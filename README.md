@@ -1,6 +1,6 @@
 # kd_pannel
 
-A new Flutter project.
+admin pannel for the krishiDealer application.
 
 ## Getting Started
 
