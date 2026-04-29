@@ -7,13 +7,21 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kd_pannel/features/counter/data/datasources/counter_local_data_source.dart';
+import 'package:kd_pannel/features/counter/domain/repositories/counter_repository.dart';
+import 'package:kd_pannel/features/counter/domain/usecases/increment_counter_usecase.dart';
 
 import 'package:kd_pannel/main.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      MyApp(
+        incrementUseCase:
+            IncrementCounterUseCase(CounterLocalDataSourceImpl() as CounterRepository),
+      ),
+    );
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);
