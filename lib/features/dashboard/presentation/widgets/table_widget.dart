@@ -97,21 +97,18 @@ class TableWidget extends StatelessWidget {
 
   Widget _buildCell(int index, String cell) {
     if (cell == 'FOLLOW_UP_BTN') {
-      return UnconstrainedBox(
-        alignment: Alignment.centerLeft,
-        child: ElevatedButton(
-          onPressed: () {},
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.orange,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          ),
-          child: const Text('Follow Up', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      return ElevatedButton(
+        onPressed: () {},
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
+        child: const Text('Follow Up', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
       );
     }
 

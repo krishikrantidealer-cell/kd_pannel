@@ -5,6 +5,7 @@ class SidebarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    //bjgbjb
     return Container(
       width: 260,
       decoration: const BoxDecoration(
