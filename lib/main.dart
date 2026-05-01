@@ -1,33 +1,31 @@
 import 'package:flutter/material.dart';
-import 'features/counter/data/datasources/counter_local_data_source.dart';
-import 'features/counter/data/repositories/counter_repository_impl.dart';
-import 'features/counter/domain/usecases/increment_counter_usecase.dart';
-import 'features/counter/presentation/pages/counter_page.dart';
+import 'core/di/service_locator.dart';
+import 'features/dashboard/presentation/pages/dashboard_page.dart';
+import 'features/dashboard/presentation/pages/sales_dashboard_page.dart';
 
-void main() {
-  // Simple Dependency Injection (Manual)
-  // In a real app, use GetIt or a similar Service Locator
-  final localDataSource = CounterLocalDataSourceImpl();
-  final repository = CounterRepositoryImpl(localDataSource: localDataSource);
-  final incrementUseCase = IncrementCounterUseCase(repository);
-
-  runApp(MyApp(incrementUseCase: incrementUseCase));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await setupServiceLocator();
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final IncrementCounterUseCase incrementUseCase;
-
-  const MyApp({super.key, required this.incrementUseCase});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Role-based navigation preparation
+    bool isAdmin = false;
+
     return MaterialApp(
-      title: 'Clean Architecture Demo',
+      title: 'KrishiDealer Admin Panel',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4CAF50)),
         useMaterial3: true,
+        fontFamily: 'Roboto',
       ),
-      home: CounterPage(incrementUseCase: incrementUseCase),
+      home: isAdmin ? const DashboardPage() : const SalesDashboardPage(),
     );
   }
 }
