@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kd_pannel/app_theme.dart';
 
 class TableWidget extends StatelessWidget {
   final String title;
@@ -15,17 +16,11 @@ class TableWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppTheme.spacingXLarge - 12), // 20
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,7 +33,7 @@ class TableWidget extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF111827),
+                  color: AppTheme.textPrimary,
                 ),
               ),
               InkWell(
@@ -47,7 +42,11 @@ class TableWidget extends StatelessWidget {
                   children: [
                     Text(
                       'View All',
-                      style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     Icon(Icons.chevron_right, size: 16, color: Colors.grey),
                   ],
@@ -55,23 +54,26 @@ class TableWidget extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppTheme.spacingMedium),
           Table(
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
               // Header Row
               TableRow(
                 decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6))),
+                  border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
                 ),
                 children: columns.map((col) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: AppTheme.spacingXSmall,
+                  ),
                   child: Text(
                     col,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B7280),
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 )).toList(),
@@ -83,7 +85,10 @@ class TableWidget extends StatelessWidget {
                   final cell = entry.value;
 
                   return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: AppTheme.spacingXSmall,
+                    ),
                     child: _buildCell(index, cell),
                   );
                 }).toList(),
@@ -100,15 +105,18 @@ class TableWidget extends StatelessWidget {
       return ElevatedButton(
         onPressed: () {},
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.orange,
-          foregroundColor: Colors.white,
+          backgroundColor: AppTheme.warning,
+          foregroundColor: AppTheme.cardColor,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
-        child: const Text('Follow Up', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        child: const Text(
+          'Follow Up',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        ),
       );
     }
 
@@ -118,7 +126,7 @@ class TableWidget extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: isCompleted ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
         ),
         child: Text(
           cell,
@@ -133,7 +141,7 @@ class TableWidget extends StatelessWidget {
 
     return Text(
       cell,
-      style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+      style: const TextStyle(fontSize: 13, color: AppTheme.textBody),
     );
   }
 }

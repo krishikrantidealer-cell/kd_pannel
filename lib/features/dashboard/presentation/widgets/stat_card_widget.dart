@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kd_pannel/app_theme.dart';
 
 class StatCardWidget extends StatelessWidget {
   final String title;
@@ -23,46 +24,43 @@ class StatCardWidget extends StatelessWidget {
     if (isSmall) {
       // 5 Square-ish cards
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+        padding: const EdgeInsets.symmetric(
+          vertical: 20,
+          horizontal: AppTheme.spacingMedium - 4,
+        ),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+          boxShadow: AppTheme.cardShadow,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppTheme.spacingMedium - 4),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 28),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTheme.spacingMedium - 4),
             Text(
               title,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF757575),
+                color: Color(0xFF757575), // Using a generic gray for now as it doesn't match exactly textSecondary
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppTheme.spacingXSmall),
             Text(
               value,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF212121),
+                color: Color(0xFF212121), // Using a dark gray
               ),
               textAlign: TextAlign.center,
             ),
@@ -72,17 +70,11 @@ class StatCardWidget extends StatelessWidget {
     } else {
       // 4 Rectangular cards
       return Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppTheme.spacingXLarge - 12), // 20
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+          boxShadow: AppTheme.cardShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,7 +82,7 @@ class StatCardWidget extends StatelessWidget {
             Row(
               children: [
                 Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppTheme.spacingSmall),
                 Text(
                   title,
                   style: const TextStyle(
@@ -101,17 +93,17 @@ class StatCardWidget extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTheme.spacingMedium - 4),
             Text(
               value,
               style: const TextStyle(
-                fontSize: 22, // Reduced size as requested
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF212121),
               ),
             ),
             if (subtext != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: AppTheme.spacingXSmall),
               Text(
                 subtext!,
                 style: const TextStyle(

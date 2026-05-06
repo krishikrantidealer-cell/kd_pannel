@@ -31,8 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  get_it: ^7.6.4
   cupertino_icons: ^1.0.8
+  ios_search_appbar: ^1.1.6
+  syncfusion_flutter_datepicker: ^33.2.4
 
 dev_dependencies:
   flutter_test:
@@ -45,7 +46,6 @@ flutter:
 
   assets:
     - assets/images/
-    - assets/icons/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../widgets/sidebar_widget.dart';
-import '../widgets/topbar_widget.dart';
+import 'package:kd_pannel/app_theme.dart';
 import '../widgets/table_widget.dart';
 
 class SupportDashboardPage extends StatelessWidget {
@@ -8,67 +7,49 @@ class SupportDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      body: Column(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppTheme.spacingLarge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TopbarWidget(),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SidebarWidget(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Support Dashboard',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        const _SupportStatsGrid(),
-                        const SizedBox(height: 24),
-                        const Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: TableWidget(
-                                title: "Dealer Support Requests",
-                                columns: ['Dealer Name', 'Issue Type', 'Status', 'Date'],
-                                rows: [
-                                  ['Anil Kumar', 'KYC Pending', 'Pending', '24 Oct'],
-                                  ['Sunil Sharma', 'Payment Issue', 'Completed', '23 Oct'],
-                                  ['Rajesh Gupta', 'Account Access', 'Pending', '22 Oct'],
-                                ],
-                              ),
-                            ),
-                            SizedBox(width: 20),
-                            Expanded(
-                              child: TableWidget(
-                                title: "Order Support Requests",
-                                columns: ['Order ID', 'Issue', 'Status', 'Date'],
-                                rows: [
-                                  ['#ORD-7890', 'Delivery Delayed', 'Pending', '24 Oct'],
-                                  ['#ORD-7891', 'Wrong Product', 'Completed', '23 Oct'],
-                                  ['#ORD-7892', 'Refund Request', 'Pending', '22 Oct'],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+          const Text(
+            'Support Dashboard',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
             ),
+          ),
+          const SizedBox(height: AppTheme.spacingLarge),
+          const _SupportStatsGrid(),
+          const SizedBox(height: AppTheme.spacingLarge),
+          const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TableWidget(
+                  title: "Dealer Support Requests",
+                  columns: ['Dealer Name', 'Issue Type', 'Status', 'Date'],
+                  rows: [
+                    ['Anil Kumar', 'KYC Pending', 'Pending', '24 Oct'],
+                    ['Sunil Sharma', 'Payment Issue', 'Completed', '23 Oct'],
+                    ['Rajesh Gupta', 'Account Access', 'Pending', '22 Oct'],
+                  ],
+                ),
+              ),
+              SizedBox(width: 20),
+              Expanded(
+                child: TableWidget(
+                  title: "Order Support Requests",
+                  columns: ['Order ID', 'Issue', 'Status', 'Date'],
+                  rows: [
+                    ['#ORD-7890', 'Delivery Delayed', 'Pending', '24 Oct'],
+                    ['#ORD-7891', 'Wrong Product', 'Completed', '23 Oct'],
+                    ['#ORD-7892', 'Refund Request', 'Pending', '22 Oct'],
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -83,14 +64,14 @@ class _SupportStatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double spacing = 16;
+        final double spacing = AppTheme.spacingMedium;
         final double width = (constraints.maxWidth - (spacing * 3)) / 4;
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _SupportStatCard(width: width, title: 'Open Tickets', value: '42', icon: Icons.confirmation_number_outlined, color: Colors.blue),
-            _SupportStatCard(width: width, title: 'Tickets Resolved', value: '128', icon: Icons.check_circle_outline, color: Colors.green),
-            _SupportStatCard(width: width, title: 'Pending Dealer', value: '15', icon: Icons.hourglass_empty, color: Colors.orange),
+            _SupportStatCard(width: width, title: 'Open Tickets', value: '42', icon: Icons.confirmation_number_outlined, color: AppTheme.info),
+            _SupportStatCard(width: width, title: 'Tickets Resolved', value: '128', icon: Icons.check_circle_outline, color: AppTheme.success),
+            _SupportStatCard(width: width, title: 'Pending Dealer', value: '15', icon: Icons.hourglass_empty, color: AppTheme.warning),
             _SupportStatCard(width: width, title: 'Active Chats', value: '8', icon: Icons.chat_bubble_outline, color: Colors.purple),
           ],
         );
@@ -120,21 +101,15 @@ class _SupportStatCard extends StatelessWidget {
       width: width,
       height: 180,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.borderRadiusXLarge)),
             child: Container(
               width: double.infinity,
               height: 95,
@@ -159,7 +134,7 @@ class _SupportStatCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: color.withOpacity(0.15),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
+                border: Border.all(color: AppTheme.cardColor, width: 2),
               ),
               child: Icon(icon, color: color, size: 28),
             ),
@@ -172,13 +147,13 @@ class _SupportStatCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                   textAlign: TextAlign.center,
                 ),
               ],
