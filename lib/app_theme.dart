@@ -62,9 +62,9 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       primaryColor: primaryColor,
-      scaffoldBackgroundColor: backgroundColor,
+      scaffoldBackgroundColor: Colors.white,
       cardColor: cardColor,
-      fontFamily: 'Roboto',
+      fontFamily: 'Open Sans',
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryColor,
         primary: primaryColor,

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kd_pannel/core/theme/app_theme.dart';
+import 'package:kd_pannel/app_theme.dart';
 
 class StatCardWidget extends StatelessWidget {
   final String title;
