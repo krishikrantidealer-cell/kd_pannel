@@ -55,47 +55,67 @@ class TableWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppTheme.spacingMedium),
-          Table(
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            children: [
-              // Header Row
-              TableRow(
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
-                ),
-                children: columns.map((col) => Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: AppTheme.spacingXSmall,
-                  ),
-                  child: Text(
-                    col,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                )).toList(),
-              ),
-              // Data Rows
-              ...rows.map((row) => TableRow(
-                children: row.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final cell = entry.value;
+          _buildTable(context),
+        ],
+      ),
+    );
+  }
 
-                  return Padding(
+  Widget _buildTable(BuildContext context) {
+    final bool isDesktop = MediaQuery.of(context).size.width >= 1200;
+
+    Widget table = Table(
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        // Header Row
+        TableRow(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
+          ),
+          children: columns
+              .map((col) => Padding(
                     padding: const EdgeInsets.symmetric(
                       vertical: 10,
                       horizontal: AppTheme.spacingXSmall,
                     ),
-                    child: _buildCell(index, cell),
-                  );
-                }).toList(),
-              )),
-            ],
-          ),
-        ],
+                    child: Text(
+                      col,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ))
+              .toList(),
+        ),
+        // Data Rows
+        ...rows.map((row) => TableRow(
+              children: row.asMap().entries.map((entry) {
+                final index = entry.key;
+                final cell = entry.value;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: AppTheme.spacingXSmall,
+                  ),
+                  child: _buildCell(index, cell),
+                );
+              }).toList(),
+            )),
+      ],
+    );
+
+    if (isDesktop) {
+      return table;
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 500),
+        child: table,
       ),
     );
   }

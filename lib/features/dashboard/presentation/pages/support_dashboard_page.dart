@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/responsive/responsive.dart';
 import '../widgets/table_widget.dart';
 
 class SupportDashboardPage extends StatelessWidget {
@@ -7,51 +8,86 @@ class SupportDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = Responsive.isDesktop(context);
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppTheme.spacingLarge),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Support Dashboard',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingLarge),
-          const _SupportStatsGrid(),
-          const SizedBox(height: AppTheme.spacingLarge),
-          const Row(
+      padding: AppTheme.getResponsivePadding(context),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double halfWidth = (constraints.maxWidth - 20) / 2;
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TableWidget(
-                  title: "Dealer Support Requests",
-                  columns: ['Dealer Name', 'Issue Type', 'Status', 'Date'],
-                  rows: [
-                    ['Anil Kumar', 'KYC Pending', 'Pending', '24 Oct'],
-                    ['Sunil Sharma', 'Payment Issue', 'Completed', '23 Oct'],
-                    ['Rajesh Gupta', 'Account Access', 'Pending', '22 Oct'],
-                  ],
+              const Text(
+                'Support Dashboard',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
                 ),
               ),
-              SizedBox(width: 20),
-              Expanded(
-                child: TableWidget(
-                  title: "Order Support Requests",
-                  columns: ['Order ID', 'Issue', 'Status', 'Date'],
-                  rows: [
-                    ['#ORD-7890', 'Delivery Delayed', 'Pending', '24 Oct'],
-                    ['#ORD-7891', 'Wrong Product', 'Completed', '23 Oct'],
-                    ['#ORD-7892', 'Refund Request', 'Pending', '22 Oct'],
+              const SizedBox(height: AppTheme.spacingLarge),
+              const _SupportStatsGrid(),
+              const SizedBox(height: AppTheme.spacingLarge),
+              if (isDesktop)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: halfWidth,
+                      child: const TableWidget(
+                        title: "Dealer Support Requests",
+                        columns: ['Dealer Name', 'Issue Type', 'Status', 'Date'],
+                        rows: [
+                          ['Anil Kumar', 'KYC Pending', 'Pending', '24 Oct'],
+                          ['Sunil Sharma', 'Payment Issue', 'Completed', '23 Oct'],
+                          ['Rajesh Gupta', 'Account Access', 'Pending', '22 Oct'],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    SizedBox(
+                      width: halfWidth,
+                      child: const TableWidget(
+                        title: "Order Support Requests",
+                        columns: ['Order ID', 'Issue', 'Status', 'Date'],
+                        rows: [
+                          ['#ORD-7890', 'Delivery Delayed', 'Pending', '24 Oct'],
+                          ['#ORD-7891', 'Wrong Product', 'Completed', '23 Oct'],
+                          ['#ORD-7892', 'Refund Request', 'Pending', '22 Oct'],
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              else
+                const Column(
+                  children: [
+                    TableWidget(
+                      title: "Dealer Support Requests",
+                      columns: ['Dealer Name', 'Issue Type', 'Status', 'Date'],
+                      rows: [
+                        ['Anil Kumar', 'KYC Pending', 'Pending', '24 Oct'],
+                        ['Sunil Sharma', 'Payment Issue', 'Completed', '23 Oct'],
+                        ['Rajesh Gupta', 'Account Access', 'Pending', '22 Oct'],
+                      ],
+                    ),
+                    SizedBox(height: 20),
+                    TableWidget(
+                      title: "Order Support Requests",
+                      columns: ['Order ID', 'Issue', 'Status', 'Date'],
+                      rows: [
+                        ['#ORD-7890', 'Delivery Delayed', 'Pending', '24 Oct'],
+                        ['#ORD-7891', 'Wrong Product', 'Completed', '23 Oct'],
+                        ['#ORD-7892', 'Refund Request', 'Pending', '22 Oct'],
+                      ],
+                    ),
                   ],
                 ),
-              ),
             ],
-          ),
-        ],
+          );
+        }
       ),
     );
   }
@@ -62,17 +98,39 @@ class _SupportStatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = Responsive.isDesktop(context);
+    final bool isMobile = Responsive.isMobile(context);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final double spacing = AppTheme.spacingMedium;
-        final double width = (constraints.maxWidth - (spacing * 3)) / 4;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+        if (isDesktop) {
+          final double cardWidth = (constraints.maxWidth - (spacing * 3)) / 4;
+          return Row(
+            children: [
+              _SupportStatCard(width: cardWidth, title: 'Open Tickets', value: '42', icon: Icons.confirmation_number_outlined, color: AppTheme.info),
+              SizedBox(width: spacing),
+              _SupportStatCard(width: cardWidth, title: 'Tickets Resolved', value: '128', icon: Icons.check_circle_outline, color: AppTheme.success),
+              SizedBox(width: spacing),
+              _SupportStatCard(width: cardWidth, title: 'Pending Dealer', value: '15', icon: Icons.hourglass_empty, color: AppTheme.warning),
+              SizedBox(width: spacing),
+              _SupportStatCard(width: cardWidth, title: 'Active Chats', value: '8', icon: Icons.chat_bubble_outline, color: Colors.purple),
+            ],
+          );
+        }
+
+        final int count = isMobile ? 1 : 2;
+        final double width = (constraints.maxWidth - (spacing * (count - 1))) / count;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
           children: [
-            _SupportStatCard(width: width, title: 'Open Tickets', value: '42', icon: Icons.confirmation_number_outlined, color: AppTheme.info),
-            _SupportStatCard(width: width, title: 'Tickets Resolved', value: '128', icon: Icons.check_circle_outline, color: AppTheme.success),
-            _SupportStatCard(width: width, title: 'Pending Dealer', value: '15', icon: Icons.hourglass_empty, color: AppTheme.warning),
-            _SupportStatCard(width: width, title: 'Active Chats', value: '8', icon: Icons.chat_bubble_outline, color: Colors.purple),
+            _SupportStatCard(width: width.clamp(200.0, double.infinity), title: 'Open Tickets', value: '42', icon: Icons.confirmation_number_outlined, color: AppTheme.info),
+            _SupportStatCard(width: width.clamp(200.0, double.infinity), title: 'Tickets Resolved', value: '128', icon: Icons.check_circle_outline, color: AppTheme.success),
+            _SupportStatCard(width: width.clamp(200.0, double.infinity), title: 'Pending Dealer', value: '15', icon: Icons.hourglass_empty, color: AppTheme.warning),
+            _SupportStatCard(width: width.clamp(200.0, double.infinity), title: 'Active Chats', value: '8', icon: Icons.chat_bubble_outline, color: Colors.purple),
           ],
         );
       },

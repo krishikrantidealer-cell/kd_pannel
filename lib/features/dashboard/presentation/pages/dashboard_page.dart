@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -72,54 +73,101 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = Responsive.isDesktop(context);
     return Material(
       color: Colors.white,
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          padding: AppTheme.getResponsivePadding(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'KrishiDealer Admin Dashboard',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: Color(0xFF4B5563)),
+              isDesktop 
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'KrishiDealer Admin Dashboard',
+                        style: TextStyle(
+                          fontSize: 22, 
+                          fontWeight: FontWeight.w500, 
+                          color: Color(0xFF4B5563),
+                        ),
+                      ),
+                      _buildFilterRow(),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Dashboard',
+                          style: TextStyle(
+                            fontSize: 16, 
+                            fontWeight: FontWeight.w700, 
+                            color: Color(0xFF1F2937),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterRow(),
+                    ],
                   ),
-                  _buildFilterRow(),
-                ],
-              ),
               const SizedBox(height: 28),
 
               _StatGridRow(
-                count: 5,
+                count: isDesktop ? 4 : 2,
                 items: [
-                  {'title': 'Revenue Today', 'value': '\$2,450', 'image': 'assets/images/Revenue.png', 'color': AppTheme.success},
-                  {'title': 'Orders Today', 'value': '32', 'image': 'assets/images/order today.png', 'color': AppTheme.lightGreen},
+                  {'title': 'Total Sales', 'value': '\$2,450', 'image': 'assets/images/Revenue.png', 'color': AppTheme.success},
+                  {'title': 'Total Order', 'value': '32', 'image': 'assets/images/order today.png', 'color': AppTheme.lightGreen},
                   {'title': 'Total Dealers', 'value': '920', 'image': 'assets/images/Total dealer.png', 'color': AppTheme.info},
-                  {'title': 'Active Dealers', 'value': '550', 'image': 'assets/images/Active dealer .png', 'color': AppTheme.teal},
-                  {'title': 'New Leads', 'value': '24', 'image': 'assets/images/New leads.png', 'color': AppTheme.warning},
-                ],
-              ),
-              const SizedBox(height: 20),
-              const _StatGridRow(
-                count: 4,
-                items: [
-                  {'title': 'Sales Performance', 'value': '74,200', 'subtext': 'Orders', 'image': 'assets/images/sales perfrom.png', 'color': AppTheme.success},
-                  {'title': 'Dealer Onboarding', 'value': '320', 'subtext': 'Dealers Joined', 'image': 'assets/images/dealer onbord.png', 'color': AppTheme.lightGreen},
-                  {'title': 'Order Status', 'value': '2,450', 'subtext': 'Total Orders', 'image': 'assets/images/order status.png', 'color': AppTheme.warning},
-                  {'title': 'Pending Orders', 'value': '140', 'subtext': 'Orders Pending', 'image': 'assets/images/order pending.png', 'color': AppTheme.error},
+                  {'title': 'Total Leads', 'value': '24', 'image': 'assets/images/New leads.png', 'color': AppTheme.warning},
                 ],
               ),
               const SizedBox(height: 32),
 
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(
-                    flex: 3,
-                    child: _SmallTableCard(
+              if (isDesktop)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double totalWidth = constraints.maxWidth - 24;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: totalWidth * 0.6,
+                          child: const _SmallTableCard(
+                            title: 'Recent Orders',
+                            columns: ['Dealer', 'Product', 'Amount', 'Date', 'Status'],
+                            rows: [
+                              ['King Agro', 'Drip Irrigation', '\$2,400', '2023-10-24', 'Completed'],
+                              ['Gupta Seeds', 'Hybrid Seeds', '\$650', '2023-10-24', 'Pending'],
+                              ['Patel Agro', 'Pump', '\$1,150', '2023-10-23', 'Completed'],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        SizedBox(
+                          width: totalWidth * 0.4,
+                          child: const _SmallTableCard(
+                            title: 'Recent Leads',
+                            columns: ['Dealer Name', 'Contact Person', 'Created Time'],
+                            rows: [
+                              ['Choudhary Krishi', 'Nirmal', '2 hours ago'],
+                              ['Greenway Agro', 'Priya', '5 hours ago'],
+                              ['Shiva Ent.', 'Ravi', '3 days ago'],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                )
+              else
+                Column(
+                  children: [
+                    const _SmallTableCard(
                       title: 'Recent Orders',
                       columns: ['Dealer', 'Product', 'Amount', 'Date', 'Status'],
                       rows: [
@@ -128,11 +176,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         ['Patel Agro', 'Pump', '\$1,150', '2023-10-23', 'Completed'],
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 24),
-                  const Expanded(
-                    flex: 2,
-                    child: _SmallTableCard(
+                    const SizedBox(height: 24),
+                    const _SmallTableCard(
                       title: 'Recent Leads',
                       columns: ['Dealer Name', 'Contact Person', 'Created Time'],
                       rows: [
@@ -141,9 +186,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         ['Shiva Ent.', 'Ravi', '3 days ago'],
                       ],
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -152,19 +196,21 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildFilterRow() {
+    final bool isMobile = Responsive.isMobile(context);
+
     return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: isMobile ? 38 : 48,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
+            blurRadius: isMobile ? 8 : 14,
             spreadRadius: 1,
-            offset: const Offset(0, 4),
+            offset: Offset(0, isMobile ? 2 : 4),
           ),
         ],
       ),
@@ -175,22 +221,23 @@ class _DashboardPageState extends State<DashboardPage> {
             cursor: SystemMouseCursors.click,
             child: InkWell(
               onTap: _showSyncfusionDatePicker,
-              child: const Icon(Icons.calendar_month_outlined, size: 20, color: AppTheme.textSecondary),
+              child: Icon(Icons.calendar_month_outlined, size: isMobile ? 16 : 20, color: AppTheme.textSecondary),
             ),
           ),
-          const VerticalDivider(
-            indent: 12,
-            endIndent: 12,
-            width: 24,
-            color: Color(0xFFE5E7EB),
+          VerticalDivider(
+            indent: isMobile ? 8 : 12,
+            endIndent: isMobile ? 8 : 12,
+            width: isMobile ? 16 : 24,
+            color: const Color(0xFFE5E7EB),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: dropdownOptions.contains(selectedDropdown) ? selectedDropdown : null,
-              hint: Text(_rangeDisplay, style: const TextStyle(fontSize: 13, color: AppTheme.textBody, fontWeight: FontWeight.w500)),
-              icon: const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.keyboard_arrow_down, size: 18, color: AppTheme.textSecondary),
+              isExpanded: false,
+              hint: Text(_rangeDisplay, style: TextStyle(fontSize: isMobile ? 12 : 13, color: AppTheme.textBody, fontWeight: FontWeight.w500)),
+              icon: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(Icons.keyboard_arrow_down, size: isMobile ? 16 : 18, color: AppTheme.textSecondary),
               ),
               onChanged: (String? newValue) {
                 if (newValue != null) {
@@ -203,7 +250,7 @@ class _DashboardPageState extends State<DashboardPage> {
               items: dropdownOptions.map<DropdownMenuItem<String>>((String value) {
                 return DropdownMenuItem<String>(
                   value: value,
-                  child: Text(value, style: const TextStyle(fontSize: 13)),
+                  child: Text(value, style: TextStyle(fontSize: isMobile ? 12 : 13)),
                 );
               }).toList(),
             ),
@@ -222,14 +269,40 @@ class _StatGridRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = Responsive.isDesktop(context);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final spacing = 16.0;
+
+        if (isDesktop) {
+          return Row(
+            children: items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : spacing),
+                  child: _StatCard(
+                    width: double.infinity,
+                    title: item['title'],
+                    value: item['value'],
+                    subtext: item['subtext'],
+                    image: item['image'],
+                    color: item['color'],
+                  ),
+                ),
+              );
+            }).toList(),
+          );
+        }
+
         final width = (constraints.maxWidth - (spacing * (count - 1))) / count;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
           children: items.map((item) => _StatCard(
-            width: width,
+            width: width.clamp(140.0, double.infinity),
             title: item['title'],
             value: item['value'],
             subtext: item['subtext'],
@@ -254,16 +327,18 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMobile = Responsive.isMobile(context);
+
     return Container(
-      width: width, height: 170,
+      width: width, height: isMobile ? 140 : 170,
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(20),
+        color: Colors.white, borderRadius: BorderRadius.circular(isMobile ? 18 : 20),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 8),
+            blurRadius: isMobile ? 14 : 20,
+            spreadRadius: isMobile ? 1 : 2,
+            offset: Offset(0, isMobile ? 4 : 8),
           ),
         ],
       ),
@@ -271,19 +346,19 @@ class _StatCard extends StatelessWidget {
         alignment: Alignment.topCenter,
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(isMobile ? 18 : 20)),
             child: Container(
-              height: 80,
+              height: isMobile ? 65 : 80,
               decoration: BoxDecoration(
                 gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [color.withOpacity(0.15), color.withOpacity(0.01)]),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.elliptical(120, 35)),
+                borderRadius: BorderRadius.vertical(bottom: Radius.elliptical(isMobile ? 100 : 120, isMobile ? 25 : 35)),
               ),
             ),
           ),
           Positioned(
-            top: 20,
+            top: isMobile ? 16 : 20,
             child: SizedBox(
-              width: 42, height: 42,
+              width: isMobile ? 36 : 42, height: isMobile ? 36 : 42,
               child: Image.asset(
                 image,
                 color: color,
@@ -292,13 +367,13 @@ class _StatCard extends StatelessWidget {
             )
           ),
           Positioned(
-            bottom: 16,
+            bottom: isMobile ? 12 : 16,
             child: Column(
               children: [
-                Text(title, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500)),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
-                if (subtext != null) Text(subtext!, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                Text(title, style: TextStyle(fontSize: isMobile ? 11 : 12, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500)),
+                SizedBox(height: isMobile ? 2 : 4),
+                Text(value, style: TextStyle(fontSize: isMobile ? 18 : 22, fontWeight: FontWeight.bold, color: const Color(0xFF1F2937))),
+                if (subtext != null) Text(subtext!, style: TextStyle(fontSize: isMobile ? 10 : 11, color: const Color(0xFF9CA3AF))),
               ],
             ),
           ),
@@ -307,6 +382,7 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
+
 
 class _SmallTableCard extends StatelessWidget {
   final String title;
@@ -317,19 +393,40 @@ class _SmallTableCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMobile = Responsive.isMobile(context);
+
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFF3F4F6))),
+      padding: isMobile 
+          ? const EdgeInsets.symmetric(horizontal: 6, vertical: 12) 
+          : const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AppTheme.softShadow,
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-              const _ActionButton(text: 'View All', icon: Icons.chevron_right),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title, 
+                  style: TextStyle(
+                    fontSize: isMobile ? 15 : 16, 
+                    fontWeight: FontWeight.w600, 
+                    color: const Color(0xFF374151),
+                    letterSpacing: isMobile ? 0.4 : 0.0,
+                  ),
+                ),
+                const _ActionButton(text: 'View All', icon: Icons.chevron_right),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           _BaseTable(columns: columns, rows: rows),
         ],
       ),
@@ -369,22 +466,117 @@ class _BaseTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Table(
+    final bool isDesktop = Responsive.isDesktop(context);
+    final bool isMobile = Responsive.isMobile(context);
+
+    Widget table = Table(
+      columnWidths: const {
+        0: FlexColumnWidth(2),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
         TableRow(
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1))),
-          children: columns.map((c) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(c, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF9CA3AF))))).toList(),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1.5)),
+            color: Color(0xFFF9FAFB),
+          ),
+          children: columns.map((c) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            child: _HeaderText(c),
+          )).toList(),
         ),
-        ...rows.map((r) => TableRow(children: r.map((cell) => Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: _buildCell(cell))).toList())),
+        ...rows.asMap().entries.map((entry) {
+          final index = entry.key;
+          final row = entry.value;
+          return TableRow(
+            decoration: BoxDecoration(
+              color: index % 2 == 1 ? const Color(0xFFF9FAFB) : Colors.white,
+              border: const Border(bottom: BorderSide(color: Color(0xFFF3F4F6))),
+            ),
+            children: row.map((cell) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              child: _buildCell(cell),
+            )).toList(),
+          );
+        }),
       ],
+    );
+
+    if (isDesktop) {
+      return table;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double minTableWidth = columns.length * 120.0;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: constraints.maxWidth > minTableWidth 
+                ? constraints.maxWidth 
+                : minTableWidth,
+            child: table,
+          ),
+        );
+      },
     );
   }
 
   Widget _buildCell(String text) {
     if (text == 'Completed' || text == 'Pending') {
-      bool isComp = text == 'Completed';
-      return Align(alignment: Alignment.centerLeft, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: isComp ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(20)), child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isComp ? const Color(0xFF10B981) : const Color(0xFFF59E0B)))));
+      return Center(child: _StatusBadge(status: text));
     }
-    return Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), fontWeight: FontWeight.w500));
+    return Text(
+      text, 
+      style: const TextStyle(
+        fontSize: 12, 
+        color: Color(0xFF4B5563), 
+        fontWeight: FontWeight.w500
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String status;
+  const _StatusBadge({required this.status});
+  @override
+  Widget build(BuildContext context) {
+    Color bgColor;
+    switch (status) {
+      case 'Completed': bgColor = const Color(0xFF10B981); break;
+      case 'Pending': bgColor = const Color(0xFFF59E0B); break;
+      default: bgColor = const Color(0xFF3B82F6);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+      child: Text(
+        status, 
+        style: const TextStyle(
+          fontSize: 9.5, 
+          fontWeight: FontWeight.w700, 
+          color: Colors.white, 
+          letterSpacing: 0.1
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderText extends StatelessWidget {
+  final String text;
+  const _HeaderText(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text, 
+      style: const TextStyle(
+        fontSize: 11, 
+        fontWeight: FontWeight.w800, 
+        color: Color(0xFF374151), 
+        letterSpacing: 0.2
+      ),
+    );
   }
 }

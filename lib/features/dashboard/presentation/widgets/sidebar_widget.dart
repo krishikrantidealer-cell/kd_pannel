@@ -5,9 +5,13 @@ class SidebarWidget extends StatelessWidget {
   const SidebarWidget({super.key});
 
   static const List<Map<String, dynamic>> _menuItems = [
-    {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'route': '/dashboard'},
-    // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'route': '/leads'},
-    // {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'route': '/dealers'},
+    {
+      'icon': Icons.dashboard_rounded,
+      'title': 'Dashboard',
+      'route': '/dashboard',
+    },
+    {'icon': Icons.campaign_rounded, 'title': 'Leads', 'route': '/leads'},
+    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'route': '/dealers'},
     // {'icon': Icons.shopping_cart_rounded, 'title': 'Orders', 'route': '/orders'},
     // {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'route': '/products'},
     // {'icon': Icons.ad_units_rounded, 'title': 'Marketing', 'route': '/marketing'},
@@ -75,7 +79,10 @@ class SidebarWidget extends StatelessWidget {
                     isActive: isActive,
                     onTap: () {
                       if (currentRoute != item['route']) {
-                        Navigator.pushReplacementNamed(context, item['route'] as String);
+                        Navigator.pushReplacementNamed(
+                          context,
+                          item['route'] as String,
+                        );
                       }
                     },
                   ),
@@ -114,7 +121,9 @@ class _SidebarItem extends StatelessWidget {
         height: 50,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: isActive ? AppTheme.primaryColor.withOpacity(0.08) : Colors.transparent,
+          color: isActive
+              ? AppTheme.primaryColor.withOpacity(0.08)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -129,7 +138,9 @@ class _SidebarItem extends StatelessWidget {
               child: Text(
                 title,
                 style: TextStyle(
-                  color: isActive ? AppTheme.primaryColor : const Color(0xFF374151),
+                  color: isActive
+                      ? AppTheme.primaryColor
+                      : const Color(0xFF374151),
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                   fontSize: 14,
                 ),
