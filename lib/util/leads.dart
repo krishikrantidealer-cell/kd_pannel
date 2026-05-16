@@ -1,0 +1,73 @@
+final List<Map<String, dynamic>> allLeads = [
+  // Unassigned (10)
+  {'name': 'Kumar Agro Mart', 'phone': '99765 43210', 'city': 'Nagpur', 'source': 'CTWA', 'agent': '-', 'status': 'Unassigned', 'activity': '5 hours ago'},
+  {'name': 'Green Fields Agro', 'phone': '98234 56789', 'city': 'Pune', 'source': 'CTWA', 'agent': '-', 'status': 'Unassigned', 'activity': '2 days ago'},
+  {'name': 'Bharat Krishi', 'phone': '98111 22233', 'city': 'Nashik', 'source': 'Google', 'agent': '-', 'status': 'Unassigned', 'activity': '1 hour ago'},
+  {'name': 'Farmer Choice', 'phone': '98222 33344', 'city': 'Amravati', 'source': 'Facebook', 'agent': '-', 'status': 'Unassigned', 'activity': '12 hours ago'},
+  {'name': 'Agri Solutions', 'phone': '98333 44455', 'city': 'Solapur', 'source': 'Website', 'agent': '-', 'status': 'Unassigned', 'activity': '1 day ago'},
+  {'name': 'Modern Seeds', 'phone': '98444 55566', 'city': 'Kolhapur', 'source': 'Direct', 'agent': '-', 'status': 'Unassigned', 'activity': '3 hours ago'},
+  {'name': 'Village Agro', 'phone': '98555 66677', 'city': 'Sangli', 'source': 'CTWA', 'agent': '-', 'status': 'Unassigned', 'activity': '6 hours ago'},
+  {'name': 'Krishi Mitra', 'phone': '98666 77788', 'city': 'Satara', 'source': 'Google', 'agent': '-', 'status': 'Unassigned', 'activity': '8 hours ago'},
+  {'name': 'Organic Farm', 'phone': '98777 88899', 'city': 'Jalgaon', 'source': 'Facebook', 'agent': '-', 'status': 'Unassigned', 'activity': '4 hours ago'},
+  {'name': 'Green Leaf', 'phone': '98888 99900', 'city': 'Akola', 'source': 'Website', 'agent': '-', 'status': 'Unassigned', 'activity': '2 hours ago'},
+
+  // Assigned (10)
+  {'name': 'Prakash Seeds Ltd.', 'phone': '99234 56789', 'city': 'Lucknow', 'source': 'CTWA', 'agent': 'Sahil', 'status': 'Assigned', 'activity': '2 minute ago'},
+  {'name': 'Super Krishi Mart', 'phone': '99765 23451', 'city': 'Chennai', 'source': 'CTWA', 'agent': 'Anita', 'status': 'Assigned', 'activity': '7 days ago'},
+  {'name': 'Sunrise Agro', 'phone': '99111 22233', 'city': 'Bhopal', 'source': 'Google', 'agent': 'Amit', 'status': 'Assigned', 'activity': '10 mins ago'},
+  {'name': 'Global Seeds', 'phone': '99222 33344', 'city': 'Indore', 'source': 'Facebook', 'agent': 'Rajesh', 'status': 'Assigned', 'activity': '30 mins ago'},
+  {'name': 'Prime Fertilizers', 'phone': '99333 44455', 'city': 'Gwalior', 'source': 'Website', 'agent': 'Sahil', 'status': 'Assigned', 'activity': '1 hour ago'},
+  {'name': 'Royal Agro', 'phone': '99444 55566', 'city': 'Jabalpur', 'source': 'Direct', 'agent': 'Anita', 'status': 'Assigned', 'activity': '2 hours ago'},
+  {'name': 'Eco Farm', 'phone': '99555 66677', 'city': 'Ujjain', 'source': 'CTWA', 'agent': 'Amit', 'status': 'Assigned', 'activity': '5 hours ago'},
+  {'name': 'Nature Best', 'phone': '99666 77788', 'city': 'Sagar', 'source': 'Google', 'agent': 'Rajesh', 'status': 'Assigned', 'activity': '3 hours ago'},
+  {'name': 'Harvest Moon', 'phone': '99777 88899', 'city': 'Ratlam', 'source': 'Facebook', 'agent': 'Sahil', 'status': 'Assigned', 'activity': '4 hours ago'},
+  {'name': 'Field Fresh', 'phone': '99888 99900', 'city': 'Dewas', 'source': 'Website', 'agent': 'Anita', 'status': 'Assigned', 'activity': '6 hours ago'},
+
+  // KYC Pending (10)
+  {'name': 'Shivam Fertilizers', 'phone': '98901 24567', 'city': 'Kanpur', 'source': 'CTWA', 'agent': 'Amit', 'status': 'KYC Pending', 'activity': '7 days ago'},
+  {'name': 'Ishan Agro', 'phone': '98501 23456', 'city': 'Nashik', 'source': 'CTWA', 'agent': 'Rajesh', 'status': 'KYC Pending', 'activity': '7 days ago'},
+  {'name': 'Deepak Traders', 'phone': '98123 45678', 'city': 'Varanasi', 'source': 'Google', 'agent': 'Sahil', 'status': 'KYC Pending', 'activity': '1 day ago'},
+  {'name': 'Mohan Agro', 'phone': '98234 56789', 'city': 'Agra', 'source': 'Facebook', 'agent': 'Anita', 'status': 'KYC Pending', 'activity': '2 days ago'},
+  {'name': 'Shyam Seeds', 'phone': '98345 67890', 'city': 'Meerut', 'source': 'Website', 'agent': 'Amit', 'status': 'KYC Pending', 'activity': '3 days ago'},
+  {'name': 'Gopal Krishi', 'phone': '98456 78901', 'city': 'Bareilly', 'source': 'Direct', 'agent': 'Rajesh', 'status': 'KYC Pending', 'activity': '4 days ago'},
+  {'name': 'Krishna Farm', 'phone': '98567 89012', 'city': 'Aligarh', 'source': 'CTWA', 'agent': 'Sahil', 'status': 'KYC Pending', 'activity': '5 days ago'},
+  {'name': 'Radha Agro', 'phone': '98678 90123', 'city': 'Mathura', 'source': 'Google', 'agent': 'Anita', 'status': 'KYC Pending', 'activity': '6 days ago'},
+  {'name': 'Balaji Seeds', 'phone': '98789 01234', 'city': 'Jhansi', 'source': 'Facebook', 'agent': 'Amit', 'status': 'KYC Pending', 'activity': '1 week ago'},
+  {'name': 'Venkatesh Agro', 'phone': '98890 12345', 'city': 'Ayodhya', 'source': 'Website', 'agent': 'Rajesh', 'status': 'KYC Pending', 'activity': '8 days ago'},
+
+  // KYC Confirm (10)
+  {'name': 'Modi Agro Center', 'phone': '98765 23451', 'city': 'Surat', 'source': 'CTWA', 'agent': 'Sersa', 'status': 'KYC Confirm', 'activity': '2 days ago'},
+  {'name': 'AgriFresh Supplier', 'phone': '98765 33619', 'city': 'Satara', 'source': 'CTWA', 'agent': 'Satara', 'status': 'KYC Confirm', 'activity': '15 hours ago'},
+  {'name': 'Patel Brothers', 'phone': '98111 33333', 'city': 'Ahmedabad', 'source': 'Google', 'agent': 'Amit', 'status': 'KYC Confirm', 'activity': '1 day ago'},
+  {'name': 'Shah Agro', 'phone': '98222 44444', 'city': 'Rajkot', 'source': 'Facebook', 'agent': 'Rajesh', 'status': 'KYC Confirm', 'activity': '2 days ago'},
+  {'name': 'Mehta Seeds', 'phone': '98333 55555', 'city': 'Vadodara', 'source': 'Website', 'agent': 'Sahil', 'status': 'KYC Confirm', 'activity': '3 days ago'},
+  {'name': 'Desai Fertilizers', 'phone': '98444 66666', 'city': 'Bhavnagar', 'source': 'Direct', 'agent': 'Anita', 'status': 'KYC Confirm', 'activity': '4 days ago'},
+  {'name': 'Joshi Krishi', 'phone': '98555 77777', 'city': 'Jamnagar', 'source': 'CTWA', 'agent': 'Amit', 'status': 'KYC Confirm', 'activity': '5 days ago'},
+  {'name': 'Panchal Agro', 'phone': '98666 88888', 'city': 'Gandhinagar', 'source': 'Google', 'agent': 'Rajesh', 'status': 'KYC Confirm', 'activity': '6 days ago'},
+  {'name': 'Gajjar Seeds', 'phone': '98777 99999', 'city': 'Anand', 'source': 'Facebook', 'agent': 'Sahil', 'status': 'KYC Confirm', 'activity': '1 week ago'},
+  {'name': 'Mistry Farm', 'phone': '98888 00000', 'city': 'Navsari', 'source': 'Website', 'agent': 'Anita', 'status': 'KYC Confirm', 'activity': '10 days ago'},
+
+  // Order Pending (10)
+  {'name': 'Shree Agro Traders', 'phone': '98765 23451', 'city': 'Jaipur', 'source': 'CTWA', 'agent': 'Rajesh', 'status': 'Order Pending', 'activity': '4 days ago'},
+  {'name': 'Pink City Seeds', 'phone': '98123 11111', 'city': 'Jaipur', 'source': 'Google', 'agent': 'Amit', 'status': 'Order Pending', 'activity': '1 day ago'},
+  {'name': 'Desert Agro', 'phone': '98234 22222', 'city': 'Jodhpur', 'source': 'Facebook', 'agent': 'Rajesh', 'status': 'Order Pending', 'activity': '2 days ago'},
+  {'name': 'Royal Raj Agro', 'phone': '98345 33333', 'city': 'Udaipur', 'source': 'Website', 'agent': 'Sahil', 'status': 'Order Pending', 'activity': '3 days ago'},
+  {'name': 'Marwar Krishi', 'phone': '98456 44444', 'city': 'Bikaner', 'source': 'Direct', 'agent': 'Anita', 'status': 'Order Pending', 'activity': '4 days ago'},
+  {'name': 'Shekhawati Seeds', 'phone': '98567 55555', 'city': 'Ajmer', 'source': 'CTWA', 'agent': 'Amit', 'status': 'Order Pending', 'activity': '5 days ago'},
+  {'name': 'Hadoti Fertilizers', 'phone': '98678 66666', 'city': 'Kota', 'source': 'Google', 'agent': 'Rajesh', 'status': 'Order Pending', 'activity': '6 days ago'},
+  {'name': 'Mewar Farm', 'phone': '98789 77777', 'city': 'Chittorgarh', 'source': 'Facebook', 'agent': 'Sahil', 'status': 'Order Pending', 'activity': '1 week ago'},
+  {'name': 'Thar Agro', 'phone': '98890 88888', 'city': 'Jaisalmer', 'source': 'Website', 'agent': 'Anita', 'status': 'Order Pending', 'activity': '2 weeks ago'},
+  {'name': 'Matsya Seeds', 'phone': '98901 99999', 'city': 'Alwar', 'source': 'Direct', 'agent': 'Amit', 'status': 'Order Pending', 'activity': '3 weeks ago'},
+
+  // Order Confirm (10)
+  {'name': 'Reliance Agro', 'phone': '98111 00001', 'city': 'Mumbai', 'source': 'Google', 'agent': 'Amit', 'status': 'Order Confirm', 'activity': '10 mins ago'},
+  {'name': 'Tata Krishi', 'phone': '98222 00002', 'city': 'Pune', 'source': 'Facebook', 'agent': 'Rajesh', 'status': 'Order Confirm', 'activity': '1 hour ago'},
+  {'name': 'Mahindra Farm', 'phone': '98333 00003', 'city': 'Nagpur', 'source': 'Website', 'agent': 'Sahil', 'status': 'Order Confirm', 'activity': '2 hours ago'},
+  {'name': 'Godrej Agro', 'phone': '98444 00004', 'city': 'Nashik', 'source': 'Direct', 'agent': 'Anita', 'status': 'Order Confirm', 'activity': '3 hours ago'},
+  {'name': 'Adani Seeds', 'phone': '98555 00005', 'city': 'Aurangabad', 'source': 'CTWA', 'agent': 'Amit', 'status': 'Order Confirm', 'activity': '4 hours ago'},
+  {'name': 'ITC Krishi', 'phone': '98666 00006', 'city': 'Kolhapur', 'source': 'Google', 'agent': 'Rajesh', 'status': 'Order Confirm', 'activity': '5 hours ago'},
+  {'name': 'DCM Shriram', 'phone': '98777 00007', 'city': 'Solapur', 'source': 'Facebook', 'agent': 'Sahil', 'status': 'Order Confirm', 'activity': '6 hours ago'},
+  {'name': 'Coromandel Agro', 'phone': '98888 00008', 'city': 'Amravati', 'source': 'Website', 'agent': 'Anita', 'status': 'Order Confirm', 'activity': '1 day ago'},
+  {'name': 'Chambal Fert', 'phone': '98999 00009', 'city': 'Jalgaon', 'source': 'Direct', 'agent': 'Amit', 'status': 'Order Confirm', 'activity': '2 days ago'},
+  {'name': 'Zuari Agro', 'phone': '98000 00010', 'city': 'Akola', 'source': 'CTWA', 'agent': 'Rajesh', 'status': 'Order Confirm', 'activity': '3 days ago'},
+];

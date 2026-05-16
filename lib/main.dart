@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:kd_pannel/features/dashboard/presentation/pages/dealer_management_page.dart';
+import 'package:kd_pannel/features/dashboard/presentation/pages/dealer_profile_page.dart';
+import 'package:kd_pannel/features/dashboard/presentation/pages/lead_profile_page.dart';
+import 'package:kd_pannel/features/dashboard/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/dashboard/presentation/pages/support_dashboard_page.dart';
 import 'package:kd_pannel/features/dashboard/presentation/widgets/main_layout.dart';
 
@@ -21,8 +25,10 @@ class MyApp extends StatelessWidget {
       initialRoute: '/dashboard',
       routes: {
         '/dashboard': (context) => const MainLayout(child: DashboardPage()),
-        '/leads': (context) => const MainLayout(child: Scaffold(body: Center(child: Text('Leads')))),
-        '/dealers': (context) => const MainLayout(child: Scaffold(body: Center(child: Text('Dealers')))),
+        '/leads': (context) => const MainLayout(child: LeadsPage()),
+        '/leads/profile': (context) => const MainLayout(child: LeadProfilePage()),
+        '/dealers': (context) => const MainLayout(child: DealerManagementPage()),
+        '/dealers/profile': (context) => const MainLayout(child: DealerProfilePage()),
         '/orders': (context) => const MainLayout(child: Scaffold(body: Center(child: Text('Orders')))),
         '/products': (context) => const MainLayout(child: Scaffold(body: Center(child: Text('Products')))),
         '/marketing': (context) => const MainLayout(child: Scaffold(body: Center(child: Text('Marketing')))),

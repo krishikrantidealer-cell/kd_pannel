@@ -27,6 +27,30 @@ class AppTheme {
   static const double spacingLarge = 24.0;
   static const double spacingXLarge = 32.0;
 
+  // Responsive Padding
+  static const EdgeInsets mobilePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 16);
+  static const EdgeInsets tabletPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 20);
+  static const EdgeInsets desktopPadding = EdgeInsets.symmetric(horizontal: 32, vertical: 24);
+
+  static EdgeInsets getResponsivePadding(BuildContext context) {
+    double width = MediaQuery.of(context).size.width;
+    if (width >= 1200) return desktopPadding;
+    if (width >= 768) return tabletPadding;
+    return mobilePadding;
+  }
+
+  // Responsive Gaps
+  static const double mobileGap = 16.0;
+  static const double tabletGap = 20.0;
+  static const double desktopGap = 24.0;
+
+  static double getResponsiveGap(BuildContext context) {
+    double width = MediaQuery.of(context).size.width;
+    if (width >= 1200) return desktopGap;
+    if (width >= 768) return tabletGap;
+    return mobileGap;
+  }
+
   // Border Radius
   static const double borderRadiusSmall = 8.0;
   static const double borderRadiusMedium = 12.0;
