@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 
 class SidebarWidget extends StatelessWidget {
   const SidebarWidget({super.key});
 
-  static const List<Map<String, dynamic>> _menuItems = [
+  static const List<Map<String, dynamic>> _adminMenuItems = [
     {
       'icon': Icons.dashboard_rounded,
       'title': 'Dashboard',
@@ -12,18 +13,24 @@ class SidebarWidget extends StatelessWidget {
     },
     {'icon': Icons.campaign_rounded, 'title': 'Leads', 'route': '/leads'},
     {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'route': '/dealers'},
-    // {'icon': Icons.shopping_cart_rounded, 'title': 'Orders', 'route': '/orders'},
-    // {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'route': '/products'},
-    // {'icon': Icons.ad_units_rounded, 'title': 'Marketing', 'route': '/marketing'},
-    // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'route': '/support'},
-    // {'icon': Icons.bar_chart_rounded, 'title': 'Reports', 'route': '/reports'},
-    // {'icon': Icons.settings_rounded, 'title': 'Settings', 'route': '/settings'},
-    // {'icon': Icons.groups_rounded, 'title': 'Team Management', 'route': '/team'},
+    {'icon': Icons.support_agent_rounded, 'title': 'Support', 'route': '/support'},
+  ];
+
+  static const List<Map<String, dynamic>> _salesMenuItems = [
+    {
+      'icon': Icons.dashboard_rounded,
+      'title': 'Sales Dashboard',
+      'route': '/sales/dashboard',
+    },
+    {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'route': '/leads'},
+    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'route': '/dealers'},
   ];
 
   @override
   Widget build(BuildContext context) {
     final currentRoute = ModalRoute.of(context)?.settings.name;
+    final role = AuthService().currentUserRole ?? UserRole.admin;
+    final menuItems = role == UserRole.admin ? _adminMenuItems : _salesMenuItems;
 
     return Container(
       width: 260,
@@ -35,7 +42,6 @@ class SidebarWidget extends StatelessWidget {
       child: Column(
         children: [
           // 1. Sidebar Header (Logo Section)
-          // Fixed 70px height and bottom border to align perfectly with Topbar
           Container(
             height: 70,
             width: double.infinity,
@@ -66,9 +72,9 @@ class SidebarWidget extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _menuItems.length,
+              itemCount: menuItems.length,
               itemBuilder: (context, index) {
-                final item = _menuItems[index];
+                final item = menuItems[index];
                 final isActive = currentRoute == item['route'];
 
                 return Padding(
@@ -87,6 +93,20 @@ class SidebarWidget extends StatelessWidget {
                     },
                   ),
                 );
+              },
+            ),
+          ),
+
+          // Logout Button
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: _SidebarItem(
+              icon: Icons.logout_rounded,
+              title: 'Logout',
+              isActive: false,
+              onTap: () {
+                AuthService().logout();
+                Navigator.pushReplacementNamed(context, '/login');
               },
             ),
           ),
@@ -152,3 +172,4 @@ class _SidebarItem extends StatelessWidget {
     );
   }
 }
+

@@ -35,6 +35,7 @@ dependencies:
   ios_search_appbar: ^1.1.6
   syncfusion_flutter_datepicker: ^33.2.4
   switch_button: ^0.0.1
+  google_fonts: ^8.1.0
 
 dev_dependencies:
   flutter_test:

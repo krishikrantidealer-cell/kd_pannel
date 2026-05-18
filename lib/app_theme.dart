@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Colors
-  static const Color primaryColor = Color(0xFF4CAF50);
+  static const Color primaryColor = Color(0xFF298E4D); // Official Green
+  static const Color accentColor = Color(0xFFFA9527); // Official Orange
   static const Color backgroundColor = Color(0xFFF9FAFB);
   static const Color cardColor = Colors.white;
   static const Color textPrimary = Color(0xFF111827);
@@ -10,7 +11,9 @@ class AppTheme {
   static const Color textBody = Color(0xFF374151);
   static const Color borderColor = Color(0xFFE5E7EB);
   static const Color lightBorderColor = Color(0xFFF3F4F6);
-  static const Color shadowColor = Color(0x0A000000); // 0.04 opacity black approx
+  static const Color shadowColor = Color(
+    0x0A000000,
+  ); // 0.04 opacity black approx
 
   // Functional Colors
   static const Color success = Color(0xFF10B981);
@@ -26,11 +29,22 @@ class AppTheme {
   static const double spacingMedium = 16.0;
   static const double spacingLarge = 24.0;
   static const double spacingXLarge = 32.0;
+  static const double spacing2XL = 40.0;
+  static const double spacing3XL = 48.0;
 
   // Responsive Padding
-  static const EdgeInsets mobilePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 16);
-  static const EdgeInsets tabletPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 20);
-  static const EdgeInsets desktopPadding = EdgeInsets.symmetric(horizontal: 32, vertical: 24);
+  static const EdgeInsets mobilePadding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 16,
+  );
+  static const EdgeInsets tabletPadding = EdgeInsets.symmetric(
+    horizontal: 24,
+    vertical: 20,
+  );
+  static const EdgeInsets desktopPadding = EdgeInsets.symmetric(
+    horizontal: 32,
+    vertical: 24,
+  );
 
   static EdgeInsets getResponsivePadding(BuildContext context) {
     double width = MediaQuery.of(context).size.width;
@@ -102,10 +116,7 @@ class AppTheme {
         bodyMedium: body,
         bodySmall: caption,
       ),
-      dividerTheme: const DividerThemeData(
-        color: borderColor,
-        thickness: 1,
-      ),
+      dividerTheme: const DividerThemeData(color: borderColor, thickness: 1),
     );
   }
 

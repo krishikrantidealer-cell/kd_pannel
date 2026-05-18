@@ -16,7 +16,7 @@ class TableWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingXLarge - 12), // 20
+      padding: EdgeInsets.all(AppTheme.spacingXLarge - 12), // 20
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
@@ -54,7 +54,7 @@ class TableWidget extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppTheme.spacingMedium),
+          SizedBox(height: AppTheme.spacingMedium),
           _buildTable(context),
         ],
       ),
@@ -161,7 +161,7 @@ class TableWidget extends StatelessWidget {
 
     return Text(
       cell,
-      style: const TextStyle(fontSize: 13, color: AppTheme.textBody),
+      style: TextStyle(fontSize: 13, color: AppTheme.textBody),
     );
   }
 }

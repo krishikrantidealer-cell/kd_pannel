@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -283,12 +284,12 @@ class _StatGridRow extends StatelessWidget {
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : spacing),
-                  child: _StatCard(
+                  child: StatCardWidget(
                     width: double.infinity,
                     title: item['title'],
                     value: item['value'],
                     subtext: item['subtext'],
-                    image: item['image'],
+                    imagePath: item['image'],
                     color: item['color'],
                   ),
                 ),
@@ -301,84 +302,16 @@ class _StatGridRow extends StatelessWidget {
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
-          children: items.map((item) => _StatCard(
+          children: items.map((item) => StatCardWidget(
             width: width.clamp(140.0, double.infinity),
             title: item['title'],
             value: item['value'],
             subtext: item['subtext'],
-            image: item['image'],
+            imagePath: item['image'],
             color: item['color'],
           )).toList(),
         );
       },
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final double width;
-  final String title;
-  final String value;
-  final String? subtext;
-  final String image;
-  final Color color;
-
-  const _StatCard({required this.width, required this.title, required this.value, this.subtext, required this.image, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isMobile = Responsive.isMobile(context);
-
-    return Container(
-      width: width, height: isMobile ? 140 : 170,
-      decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(isMobile ? 18 : 20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: isMobile ? 14 : 20,
-            spreadRadius: isMobile ? 1 : 2,
-            offset: Offset(0, isMobile ? 4 : 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(isMobile ? 18 : 20)),
-            child: Container(
-              height: isMobile ? 65 : 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [color.withOpacity(0.15), color.withOpacity(0.01)]),
-                borderRadius: BorderRadius.vertical(bottom: Radius.elliptical(isMobile ? 100 : 120, isMobile ? 25 : 35)),
-              ),
-            ),
-          ),
-          Positioned(
-            top: isMobile ? 16 : 20,
-            child: SizedBox(
-              width: isMobile ? 36 : 42, height: isMobile ? 36 : 42,
-              child: Image.asset(
-                image,
-                color: color,
-                fit: BoxFit.contain,
-              )
-            )
-          ),
-          Positioned(
-            bottom: isMobile ? 12 : 16,
-            child: Column(
-              children: [
-                Text(title, style: TextStyle(fontSize: isMobile ? 11 : 12, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500)),
-                SizedBox(height: isMobile ? 2 : 4),
-                Text(value, style: TextStyle(fontSize: isMobile ? 18 : 22, fontWeight: FontWeight.bold, color: const Color(0xFF1F2937))),
-                if (subtext != null) Text(subtext!, style: TextStyle(fontSize: isMobile ? 10 : 11, color: const Color(0xFF9CA3AF))),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

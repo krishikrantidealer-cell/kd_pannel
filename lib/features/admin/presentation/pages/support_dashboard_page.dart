@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import '../widgets/table_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/table_widget.dart';
 
 class SupportDashboardPage extends StatelessWidget {
   const SupportDashboardPage({super.key});
@@ -27,9 +27,9 @@ class SupportDashboardPage extends StatelessWidget {
                   color: AppTheme.textPrimary,
                 ),
               ),
-              const SizedBox(height: AppTheme.spacingLarge),
+              SizedBox(height: AppTheme.spacingLarge),
               const _SupportStatsGrid(),
-              const SizedBox(height: AppTheme.spacingLarge),
+              SizedBox(height: AppTheme.spacingLarge),
               if (isDesktop)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +167,7 @@ class _SupportStatCard extends StatelessWidget {
         alignment: Alignment.topCenter,
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.borderRadiusXLarge)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.borderRadiusXLarge)),
             child: Container(
               width: double.infinity,
               height: 95,
@@ -205,13 +205,13 @@ class _SupportStatCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                   textAlign: TextAlign.center,
                 ),
               ],
