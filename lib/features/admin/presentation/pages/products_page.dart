@@ -252,49 +252,92 @@ class _ProductsPageState extends State<ProductsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Product Catalogue',
-                    style: GoogleFonts.outfit(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
+          isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Product Catalogue',
+                      style: GoogleFonts.outfit(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'View and manage agricultural products, categories and sub-categories',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: AppTheme.textSecondary,
+                    const SizedBox(height: 4),
+                    Text(
+                      'View and manage agricultural products, categories and sub-categories',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              ElevatedButton.icon(
-                onPressed: _startAddProduct,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Product'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _startAddProduct,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add Product'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Product Catalogue',
+                            style: GoogleFonts.outfit(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'View and manage agricultural products, categories and sub-categories',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _startAddProduct,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add Product'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
           SizedBox(height: AppTheme.spacingLarge),
 
           // Search & Filter Row
@@ -456,7 +499,7 @@ class _ProductsPageState extends State<ProductsPage> {
           Expanded(flex: 2, child: _TableHeaderText('CATEGORY')),
           Expanded(flex: 1, child: _TableHeaderText('VARIANTS')),
           Expanded(flex: 1, child: _TableHeaderText('UNIT PRICE')),
-          Expanded(flex: 1, child: _TableHeaderText('AVAILABILITY')),
+          Expanded(flex: 2, child: _TableHeaderText('AVAILABILITY')),
           SizedBox(width: 80),
         ],
       ),
@@ -587,7 +630,7 @@ class _ProductsPageState extends State<ProductsPage> {
                   ),
                 ),
                 Expanded(
-                  flex: 1,
+                  flex: 2,
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: _buildAvailabilityBadge(prod),
@@ -627,10 +670,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 750),
-        child: tableWidget,
-      ),
+      child: SizedBox(width: 850, child: tableWidget),
     );
   }
 
@@ -646,7 +686,7 @@ class _ProductsPageState extends State<ProductsPage> {
         child: Tooltip(
           message: 'Click to toggle availability',
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(20),
@@ -663,12 +703,12 @@ class _ProductsPageState extends State<ProductsPage> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
                   label,
                   style: GoogleFonts.outfit(
                     color: color,
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

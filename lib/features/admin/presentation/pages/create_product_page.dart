@@ -24,6 +24,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final HtmlEditorController _descriptionController = HtmlEditorController();
   List<String> _tags = [];
   List<Map<String, dynamic>> _formVariants = [];
+  List<Map<String, String>> _priceTiers = [
+    {'id': '1', 'name': 'Tier 1 (10-30)'},
+    {'id': '2', 'name': 'Tier 2 (30-50)'},
+    {'id': '3', 'name': 'Tier 3 (50+)'},
+  ];
   List<Uint8List> _productImages = [];
   final ImagePicker _picker = ImagePicker();
 
@@ -50,15 +55,19 @@ class _CreateProductPageState extends State<CreateProductPage> {
       _formInStock = data['inStock'] ?? true;
       _tags = List<String>.from(data['tags'] ?? []);
 
+      if (data['priceTiers'] != null) {
+        try {
+          _priceTiers = List<Map<String, String>>.from(
+            (data['priceTiers'] as List).map(
+              (t) => Map<String, String>.from(t as Map),
+            ),
+          );
+        } catch (_) {}
+      }
+
       if (data['variants'] != null) {
         for (var v in data['variants']) {
-          _formVariants.add({
-            'price': TextEditingController(text: v['price']),
-            'compareAtPrice': TextEditingController(text: v['compareAtPrice']),
-            'packSize': TextEditingController(text: v['packSize']),
-            'baseQuantity': TextEditingController(text: v['baseQuantity']),
-            'image': v['image'],
-          });
+          _addVariant(data: v);
         }
       }
       if (_formVariants.isEmpty) {
@@ -76,6 +85,34 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
   }
 
+  Map<String, String> _parsePackSize(String packSizeText) {
+    final match = RegExp(
+      r'^(\d+\.?\d*)\s*([a-zA-Z]+)$',
+    ).firstMatch(packSizeText.trim());
+    if (match != null) {
+      return {'val': match.group(1) ?? '1', 'unit': match.group(2) ?? 'lit'};
+    }
+    final valOnly = packSizeText.replaceAll(RegExp(r'[^0-9.]'), '');
+    final unitOnly = packSizeText.replaceAll(RegExp(r'[0-9.]'), '').trim();
+    return {
+      'val': valOnly.isEmpty ? '1' : valOnly,
+      'unit': unitOnly.isEmpty ? 'lit' : unitOnly,
+    };
+  }
+
+  String _parseRate(String rateString) {
+    // Extract digits and decimals from the beginning of the string
+    final match = RegExp(r'^([0-9.]+)').firstMatch(rateString.trim());
+    return match?.group(1) ?? rateString.trim();
+  }
+
+  String _getRateSuffix(String packUnit) {
+    final unit = packUnit.toLowerCase().trim();
+    if (unit == 'ml' || unit == 'lit') return '/lit';
+    if (unit == 'gm' || unit == 'kg') return '/kg';
+    return '/pcs';
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -84,22 +121,176 @@ class _CreateProductPageState extends State<CreateProductPage> {
     for (var variant in _formVariants) {
       variant['price']?.dispose();
       variant['compareAtPrice']?.dispose();
-      variant['packSize']?.dispose();
+      variant['packSizeVal']?.dispose();
       variant['baseQuantity']?.dispose();
+      variant['compareRate']?.dispose();
+      variant['basePackingVal']?.dispose();
+
+      final rates = variant['rates'] as Map<String, TextEditingController>?;
+      rates?.values.forEach((ctrl) => ctrl.dispose());
+
+      final computed =
+          variant['computed'] as Map<String, TextEditingController>?;
+      computed?.values.forEach((ctrl) => ctrl.dispose());
     }
     // Note: HtmlEditorController does not have a dispose() method in html_editor_enhanced.
     // Its lifecycle and webview resources are managed internally by the package.
     super.dispose();
   }
 
-  void _addVariant() {
+  void _addVariant({Map<String, dynamic>? data}) {
+    final String initialPrice = data?['price'] ?? '';
+    final String initialCompare = data?['compareAtPrice'] ?? '';
+    final String initialPackSize = data?['packSize'] ?? '';
+    final String initialQty = data?['baseQuantity'] ?? '1';
+    final String initialBasePacking = data?['basePacking'] ?? '';
+
+    // Parse pack size
+    String packVal = '1';
+    String packUnit = 'lit';
+    if (initialPackSize.isNotEmpty) {
+      final parsed = _parsePackSize(initialPackSize);
+      packVal = parsed['val'] ?? '1';
+      packUnit = (parsed['unit'] ?? 'lit').toLowerCase();
+      if (packUnit.isEmpty) packUnit = 'lit';
+    }
+
+    // Parse base packing
+    String basePackVal = '1';
+    String basePackUnit = 'lit';
+    if (initialBasePacking.isNotEmpty) {
+      final parsed = _parsePackSize(initialBasePacking);
+      basePackVal = parsed['val'] ?? '1';
+      basePackUnit = (parsed['unit'] ?? 'lit').toLowerCase();
+      if (basePackUnit.isEmpty) basePackUnit = 'lit';
+    }
+
+    final priceCtrl = TextEditingController(text: initialPrice);
+    final compareCtrl = TextEditingController(text: initialCompare);
+    final packValCtrl = TextEditingController(text: packVal);
+    final qtyCtrl = TextEditingController(text: initialQty);
+    final compareRateCtrl = TextEditingController();
+    final basePackingValCtrl = TextEditingController(text: basePackVal);
+
+    // Map of rates for each tier
+    final rates = <String, TextEditingController>{};
+    final computed = <String, TextEditingController>{};
+
+    for (var tier in _priceTiers) {
+      final id = tier['id']!;
+      // Read rate from data if available
+      final String rateVal =
+          data?['rates']?[id] ??
+          data?['unitPriceRate${id == "1" ? "" : id}'] ??
+          '';
+      rates[id] = TextEditingController(text: _parseRate(rateVal));
+      computed[id] = TextEditingController(
+        text: data?['price$id'] ?? data?['computedPrices']?[id] ?? '',
+      );
+    }
+
+    // Handle initial fallback or legacy values for rates
+    final String legacyUnitPriceRate =
+        data?['unitPriceRate'] ?? data?['price'] ?? '';
+    final String legacyUnitCompareRate =
+        data?['unitCompareRate'] ?? data?['compareAtPrice'] ?? '';
+
+    if (rates['1']!.text.isEmpty && legacyUnitPriceRate.isNotEmpty) {
+      rates['1']!.text = _parseRate(legacyUnitPriceRate);
+    }
+    if (compareRateCtrl.text.isEmpty && legacyUnitCompareRate.isNotEmpty) {
+      compareRateCtrl.text = _parseRate(legacyUnitCompareRate);
+    }
+
+    // If unit rates are empty but we have final prices and pack size, let's reverse calculate!
+    final double? finalPrice = double.tryParse(initialPrice);
+    final double? finalCompare = double.tryParse(initialCompare);
+    final double? sizeVal = double.tryParse(packVal);
+
+    double getFactor() {
+      double factor = 1.0;
+      final String currentUnit = packUnit.toLowerCase().trim();
+      if (currentUnit == 'ml' || currentUnit == 'gm' || currentUnit == 'g')
+        factor = 0.001;
+      return factor;
+    }
+
+    if (rates['1']!.text.isEmpty &&
+        finalPrice != null &&
+        sizeVal != null &&
+        sizeVal > 0) {
+      rates['1']!.text = (finalPrice / (sizeVal * getFactor())).toStringAsFixed(
+        2,
+      );
+    }
+    if (compareRateCtrl.text.isEmpty &&
+        finalCompare != null &&
+        sizeVal != null &&
+        sizeVal > 0) {
+      compareRateCtrl.text = (finalCompare / (sizeVal * getFactor()))
+          .toStringAsFixed(2);
+    }
+
+    // Setup listeners to calculate prices on the fly!
+    void recalculate() {
+      final double? cRateVal = double.tryParse(compareRateCtrl.text);
+      final double? sVal = double.tryParse(packValCtrl.text);
+
+      if (sVal != null && sVal > 0) {
+        final factor = getFactor();
+
+        if (cRateVal != null) {
+          final computedMRP = cRateVal * sVal * factor;
+          compareCtrl.text = computedMRP % 1 == 0
+              ? computedMRP.toStringAsFixed(0)
+              : computedMRP.toStringAsFixed(2);
+        }
+
+        for (var tier in _priceTiers) {
+          final id = tier['id']!;
+          final rateCtrl = rates[id];
+          final compCtrl = computed[id];
+          if (rateCtrl != null && compCtrl != null) {
+            final double? rVal = double.tryParse(rateCtrl.text);
+            if (rVal != null) {
+              final computedVal = rVal * sVal * factor;
+              compCtrl.text = computedVal % 1 == 0
+                  ? computedVal.toStringAsFixed(0)
+                  : computedVal.toStringAsFixed(2);
+
+              if (id == '1') {
+                priceCtrl.text = compCtrl.text;
+              }
+            } else {
+              compCtrl.clear();
+              if (id == '1') priceCtrl.clear();
+            }
+          }
+        }
+      }
+    }
+
+    compareRateCtrl.addListener(recalculate);
+    packValCtrl.addListener(recalculate);
+    for (var controller in rates.values) {
+      controller.addListener(recalculate);
+    }
+
     setState(() {
       _formVariants.add({
-        'price': TextEditingController(),
-        'compareAtPrice': TextEditingController(),
-        'packSize': TextEditingController(),
-        'baseQuantity': TextEditingController(),
-        'image': null,
+        'price': priceCtrl,
+        'compareAtPrice': compareCtrl,
+        'packSizeVal': packValCtrl,
+        'packSizeUnit': packUnit,
+        'baseQuantity': qtyCtrl,
+        'compareRate': compareRateCtrl,
+        'basePackingVal': basePackingValCtrl,
+        'basePackingUnit': basePackUnit,
+        'rates': rates,
+        'computed': computed,
+        'image': data?['image'],
+        // Maintain recalculate reference for update on unit dropdown change
+        'recalculate': recalculate,
       });
     });
   }
@@ -108,10 +299,261 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final variant = _formVariants[index];
     variant['price']?.dispose();
     variant['compareAtPrice']?.dispose();
-    variant['packSize']?.dispose();
+    variant['packSizeVal']?.dispose();
     variant['baseQuantity']?.dispose();
+    variant['compareRate']?.dispose();
+    variant['basePackingVal']?.dispose();
+
+    final rates = variant['rates'] as Map<String, TextEditingController>?;
+    rates?.values.forEach((ctrl) => ctrl.dispose());
+
+    final computed = variant['computed'] as Map<String, TextEditingController>?;
+    computed?.values.forEach((ctrl) => ctrl.dispose());
+
     setState(() {
       _formVariants.removeAt(index);
+    });
+  }
+
+  void _addNewTier(String name) {
+    final newId = (DateTime.now().millisecondsSinceEpoch).toString();
+    setState(() {
+      _priceTiers.add({'id': newId, 'name': name});
+
+      // Update all variants to have this tier's controllers
+      for (var variant in _formVariants) {
+        final ratesMap = variant['rates'] as Map<String, TextEditingController>;
+        final computedMap =
+            variant['computed'] as Map<String, TextEditingController>;
+        final recalculate = variant['recalculate'] as VoidCallback;
+
+        final rateCtrl = TextEditingController();
+        ratesMap[newId] = rateCtrl;
+        computedMap[newId] = TextEditingController();
+
+        rateCtrl.addListener(recalculate);
+      }
+    });
+  }
+
+  void _deleteTier(String id) {
+    if (id == '1') return; // Primary is required
+    setState(() {
+      _priceTiers.removeWhere((t) => t['id'] == id);
+
+      for (var variant in _formVariants) {
+        final ratesMap = variant['rates'] as Map<String, TextEditingController>;
+        final computedMap =
+            variant['computed'] as Map<String, TextEditingController>;
+
+        final rateCtrl = ratesMap.remove(id);
+        if (rateCtrl != null) {
+          final recalculate = variant['recalculate'] as VoidCallback;
+          rateCtrl.removeListener(recalculate);
+          rateCtrl.dispose();
+        }
+        final compCtrl = computedMap.remove(id);
+        compCtrl?.dispose();
+
+        // Trigger recalculate after removing tier
+        final recalculate = variant['recalculate'] as VoidCallback;
+        recalculate();
+      }
+    });
+  }
+
+  void _showManageTiersDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final addController = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                width: 400,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Configure Pricing Tiers',
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            setState(() {});
+                          },
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Tiers are applied globally. Tier 1 is the primary selling price.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 250),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _priceTiers.length,
+                        itemBuilder: (context, idx) {
+                          final tier = _priceTiers[idx];
+                          final isPrimary = tier['id'] == '1';
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    initialValue: tier['name'],
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    style: GoogleFonts.outfit(fontSize: 13),
+                                    onChanged: (val) {
+                                      tier['name'] = val;
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                isPrimary
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor
+                                              .withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Primary',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 11,
+                                            color: AppTheme.primaryColor,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      )
+                                    : IconButton(
+                                        onPressed: () {
+                                          _deleteTier(tier['id']!);
+                                          setDialogState(() {});
+                                        },
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          color: AppTheme.error,
+                                          size: 18,
+                                        ),
+                                      ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 24),
+                    Text(
+                      'Add New Tier',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: addController,
+                            decoration: InputDecoration(
+                              hintText: 'e.g. Tier 4 (Bulk)',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            style: GoogleFonts.outfit(fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (addController.text.trim().isNotEmpty) {
+                              _addNewTier(addController.text.trim());
+                              addController.clear();
+                              setDialogState(() {});
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                          child: Text(
+                            'Add',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      setState(() {});
     });
   }
 
@@ -167,12 +609,53 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     List<Map<String, dynamic>> variantsData = [];
     for (var v in _formVariants) {
+      final ratesMap = v['rates'] as Map<String, TextEditingController>;
+      final computedMap = v['computed'] as Map<String, TextEditingController>;
+
+      final ratesJson = <String, String>{};
+      final computedJson = <String, String>{};
+
+      final suffix = _getRateSuffix(v['packSizeUnit']);
+
+      ratesMap.forEach((key, ctrl) {
+        final val = ctrl.text.trim();
+        ratesJson[key] = val.isNotEmpty ? '$val$suffix' : '';
+      });
+      computedMap.forEach((key, ctrl) {
+        computedJson[key] = ctrl.text;
+      });
+
+      final String primaryRateVal = ratesMap['1']?.text.trim() ?? '';
+      final String primaryRateWithSuffix = primaryRateVal.isNotEmpty
+          ? '$primaryRateVal$suffix'
+          : '';
+
+      final String mrpRateVal = v['compareRate'].text.trim();
+      final String mrpRateWithSuffix = mrpRateVal.isNotEmpty
+          ? '$mrpRateVal$suffix'
+          : '';
+
       variantsData.add({
-        'price': v['price'].text,
-        'compareAtPrice': v['compareAtPrice'].text,
-        'packSize': v['packSize'].text,
+        'price': primaryRateWithSuffix,
+        'compareAtPrice': mrpRateWithSuffix,
+        'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
+        'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
         'baseQuantity': v['baseQuantity'].text,
         'image': v['image'],
+        'unitCompareRate': mrpRateWithSuffix,
+        'rates': ratesJson,
+        'computedPrices': computedJson,
+
+        // Also map legacy properties for safety & backward compatibility
+        'unitPriceRate': primaryRateWithSuffix,
+        'unitPriceRate2': (ratesMap['2']?.text.isNotEmpty ?? false)
+            ? '${ratesMap['2']!.text}$suffix'
+            : '',
+        'unitPriceRate3': (ratesMap['3']?.text.isNotEmpty ?? false)
+            ? '${ratesMap['3']!.text}$suffix'
+            : '',
+        'price2': computedMap['2']?.text ?? '',
+        'price3': computedMap['3']?.text ?? '',
       });
     }
 
@@ -197,6 +680,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       'variants': variantsData,
       'images': _productImages,
       'tags': _tags,
+      'priceTiers': _priceTiers,
     };
 
     widget.onSave(data);
@@ -289,7 +773,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.all(
+            MediaQuery.of(context).size.width > 800 ? 24.0 : 16.0,
+          ),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final bool isWide = constraints.maxWidth > 800;
@@ -360,20 +846,45 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   _buildSectionCard(
                     title: 'Product Variants',
                     icon: Icons.style_outlined,
-                    action: TextButton.icon(
-                      onPressed: _addVariant,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: Text(
-                        'Add Variant',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.primaryColor,
-                      ),
+                    action: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _showManageTiersDialog,
+                          icon: const Icon(Icons.settings_outlined, size: 18),
+                          label: Text(
+                            'Manage Tiers',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: _addVariant,
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(
+                            'Add Variant',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: _formVariants.asMap().entries.map((entry) {
-                        return _buildVariantCard(entry.key, entry.value);
+                        return _buildVariantCard(
+                          entry.key,
+                          entry.value,
+                          isMobile: !isWide,
+                        );
                       }).toList(),
                     ),
                   ),
@@ -962,44 +1473,367 @@ class _CreateProductPageState extends State<CreateProductPage> {
     );
   }
 
-  Widget _buildVariantCard(int index, Map<String, dynamic> variant) {
-    // Discount badge calculation
-    final priceText = variant['price'].text;
-    final compareText = variant['compareAtPrice'].text;
-    double? price = double.tryParse(priceText);
-    double? compare = double.tryParse(compareText);
-    Widget? discountBadge;
-    if (price != null && compare != null && compare > price) {
-      final discountPercent = ((compare - price) / compare * 100).round();
-      final savings = compare - price;
-      discountBadge = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppTheme.success.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
+  Widget _buildVariantCard(
+    int index,
+    Map<String, dynamic> variant, {
+    required bool isMobile,
+  }) {
+    final imagePickerWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Image',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.local_offer_outlined,
-              size: 12,
-              color: AppTheme.success,
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: () {
+            _pickAndEditImage(
+              onImageEdited: (editedImage) {
+                setState(() => variant['image'] = editedImage);
+              },
+            );
+          },
+          child: Container(
+            height: 70,
+            width: 70,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.borderColor),
+              image: variant['image'] != null && variant['image'] is Uint8List
+                  ? DecorationImage(
+                      image: MemoryImage(variant['image'] as Uint8List),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
             ),
-            const SizedBox(width: 4),
-            Text(
-              '$discountPercent% OFF (Save ₹${savings.toStringAsFixed(0)})',
+            child: variant['image'] == null || variant['image'] is! Uint8List
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          color: AppTheme.textSecondary,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  )
+                : null,
+          ),
+        ),
+      ],
+    );
+
+    final bool isLiquid = ['ml', 'lit'].contains(variant['packSizeUnit']);
+    final bool isSolid = ['gm', 'kg'].contains(variant['packSizeUnit']);
+
+    // Get compatible units for base packing
+    List<String> basePackingUnits = [];
+    if (isLiquid) {
+      basePackingUnits = ['lit', 'ml'];
+    } else if (isSolid) {
+      basePackingUnits = ['kg', 'gm'];
+    } else {
+      basePackingUnits = ['pcs'];
+    }
+
+    // Ensure basePackingUnit is in the valid list, otherwise reset to default
+    if (!basePackingUnits.contains(variant['basePackingUnit'])) {
+      variant['basePackingUnit'] = basePackingUnits.first;
+    }
+
+    final Widget packSizeValueField = _buildFormTextField(
+      label: 'Pack Size',
+      hint: 'e.g. 250',
+      controller: variant['packSizeVal'],
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+      ],
+      validator: (val) {
+        if (val == null || val.trim().isEmpty) return 'Required';
+        final numVal = double.tryParse(val);
+        if (numVal == null || numVal <= 0) return 'Invalid';
+        return null;
+      },
+      isCompact: true,
+    );
+
+    final Widget packSizeUnitField = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Pack Unit',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 32,
+          width: double.infinity,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value:
+                  [
+                    'ml',
+                    'lit',
+                    'gm',
+                    'kg',
+                    'pcs',
+                  ].contains(variant['packSizeUnit'])
+                  ? variant['packSizeUnit']
+                  : 'lit',
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    variant['packSizeUnit'] = val;
+                    // Auto-resolve base packing unit category mismatch
+                    if (['ml', 'lit'].contains(val)) {
+                      variant['basePackingUnit'] = 'lit';
+                    } else if (['gm', 'kg'].contains(val)) {
+                      variant['basePackingUnit'] = 'kg';
+                    } else {
+                      variant['basePackingUnit'] = 'pcs';
+                    }
+                  });
+                  variant['recalculate']();
+                }
+              },
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'ml', child: Text('ml')),
+                DropdownMenuItem(value: 'lit', child: Text('lit')),
+                DropdownMenuItem(value: 'gm', child: Text('gm')),
+                DropdownMenuItem(value: 'kg', child: Text('kg')),
+                DropdownMenuItem(value: 'pcs', child: Text('pcs')),
+              ],
               style: GoogleFonts.outfit(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.success,
+                fontSize: 13,
+                color: AppTheme.textPrimary,
               ),
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    );
+
+    final Widget basePackingValueField = _buildFormTextField(
+      label: 'Base Packing',
+      hint: 'e.g. 10',
+      controller: variant['basePackingVal'],
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+      ],
+      validator: (val) {
+        if (val == null || val.trim().isEmpty) return 'Required';
+        final numVal = double.tryParse(val);
+        if (numVal == null || numVal <= 0) return 'Invalid';
+        return null;
+      },
+      isCompact: true,
+    );
+
+    final Widget basePackingUnitField = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Base Unit',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 32,
+          width: double.infinity,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: variant['basePackingUnit'],
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    variant['basePackingUnit'] = val;
+                  });
+                }
+              },
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+              items: basePackingUnits.map((u) {
+                return DropdownMenuItem<String>(value: u, child: Text(u));
+              }).toList(),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final sizeFields = isMobile
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: packSizeValueField),
+                  const SizedBox(width: 12),
+                  Expanded(child: packSizeUnitField),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: basePackingValueField),
+                  const SizedBox(width: 12),
+                  Expanded(child: basePackingUnitField),
+                ],
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(flex: 2, child: packSizeValueField),
+              const SizedBox(width: 12),
+              Expanded(flex: 2, child: packSizeUnitField),
+              const SizedBox(width: 12),
+              Expanded(flex: 2, child: basePackingValueField),
+              const SizedBox(width: 12),
+              Expanded(flex: 2, child: basePackingUnitField),
+            ],
+          );
+
+    // MRP rate is always first
+    final List<Widget> rateRowChildren = [
+      Expanded(
+        child: _buildFormTextField(
+          label: 'MRP Rate (Per Unit)',
+          hint: 'e.g. 2400',
+          controller: variant['compareRate'],
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (val) {
+            if (val == null || val.trim().isEmpty) return 'Required';
+            final numVal = double.tryParse(val);
+            if (numVal == null || numVal <= 0) return 'Invalid';
+            return null;
+          },
+          prefixIcon: const Icon(
+            Icons.currency_rupee_rounded,
+            size: 14,
+            color: AppTheme.textSecondary,
+          ),
+          isCompact: true,
+        ),
+      ),
+    ];
+
+    // Build the fields for each tier dynamically
+    final ratesMap = variant['rates'] as Map<String, TextEditingController>;
+    final List<Widget> dynamicTierFields = [];
+
+    for (var tier in _priceTiers) {
+      final id = tier['id']!;
+      final ctrl = ratesMap[id];
+      if (ctrl != null) {
+        final isPrimary = id == '1';
+        dynamicTierFields.add(
+          _buildFormTextField(
+            label: '${tier['name']} Rate',
+            hint: isPrimary ? 'e.g. 950' : 'Optional',
+            controller: ctrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+            validator: isPrimary
+                ? (val) {
+                    if (val == null || val.trim().isEmpty) return 'Required';
+                    final numVal = double.tryParse(val);
+                    if (numVal == null || numVal <= 0) return 'Invalid';
+                    return null;
+                  }
+                : null,
+            prefixIcon: const Icon(
+              Icons.currency_rupee_rounded,
+              size: 14,
+              color: AppTheme.textSecondary,
+            ),
+            isCompact: true,
+          ),
+        );
+      }
     }
+
+    // Lay out the fields in rows of 2
+    final List<Widget> rateRows = [];
+
+    // First row: MRP + Primary Tier (Tier 1)
+    if (dynamicTierFields.isNotEmpty) {
+      rateRowChildren.add(const SizedBox(width: 12));
+      rateRowChildren.add(Expanded(child: dynamicTierFields[0]));
+    }
+    rateRows.add(Row(children: rateRowChildren));
+
+    // Next rows: 2 tiers per row
+    for (int i = 1; i < dynamicTierFields.length; i += 2) {
+      final List<Widget> rowItems = [];
+      rowItems.add(Expanded(child: dynamicTierFields[i]));
+      if (i + 1 < dynamicTierFields.length) {
+        rowItems.add(const SizedBox(width: 12));
+        rowItems.add(Expanded(child: dynamicTierFields[i + 1]));
+      } else {
+        rowItems.add(const SizedBox(width: 12));
+        rowItems.add(const Spacer()); // fill empty spot
+      }
+      rateRows.add(const SizedBox(height: 10));
+      rateRows.add(Row(children: rowItems));
+    }
+
+    final rateFields = Column(children: rateRows);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1040,10 +1874,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           color: AppTheme.textPrimary,
                         ),
                       ),
-                      if (discountBadge != null) ...[
-                        const SizedBox(width: 12),
-                        discountBadge,
-                      ],
                     ],
                   ),
                   if (_formVariants.length > 1)
@@ -1061,204 +1891,33 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Image',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      GestureDetector(
-                        onTap: () {
-                          _pickAndEditImage(
-                            onImageEdited: (editedImage) {
-                              setState(() => variant['image'] = editedImage);
-                            },
-                          );
-                        },
-                        child: Container(
-                          height: 70,
-                          width: 70,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.borderColor),
-                            image:
-                                variant['image'] != null &&
-                                    variant['image'] is Uint8List
-                                ? DecorationImage(
-                                    image: MemoryImage(
-                                      variant['image'] as Uint8List,
-                                    ),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
-                          ),
-                          child:
-                              variant['image'] == null ||
-                                  variant['image'] is! Uint8List
-                              ? const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.add_photo_alternate_outlined,
-                                        color: AppTheme.textSecondary,
-                                        size: 20,
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
+              isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildFormTextField(
-                                label: 'Selling Price',
-                                hint: '0.00',
-                                controller: variant['price'],
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'^\d+\.?\d{0,2}'),
-                                  ),
-                                ],
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Required';
-                                  }
-                                  final numPrice = double.tryParse(val);
-                                  if (numPrice == null || numPrice <= 0) {
-                                    return 'Invalid price';
-                                  }
-                                  return null;
-                                },
-                                onChanged: (val) => setState(() {}),
-                                prefixIcon: const Icon(
-                                  Icons.currency_rupee_rounded,
-                                  size: 14,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                isCompact: true,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildFormTextField(
-                                label: 'Compare at Price',
-                                hint: '0.00',
-                                controller: variant['compareAtPrice'],
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'^\d+\.?\d{0,2}'),
-                                  ),
-                                ],
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return null; // optional
-                                  }
-                                  final comp = double.tryParse(val);
-                                  if (comp == null || comp <= 0) {
-                                    return 'Invalid price';
-                                  }
-                                  final pVal = variant['price'].text;
-                                  final p = double.tryParse(pVal);
-                                  if (p != null && comp < p) {
-                                    return 'Must be >= Selling Price';
-                                  }
-                                  return null;
-                                },
-                                onChanged: (val) => setState(() {}),
-                                prefixIcon: const Icon(
-                                  Icons.currency_rupee_rounded,
-                                  size: 14,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                isCompact: true,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildFormTextField(
-                                label: 'Pack Size',
-                                hint: 'e.g. 500g',
-                                controller: variant['packSize'],
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Required';
-                                  }
-                                  return null;
-                                },
-                                prefixIcon: const Icon(
-                                  Icons.inventory_2_outlined,
-                                  size: 14,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                isCompact: true,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildFormTextField(
-                                label: 'Inventory Qty',
-                                hint: '0',
-                                controller: variant['baseQuantity'],
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Required';
-                                  }
-                                  final qty = int.tryParse(val);
-                                  if (qty == null || qty < 0) {
-                                    return 'Invalid Qty';
-                                  }
-                                  return null;
-                                },
-                                prefixIcon: const Icon(
-                                  Icons.layers_outlined,
-                                  size: 14,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                isCompact: true,
-                              ),
-                            ),
-                          ],
+                        imagePickerWidget,
+                        const SizedBox(height: 16),
+                        sizeFields,
+                        const SizedBox(height: 16),
+                        rateFields,
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        imagePickerWidget,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              sizeFields,
+                              const SizedBox(height: 12),
+                              rateFields,
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
