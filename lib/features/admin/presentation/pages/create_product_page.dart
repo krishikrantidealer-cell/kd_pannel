@@ -834,8 +834,32 @@ class _CreateProductPageState extends State<CreateProductPage> {
                               htmlToolbarOptions: const HtmlToolbarOptions(
                                 toolbarPosition: ToolbarPosition.aboveEditor,
                                 toolbarType: ToolbarType.nativeScrollable,
+                                defaultToolbarButtons: [
+                                  StyleButtons(),
+                                  FontSettingButtons(
+                                    fontName: false,
+                                    fontSizeUnit: false,
+                                  ),
+                                  FontButtons(
+                                    superscript: false,
+                                    subscript: false,
+                                    strikethrough: false,
+                                  ),
+                                  ColorButtons(),
+                                  ListButtons(listStyles: false),
+                                  ParagraphButtons(
+                                    lineHeight: false,
+                                    caseConverter: false,
+                                  ),
+                                  InsertButtons(
+                                    video: false,
+                                    audio: false,
+                                    otherFile: false,
+                                  ),
+                                  OtherButtons(fullscreen: false, help: false),
+                                ],
                               ),
-                              otherOptions: const OtherOptions(height: 300),
+                              otherOptions: const OtherOptions(height: 450),
                             ),
                           ),
                         ),
