@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:typed_data';
 import 'package:html_editor_enhanced/html_editor.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +17,7 @@ class CreateProductPage extends StatefulWidget {
 }
 
 class _CreateProductPageState extends State<CreateProductPage> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _vendorController = TextEditingController();
   final _tagController = TextEditingController();
@@ -149,9 +150,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   Future<void> _handleSave() async {
-    if (_nameController.text.isEmpty) {
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a product title.')),
+        const SnackBar(
+          content: Text('Please correct the validation errors in the form.'),
+          backgroundColor: AppTheme.error,
+        ),
       );
       return;
     }
@@ -183,7 +187,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       'sku':
           widget.initialData?['sku'] ??
           'PROD-NEW-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-      'name': _nameController.text,
+      'name': _nameController.text.trim(),
       'category': _formCategory,
       'subCategory': _formSubCategory,
       'vendor': _vendorController.text.trim(),
@@ -196,6 +200,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     };
 
     widget.onSave(data);
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
@@ -281,133 +286,153 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final bool isWide = constraints.maxWidth > 800;
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bool isWide = constraints.maxWidth > 800;
 
-            final leftColumn = Column(
-              children: [
-                _buildSectionCard(
-                  title: 'Basic Details',
-                  icon: Icons.info_outline_rounded,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildFormTextField(
-                        label: 'Product Title',
-                        hint: 'e.g. Premium Drip Irrigation Kit',
-                        controller: _nameController,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Description',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
+              final leftColumn = Column(
+                children: [
+                  _buildSectionCard(
+                    title: 'Basic Details',
+                    icon: Icons.info_outline_rounded,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFormTextField(
+                          label: 'Product Title',
+                          hint: 'e.g. Premium Drip Irrigation Kit',
+                          controller: _nameController,
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Product Title is required';
+                            }
+                            return null;
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.borderColor),
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.white,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: HtmlEditor(
-                            controller: _descriptionController,
-                            htmlEditorOptions: const HtmlEditorOptions(
-                              hint: 'Provide a detailed product description...',
-                              shouldEnsureVisible: true,
-                            ),
-                            htmlToolbarOptions: const HtmlToolbarOptions(
-                              toolbarPosition: ToolbarPosition.aboveEditor,
-                              toolbarType: ToolbarType.nativeScrollable,
-                            ),
-                            otherOptions: const OtherOptions(height: 300),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Description',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionCard(
-                  title: 'Product Variants',
-                  icon: Icons.style_outlined,
-                  action: TextButton.icon(
-                    onPressed: _addVariant,
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: Text(
-                      'Add Variant',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppTheme.borderColor),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: HtmlEditor(
+                              controller: _descriptionController,
+                              htmlEditorOptions: const HtmlEditorOptions(
+                                hint:
+                                    'Provide a detailed product description...',
+                                shouldEnsureVisible: true,
+                              ),
+                              htmlToolbarOptions: const HtmlToolbarOptions(
+                                toolbarPosition: ToolbarPosition.aboveEditor,
+                                toolbarType: ToolbarType.nativeScrollable,
+                              ),
+                              otherOptions: const OtherOptions(height: 300),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionCard(
+                    title: 'Product Variants',
+                    icon: Icons.style_outlined,
+                    action: TextButton.icon(
+                      onPressed: _addVariant,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: Text(
+                        'Add Variant',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                      ),
+                    ),
+                    child: Column(
+                      children: _formVariants.asMap().entries.map((entry) {
+                        return _buildVariantCard(entry.key, entry.value);
+                      }).toList(),
                     ),
                   ),
-                  child: Column(
-                    children: _formVariants.asMap().entries.map((entry) {
-                      return _buildVariantCard(entry.key, entry.value);
-                    }).toList(),
-                  ),
-                ),
-              ],
-            );
-
-            final rightColumn = Column(
-              children: [
-                _buildSectionCard(
-                  title: 'Publishing Status',
-                  icon: Icons.visibility_outlined,
-                  child: _buildAvailabilitySelector(),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionCard(
-                  title: 'Organization',
-                  icon: Icons.category_outlined,
-                  child: Column(
-                    children: [
-                      _buildCategoryDropdowns(),
-                      const SizedBox(height: 20),
-                      _buildFormTextField(
-                        label: 'Vendor',
-                        hint: 'e.g. Jain Irrigation, Mahyco',
-                        controller: _vendorController,
-                      ),
-                      const SizedBox(height: 20),
-                      _buildTagsSection(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionCard(
-                  title: 'Product Media',
-                  icon: Icons.image_outlined,
-                  child: _buildMediaUploader(),
-                ),
-              ],
-            );
-
-            if (isWide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 2, child: leftColumn),
-                  const SizedBox(width: 24),
-                  Expanded(flex: 1, child: rightColumn),
                 ],
               );
-            } else {
-              return Column(
-                children: [leftColumn, const SizedBox(height: 24), rightColumn],
+
+              final rightColumn = Column(
+                children: [
+                  _buildSectionCard(
+                    title: 'Publishing Status',
+                    icon: Icons.visibility_outlined,
+                    child: _buildAvailabilitySelector(),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionCard(
+                    title: 'Organization',
+                    icon: Icons.category_outlined,
+                    child: Column(
+                      children: [
+                        _buildCategoryDropdowns(),
+                        const SizedBox(height: 20),
+                        _buildFormTextField(
+                          label: 'Vendor',
+                          hint: 'e.g. Jain Irrigation, Mahyco',
+                          controller: _vendorController,
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Vendor is required';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        _buildTagsSection(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionCard(
+                    title: 'Product Media',
+                    icon: Icons.image_outlined,
+                    child: _buildMediaUploader(),
+                  ),
+                ],
               );
-            }
-          },
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: leftColumn),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 1, child: rightColumn),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    leftColumn,
+                    const SizedBox(height: 24),
+                    rightColumn,
+                  ],
+                );
+              }
+            },
+          ),
         ),
       ),
     );
@@ -477,6 +502,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
     required TextEditingController controller,
     Widget? prefixIcon,
     bool isCompact = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? validator,
+    void Function(String)? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,6 +521,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          validator: validator,
+          onChanged: onChanged,
           style: GoogleFonts.outfit(
             fontSize: isCompact ? 13 : 14,
             color: AppTheme.textPrimary,
@@ -524,6 +557,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 color: AppTheme.primaryColor,
                 width: 1.5,
               ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(isCompact ? 8 : 10),
+              borderSide: const BorderSide(color: AppTheme.error, width: 1.0),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(isCompact ? 8 : 10),
+              borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
             ),
           ),
         ),
@@ -915,6 +956,44 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   Widget _buildVariantCard(int index, Map<String, dynamic> variant) {
+    // Discount badge calculation
+    final priceText = variant['price'].text;
+    final compareText = variant['compareAtPrice'].text;
+    double? price = double.tryParse(priceText);
+    double? compare = double.tryParse(compareText);
+    Widget? discountBadge;
+    if (price != null && compare != null && compare > price) {
+      final discountPercent = ((compare - price) / compare * 100).round();
+      final savings = compare - price;
+      discountBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.local_offer_outlined,
+              size: 12,
+              color: AppTheme.success,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$discountPercent% OFF (Save ₹${savings.toStringAsFixed(0)})',
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.success,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -944,13 +1023,21 @@ class _CreateProductPageState extends State<CreateProductPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Variant Option ${index + 1}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Variant Option ${index + 1}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      if (discountBadge != null) ...[
+                        const SizedBox(width: 12),
+                        discountBadge,
+                      ],
+                    ],
                   ),
                   if (_formVariants.length > 1)
                     IconButton(
@@ -1039,6 +1126,26 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 label: 'Selling Price',
                                 hint: '0.00',
                                 controller: variant['price'],
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d+\.?\d{0,2}'),
+                                  ),
+                                ],
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Required';
+                                  }
+                                  final numPrice = double.tryParse(val);
+                                  if (numPrice == null || numPrice <= 0) {
+                                    return 'Invalid price';
+                                  }
+                                  return null;
+                                },
+                                onChanged: (val) => setState(() {}),
                                 prefixIcon: const Icon(
                                   Icons.currency_rupee_rounded,
                                   size: 14,
@@ -1053,6 +1160,31 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 label: 'Compare at Price',
                                 hint: '0.00',
                                 controller: variant['compareAtPrice'],
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d+\.?\d{0,2}'),
+                                  ),
+                                ],
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return null; // optional
+                                  }
+                                  final comp = double.tryParse(val);
+                                  if (comp == null || comp <= 0) {
+                                    return 'Invalid price';
+                                  }
+                                  final pVal = variant['price'].text;
+                                  final p = double.tryParse(pVal);
+                                  if (p != null && comp < p) {
+                                    return 'Must be >= Selling Price';
+                                  }
+                                  return null;
+                                },
+                                onChanged: (val) => setState(() {}),
                                 prefixIcon: const Icon(
                                   Icons.currency_rupee_rounded,
                                   size: 14,
@@ -1071,6 +1203,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 label: 'Pack Size',
                                 hint: 'e.g. 500g',
                                 controller: variant['packSize'],
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Required';
+                                  }
+                                  return null;
+                                },
                                 prefixIcon: const Icon(
                                   Icons.inventory_2_outlined,
                                   size: 14,
@@ -1085,6 +1223,20 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 label: 'Inventory Qty',
                                 hint: '0',
                                 controller: variant['baseQuantity'],
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Required';
+                                  }
+                                  final qty = int.tryParse(val);
+                                  if (qty == null || qty < 0) {
+                                    return 'Invalid Qty';
+                                  }
+                                  return null;
+                                },
                                 prefixIcon: const Icon(
                                   Icons.layers_outlined,
                                   size: 14,
