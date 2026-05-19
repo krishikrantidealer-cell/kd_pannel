@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
-import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
+// import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
+// import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
+// import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
+// import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
+// import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'sidebar_widget.dart';
 import 'topbar_widget.dart';
@@ -25,19 +25,12 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = const [
-    DashboardPage(),
     ProductsPage(),
-    LeadsPage(),
-    DealerManagementPage(),
-    SupportDashboardPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = const [
-    SalesDashboardPage(),
     ProductsPage(),
-    LeadsPage(),
-    DealerManagementPage(),
   ];
 
   @override
@@ -47,28 +40,12 @@ class _MainLayoutState extends State<MainLayout> {
     precacheImage(const AssetImage('assets/images/logo.png'), context);
     precacheImage(const AssetImage('assets/images/admin.png'), context);
 
-    final String? routeName = ModalRoute.of(context)?.settings.name;
-    final role = AuthService().currentUserRole ?? UserRole.admin;
-
-    if (routeName != null) {
-      if (role == UserRole.admin) {
-        if (routeName == '/dashboard') _currentIdx = 0;
-        if (routeName == '/products') _currentIdx = 1;
-        if (routeName == '/leads') _currentIdx = 2;
-        if (routeName == '/dealers') _currentIdx = 3;
-        if (routeName == '/support') _currentIdx = 4;
-      } else {
-        if (routeName == '/sales/dashboard') _currentIdx = 0;
-        if (routeName == '/products') _currentIdx = 1;
-        if (routeName == '/leads') _currentIdx = 2;
-        if (routeName == '/dealers') _currentIdx = 3;
-      }
-    }
+    _currentIdx = 0;
   }
 
   void _handleTabSelected(int index) {
     setState(() {
-      _currentIdx = index;
+      _currentIdx = 0;
     });
     // If mobile drawer is open, auto-close it
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {

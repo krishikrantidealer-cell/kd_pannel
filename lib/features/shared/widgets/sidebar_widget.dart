@@ -15,18 +15,18 @@ class SidebarWidget extends StatelessWidget {
   });
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
-    {'icon': Icons.dashboard_rounded, 'title': 'Dashboard'},
+    // {'icon': Icons.dashboard_rounded, 'title': 'Dashboard'},
     {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
-    {'icon': Icons.campaign_rounded, 'title': 'Leads'},
-    {'icon': Icons.storefront_rounded, 'title': 'Dealers'},
-    {'icon': Icons.support_agent_rounded, 'title': 'Support'},
+    // {'icon': Icons.campaign_rounded, 'title': 'Leads'},
+    // {'icon': Icons.storefront_rounded, 'title': 'Dealers'},
+    // {'icon': Icons.support_agent_rounded, 'title': 'Support'},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
-    {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard'},
+    // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard'},
     {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
-    {'icon': Icons.campaign_rounded, 'title': 'My Leads'},
-    {'icon': Icons.storefront_rounded, 'title': 'My Dealers'},
+    // {'icon': Icons.campaign_rounded, 'title': 'My Leads'},
+    // {'icon': Icons.storefront_rounded, 'title': 'My Dealers'},
   ];
 
   @override
