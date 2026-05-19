@@ -322,6 +322,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             color: AppTheme.textPrimary,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Provide a detailed description of the product features, benefits, and specifications.',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Container(
                           decoration: BoxDecoration(
@@ -334,8 +342,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             child: HtmlEditor(
                               controller: _descriptionController,
                               htmlEditorOptions: const HtmlEditorOptions(
-                                hint:
-                                    'Provide a detailed product description...',
+                                hint: '',
                                 shouldEnsureVisible: true,
                               ),
                               htmlToolbarOptions: const HtmlToolbarOptions(
