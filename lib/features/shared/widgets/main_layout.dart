@@ -121,10 +121,13 @@ class _MainLayoutState extends State<MainLayout> {
 
                 // Screen Content
                 Expanded(
-                  child: widget.child ??
+                  child:
+                      widget.child ??
                       IndexedStack(
                         index: _currentIdx,
-                        children: role == UserRole.admin ? _adminPages : _salesPages,
+                        children: role == UserRole.admin
+                            ? _adminPages
+                            : _salesPages,
                       ),
                 ),
               ],
