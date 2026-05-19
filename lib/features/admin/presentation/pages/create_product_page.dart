@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -825,41 +826,27 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: HtmlEditor(
-                              controller: _descriptionController,
-                              htmlEditorOptions: const HtmlEditorOptions(
-                                hint: '',
-                                shouldEnsureVisible: true,
+                            child: ScrollConfiguration(
+                              behavior: ScrollConfiguration.of(context)
+                                  .copyWith(
+                                    dragDevices: {
+                                      ui.PointerDeviceKind.touch,
+                                      ui.PointerDeviceKind.mouse,
+                                      ui.PointerDeviceKind.trackpad,
+                                    },
+                                  ),
+                              child: HtmlEditor(
+                                controller: _descriptionController,
+                                htmlEditorOptions: const HtmlEditorOptions(
+                                  hint: '',
+                                  shouldEnsureVisible: true,
+                                ),
+                                htmlToolbarOptions: const HtmlToolbarOptions(
+                                  toolbarPosition: ToolbarPosition.aboveEditor,
+                                  toolbarType: ToolbarType.nativeScrollable,
+                                ),
+                                otherOptions: const OtherOptions(height: 450),
                               ),
-                              htmlToolbarOptions: const HtmlToolbarOptions(
-                                toolbarPosition: ToolbarPosition.aboveEditor,
-                                toolbarType: ToolbarType.nativeScrollable,
-                                defaultToolbarButtons: [
-                                  StyleButtons(),
-                                  FontSettingButtons(
-                                    fontName: false,
-                                    fontSizeUnit: false,
-                                  ),
-                                  FontButtons(
-                                    superscript: false,
-                                    subscript: false,
-                                    strikethrough: false,
-                                  ),
-                                  ColorButtons(),
-                                  ListButtons(listStyles: false),
-                                  ParagraphButtons(
-                                    lineHeight: false,
-                                    caseConverter: false,
-                                  ),
-                                  InsertButtons(
-                                    video: false,
-                                    audio: false,
-                                    otherFile: false,
-                                  ),
-                                  OtherButtons(fullscreen: false, help: false),
-                                ],
-                              ),
-                              otherOptions: const OtherOptions(height: 450),
                             ),
                           ),
                         ),
