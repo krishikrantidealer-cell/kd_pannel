@@ -39,15 +39,19 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Pre-load Outfit fonts to prevent layout shift / font swap on restart
-  await GoogleFonts.pendingFonts([
-    GoogleFonts.outfit(fontWeight: FontWeight.w300),
-    GoogleFonts.outfit(fontWeight: FontWeight.w400),
-    GoogleFonts.outfit(fontWeight: FontWeight.w500),
-    GoogleFonts.outfit(fontWeight: FontWeight.w600),
-    GoogleFonts.outfit(fontWeight: FontWeight.w700),
-    GoogleFonts.outfit(fontWeight: FontWeight.w800),
-    GoogleFonts.outfit(fontWeight: FontWeight.w900),
-  ]);
+  try {
+    await GoogleFonts.pendingFonts([
+      GoogleFonts.outfit(fontWeight: FontWeight.w300),
+      GoogleFonts.outfit(fontWeight: FontWeight.w400),
+      GoogleFonts.outfit(fontWeight: FontWeight.w500),
+      GoogleFonts.outfit(fontWeight: FontWeight.w600),
+      GoogleFonts.outfit(fontWeight: FontWeight.w700),
+      GoogleFonts.outfit(fontWeight: FontWeight.w800),
+      GoogleFonts.outfit(fontWeight: FontWeight.w900),
+    ]);
+  } catch (e) {
+    debugPrint('Google Fonts preloading bypassed: $e');
+  }
 
   // Preload brand images synchronously into memory buffer before running the app
   await AppCache.preload();

@@ -147,21 +147,21 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final String initialBasePacking = data?['basePacking'] ?? '';
 
     // Parse pack size
-    String packVal = '1';
+    String packVal = '';
     String packUnit = 'lit';
     if (initialPackSize.isNotEmpty) {
       final parsed = _parsePackSize(initialPackSize);
-      packVal = parsed['val'] ?? '1';
+      packVal = parsed['val'] ?? '';
       packUnit = (parsed['unit'] ?? 'lit').toLowerCase();
       if (packUnit.isEmpty) packUnit = 'lit';
     }
 
     // Parse base packing
-    String basePackVal = '1';
+    String basePackVal = '';
     String basePackUnit = 'lit';
     if (initialBasePacking.isNotEmpty) {
       final parsed = _parsePackSize(initialBasePacking);
-      basePackVal = parsed['val'] ?? '1';
+      basePackVal = parsed['val'] ?? '';
       basePackUnit = (parsed['unit'] ?? 'lit').toLowerCase();
       if (basePackUnit.isEmpty) basePackUnit = 'lit';
     }
@@ -1560,9 +1560,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
       variant['basePackingUnit'] = basePackingUnits.first;
     }
 
+    final String packSizeHint = switch (variant['packSizeUnit']) {
+      'ml' => 'e.g. 250',
+      'lit' => 'e.g. 1',
+      'gm' => 'e.g. 500',
+      'kg' => 'e.g. 1',
+      'pcs' => 'e.g. 1',
+      _ => 'e.g. 250',
+    };
+
     final Widget packSizeValueField = _buildFormTextField(
       label: 'Pack Size',
-      hint: 'e.g. 250',
+      hint: packSizeHint,
       controller: variant['packSizeVal'],
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -1652,9 +1661,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
       ],
     );
 
+    final String basePackingHint = switch (variant['basePackingUnit']) {
+      'ml' => 'e.g. 1000',
+      'lit' => 'e.g. 10',
+      'gm' => 'e.g. 1000',
+      'kg' => 'e.g. 10',
+      'pcs' => 'e.g. 10',
+      _ => 'e.g. 10',
+    };
+
     final Widget basePackingValueField = _buildFormTextField(
       label: 'Base Packing',
-      hint: 'e.g. 10',
+      hint: basePackingHint,
       controller: variant['basePackingVal'],
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
