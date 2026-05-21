@@ -626,7 +626,10 @@ class _LoginPageState extends State<LoginPage> {
                                   if (val == null || val.trim().isEmpty) {
                                     return 'Please enter your identity identifier';
                                   }
-                                  if (!val.contains('@')) {
+                                  final emailRegex = RegExp(
+                                    r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,}$',
+                                  );
+                                  if (!emailRegex.hasMatch(val.trim())) {
                                     return 'Please enter a valid email address';
                                   }
                                   return null;

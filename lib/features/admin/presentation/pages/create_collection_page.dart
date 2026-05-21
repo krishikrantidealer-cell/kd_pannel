@@ -644,7 +644,32 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                         width: 1.5,
                       ),
                     ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Colors.redAccent,
+                        width: 1.0,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Colors.redAccent,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return 'Please enter a display priority (0 to 9999)';
+                    }
+                    final num = int.tryParse(val.trim());
+                    if (num == null) return 'Must be a whole number';
+                    if (num < 0 || num > 9999) {
+                      return 'Priority must be between 0 and 9999';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
               ],

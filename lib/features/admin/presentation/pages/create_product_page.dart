@@ -42,6 +42,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
     {'id': '3', 'name': 'Tier 3 (50+)'},
   ];
   List<Uint8List> _productImages = [];
+  // URLs of images already uploaded to GCS (shown in edit mode)
+  List<String> _existingImageUrls = [];
+  List<String> _existingMediumUrls = [];
+  List<String> _existingOriginalUrls = [];
   final ImagePicker _picker = ImagePicker();
 
   final _tagController = TextEditingController();
@@ -91,6 +95,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
       _formCategory = data['category'] ?? '';
       _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
+      // Load existing uploaded images for edit mode
+      _existingImageUrls = List<String>.from(data['images'] ?? []);
+      _existingMediumUrls = List<String>.from(data['mediumImages'] ?? []);
+      _existingOriginalUrls = List<String>.from(data['originalImages'] ?? []);
 
       if (data['priceTiers'] != null) {
         try {
@@ -230,15 +238,31 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final String initialCompare = data?['compareAtPrice'] != null
         ? data!['compareAtPrice'].toString()
         : '';
-    final String initialPackSize = data?['packSize'] != null
-        ? data!['packSize'].toString()
-        : '';
+    // 'packSize' is the carton/booking total string (new field).
+    // Old products store the same value as a number in 'packVolume' (always in litres).
+    String initialPackSize = '';
+    if (data?['packSize'] != null) {
+      initialPackSize = data!['packSize'].toString();
+    } else if (data?['packVolume'] != null) {
+      // packVolume is stored in litres as a number, convert back to readable string
+      final pvNum = data!['packVolume'];
+      final pvDouble = pvNum is num ? pvNum.toDouble() : double.tryParse(pvNum.toString());
+      if (pvDouble != null && pvDouble > 0) {
+        initialPackSize = pvDouble % 1 == 0
+            ? '${pvDouble.toInt()}lit'
+            : '${pvDouble}lit';
+      }
+    }
+
     final String initialQty = data?['baseQuantity'] != null
         ? data!['baseQuantity'].toString()
         : '1';
-    final String initialBasePacking = data?['basePacking'] != null
-        ? data!['basePacking'].toString()
-        : '';
+    // 'basePacking' is the individual bottle/unit size.
+    // For old products the backend stored this under the 'size' field, so fall back to it.
+    final String initialBasePacking =
+        (data?['basePacking'] ?? data?['size']) != null
+            ? (data!['basePacking'] ?? data['size']).toString()
+            : '';
 
     // Parse pack size
     String packVal = '';
@@ -729,6 +753,29 @@ class _CreateProductPageState extends State<CreateProductPage> {
       return;
     }
 
+    // Check at least one image is present
+    if (_existingImageUrls.isEmpty && _productImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload at least one product image.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    // Check description is not empty
+    final descPlainText = _descriptionController.document.toPlainText().trim();
+    if (descPlainText.isEmpty || descPlainText == '\n') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Product description cannot be empty.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -886,6 +933,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'description': description,
         'variants': mappedVariants,
         'tags': _tags,
+        // Tell the backend which existing images to keep
+        if (isEdit) 'keepImages': _existingImageUrls,
+        if (isEdit) 'keepMediumImages': _existingMediumUrls,
+        if (isEdit) 'keepOriginalImages': _existingOriginalUrls,
       };
 
       http.Response response;
@@ -1080,6 +1131,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             if (val == null || val.trim().isEmpty) {
                               return 'Product Title is required';
                             }
+                            if (val.trim().length < 5) {
+                              return 'Title must be at least 5 characters';
+                            }
                             return null;
                           },
                         ),
@@ -1250,6 +1304,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) {
                               return 'Vendor is required';
+                            }
+                            if (val.trim().length < 2) {
+                              return 'Vendor name must be at least 2 characters';
                             }
                             return null;
                           },
@@ -1428,62 +1485,122 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   Widget _buildMediaUploader() {
+    final bool hasAnyImages = _existingImageUrls.isNotEmpty || _productImages.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: _pickMultipleProductImages,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.primaryColor.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.cloud_upload_outlined,
-                    color: AppTheme.primaryColor,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Click to upload images',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'SVG, PNG, JPG or GIF (max. 5MB)',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
+        // ── Existing uploaded images (from GCS) ──────────────────────────
+        if (_existingImageUrls.isNotEmpty) ...[
+          Text(
+            'Current Images',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
             ),
           ),
-        ),
-        if (_productImages.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           SizedBox(
-            height: 80,
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _existingImageUrls.length,
+              itemBuilder: (context, index) {
+                final url = _existingImageUrls[index];
+                return Stack(
+                  children: [
+                    Container(
+                      width: 90,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: index == 0
+                              ? AppTheme.primaryColor
+                              : AppTheme.borderColor,
+                          width: index == 0 ? 2 : 1,
+                        ),
+                        image: DecorationImage(
+                          image: NetworkImage(url),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    if (index == 0)
+                      Positioned(
+                        bottom: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Main',
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      top: 4,
+                      right: 14,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            // Remove from all 3 image lists at the same index
+                            _existingImageUrls.removeAt(index);
+                            if (index < _existingMediumUrls.length) {
+                              _existingMediumUrls.removeAt(index);
+                            }
+                            if (index < _existingOriginalUrls.length) {
+                              _existingOriginalUrls.removeAt(index);
+                            }
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.85),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // ── New images (picked from device) ─────────────────────────────
+        if (_productImages.isNotEmpty) ...[
+          Text(
+            'New Images (will be uploaded)',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 90,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _productImages.length,
@@ -1506,11 +1623,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         }
                       },
                       child: Container(
-                        width: 80,
-                        margin: const EdgeInsets.only(right: 12),
+                        width: 90,
+                        margin: const EdgeInsets.only(right: 10),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.borderColor),
+                          border: Border.all(
+                            color: const Color(0xFFF59E0B),
+                            width: 2,
+                          ),
                           image: DecorationImage(
                             image: MemoryImage(_productImages[index]),
                             fit: BoxFit.cover,
@@ -1519,8 +1639,30 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       ),
                     ),
                     Positioned(
+                      bottom: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'New',
+                          style: GoogleFonts.outfit(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
                       top: 4,
-                      right: 16,
+                      right: 14,
                       child: InkWell(
                         onTap: () =>
                             setState(() => _productImages.removeAt(index)),
@@ -1532,7 +1674,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           ),
                           child: const Icon(
                             Icons.close,
-                            size: 12,
+                            size: 11,
                             color: Colors.white,
                           ),
                         ),
@@ -1543,7 +1685,64 @@ class _CreateProductPageState extends State<CreateProductPage> {
               },
             ),
           ),
+          const SizedBox(height: 12),
         ],
+
+        // ── Upload button ────────────────────────────────────────────────
+        InkWell(
+          onTap: _pickMultipleProductImages,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(
+              vertical: hasAnyImages ? 16 : 32,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.02),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                style: BorderStyle.solid,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(hasAnyImages ? 8 : 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.add_photo_alternate_outlined,
+                    color: AppTheme.primaryColor,
+                    size: hasAnyImages ? 20 : 28,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  hasAnyImages ? 'Add more images' : 'Click to upload images',
+                  style: GoogleFonts.outfit(
+                    fontSize: hasAnyImages ? 12 : 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                if (!hasAnyImages) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'PNG, JPG or GIF (max. 5MB each)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -2280,7 +2479,17 @@ class _CreateProductPageState extends State<CreateProductPage> {
           validator: (val) {
             if (val == null || val.trim().isEmpty) return 'Required';
             final numVal = double.tryParse(val);
-            if (numVal == null || numVal <= 0) return 'Invalid';
+            if (numVal == null || numVal <= 0) return 'Must be > 0';
+            // MRP rate must be >= Tier 1 selling rate
+            final t1RateVal = double.tryParse(
+              (variant['rates'] as Map<String, TextEditingController>)['1']
+                  ?.text
+                  .trim() ??
+                  '',
+            );
+            if (t1RateVal != null && numVal < t1RateVal) {
+              return 'MRP ≥ Tier 1';
+            }
             return null;
           },
           prefixIcon: const Icon(
@@ -2315,10 +2524,25 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 ? (val) {
                     if (val == null || val.trim().isEmpty) return 'Required';
                     final numVal = double.tryParse(val);
-                    if (numVal == null || numVal <= 0) return 'Invalid';
+                    if (numVal == null || numVal <= 0) return 'Must be > 0';
                     return null;
                   }
-                : null,
+                : (val) {
+                    if (val == null || val.trim().isEmpty) return null; // Optional
+                    final numVal = double.tryParse(val);
+                    if (numVal == null || numVal <= 0) return 'Must be > 0';
+                    // Tier 2/3 rates should be <= Tier 1 (descending price tiers)
+                    final t1Val = double.tryParse(
+                      (variant['rates'] as Map<String, TextEditingController>)['1']
+                          ?.text
+                          .trim() ??
+                          '',
+                    );
+                    if (t1Val != null && numVal > t1Val) {
+                      return '≤ Tier 1';
+                    }
+                    return null;
+                  },
             prefixIcon: const Icon(
               Icons.currency_rupee_rounded,
               size: 14,
@@ -2417,6 +2641,30 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   sizeFields,
+                  const SizedBox(height: 12),
+                  _buildFormTextField(
+                    label: 'Base Quantity (Units per Carton)',
+                    hint: 'e.g. 12',
+                    controller: variant['baseQuantity'],
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) {
+                        return 'Base quantity is required';
+                      }
+                      final numVal = int.tryParse(val.trim());
+                      if (numVal == null || numVal < 1) {
+                        return 'Must be at least 1';
+                      }
+                      if (numVal > 10000) {
+                        return 'Must be 10,000 or less';
+                      }
+                      return null;
+                    },
+                    isCompact: true,
+                  ),
                   const SizedBox(height: 16),
                   rateFields,
                 ],
