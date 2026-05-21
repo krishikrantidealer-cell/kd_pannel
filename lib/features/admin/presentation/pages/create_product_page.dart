@@ -313,29 +313,31 @@ class _CreateProductPageState extends State<CreateProductPage> {
     // 'packSize' is the carton/booking total string (new field).
     // Old products store the same value as a number in 'packVolume' (always in litres).
     String initialPackSize = '';
-    if (data?['packSize'] != null) {
-      initialPackSize = data!['packSize'].toString();
-    } else if (data?['size'] != null) {
-      initialPackSize = data!['size'].toString();
-    } else if (data?['packVolume'] != null) {
-      // packVolume is stored in litres as a number, convert back to readable string
-      final pvNum = data!['packVolume'];
-      final pvDouble = pvNum is num
-          ? pvNum.toDouble()
-          : double.tryParse(pvNum.toString());
-      if (pvDouble != null && pvDouble > 0) {
-        initialPackSize = pvDouble % 1 == 0
-            ? '${pvDouble.toInt()}lit'
-            : '${pvDouble}lit';
-      }
+    if (data?['size'] != null && data!['size'].toString().isNotEmpty) {
+      initialPackSize = data['size'].toString();
+    } else if (data?['packSize'] != null && data!['packSize'].toString().isNotEmpty) {
+      initialPackSize = data['packSize'].toString();
     }
 
-    // 'basePacking' is the individual bottle/unit size.
-    // For old products the backend stored this under the 'size' field, so fall back to it.
-    final String initialBasePacking =
-        (data?['basePacking'] ?? data?['size']) != null
-        ? (data!['basePacking'] ?? data['size']).toString()
-        : '';
+    String initialBasePacking = '';
+    if (data?['basePacking'] != null && data!['basePacking'].toString().isNotEmpty) {
+      initialBasePacking = data['basePacking'].toString();
+    } else if (data?['packVolume'] != null) {
+      final pvNum = data!['packVolume'];
+      final pvDouble = pvNum is num ? pvNum.toDouble() : double.tryParse(pvNum.toString());
+      if (pvDouble != null && pvDouble > 0) {
+        final val = pvDouble % 1 == 0 ? pvDouble.toInt().toString() : pvDouble.toString();
+        String unit = 'lit';
+        final parsedPackSize = _parsePackSize(initialPackSize);
+        final packU = parsedPackSize['unit']?.toLowerCase() ?? '';
+        if (packU == 'gm' || packU == 'kg' || packU == 'gram' || packU == 'g') {
+          unit = 'kg';
+        } else if (packU == 'pcs' || packU == 'piece' || packU == 'pieces') {
+          unit = 'pcs';
+        }
+        initialBasePacking = '$val$unit';
+      }
+    }
 
     // Parse pack size
     String packVal = '';
@@ -370,8 +372,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
     for (var tier in _priceTiers) {
       final id = tier['id']!;
       // Read rate from data if available
-      final dynamic rawRateVal =
-          data?['rates']?[id] ?? data?['unitPriceRate${id == "1" ? "" : id}'];
+      dynamic rawRateVal = data?['rates']?[id] ?? data?['unitPriceRate${id == "1" ? "" : id}'];
+      if (rawRateVal == null) {
+        if (id == '1') rawRateVal = data?['price10_30'];
+        if (id == '2') rawRateVal = data?['price30_50'];
+        if (id == '3') rawRateVal = data?['price50_plus'];
+      }
       final String rateVal = rawRateVal != null ? rawRateVal.toString() : '';
       rates[id] = TextEditingController(text: _parseRate(rateVal));
 
@@ -986,7 +992,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'price10_30': priceVal,
           'price30_50': rate2,
           'price50_plus': rate3,
-          'packVolume': _getPackVolume(v['packSize'] ?? ''),
+          'packVolume': _getPackVolume(v['basePacking'] ?? ''),
           'weight': 0.0,
         };
       }).toList();
@@ -1077,7 +1083,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   double _getPackVolume(String sizeStr) {
     final clean = sizeStr.toLowerCase().replaceAll(RegExp(r'\s+'), '');
     final match = RegExp(
-      r'^([\d.]+)(ml|lit|litre|l|gm|gram|g|kg|kilogram|k)$',
+      r'^([\d.]+)(ml|lit|litre|l|gm|gram|g|kg|kilogram|k|pcs|piece|pieces)$',
     ).firstMatch(clean);
     if (match == null) return 1.0;
 
