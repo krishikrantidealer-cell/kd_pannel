@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,10 +17,25 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isPersistentSession = true;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Warm up the server in the background (proactively wake up Render instance)
+    _warmUpServer();
+  }
+
+  void _warmUpServer() {
+    ApiClient().get('/products/categories').catchError((_) {
+      return http.Response('', 500);
+    });
+  }
 
   @override
   void dispose() {
@@ -34,12 +53,175 @@ class _LoginPageState extends State<LoginPage> {
     precacheImage(const AssetImage('assets/images/admin.png'), context);
   }
 
-  void _handleLogin(UserRole role) {
-    AuthService().login(role);
-    if (role == UserRole.admin) {
-      Navigator.pushReplacementNamed(context, '/dashboard');
-    } else {
-      Navigator.pushReplacementNamed(context, '/sales/dashboard');
+  void _precacheProductData() {
+    final client = ApiClient();
+    Future.wait([
+          client.get('/products?limit=1000'),
+          client.get('/collections?all=true'),
+          client.get('/products/categories'),
+        ])
+        .then((results) {
+          final productsRes = results[0];
+          final collectionsRes = results[1];
+          final categoriesRes = results[2];
+
+          // Parse products
+          if (productsRes.statusCode == 200) {
+            final data = jsonDecode(productsRes.body);
+            if (data['success'] == true && data['products'] is List) {
+              final List rawProducts = data['products'];
+              final List<Map<String, dynamic>> preparedProducts = [];
+              for (var p in rawProducts) {
+                final String minPriceStr = p['minPrice'] != null
+                    ? '₹${p['minPrice']}'
+                    : '₹0';
+                final String maxPriceStr = p['maxPrice'] != null
+                    ? '₹${p['maxPrice']}'
+                    : '₹0';
+                final String priceRange = p['minPrice'] == p['maxPrice']
+                    ? minPriceStr
+                    : '$minPriceStr - $maxPriceStr';
+                final bool inStock = p['availabilityStatus'] != 'Out of Stock';
+
+                String categoryName = 'N/A';
+                if (p['categoryId'] != null && p['categoryId'] is Map) {
+                  categoryName = p['categoryId']['name'] ?? 'N/A';
+                }
+
+                String subCategoryName = 'N/A';
+                if (p['subCategoryId'] != null &&
+                    p['categoryId'] != null &&
+                    p['categoryId'] is Map &&
+                    p['categoryId']['subCategories'] is List) {
+                  final List subs = p['categoryId']['subCategories'];
+                  final matchingSub = subs.firstWhere(
+                    (s) => s['_id'] == p['subCategoryId'],
+                    orElse: () => null,
+                  );
+                  if (matchingSub != null) {
+                    subCategoryName = matchingSub['name'] ?? 'N/A';
+                  }
+                }
+
+                preparedProducts.add({
+                  'id': p['_id'],
+                  'sku': p['_id']
+                      .toString()
+                      .substring(
+                        p['_id'].toString().length >= 6
+                            ? p['_id'].toString().length - 6
+                            : 0,
+                      )
+                      .toUpperCase(),
+                  'name': p['title'] ?? '',
+                  'category': categoryName,
+                  'subCategory': subCategoryName,
+                  'vendor': p['brandName'] ?? p['vendor'] ?? 'N/A',
+                  'price': priceRange,
+                  'inStock': inStock,
+                  'variants': p['variants'] ?? [],
+                  'images': p['images'] ?? [],
+                  'thumbnail': p['thumbnail'],
+                  'thumbnailBytes': null,
+                  'assignedCollections': p['assignedCollections'] ?? [],
+                  'description': p['description'] ?? '',
+                  'specifications': p['specifications'] ?? {},
+                  'tags': p['tags'] ?? [],
+                  'mediumImages': p['mediumImages'] ?? [],
+                  'originalImages': p['originalImages'] ?? [],
+                  'isFeatured': p['isFeatured'] ?? false,
+                });
+              }
+              client.cachedProducts = preparedProducts;
+              LocalCacheHelper.saveCachedProducts(preparedProducts);
+            }
+          }
+
+          // Parse collections
+          if (collectionsRes.statusCode == 200) {
+            final data = jsonDecode(collectionsRes.body);
+            if (data['success'] == true && data['collections'] is List) {
+              final List rawCollections = data['collections'];
+              final List<Map<String, dynamic>> preparedCollections = [];
+              for (var c in rawCollections) {
+                final String parentId = c['_id'] ?? c['id'] ?? '';
+                final List subList = c['subCollections'] as List? ?? [];
+                preparedCollections.add({
+                  'id': parentId,
+                  'name': c['name'] ?? '',
+                  'slug': c['slug'] ?? '',
+                  'isActive': c['isActive'] ?? true,
+                  'subCollections': subList
+                      .map(
+                        (sub) => {
+                          'id': sub['_id'] ?? sub['id'] ?? '',
+                          'parentId': parentId,
+                          'name': sub['name'] ?? '',
+                          'slug': sub['slug'] ?? '',
+                          'isActive': sub['isActive'] ?? true,
+                        },
+                      )
+                      .toList(),
+                });
+              }
+              client.cachedCollections = preparedCollections;
+              LocalCacheHelper.saveCachedCollections(preparedCollections);
+            }
+          }
+
+          // Parse categories
+          if (categoriesRes.statusCode == 200) {
+            final data = jsonDecode(categoriesRes.body);
+            if (data['success'] == true && data['categories'] is List) {
+              final loaded = data['categories'] as List<dynamic>;
+              client.cachedCategories = loaded;
+              LocalCacheHelper.saveCachedCategories(loaded);
+            }
+          }
+        })
+        .catchError((e) {
+          print('Background precache failed: $e');
+        });
+  }
+
+  void _handleLogin(UserRole role) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final success = await AuthService().login(
+      email: email,
+      password: password,
+      role: role,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (success) {
+        if (role == UserRole.admin) {
+          _precacheProductData();
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        } else {
+          Navigator.pushReplacementNamed(context, '/sales/dashboard');
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Authorization failed. Please verify your credentials.',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -377,129 +559,228 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         SizedBox(height: isDesktop ? 24 : 16),
 
-                        FocusableAdvancedField(
-                          controller: _emailController,
-                          hint: 'Identity Identifier',
-                          icon: Icons.alternate_email_rounded,
-                          isDark: !isDesktop,
-                        ),
-                        SizedBox(height: isDesktop ? 16 : 12),
-                        FocusableAdvancedField(
-                          controller: _passwordController,
-                          hint: 'Security Token',
-                          icon: Icons.lock_outline_rounded,
-                          isPassword: true,
-                          obscure: !_isPasswordVisible,
-                          togglePassword: () => setState(
-                            () => _isPasswordVisible = !_isPasswordVisible,
-                          ),
-                          isDark: !isDesktop,
-                        ),
-
-                        SizedBox(height: isDesktop ? 16 : 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            GestureDetector(
-                              onTap: () => setState(
-                                () => _isPersistentSession =
-                                    !_isPersistentSession,
-                              ),
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: Checkbox(
-                                      value: _isPersistentSession,
-                                      onChanged: (v) {
-                                        setState(
-                                          () =>
-                                              _isPersistentSession = v ?? true,
-                                        );
-                                      },
-                                      activeColor: AppTheme.primaryColor,
-                                      side: isDesktop
-                                          ? null
-                                          : BorderSide(
-                                              color: Colors.white.withOpacity(
-                                                0.4,
-                                              ),
-                                              width: 1.5,
-                                            ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(4),
+                        Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Proactive server wakeup indicator
+                              ValueListenableBuilder<bool>(
+                                valueListenable: ApiClient().isBackendWakingUp,
+                                builder: (context, isWakingUp, child) {
+                                  if (!isWakingUp)
+                                    return const SizedBox.shrink();
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isDesktop
+                                          ? const Color(0xFFFFF3CD)
+                                          : Colors.white.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDesktop
+                                            ? const Color(0xFFFFEBAA)
+                                            : Colors.white.withOpacity(0.15),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Keep me signed in',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      color: isDesktop
-                                          ? const Color(0xFF64748B)
-                                          : Colors.white.withOpacity(0.8),
-                                      fontWeight: FontWeight.w600,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  isDesktop
+                                                      ? const Color(0xFF856404)
+                                                      : Colors.white,
+                                                ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            '⚡ Server warming up (Render Free Tier)... This may take up to 50 seconds.',
+                                            style: TextStyle(
+                                              color: isDesktop
+                                                  ? const Color(0xFF856404)
+                                                  : Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
+                                  );
+                                },
                               ),
-                            ),
-                          ],
-                        ),
+                              FocusableAdvancedField(
+                                controller: _emailController,
+                                hint: 'Identity Identifier',
+                                icon: Icons.alternate_email_rounded,
+                                isDark: !isDesktop,
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Please enter your identity identifier';
+                                  }
+                                  if (!val.contains('@')) {
+                                    return 'Please enter a valid email address';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              SizedBox(height: isDesktop ? 16 : 12),
+                              FocusableAdvancedField(
+                                controller: _passwordController,
+                                hint: 'Security Token',
+                                icon: Icons.lock_outline_rounded,
+                                isPassword: true,
+                                obscure: !_isPasswordVisible,
+                                togglePassword: () => setState(
+                                  () =>
+                                      _isPasswordVisible = !_isPasswordVisible,
+                                ),
+                                isDark: !isDesktop,
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Please enter your security token';
+                                  }
+                                  if (val.length < 6) {
+                                    return 'Security token must be at least 6 characters';
+                                  }
+                                  return null;
+                                },
+                              ),
 
-                        SizedBox(height: isDesktop ? 32 : 20),
-                        SizedBox(
-                          width: double.infinity,
-                          height: isDesktop
-                              ? 54
-                              : 48, // Sleek responsive buttons
-                          child: ElevatedButton(
-                            onPressed: () => _handleLogin(_selectedRole),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              padding: EdgeInsets.zero,
-                            ),
-                            child: Ink(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppTheme.primaryColor,
-                                    const Color(0xFF1B5E20),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTheme.primaryColor.withOpacity(
-                                      0.3,
+                              SizedBox(height: isDesktop ? 16 : 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => setState(
+                                      () => _isPersistentSession =
+                                          !_isPersistentSession,
                                     ),
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 8),
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: Checkbox(
+                                            value: _isPersistentSession,
+                                            onChanged: (v) {
+                                              setState(
+                                                () => _isPersistentSession =
+                                                    v ?? true,
+                                              );
+                                            },
+                                            activeColor: AppTheme.primaryColor,
+                                            side: isDesktop
+                                                ? null
+                                                : BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.4),
+                                                    width: 1.5,
+                                                  ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Keep me signed in',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            color: isDesktop
+                                                ? const Color(0xFF64748B)
+                                                : Colors.white.withOpacity(0.8),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: Container(
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'AUTHORIZE ENTRY',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: isDesktop ? 14 : 12,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 2,
+
+                              SizedBox(height: isDesktop ? 32 : 20),
+                              SizedBox(
+                                width: double.infinity,
+                                height: isDesktop
+                                    ? 54
+                                    : 48, // Sleek responsive buttons
+                                child: ElevatedButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => _handleLogin(_selectedRole),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: AppTheme
+                                        .primaryColor
+                                        .withOpacity(0.6),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  child: Ink(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppTheme.primaryColor.withOpacity(
+                                            _isLoading ? 0.6 : 1.0,
+                                          ),
+                                          const Color(
+                                            0xFF1B5E20,
+                                          ).withOpacity(_isLoading ? 0.6 : 1.0),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: _isLoading
+                                          ? []
+                                          : [
+                                              BoxShadow(
+                                                color: AppTheme.primaryColor
+                                                    .withOpacity(0.3),
+                                                blurRadius: 15,
+                                                offset: const Offset(0, 8),
+                                              ),
+                                            ],
+                                    ),
+                                    child: Container(
+                                      alignment: Alignment.center,
+                                      child: _isLoading
+                                          ? const SizedBox(
+                                              height: 20,
+                                              width: 20,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Text(
+                                              'AUTHORIZE ENTRY',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: isDesktop ? 14 : 12,
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: 2,
+                                              ),
+                                            ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ],
@@ -800,6 +1081,7 @@ class FocusableAdvancedField extends StatefulWidget {
   final bool obscure;
   final VoidCallback? togglePassword;
   final bool isDark;
+  final String? Function(String?)? validator;
 
   const FocusableAdvancedField({
     super.key,
@@ -810,6 +1092,7 @@ class FocusableAdvancedField extends StatefulWidget {
     this.obscure = false,
     this.togglePassword,
     required this.isDark,
+    this.validator,
   });
 
   @override
@@ -844,87 +1127,90 @@ class _FocusableAdvancedFieldState extends State<FocusableAdvancedField> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        color: widget.isDark
-            ? (widget.controller.text.isNotEmpty || _isFocused
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.06))
-            : (_isFocused ? Colors.white : const Color(0xFFF8FAFC)),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
+    final Color fillColor = widget.isDark
+        ? (widget.controller.text.isNotEmpty || _isFocused
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.06))
+        : (_isFocused ? Colors.white : const Color(0xFFF8FAFC));
+
+    final Color borderColor = widget.isDark
+        ? (_isFocused ? AppTheme.accentColor : Colors.white.withOpacity(0.12))
+        : (_isFocused ? AppTheme.primaryColor : const Color(0xFFE2E8F0));
+
+    return TextFormField(
+      controller: widget.controller,
+      focusNode: _focusNode,
+      obscureText: widget.obscure,
+      validator: widget.validator,
+      style: GoogleFonts.outfit(
+        fontSize: 16,
+        color: widget.isDark ? Colors.white : const Color(0xFF0F172A),
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: InputDecoration(
+        hintText: widget.hint,
+        hintStyle: GoogleFonts.outfit(
+          color: widget.isDark
+              ? Colors.white.withOpacity(0.4)
+              : const Color(0xFF94A3B8),
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+        ),
+        prefixIcon: Icon(
+          widget.icon,
+          size: 22,
           color: widget.isDark
               ? (_isFocused
                     ? AppTheme.accentColor
-                    : Colors.white.withOpacity(0.12))
-              : (_isFocused ? AppTheme.primaryColor : const Color(0xFFE2E8F0)),
-          width: _isFocused ? 1.5 : 1.0,
+                    : Colors.white.withOpacity(0.7))
+              : (_isFocused
+                    ? AppTheme.primaryColor
+                    : AppTheme.primaryColor.withOpacity(0.6)),
         ),
-        boxShadow: _isFocused
-            ? [
-                BoxShadow(
-                  color:
-                      (widget.isDark
-                              ? AppTheme.accentColor
-                              : AppTheme.primaryColor)
-                          .withOpacity(widget.isDark ? 0.2 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+        suffixIcon: widget.isPassword
+            ? IconButton(
+                icon: Icon(
+                  widget.obscure
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  size: 20,
+                  color: widget.isDark
+                      ? Colors.white.withOpacity(0.5)
+                      : const Color(0xFF94A3B8),
                 ),
-              ]
-            : [],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        obscureText: widget.obscure,
-        style: GoogleFonts.outfit(
-          fontSize: 16,
-          color: widget.isDark ? Colors.white : const Color(0xFF0F172A),
-          fontWeight: FontWeight.w600,
+                onPressed: widget.togglePassword,
+              )
+            : null,
+        filled: true,
+        fillColor: fillColor,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: widget.isDark ? 12 : (isDesktop ? 15 : 12),
         ),
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          hintStyle: GoogleFonts.outfit(
-            color: widget.isDark
-                ? Colors.white.withOpacity(0.4)
-                : const Color(0xFF94A3B8),
-            fontSize: 15,
-            fontWeight: FontWeight.w400,
-          ),
-          prefixIcon: Icon(
-            widget.icon,
-            size: 22,
-            color: widget.isDark
-                ? (_isFocused
-                      ? AppTheme.accentColor
-                      : Colors.white.withOpacity(0.7))
-                : (_isFocused
-                      ? AppTheme.primaryColor
-                      : AppTheme.primaryColor.withOpacity(0.6)),
-          ),
-          suffixIcon: widget.isPassword
-              ? IconButton(
-                  icon: Icon(
-                    widget.obscure
-                        ? Icons.visibility_off_rounded
-                        : Icons.visibility_rounded,
-                    size: 20,
-                    color: widget.isDark
-                        ? Colors.white.withOpacity(0.5)
-                        : const Color(0xFF94A3B8),
-                  ),
-                  onPressed: widget.togglePassword,
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(
-            vertical: widget.isDark ? 12 : (isDesktop ? 15 : 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: widget.isDark ? AppTheme.accentColor : AppTheme.primaryColor,
+            width: 1.5,
           ),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppTheme.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+        ),
+        errorStyle: GoogleFonts.outfit(fontSize: 12, color: AppTheme.error),
       ),
     );
   }

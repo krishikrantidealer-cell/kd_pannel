@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 // import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
 // import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
 // import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
@@ -93,6 +94,49 @@ class _MainLayoutState extends State<MainLayout> {
                 TopbarWidget(
                   onMenuPressed: () {
                     _scaffoldKey.currentState?.openDrawer();
+                  },
+                ),
+
+                // Global Wakeup Alert banner (Render Free Tier Cold-Start handling)
+                ValueListenableBuilder<bool>(
+                  valueListenable: ApiClient().isBackendWakingUp,
+                  builder: (context, isWakingUp, child) {
+                    if (!isWakingUp) return const SizedBox.shrink();
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFFFF3CD), Color(0xFFFFF8E1)], // Soft warning amber
+                        ),
+                        border: Border(
+                          bottom: BorderSide(color: Color(0xFFFFEBAA), width: 1),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF856404)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              '⚡ Waking up the server (Render Free Tier)... This may take up to 50 seconds on the first request.',
+                              style: TextStyle(
+                                color: Color(0xFF856404),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
                   },
                 ),
 

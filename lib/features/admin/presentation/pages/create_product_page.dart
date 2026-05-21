@@ -1,17 +1,30 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:html_editor_enhanced/html_editor.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
+import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 
 class CreateProductPage extends StatefulWidget {
   final Map<String, dynamic>? initialData;
   final ValueChanged<Map<String, dynamic>> onSave;
+  final List<dynamic>? preloadedCategories;
 
-  const CreateProductPage({super.key, this.initialData, required this.onSave});
+  const CreateProductPage({
+    super.key,
+    this.initialData,
+    required this.onSave,
+    this.preloadedCategories,
+  });
 
   @override
   State<CreateProductPage> createState() => _CreateProductPageState();
@@ -21,9 +34,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _vendorController = TextEditingController();
-  final _tagController = TextEditingController();
-  final HtmlEditorController _descriptionController = HtmlEditorController();
-  List<String> _tags = [];
+  late final quill.QuillController _descriptionController;
   List<Map<String, dynamic>> _formVariants = [];
   List<Map<String, String>> _priceTiers = [
     {'id': '1', 'name': 'Tier 1 (10-30)'},
@@ -33,36 +44,63 @@ class _CreateProductPageState extends State<CreateProductPage> {
   List<Uint8List> _productImages = [];
   final ImagePicker _picker = ImagePicker();
 
-  String _formCategory = 'Irrigation';
-  String _formSubCategory = 'Drip';
-  bool _formInStock = true;
-
-  final List<String> _categories = [
-    'Irrigation',
-    'Seeds',
-    'Machinery',
-    'Fertilizers',
-  ];
+  final _tagController = TextEditingController();
+  List<String> _tags = [];
+  String _formCategory = '';
+  String _formSubCategory = '';
+  List<dynamic> _backendCategories = [];
+  bool _isSaving = false;
+  bool _isLoadingDetails = false;
+  bool _isTransitionComplete = false;
+  late final Stopwatch _perfStopwatch;
 
   @override
   void initState() {
+    _perfStopwatch = Stopwatch()..start();
+    debugPrint('[PERF] CreateProductPage.initState started');
     super.initState();
+    _loadCategories();
+
     final data = widget.initialData;
+    quill.Document doc;
+    if (data != null && data['description'] != null && data['description'].toString().isNotEmpty) {
+      try {
+        final delta = HtmlToDelta().convert(data['description'].toString());
+        doc = quill.Document.fromDelta(delta);
+        debugPrint('[PERF] CreateProductPage.initState - Parsed description HTML to Quill Delta. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      } catch (e) {
+        debugPrint('Error parsing HTML to Quill Delta: $e');
+        doc = quill.Document();
+      }
+    } else {
+      doc = quill.Document();
+    }
+
+    _descriptionController = quill.QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+
+    // Quill is a native Flutter widget, so we don't need any delay transitions!
+    _isTransitionComplete = true;
+
     if (data != null) {
+      debugPrint('[PERF] CreateProductPage.initState - data is NOT null (Edit Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
       _nameController.text = data['name'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
-      _formCategory = data['category'] ?? 'Irrigation';
-      _formSubCategory = data['subCategory'] ?? 'Drip';
-      _formInStock = data['inStock'] ?? true;
+      _formCategory = data['category'] ?? '';
+      _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
 
       if (data['priceTiers'] != null) {
         try {
-          _priceTiers = List<Map<String, String>>.from(
-            (data['priceTiers'] as List).map(
-              (t) => Map<String, String>.from(t as Map),
-            ),
-          );
+          _priceTiers = (data['priceTiers'] as List).map((t) {
+            final map = t as Map;
+            return {
+              for (var entry in map.entries)
+                entry.key.toString(): entry.value.toString(),
+            };
+          }).toList();
         } catch (_) {}
       }
 
@@ -74,15 +112,63 @@ class _CreateProductPageState extends State<CreateProductPage> {
       if (_formVariants.isEmpty) {
         _addVariant();
       }
-
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _descriptionController.setText(data['description'] ?? '');
-      });
     } else {
+      debugPrint('[PERF] CreateProductPage.initState - data is null (Create Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
       _addVariant();
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _descriptionController.clear();
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    debugPrint('[PERF] CreateProductPage._loadCategories started. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+    
+    // 1. Try to use preloaded categories passed down from parent page/BLoC
+    if (widget.preloadedCategories != null && widget.preloadedCategories!.isNotEmpty) {
+      debugPrint('[PERF] CreateProductPage._loadCategories - Using preloaded categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      setState(() {
+        _backendCategories = widget.preloadedCategories!;
+        _initializeCategorySelection();
       });
+      return;
+    }
+
+    // 2. Try to load from memory cache
+    final cached = ApiClient().cachedCategories;
+    if (cached != null && cached.isNotEmpty) {
+      debugPrint('[PERF] CreateProductPage._loadCategories - Found cached categories in ApiClient. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      setState(() {
+        _backendCategories = cached;
+        _initializeCategorySelection();
+      });
+      return;
+    }
+
+    try {
+      debugPrint('[PERF] CreateProductPage._loadCategories - Dispatching API call to /products/categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      final response = await ApiClient().get('/products/categories');
+      debugPrint('[PERF] CreateProductPage._loadCategories - API call completed with code ${response.statusCode}. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['categories'] is List) {
+          final List categories = data['categories'];
+          ApiClient().cachedCategories = categories; // Update cache
+          if (mounted) {
+            setState(() {
+              _backendCategories = categories;
+              _initializeCategorySelection();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[PERF] CreateProductPage._loadCategories - Error fetching categories: $e. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+    }
+  }
+
+  void _initializeCategorySelection() {
+    if (widget.initialData == null && _backendCategories.isNotEmpty) {
+      _formCategory = _backendCategories.first['name']?.toString() ?? '';
+      final subCats = getFormSubCategories(_formCategory);
+      _formSubCategory = subCats.isNotEmpty ? subCats.first : '';
     }
   }
 
@@ -118,7 +204,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
   void dispose() {
     _nameController.dispose();
     _vendorController.dispose();
-    _tagController.dispose();
     for (var variant in _formVariants) {
       variant['price']?.dispose();
       variant['compareAtPrice']?.dispose();
@@ -134,17 +219,26 @@ class _CreateProductPageState extends State<CreateProductPage> {
           variant['computed'] as Map<String, TextEditingController>?;
       computed?.values.forEach((ctrl) => ctrl.dispose());
     }
-    // Note: HtmlEditorController does not have a dispose() method in html_editor_enhanced.
-    // Its lifecycle and webview resources are managed internally by the package.
+    _descriptionController.dispose();
     super.dispose();
   }
 
   void _addVariant({Map<String, dynamic>? data}) {
-    final String initialPrice = data?['price'] ?? '';
-    final String initialCompare = data?['compareAtPrice'] ?? '';
-    final String initialPackSize = data?['packSize'] ?? '';
-    final String initialQty = data?['baseQuantity'] ?? '1';
-    final String initialBasePacking = data?['basePacking'] ?? '';
+    final String initialPrice = data?['price'] != null
+        ? data!['price'].toString()
+        : '';
+    final String initialCompare = data?['compareAtPrice'] != null
+        ? data!['compareAtPrice'].toString()
+        : '';
+    final String initialPackSize = data?['packSize'] != null
+        ? data!['packSize'].toString()
+        : '';
+    final String initialQty = data?['baseQuantity'] != null
+        ? data!['baseQuantity'].toString()
+        : '1';
+    final String initialBasePacking = data?['basePacking'] != null
+        ? data!['basePacking'].toString()
+        : '';
 
     // Parse pack size
     String packVal = '';
@@ -180,21 +274,29 @@ class _CreateProductPageState extends State<CreateProductPage> {
     for (var tier in _priceTiers) {
       final id = tier['id']!;
       // Read rate from data if available
-      final String rateVal =
-          data?['rates']?[id] ??
-          data?['unitPriceRate${id == "1" ? "" : id}'] ??
-          '';
+      final dynamic rawRateVal =
+          data?['rates']?[id] ?? data?['unitPriceRate${id == "1" ? "" : id}'];
+      final String rateVal = rawRateVal != null ? rawRateVal.toString() : '';
       rates[id] = TextEditingController(text: _parseRate(rateVal));
-      computed[id] = TextEditingController(
-        text: data?['price$id'] ?? data?['computedPrices']?[id] ?? '',
-      );
+
+      String computedVal = '';
+      if (data?['price$id'] != null) {
+        computedVal = data!['price$id'].toString();
+      } else if (data?['computedPrices']?[id] != null) {
+        computedVal = data!['computedPrices'][id].toString();
+      }
+      computed[id] = TextEditingController(text: computedVal);
     }
 
     // Handle initial fallback or legacy values for rates
-    final String legacyUnitPriceRate =
-        data?['unitPriceRate'] ?? data?['price'] ?? '';
-    final String legacyUnitCompareRate =
-        data?['unitCompareRate'] ?? data?['compareAtPrice'] ?? '';
+    final String legacyUnitPriceRate = data?['unitPriceRate'] != null
+        ? data!['unitPriceRate'].toString()
+        : (data?['price'] != null ? data!['price'].toString() : '');
+    final String legacyUnitCompareRate = data?['unitCompareRate'] != null
+        ? data!['unitCompareRate'].toString()
+        : (data?['compareAtPrice'] != null
+              ? data!['compareAtPrice'].toString()
+              : '');
 
     if (rates['1']!.text.isEmpty && legacyUnitPriceRate.isNotEmpty) {
       rates['1']!.text = _parseRate(legacyUnitPriceRate);
@@ -289,7 +391,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'basePackingUnit': basePackUnit,
         'rates': rates,
         'computed': computed,
-        'image': data?['image'],
         // Maintain recalculate reference for update on unit dropdown change
         'recalculate': recalculate,
       });
@@ -559,36 +660,61 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   List<String> getFormSubCategories(String cat) {
-    switch (cat) {
-      case 'Irrigation':
-        return ['Drip', 'Sprinkler'];
-      case 'Seeds':
-        return ['Vegetable', 'Grain'];
-      case 'Machinery':
-        return ['Pumps', 'Tillers'];
-      case 'Fertilizers':
-        return ['Organic', 'NPK'];
-      default:
-        return ['Other'];
+    if (_backendCategories.isNotEmpty) {
+      final matchingCat = _backendCategories.firstWhere(
+        (c) => c['name'].toString().toLowerCase() == cat.toLowerCase(),
+        orElse: () => null,
+      );
+      if (matchingCat != null) {
+        final List subs = matchingCat['subCategories'] ?? [];
+        final List<String> list = [];
+        for (var sub in subs) {
+          final sName = sub['name']?.toString();
+          if (sName != null && sName.isNotEmpty) {
+            list.add(sName);
+          }
+        }
+        if (list.isNotEmpty) {
+          // Make sure current subcategory is in list to prevent crashes
+          if (!list.contains(_formSubCategory) &&
+              cat.toLowerCase() == _formCategory.toLowerCase()) {
+            list.add(_formSubCategory);
+          }
+          list.add('+ Create Custom...');
+          return list;
+        }
+      }
     }
+
+    final List<String> list = [];
+    if (_formSubCategory.isNotEmpty &&
+        cat.toLowerCase() == _formCategory.toLowerCase()) {
+      list.add(_formSubCategory);
+    }
+    if (list.isEmpty) {
+      list.add('');
+    }
+    list.add('+ Create Custom...');
+    return list;
   }
 
-  Future<void> _pickAndEditImage({
-    required Function(Uint8List) onImageEdited,
-  }) async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final Uint8List imageBytes = await image.readAsBytes();
-      if (!mounted) return;
-
-      final Uint8List? editedImage = await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => ImageEditor(image: imageBytes)),
+  Future<void> _pickMultipleProductImages() async {
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(
+        imageQuality: 85, // Compress to 85% quality to save space and upload time
+        maxWidth: 1440,   // Limit maximum width to 1440 pixels
+        maxHeight: 1440,  // Limit maximum height to 1440 pixels
       );
-
-      if (editedImage != null) {
-        onImageEdited(editedImage);
+      if (images.isNotEmpty) {
+        for (var image in images) {
+          final Uint8List imageBytes = await image.readAsBytes();
+          setState(() {
+            _productImages.add(imageBytes);
+          });
+        }
       }
+    } catch (e) {
+      print('Error picking multiple images: $e');
     }
   }
 
@@ -603,104 +729,246 @@ class _CreateProductPageState extends State<CreateProductPage> {
       return;
     }
 
-    String description = '';
+    setState(() {
+      _isSaving = true;
+    });
+
     try {
-      description = await _descriptionController.getText();
-    } catch (_) {}
+      String description = '';
+      try {
+        final deltaJson = _descriptionController.document.toDelta().toJson();
+        final converter = QuillDeltaToHtmlConverter(
+          List<Map<String, dynamic>>.from(deltaJson),
+          ConverterOptions.forEmail(),
+        );
+        description = converter.convert();
+      } catch (e) {
+        debugPrint('[PERF] Error converting Quill Delta to HTML: $e');
+      }
 
-    List<Map<String, dynamic>> variantsData = [];
-    for (var v in _formVariants) {
-      final ratesMap = v['rates'] as Map<String, TextEditingController>;
-      final computedMap = v['computed'] as Map<String, TextEditingController>;
+      List<Map<String, dynamic>> variantsData = [];
+      for (var v in _formVariants) {
+        final ratesMap = v['rates'] as Map<String, TextEditingController>;
+        final computedMap = v['computed'] as Map<String, TextEditingController>;
 
-      final ratesJson = <String, String>{};
-      final computedJson = <String, String>{};
+        final ratesJson = <String, String>{};
+        final computedJson = <String, String>{};
 
-      final suffix = _getRateSuffix(v['packSizeUnit']);
+        final suffix = _getRateSuffix(v['packSizeUnit']);
 
-      ratesMap.forEach((key, ctrl) {
-        final val = ctrl.text.trim();
-        ratesJson[key] = val.isNotEmpty ? '$val$suffix' : '';
-      });
-      computedMap.forEach((key, ctrl) {
-        computedJson[key] = ctrl.text;
-      });
+        ratesMap.forEach((key, ctrl) {
+          final val = ctrl.text.trim();
+          ratesJson[key] = val.isNotEmpty ? '$val$suffix' : '';
+        });
+        computedMap.forEach((key, ctrl) {
+          computedJson[key] = ctrl.text;
+        });
 
-      final String primaryRateVal = ratesMap['1']?.text.trim() ?? '';
-      final String primaryRateWithSuffix = primaryRateVal.isNotEmpty
-          ? '$primaryRateVal$suffix'
-          : '';
+        final String primaryRateVal = ratesMap['1']?.text.trim() ?? '';
+        final String primaryRateWithSuffix = primaryRateVal.isNotEmpty
+            ? '$primaryRateVal$suffix'
+            : '';
 
-      final String mrpRateVal = v['compareRate'].text.trim();
-      final String mrpRateWithSuffix = mrpRateVal.isNotEmpty
-          ? '$mrpRateVal$suffix'
-          : '';
+        final String mrpRateVal = v['compareRate'].text.trim();
+        final String mrpRateWithSuffix = mrpRateVal.isNotEmpty
+            ? '$mrpRateVal$suffix'
+            : '';
 
-      variantsData.add({
-        'price': primaryRateWithSuffix,
-        'compareAtPrice': mrpRateWithSuffix,
-        'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
-        'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
-        'baseQuantity': v['baseQuantity'].text,
-        'image': v['image'],
-        'unitCompareRate': mrpRateWithSuffix,
-        'rates': ratesJson,
-        'computedPrices': computedJson,
+        variantsData.add({
+          'price': primaryRateWithSuffix,
+          'compareAtPrice': mrpRateWithSuffix,
+          'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
+          'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
+          'baseQuantity': v['baseQuantity'].text,
+          'unitCompareRate': mrpRateWithSuffix,
+          'rates': ratesJson,
+          'computedPrices': computedJson,
 
-        // Also map legacy properties for safety & backward compatibility
-        'unitPriceRate': primaryRateWithSuffix,
-        'unitPriceRate2': (ratesMap['2']?.text.isNotEmpty ?? false)
-            ? '${ratesMap['2']!.text}$suffix'
-            : '',
-        'unitPriceRate3': (ratesMap['3']?.text.isNotEmpty ?? false)
-            ? '${ratesMap['3']!.text}$suffix'
-            : '',
-        'price2': computedMap['2']?.text ?? '',
-        'price3': computedMap['3']?.text ?? '',
-      });
+          // Legacy mappings
+          'unitPriceRate': primaryRateWithSuffix,
+          'unitPriceRate2': (ratesMap['2']?.text.isNotEmpty ?? false)
+              ? '${ratesMap['2']!.text}$suffix'
+              : '',
+          'unitPriceRate3': (ratesMap['3']?.text.isNotEmpty ?? false)
+              ? '${ratesMap['3']!.text}$suffix'
+              : '',
+          'price2': computedMap['2']?.text ?? '',
+          'price3': computedMap['3']?.text ?? '',
+        });
+      }
+
+      String displayPrice = '₹0';
+      if (variantsData.isNotEmpty && variantsData.first['price'].isNotEmpty) {
+        displayPrice = variantsData.first['price'].startsWith('₹')
+            ? variantsData.first['price']
+            : '₹${variantsData.first['price']}';
+      }
+
+      // Find Category ID and Sub-category ID from backendCategories
+      String? categoryId;
+      String? subCategoryId;
+
+      if (_backendCategories.isNotEmpty) {
+        final matchingCat = _backendCategories.firstWhere(
+          (c) =>
+              c['name'].toString().toLowerCase() == _formCategory.toLowerCase(),
+          orElse: () => _backendCategories.first,
+        );
+        if (matchingCat != null) {
+          categoryId =
+              matchingCat['id']?.toString() ?? matchingCat['_id']?.toString();
+          final List subs = matchingCat['subCategories'] ?? [];
+          if (subs.isNotEmpty) {
+            final matchingSub = subs.firstWhere(
+              (s) =>
+                  s['name'].toString().toLowerCase() ==
+                  _formSubCategory.toLowerCase(),
+              orElse: () => subs.first,
+            );
+            if (matchingSub != null) {
+              subCategoryId =
+                  matchingSub['id']?.toString() ??
+                  matchingSub['_id']?.toString();
+            }
+          }
+        }
+      }
+
+      if (categoryId == null) {
+        throw Exception(
+          'Product category hierarchy could not be resolved. Please wait or reload.',
+        );
+      }
+
+      final mappedVariants = variantsData.map((v) {
+        final priceVal =
+            double.tryParse(v['price'].replaceAll(RegExp(r'[^0-9.]'), '')) ??
+            0.0;
+        final compareVal =
+            double.tryParse(
+              v['compareAtPrice'].replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
+
+        final rates = v['rates'] as Map<String, String>;
+        final rate2 =
+            double.tryParse(
+              rates['2']?.replaceAll(RegExp(r'[^0-9.]'), '') ?? '',
+            ) ??
+            priceVal;
+        final rate3 =
+            double.tryParse(
+              rates['3']?.replaceAll(RegExp(r'[^0-9.]'), '') ?? '',
+            ) ??
+            priceVal;
+
+        return {
+          'size': v['packSize'],
+          'price': priceVal,
+          'compareAtPrice': compareVal,
+          'price10_30': priceVal,
+          'price30_50': rate2,
+          'price50_plus': rate3,
+          'packVolume': _getPackVolume(v['packSize'] ?? ''),
+          'weight': 0.0,
+        };
+      }).toList();
+
+      final bool isEdit = widget.initialData != null;
+
+      final productData = {
+        'title': _nameController.text.trim(),
+        'brandName': _vendorController.text.trim(),
+        'technicalName': _nameController.text.trim(),
+        'vendor': _vendorController.text.trim(),
+        'categoryId': categoryId,
+        'subCategoryId': subCategoryId,
+        'description': description,
+        'variants': mappedVariants,
+        'tags': _tags,
+      };
+
+      http.Response response;
+      if (_productImages.isNotEmpty) {
+        // Multipart Upload
+        final fields = {'data': jsonEncode(productData)};
+        final List<http.MultipartFile> files = [];
+        for (int i = 0; i < _productImages.length; i++) {
+          final imgBytes = _productImages[i];
+          files.add(
+            http.MultipartFile.fromBytes(
+              'images',
+              imgBytes,
+              filename: 'product_image_$i.png',
+              contentType: MediaType('image', 'png'),
+            ),
+          );
+        }
+
+        response = await ApiClient().multipartRequest(
+          method: isEdit ? 'PUT' : 'POST',
+          endpoint: isEdit
+              ? '/products/${widget.initialData!['id']}'
+              : '/products',
+          fields: fields,
+          files: files,
+        );
+      } else {
+        // Standard JSON PUT/POST
+        response = isEdit
+            ? await ApiClient().put(
+                '/products/${widget.initialData!['id']}',
+                productData,
+              )
+            : await ApiClient().post('/products', productData);
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final resData = jsonDecode(response.body);
+        widget.onSave(resData['product'] ?? {});
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } else {
+        throw Exception(
+          'Failed to save product (Status ${response.statusCode}): ${response.body}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save product: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
-
-    String displayPrice = '₹0';
-    if (variantsData.isNotEmpty && variantsData.first['price'].isNotEmpty) {
-      displayPrice = variantsData.first['price'].startsWith('₹')
-          ? variantsData.first['price']
-          : '₹${variantsData.first['price']}';
-    }
-
-    final data = {
-      'sku':
-          widget.initialData?['sku'] ??
-          'PROD-NEW-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-      'name': _nameController.text.trim(),
-      'category': _formCategory,
-      'subCategory': _formSubCategory,
-      'vendor': _vendorController.text.trim(),
-      'price': displayPrice,
-      'inStock': _formInStock,
-      'description': description,
-      'variants': variantsData,
-      'images': _productImages,
-      'tags': _tags,
-      'priceTiers': _priceTiers,
-    };
-
-    widget.onSave(data);
-    if (!mounted) return;
-    Navigator.pop(context);
   }
 
-  void _addTag() {
-    final text = _tagController.text.trim();
-    if (text.isNotEmpty && !_tags.contains(text)) {
-      setState(() {
-        _tags.add(text);
-        _tagController.clear();
-      });
+  double _getPackVolume(String sizeStr) {
+    final clean = sizeStr.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    final match = RegExp(r'^([\d.]+)(ml|lit|litre|l|gm|gram|g|kg|kilogram|k)$').firstMatch(clean);
+    if (match == null) return 1.0;
+    
+    final value = double.tryParse(match.group(1) ?? '') ?? 1.0;
+    final unit = match.group(2) ?? '';
+    
+    if (unit == 'ml' || unit == 'gm' || unit == 'gram' || unit == 'g') {
+      return value / 1000.0;
     }
+    return value;
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[PERF] CreateProductPage.build called. _isTransitionComplete = $_isTransitionComplete. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
     final bool isEdit = widget.initialData != null;
 
     return Scaffold(
@@ -730,7 +998,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
               child: Row(
                 children: [
                   OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -749,9 +1017,24 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: _handleSave,
-                    icon: const Icon(Icons.check_rounded, size: 18),
-                    label: Text(isEdit ? 'Save Changes' : 'Publish Product'),
+                    onPressed: _isSaving ? null : _handleSave,
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: Text(
+                      _isSaving
+                          ? 'Saving...'
+                          : (isEdit ? 'Save Changes' : 'Publish Product'),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       foregroundColor: Colors.white,
@@ -818,37 +1101,80 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppTheme.borderColor),
-                            borderRadius: BorderRadius.circular(12),
-                            color: Colors.white,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: ScrollConfiguration(
-                              behavior: ScrollConfiguration.of(context)
-                                  .copyWith(
-                                    dragDevices: {
-                                      ui.PointerDeviceKind.touch,
-                                      ui.PointerDeviceKind.mouse,
-                                      ui.PointerDeviceKind.trackpad,
-                                    },
-                                  ),
-                              child: HtmlEditor(
-                                controller: _descriptionController,
-                                htmlEditorOptions: const HtmlEditorOptions(
-                                  hint: '',
-                                  shouldEnsureVisible: true,
+                        Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppTheme.borderColor),
+                                borderRadius: BorderRadius.circular(12),
+                                color: Colors.white,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Column(
+                                  children: [
+                                    quill.QuillSimpleToolbar(
+                                      controller: _descriptionController,
+                                      config: const quill.QuillSimpleToolbarConfig(
+                                        showFontFamily: false,
+                                        showFontSize: false,
+                                        
+                                        
+                                        showInlineCode: false,
+                                        showSubscript: false,
+                                        showSuperscript: false,
+                                        showCodeBlock: false,
+                                        showSearchButton: false,
+                                        showUndo: true,
+                                        showRedo: true,
+                                        showBoldButton: true,
+                                        showItalicButton: true,
+                                        showUnderLineButton: true,
+                                        showStrikeThrough: true,
+                                        showColorButton: true,
+                                        showBackgroundColorButton: true,
+                                        showListNumbers: true,
+                                        showListBullets: true,
+                                        showListCheck: false,
+                                        showIndent: true,
+                                        showAlignmentButtons: true,
+                                        showLink: true,
+                                        showQuote: true,
+                                        showClearFormat: true,
+                                      ),
+                                    ),
+                                    const Divider(height: 1, color: AppTheme.borderColor),
+                                    Container(
+                                      height: 350,
+                                      padding: const EdgeInsets.all(16),
+                                      child: quill.QuillEditor.basic(
+                                        controller: _descriptionController,
+                                        config: const quill.QuillEditorConfig(
+                                          placeholder: 'Provide a detailed description of the product features, benefits, and specifications...',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                htmlToolbarOptions: const HtmlToolbarOptions(
-                                  toolbarPosition: ToolbarPosition.aboveEditor,
-                                  toolbarType: ToolbarType.nativeScrollable,
-                                ),
-                                otherOptions: const OtherOptions(height: 450),
                               ),
                             ),
-                          ),
+                            if (_isLoadingDetails)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -928,17 +1254,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             return null;
                           },
                         ),
-                        const SizedBox(height: 20),
-                        _buildTagsSection(),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildSectionCard(
-                    title: 'Publishing Status',
-                    icon: Icons.visibility_outlined,
-                    child: _buildAvailabilitySelector(),
-                  ),
+                  _buildTagsCard(),
                 ],
               );
 
@@ -994,28 +1314,34 @@ class _CreateProductPageState extends State<CreateProductPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, size: 18, color: AppTheme.primaryColor),
                     ),
-                    child: Icon(icon, size: 18, color: AppTheme.primaryColor),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              if (action != null) action,
+              if (action != null) ...[const SizedBox(width: 8), action!],
             ],
           ),
           const SizedBox(height: 24),
@@ -1106,15 +1432,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          onTap: () {
-            _pickAndEditImage(
-              onImageEdited: (editedImage) {
-                setState(() {
-                  _productImages.add(editedImage);
-                });
-              },
-            );
-          },
+          onTap: _pickMultipleProductImages,
           borderRadius: BorderRadius.circular(12),
           child: Container(
             width: double.infinity,
@@ -1172,15 +1490,31 @@ class _CreateProductPageState extends State<CreateProductPage> {
               itemBuilder: (context, index) {
                 return Stack(
                   children: [
-                    Container(
-                      width: 80,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.borderColor),
-                        image: DecorationImage(
-                          image: MemoryImage(_productImages[index]),
-                          fit: BoxFit.cover,
+                    GestureDetector(
+                      onTap: () async {
+                        final Uint8List? editedImage = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                ImageEditor(image: _productImages[index]),
+                          ),
+                        );
+                        if (editedImage != null) {
+                          setState(() {
+                            _productImages[index] = editedImage;
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: 80,
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderColor),
+                          image: DecorationImage(
+                            image: MemoryImage(_productImages[index]),
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     ),
@@ -1214,31 +1548,425 @@ class _CreateProductPageState extends State<CreateProductPage> {
     );
   }
 
+  List<String> get _dropdownCategories {
+    final List<String> list = [];
+    for (var cat in _backendCategories) {
+      final name = cat['name']?.toString();
+      if (name != null && name.isNotEmpty && !list.contains(name)) {
+        list.add(name);
+      }
+    }
+    // Crucially, make sure the current _formCategory is in the list to prevent assertion failure
+    if (_formCategory.isNotEmpty && !list.contains(_formCategory)) {
+      list.add(_formCategory);
+    }
+    if (list.isEmpty) {
+      list.add('');
+    }
+    list.add('+ Create Custom...');
+    return list;
+  }
+
   Widget _buildCategoryDropdowns() {
     final subCats = getFormSubCategories(_formCategory);
     if (!subCats.contains(_formSubCategory)) _formSubCategory = subCats.first;
 
     return Column(
       children: [
-        _buildFormDropdown(
-          label: 'Primary Category',
-          value: _formCategory,
-          options: _categories,
-          onChanged: (val) {
-            setState(() {
-              _formCategory = val!;
-              _formSubCategory = getFormSubCategories(_formCategory).first;
-            });
-          },
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: _buildFormDropdown(
+                label: 'Primary Category',
+                value: _formCategory,
+                options: _dropdownCategories,
+                onChanged: (val) {
+                  if (val == '+ Create Custom...') {
+                    _showCreateCategoryDialog();
+                    return;
+                  }
+                  setState(() {
+                    _formCategory = val!;
+                    _formSubCategory = getFormSubCategories(
+                      _formCategory,
+                    ).first;
+                  });
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 20),
-        _buildFormDropdown(
-          label: 'Sub-category',
-          value: _formSubCategory,
-          options: subCats,
-          onChanged: (val) => setState(() => _formSubCategory = val!),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: _buildFormDropdown(
+                label: 'Sub-category',
+                value: _formSubCategory,
+                options: subCats,
+                onChanged: (val) {
+                  if (val == '+ Create Custom...') {
+                    _showCreateSubCategoryDialog();
+                    return;
+                  }
+                  setState(() => _formSubCategory = val!);
+                },
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  Future<void> _showCreateCategoryDialog() async {
+    final textCtrl = TextEditingController();
+    bool isLoading = false;
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Create New Category',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter name of the category to add to catalog.',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: textCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Category Name',
+                      labelStyle: GoogleFonts.outfit(fontSize: 14),
+                      errorText: errorText,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: AppTheme.borderColor,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: AppTheme.primaryColor,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 14),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final name = textCtrl.text.trim();
+                          if (name.isEmpty) {
+                            setDialogState(
+                              () => errorText = 'Name cannot be empty',
+                            );
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isLoading = true;
+                            errorText = null;
+                          });
+
+                          try {
+                            final response = await ApiClient().post(
+                              '/products/categories',
+                              {'name': name},
+                            );
+
+                            if (response.statusCode == 201) {
+                              final body = jsonDecode(response.body);
+                              if (body['success'] == true) {
+                                // Reload categories
+                                await _loadCategories();
+                                setState(() {
+                                  _formCategory = name;
+                                  _formSubCategory = getFormSubCategories(
+                                    _formCategory,
+                                  ).first;
+                                });
+                                if (context.mounted) Navigator.pop(context);
+                                return;
+                              }
+                            }
+
+                            final errMsg =
+                                jsonDecode(response.body)['message'] ??
+                                'Failed to create category';
+                            setDialogState(() {
+                              isLoading = false;
+                              errorText = errMsg;
+                            });
+                          } catch (e) {
+                            setDialogState(() {
+                              isLoading = false;
+                              errorText = 'Error: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          'Create',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showCreateSubCategoryDialog() async {
+    final textCtrl = TextEditingController();
+    bool isLoading = false;
+    String? errorText;
+
+    // Find the category ID from the _backendCategories list
+    String? categoryId;
+    if (_backendCategories.isNotEmpty) {
+      final matchingCat = _backendCategories.firstWhere(
+        (c) =>
+            c['name'].toString().toLowerCase() == _formCategory.toLowerCase(),
+        orElse: () => null,
+      );
+      if (matchingCat != null) {
+        categoryId =
+            matchingCat['id']?.toString() ?? matchingCat['_id']?.toString();
+      }
+    }
+
+    if (categoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot add subcategory to an unsaved category. Please select or create a primary category first.',
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Create New Sub-category',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter sub-category name to add under $_formCategory.',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: textCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Sub-category Name',
+                      labelStyle: GoogleFonts.outfit(fontSize: 14),
+                      errorText: errorText,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: AppTheme.borderColor,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: AppTheme.primaryColor,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 14),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final name = textCtrl.text.trim();
+                          if (name.isEmpty) {
+                            setDialogState(
+                              () => errorText = 'Name cannot be empty',
+                            );
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isLoading = true;
+                            errorText = null;
+                          });
+
+                          try {
+                            final response = await ApiClient().post(
+                              '/products/categories/$categoryId/subcategories',
+                              {'name': name},
+                            );
+
+                            if (response.statusCode == 201) {
+                              final body = jsonDecode(response.body);
+                              if (body['success'] == true) {
+                                // Reload categories
+                                await _loadCategories();
+                                setState(() {
+                                  _formSubCategory = name;
+                                });
+                                if (context.mounted) Navigator.pop(context);
+                                return;
+                              }
+                            }
+
+                            final errMsg =
+                                jsonDecode(response.body)['message'] ??
+                                'Failed to create sub-category';
+                            setDialogState(() {
+                              isLoading = false;
+                              errorText = errMsg;
+                            });
+                          } catch (e) {
+                            setDialogState(() {
+                              isLoading = false;
+                              errorText = 'Error: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          'Create',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1300,247 +2028,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
     );
   }
 
-  Widget _buildAvailabilitySelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _formInStock
-            ? AppTheme.success.withValues(alpha: 0.05)
-            : AppTheme.error.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _formInStock
-              ? AppTheme.success.withValues(alpha: 0.2)
-              : AppTheme.error.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _formInStock
-                  ? AppTheme.success.withValues(alpha: 0.1)
-                  : AppTheme.error.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _formInStock
-                  ? Icons.check_circle_outline_rounded
-                  : Icons.remove_circle_outline_rounded,
-              color: _formInStock ? AppTheme.success : AppTheme.error,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _formInStock ? 'Active Product' : 'Draft / Out of Stock',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _formInStock ? AppTheme.success : AppTheme.error,
-                  ),
-                ),
-                Text(
-                  _formInStock
-                      ? 'This product will be visible to buyers.'
-                      : 'This product is currently hidden.',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: _formInStock,
-            activeColor: Colors.white,
-            activeTrackColor: AppTheme.success,
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: AppTheme.error.withValues(alpha: 0.5),
-            onChanged: (val) => setState(() => _formInStock = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTagsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Product Tags',
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.only(left: 16, right: 8, top: 4, bottom: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF9FAFB),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.borderColor),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _tagController,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    color: AppTheme.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Press enter to add tags...',
-                    hintStyle: GoogleFonts.outfit(
-                      color: AppTheme.textSecondary,
-                      fontSize: 14,
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _addTag(),
-                ),
-              ),
-              IconButton(
-                onPressed: _addTag,
-                icon: const Icon(
-                  Icons.add_circle_rounded,
-                  color: AppTheme.primaryColor,
-                  size: 24,
-                ),
-                splashRadius: 20,
-              ),
-            ],
-          ),
-        ),
-        if (_tags.isNotEmpty) const SizedBox(height: 12),
-        if (_tags.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _tags.map((tag) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tag,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppTheme.primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: () => setState(() => _tags.remove(tag)),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          size: 10,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-      ],
-    );
-  }
-
   Widget _buildVariantCard(
     int index,
     Map<String, dynamic> variant, {
     required bool isMobile,
   }) {
-    final imagePickerWidget = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Image',
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        GestureDetector(
-          onTap: () {
-            _pickAndEditImage(
-              onImageEdited: (editedImage) {
-                setState(() => variant['image'] = editedImage);
-              },
-            );
-          },
-          child: Container(
-            height: 70,
-            width: 70,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderColor),
-              image: variant['image'] != null && variant['image'] is Uint8List
-                  ? DecorationImage(
-                      image: MemoryImage(variant['image'] as Uint8List),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-            ),
-            child: variant['image'] == null || variant['image'] is! Uint8List
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_photo_alternate_outlined,
-                          color: AppTheme.textSecondary,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                  )
-                : null,
-          ),
-        ),
-      ],
-    );
+
 
     final bool isLiquid = ['ml', 'lit'].contains(variant['packSizeUnit']);
     final bool isSolid = ['gm', 'kg'].contains(variant['packSizeUnit']);
@@ -1920,36 +2413,208 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              isMobile
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        imagePickerWidget,
-                        const SizedBox(height: 16),
-                        sizeFields,
-                        const SizedBox(height: 16),
-                        rateFields,
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        imagePickerWidget,
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              sizeFields,
-                              const SizedBox(height: 12),
-                              rateFields,
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  sizeFields,
+                  const SizedBox(height: 16),
+                  rateFields,
+                ],
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTagsCard() {
+    return _buildSectionCard(
+      title: 'Tags & Keywords',
+      icon: Icons.sell_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Add custom descriptive keywords to improve product searchability.',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _tagController,
+              decoration: InputDecoration(
+                hintText: 'e.g. Organic, Summer, Fertilizer',
+                hintStyle: GoogleFonts.outfit(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                  fontSize: 14,
+                ),
+                prefixIcon: const Icon(
+                  Icons.tag_rounded,
+                  color: AppTheme.primaryColor,
+                  size: 20,
+                ),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: InkWell(
+                    onTap: () {
+                      final val = _tagController.text;
+                      if (val.trim().isNotEmpty &&
+                          !_tags.contains(val.trim())) {
+                        setState(() {
+                          _tags.add(val.trim());
+                          _tagController.clear();
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppTheme.primaryColor, Color(0xFF2D6A4F)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.add_circle_outline_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Add',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: AppTheme.primaryColor,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              onSubmitted: (val) {
+                if (val.trim().isNotEmpty && !_tags.contains(val.trim())) {
+                  setState(() {
+                    _tags.add(val.trim());
+                    _tagController.clear();
+                  });
+                }
+              },
+            ),
+          ),
+          if (_tags.isNotEmpty) const SizedBox(height: 20),
+          if (_tags.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 10,
+              children: _tags.map((tag) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.tag_rounded,
+                        size: 14,
+                        color: AppTheme.primaryColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        tag,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _tags.remove(tag);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(
+                              alpha: 0.15,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 12,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
       ),
     );
   }

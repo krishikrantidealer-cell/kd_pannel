@@ -5,9 +5,13 @@ import 'package:kd_pannel/features/auth/presentation/pages/login_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 
 class AppCache {
   static ui.Image? logoImage;
@@ -38,6 +42,20 @@ class AppCache {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize AuthService and restore persisted session
+  await AuthService().init();
+
+  // Determine initial route based on session presence
+  String initialRoute = '/login';
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('kd_access_token');
+    final role = prefs.getString('kd_user_role');
+    if (token != null && role != null) {
+      initialRoute = role == 'sales' ? '/sales/dashboard' : '/dashboard';
+    }
+  } catch (_) {}
+
   // Pre-load Outfit fonts to prevent layout shift / font swap on restart
   try {
     await GoogleFonts.pendingFonts([
@@ -56,11 +74,13 @@ void main() async {
   // Preload brand images synchronously into memory buffer before running the app
   await AppCache.preload();
 
-  runApp(const MyApp());
+  runApp(MyApp(initialRoute: initialRoute));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String initialRoute;
+
+  const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +88,14 @@ class MyApp extends StatelessWidget {
       title: 'KrishiDealer Admin Panel',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialRoute: '/login',
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('en', '')],
+      initialRoute: initialRoute,
       routes: {
         '/login': (context) => const LoginPage(),
 
