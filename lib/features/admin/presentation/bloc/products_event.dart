@@ -38,3 +38,12 @@ class DeleteProductEvent extends ProductsEvent {
   @override
   List<Object?> get props => [productId];
 }
+
+class ToggleProductAvailabilityEvent extends ProductsEvent {
+  final String productId;
+  final bool newInStock;
+  const ToggleProductAvailabilityEvent(this.productId, this.newInStock);
+
+  @override
+  List<Object?> get props => [productId, newInStock];
+}

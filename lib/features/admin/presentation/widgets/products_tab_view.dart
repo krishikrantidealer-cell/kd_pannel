@@ -604,26 +604,34 @@ class _ProductsTabViewState extends State<ProductsTabView> {
 
   List<Widget> _buildPageNumbers(int totalPages) {
     final List<Widget> pages = [];
+    bool lastWasEllipsis = false;
+
     for (int i = 1; i <= totalPages; i++) {
       if (totalPages > 7) {
         if (i == 1 ||
             i == totalPages ||
             (i >= _currentPage - 1 && i <= _currentPage + 1)) {
           pages.add(_buildPageNumberBtn(i));
+          lastWasEllipsis = false;
         } else if (i == 2 || i == totalPages - 1) {
           // Only add ellipsis if we haven't just added one
-          if (pages.isNotEmpty && pages.last.key != const ValueKey('ellipsis')) {
+          if (!lastWasEllipsis) {
             pages.add(
               Padding(
-                key: const ValueKey('ellipsis'),
+                key: ValueKey('ellipsis_$i'),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text('...', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                child: Text(
+                  '...',
+                  style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+                ),
               ),
             );
+            lastWasEllipsis = true;
           }
         }
       } else {
         pages.add(_buildPageNumberBtn(i));
+        lastWasEllipsis = false;
       }
     }
     return pages;
@@ -654,7 +662,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                       color: AppTheme.primaryColor.withValues(alpha: 0.2),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
-                    )
+                    ),
                   ]
                 : [],
           ),
@@ -671,7 +679,10 @@ class _ProductsTabViewState extends State<ProductsTabView> {
     );
   }
 
-  Widget _buildPageNavButton({required IconData icon, required VoidCallback? onTap}) {
+  Widget _buildPageNavButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
     final bool disabled = onTap == null;
     return InkWell(
       onTap: onTap,
@@ -689,42 +700,55 @@ class _ProductsTabViewState extends State<ProductsTabView> {
         child: Icon(
           icon,
           size: 20,
-          color: disabled ? AppTheme.textSecondary.withValues(alpha: 0.4) : AppTheme.textPrimary,
+          color: disabled
+              ? AppTheme.textSecondary.withValues(alpha: 0.4)
+              : AppTheme.textPrimary,
         ),
       ),
     );
   }
 
-
   Widget _buildAvailabilityBadge(Map<String, dynamic> prod) {
     final bool inStock = prod['inStock'] ?? false;
     final color = inStock ? AppTheme.success : AppTheme.error;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          final String id = (prod['id'] ?? prod['_id']).toString();
+          context.read<ProductsBloc>().add(
+            ToggleProductAvailabilityEvent(id, !inStock),
+          );
+        },
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
-          const SizedBox(width: 6),
-          Text(
-            inStock ? 'In Stock' : 'Out of Stock',
-            style: GoogleFonts.outfit(
-              fontSize: 11.5,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                inStock ? 'In Stock' : 'Out of Stock',
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1019,9 +1043,7 @@ class _TableSkeletonRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.lightBorderColor),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
       ),
       child: Shimmer.fromColors(
         baseColor: Colors.grey.shade200,
@@ -1129,15 +1151,9 @@ class _TableSkeletonRow extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: Colors.white,
-                  ),
+                  CircleAvatar(radius: 12, backgroundColor: Colors.white),
                   SizedBox(width: 8),
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: Colors.white,
-                  ),
+                  CircleAvatar(radius: 12, backgroundColor: Colors.white),
                 ],
               ),
             ),

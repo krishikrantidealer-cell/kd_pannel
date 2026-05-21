@@ -11,6 +11,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
     on<SearchProductsEvent>(_onSearchProducts);
     on<FilterProductsByCategoryEvent>(_onFilterProductsByCategory);
     on<DeleteProductEvent>(_onDeleteProduct);
+    on<ToggleProductAvailabilityEvent>(_onToggleProductAvailability);
   }
 
   List<Map<String, dynamic>> _applyFilter({
@@ -292,6 +293,60 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       }
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onToggleProductAvailability(
+    ToggleProductAvailabilityEvent event,
+    Emitter<ProductsState> emit,
+  ) async {
+    // Optimistic update
+    final updatedProducts = state.allProducts.map((p) {
+      if ((p['id'] ?? p['_id'] ?? '').toString() == event.productId) {
+        return {...p, 'inStock': event.newInStock};
+      }
+      return p;
+    }).toList();
+
+    emit(state.copyWith(
+      allProducts: updatedProducts,
+      filteredProducts: _applyFilter(
+        products: updatedProducts,
+        query: state.searchQuery,
+        category: state.selectedCategory,
+      ),
+    ));
+
+    try {
+      // Use PUT to update just the status
+      final response = await ApiClient().put('/products/${event.productId}', {
+        'availabilityStatus': event.newInStock ? 'In Stock' : 'Out of Stock',
+      });
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Failed to update status');
+      } else {
+        // Update caches on success
+        ApiClient().cachedProducts = updatedProducts;
+        LocalCacheHelper.saveCachedProducts(updatedProducts);
+      }
+    } catch (e) {
+      // Revert optimistic update
+      final revertedProducts = state.allProducts.map((p) {
+        if ((p['id'] ?? p['_id'] ?? '').toString() == event.productId) {
+          return {...p, 'inStock': !event.newInStock};
+        }
+        return p;
+      }).toList();
+      emit(state.copyWith(
+        allProducts: revertedProducts,
+        filteredProducts: _applyFilter(
+          products: revertedProducts,
+          query: state.searchQuery,
+          category: state.selectedCategory,
+        ),
+        errorMessage: 'Failed to update availability: $e',
+      ));
     }
   }
 }

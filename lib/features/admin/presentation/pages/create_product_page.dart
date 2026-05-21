@@ -51,6 +51,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   final _tagController = TextEditingController();
   List<String> _tags = [];
+  bool _inStock = true;
   List<String> _assignedCollections = [];
   String _formCategory = '';
   String _formSubCategory = '';
@@ -71,11 +72,15 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     final data = widget.initialData;
     quill.Document doc;
-    if (data != null && data['description'] != null && data['description'].toString().isNotEmpty) {
+    if (data != null &&
+        data['description'] != null &&
+        data['description'].toString().isNotEmpty) {
       try {
         final delta = HtmlToDelta().convert(data['description'].toString());
         doc = quill.Document.fromDelta(delta);
-        debugPrint('[PERF] CreateProductPage.initState - Parsed description HTML to Quill Delta. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+        debugPrint(
+          '[PERF] CreateProductPage.initState - Parsed description HTML to Quill Delta. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+        );
       } catch (e) {
         debugPrint('Error parsing HTML to Quill Delta: $e');
         doc = quill.Document();
@@ -93,13 +98,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
     _isTransitionComplete = true;
 
     if (data != null) {
-      debugPrint('[PERF] CreateProductPage.initState - data is NOT null (Edit Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage.initState - data is NOT null (Edit Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       _nameController.text = data['name'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
       _formCategory = data['category'] ?? '';
       _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
-      _assignedCollections = List<String>.from(data['assignedCollections'] ?? []);
+      _inStock = data['availabilityStatus'] != 'Out of Stock';
+      _assignedCollections = List<String>.from(
+        data['assignedCollections'] ?? [],
+      );
       // Load existing uploaded images for edit mode
       _existingImageUrls = List<String>.from(data['images'] ?? []);
       _existingMediumUrls = List<String>.from(data['mediumImages'] ?? []);
@@ -126,17 +136,24 @@ class _CreateProductPageState extends State<CreateProductPage> {
         _addVariant();
       }
     } else {
-      debugPrint('[PERF] CreateProductPage.initState - data is null (Create Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage.initState - data is null (Create Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       _addVariant();
     }
   }
 
   Future<void> _loadCategories() async {
-    debugPrint('[PERF] CreateProductPage._loadCategories started. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
-    
+    debugPrint(
+      '[PERF] CreateProductPage._loadCategories started. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+    );
+
     // 1. Try to use preloaded categories passed down from parent page/BLoC
-    if (widget.preloadedCategories != null && widget.preloadedCategories!.isNotEmpty) {
-      debugPrint('[PERF] CreateProductPage._loadCategories - Using preloaded categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+    if (widget.preloadedCategories != null &&
+        widget.preloadedCategories!.isNotEmpty) {
+      debugPrint(
+        '[PERF] CreateProductPage._loadCategories - Using preloaded categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       setState(() {
         _backendCategories = widget.preloadedCategories!;
         _initializeCategorySelection();
@@ -147,7 +164,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
     // 2. Try to load from memory cache
     final cached = ApiClient().cachedCategories;
     if (cached != null && cached.isNotEmpty) {
-      debugPrint('[PERF] CreateProductPage._loadCategories - Found cached categories in ApiClient. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage._loadCategories - Found cached categories in ApiClient. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       setState(() {
         _backendCategories = cached;
         _initializeCategorySelection();
@@ -156,9 +175,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
 
     try {
-      debugPrint('[PERF] CreateProductPage._loadCategories - Dispatching API call to /products/categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage._loadCategories - Dispatching API call to /products/categories. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       final response = await ApiClient().get('/products/categories');
-      debugPrint('[PERF] CreateProductPage._loadCategories - API call completed with code ${response.statusCode}. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage._loadCategories - API call completed with code ${response.statusCode}. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['categories'] is List) {
@@ -173,7 +196,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
         }
       }
     } catch (e) {
-      debugPrint('[PERF] CreateProductPage._loadCategories - Error fetching categories: $e. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+        '[PERF] CreateProductPage._loadCategories - Error fetching categories: $e. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+      );
     }
   }
 
@@ -185,26 +210,27 @@ class _CreateProductPageState extends State<CreateProductPage> {
         if (data['success'] == true && data['collections'] is List) {
           final List collections = data['collections'];
           final Map<String, String> map = {};
-          
+
           for (var col in collections) {
             final colId = col['id']?.toString() ?? col['_id']?.toString() ?? '';
             final colName = col['name']?.toString() ?? '';
-            
+
             if (colId.isNotEmpty && colName.isNotEmpty) {
               map[colId] = colName;
               // Map legacy name string to itself for fallback
               map[colName] = colName;
             }
-            
+
             final List subs = col['subCollections'] ?? [];
             for (var sub in subs) {
-               final subId = sub['id']?.toString() ?? sub['_id']?.toString() ?? '';
-               final subName = sub['name']?.toString() ?? '';
-               if (subId.isNotEmpty && subName.isNotEmpty) {
-                 map[subId] = '$colName > $subName';
-                 // Map legacy sub-collection name as fallback
-                 map[subName] = '$colName > $subName'; 
-               }
+              final subId =
+                  sub['id']?.toString() ?? sub['_id']?.toString() ?? '';
+              final subName = sub['name']?.toString() ?? '';
+              if (subId.isNotEmpty && subName.isNotEmpty) {
+                map[subId] = '$colName > $subName';
+                // Map legacy sub-collection name as fallback
+                map[subName] = '$colName > $subName';
+              }
             }
           }
           if (mounted) {
@@ -263,7 +289,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
       variant['price']?.dispose();
       variant['compareAtPrice']?.dispose();
       variant['packSizeVal']?.dispose();
-      variant['baseQuantity']?.dispose();
       variant['compareRate']?.dispose();
       variant['basePackingVal']?.dispose();
 
@@ -293,7 +318,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
     } else if (data?['packVolume'] != null) {
       // packVolume is stored in litres as a number, convert back to readable string
       final pvNum = data!['packVolume'];
-      final pvDouble = pvNum is num ? pvNum.toDouble() : double.tryParse(pvNum.toString());
+      final pvDouble = pvNum is num
+          ? pvNum.toDouble()
+          : double.tryParse(pvNum.toString());
       if (pvDouble != null && pvDouble > 0) {
         initialPackSize = pvDouble % 1 == 0
             ? '${pvDouble.toInt()}lit'
@@ -301,15 +328,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
       }
     }
 
-    final String initialQty = data?['baseQuantity'] != null
-        ? data!['baseQuantity'].toString()
-        : '1';
     // 'basePacking' is the individual bottle/unit size.
     // For old products the backend stored this under the 'size' field, so fall back to it.
     final String initialBasePacking =
         (data?['basePacking'] ?? data?['size']) != null
-            ? (data!['basePacking'] ?? data['size']).toString()
-            : '';
+        ? (data!['basePacking'] ?? data['size']).toString()
+        : '';
 
     // Parse pack size
     String packVal = '';
@@ -334,7 +358,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final priceCtrl = TextEditingController(text: initialPrice);
     final compareCtrl = TextEditingController(text: initialCompare);
     final packValCtrl = TextEditingController(text: packVal);
-    final qtyCtrl = TextEditingController(text: initialQty);
     final compareRateCtrl = TextEditingController();
     final basePackingValCtrl = TextEditingController(text: basePackVal);
 
@@ -456,7 +479,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'compareAtPrice': compareCtrl,
         'packSizeVal': packValCtrl,
         'packSizeUnit': packUnit,
-        'baseQuantity': qtyCtrl,
         'compareRate': compareRateCtrl,
         'basePackingVal': basePackingValCtrl,
         'basePackingUnit': basePackUnit,
@@ -473,7 +495,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     variant['price']?.dispose();
     variant['compareAtPrice']?.dispose();
     variant['packSizeVal']?.dispose();
-    variant['baseQuantity']?.dispose();
     variant['compareRate']?.dispose();
     variant['basePackingVal']?.dispose();
 
@@ -772,9 +793,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
   Future<void> _pickMultipleProductImages() async {
     try {
       final List<XFile> images = await _picker.pickMultiImage(
-        imageQuality: 85, // Compress to 85% quality to save space and upload time
-        maxWidth: 1440,   // Limit maximum width to 1440 pixels
-        maxHeight: 1440,  // Limit maximum height to 1440 pixels
+        imageQuality:
+            85, // Compress to 85% quality to save space and upload time
+        maxWidth: 1440, // Limit maximum width to 1440 pixels
+        maxHeight: 1440, // Limit maximum height to 1440 pixels
       );
       if (images.isNotEmpty) {
         for (var image in images) {
@@ -873,7 +895,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'compareAtPrice': mrpRateWithSuffix,
           'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
           'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
-          'baseQuantity': v['baseQuantity'].text,
           'unitCompareRate': mrpRateWithSuffix,
           'rates': ratesJson,
           'computedPrices': computedJson,
@@ -980,6 +1001,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'description': description,
         'variants': mappedVariants,
         'tags': _tags,
+        'availabilityStatus': _inStock ? 'In Stock' : 'Out of Stock',
         // Tell the backend which existing images to keep
         if (isEdit) 'keepImages': _existingImageUrls,
         if (isEdit) 'keepMediumImages': _existingMediumUrls,
@@ -1052,12 +1074,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   double _getPackVolume(String sizeStr) {
     final clean = sizeStr.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    final match = RegExp(r'^([\d.]+)(ml|lit|litre|l|gm|gram|g|kg|kilogram|k)$').firstMatch(clean);
+    final match = RegExp(
+      r'^([\d.]+)(ml|lit|litre|l|gm|gram|g|kg|kilogram|k)$',
+    ).firstMatch(clean);
     if (match == null) return 1.0;
-    
+
     final value = double.tryParse(match.group(1) ?? '') ?? 1.0;
     final unit = match.group(2) ?? '';
-    
+
     if (unit == 'ml' || unit == 'gm' || unit == 'gram' || unit == 'g') {
       return value / 1000.0;
     }
@@ -1066,7 +1090,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('[PERF] CreateProductPage.build called. _isTransitionComplete = $_isTransitionComplete. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+    debugPrint(
+      '[PERF] CreateProductPage.build called. _isTransitionComplete = $_isTransitionComplete. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
+    );
     final bool isEdit = widget.initialData != null;
 
     return Scaffold(
@@ -1189,42 +1215,46 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                   children: [
                                     quill.QuillSimpleToolbar(
                                       controller: _descriptionController,
-                                      config: const quill.QuillSimpleToolbarConfig(
-                                        showFontFamily: false,
-                                        showFontSize: false,
-                                        
-                                        
-                                        showInlineCode: false,
-                                        showSubscript: false,
-                                        showSuperscript: false,
-                                        showCodeBlock: false,
-                                        showSearchButton: false,
-                                        showUndo: true,
-                                        showRedo: true,
-                                        showBoldButton: true,
-                                        showItalicButton: true,
-                                        showUnderLineButton: true,
-                                        showStrikeThrough: true,
-                                        showColorButton: true,
-                                        showBackgroundColorButton: true,
-                                        showListNumbers: true,
-                                        showListBullets: true,
-                                        showListCheck: false,
-                                        showIndent: true,
-                                        showAlignmentButtons: true,
-                                        showLink: true,
-                                        showQuote: true,
-                                        showClearFormat: true,
-                                      ),
+                                      config:
+                                          const quill.QuillSimpleToolbarConfig(
+                                            showFontFamily: false,
+                                            showFontSize: false,
+
+                                            showInlineCode: false,
+                                            showSubscript: false,
+                                            showSuperscript: false,
+                                            showCodeBlock: false,
+                                            showSearchButton: false,
+                                            showUndo: true,
+                                            showRedo: true,
+                                            showBoldButton: true,
+                                            showItalicButton: true,
+                                            showUnderLineButton: true,
+                                            showStrikeThrough: true,
+                                            showColorButton: true,
+                                            showBackgroundColorButton: true,
+                                            showListNumbers: true,
+                                            showListBullets: true,
+                                            showListCheck: false,
+                                            showIndent: true,
+                                            showAlignmentButtons: true,
+                                            showLink: true,
+                                            showQuote: true,
+                                            showClearFormat: true,
+                                          ),
                                     ),
-                                    const Divider(height: 1, color: AppTheme.borderColor),
+                                    const Divider(
+                                      height: 1,
+                                      color: AppTheme.borderColor,
+                                    ),
                                     Container(
                                       height: 350,
                                       padding: const EdgeInsets.all(16),
                                       child: quill.QuillEditor.basic(
                                         controller: _descriptionController,
                                         config: const quill.QuillEditorConfig(
-                                          placeholder: 'Provide a detailed description of the product features, benefits, and specifications...',
+                                          placeholder:
+                                              'Provide a detailed description of the product features, benefits, and specifications...',
                                         ),
                                       ),
                                     ),
@@ -1311,12 +1341,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   ),
                   const SizedBox(height: 24),
                   _buildSectionCard(
-                    title: 'Organization',
+                    title: 'Organization & Status',
                     icon: Icons.category_outlined,
                     child: Column(
                       children: [
                         _buildCategoryDropdowns(),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         _buildFormTextField(
                           label: 'Vendor',
                           hint: 'e.g. Jain Irrigation, Mahyco',
@@ -1330,6 +1360,116 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Product Status',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Toggle to hide from store',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _inStock = !_inStock;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.fastOutSlowIn,
+                                height: 36,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _inStock
+                                      ? const Color(
+                                          0xFF10B981,
+                                        ).withValues(alpha: 0.1)
+                                      : const Color(
+                                          0xFFEF4444,
+                                        ).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: _inStock
+                                        ? const Color(
+                                            0xFF10B981,
+                                          ).withValues(alpha: 0.3)
+                                        : const Color(
+                                            0xFFEF4444,
+                                          ).withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      transitionBuilder: (child, animation) {
+                                        return ScaleTransition(
+                                          scale: animation,
+                                          child: FadeTransition(
+                                            opacity: animation,
+                                            child: child,
+                                          ),
+                                        );
+                                      },
+                                      child: Icon(
+                                        _inStock
+                                            ? Icons.check_circle_rounded
+                                            : Icons.cancel_rounded,
+                                        key: ValueKey(_inStock),
+                                        color: _inStock
+                                            ? const Color(0xFF10B981)
+                                            : const Color(0xFFEF4444),
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    AnimatedSize(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      curve: Curves.fastOutSlowIn,
+                                      child: Text(
+                                        _inStock ? 'In Stock' : 'Out of Stock',
+                                        style: GoogleFonts.outfit(
+                                          color: _inStock
+                                              ? const Color(0xFF059669)
+                                              : const Color(0xFFDC2626),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1509,7 +1649,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   Widget _buildMediaUploader() {
-    final bool hasAnyImages = _existingImageUrls.isNotEmpty || _productImages.isNotEmpty;
+    final bool hasAnyImages =
+        _existingImageUrls.isNotEmpty || _productImages.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1718,9 +1859,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           borderRadius: BorderRadius.circular(12),
           child: Container(
             width: double.infinity,
-            padding: EdgeInsets.symmetric(
-              vertical: hasAnyImages ? 16 : 32,
-            ),
+            padding: EdgeInsets.symmetric(vertical: hasAnyImages ? 16 : 32),
             decoration: BoxDecoration(
               color: AppTheme.primaryColor.withValues(alpha: 0.02),
               borderRadius: BorderRadius.circular(12),
@@ -2256,8 +2395,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     Map<String, dynamic> variant, {
     required bool isMobile,
   }) {
-
-
     final bool isLiquid = ['ml', 'lit'].contains(variant['packSizeUnit']);
     final bool isSolid = ['gm', 'kg'].contains(variant['packSizeUnit']);
 
@@ -2507,8 +2644,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
             // MRP rate must be >= Tier 1 selling rate
             final t1RateVal = double.tryParse(
               (variant['rates'] as Map<String, TextEditingController>)['1']
-                  ?.text
-                  .trim() ??
+                      ?.text
+                      .trim() ??
                   '',
             );
             if (t1RateVal != null && numVal < t1RateVal) {
@@ -2552,14 +2689,16 @@ class _CreateProductPageState extends State<CreateProductPage> {
                     return null;
                   }
                 : (val) {
-                    if (val == null || val.trim().isEmpty) return null; // Optional
+                    if (val == null || val.trim().isEmpty)
+                      return null; // Optional
                     final numVal = double.tryParse(val);
                     if (numVal == null || numVal <= 0) return 'Must be > 0';
                     // Tier 2/3 rates should be <= Tier 1 (descending price tiers)
                     final t1Val = double.tryParse(
-                      (variant['rates'] as Map<String, TextEditingController>)['1']
-                          ?.text
-                          .trim() ??
+                      (variant['rates']
+                                  as Map<String, TextEditingController>)['1']
+                              ?.text
+                              .trim() ??
                           '',
                     );
                     if (t1Val != null && numVal > t1Val) {
@@ -2663,35 +2802,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
               const SizedBox(height: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  sizeFields,
-                  const SizedBox(height: 12),
-                  _buildFormTextField(
-                    label: 'Base Quantity (Units per Carton)',
-                    hint: 'e.g. 12',
-                    controller: variant['baseQuantity'],
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Base quantity is required';
-                      }
-                      final numVal = int.tryParse(val.trim());
-                      if (numVal == null || numVal < 1) {
-                        return 'Must be at least 1';
-                      }
-                      if (numVal > 10000) {
-                        return 'Must be 10,000 or less';
-                      }
-                      return null;
-                    },
-                    isCompact: true,
-                  ),
-                  const SizedBox(height: 16),
-                  rateFields,
-                ],
+                children: [sizeFields, const SizedBox(height: 16), rateFields],
               ),
             ],
           ),
@@ -2923,9 +3034,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF3F4F6),
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: AppTheme.borderColor,
-                  ),
+                  border: Border.all(color: AppTheme.borderColor),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
