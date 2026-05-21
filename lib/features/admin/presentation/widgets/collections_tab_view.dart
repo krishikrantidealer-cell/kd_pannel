@@ -6,6 +6,9 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/create_collection_page.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:animations/animations.dart';
+import 'package:shimmer/shimmer.dart';
 
 class CollectionsTabView extends StatefulWidget {
   // Each item: { id, name, slug, isActive, subCollections: [{id, parentId, name, slug, isActive}] }
@@ -103,8 +106,16 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
             onSave: (updated) => widget.onRefresh(),
           ),
         ),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SharedAxisTransition(
+            animation: animation,
+            secondaryAnimation: secondaryAnimation,
+            transitionType: SharedAxisTransitionType.scaled,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }
@@ -389,165 +400,147 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
             ),
           )
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _filteredCollections.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final col = _filteredCollections[index];
-              final String colId = (col['id'] ?? col['_id'] ?? '').toString();
-              final List<dynamic> subs = col['subCollections'] as List? ?? [];
-              final bool isActive = col['isActive'] as bool? ?? true;
+          AnimationLimiter(
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _filteredCollections.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final col = _filteredCollections[index];
+                final String colId = (col['id'] ?? col['_id'] ?? '').toString();
+                final List<dynamic> subs = col['subCollections'] as List? ?? [];
+                final bool isActive = col['isActive'] as bool? ?? true;
 
-              return StatefulBuilder(
-                builder: (context, setItemState) {
-                  final bool isExpanded = _expandedIds.contains(colId);
+                return StatefulBuilder(
+                  builder: (context, setItemState) {
+                    final bool isExpanded = _expandedIds.contains(colId);
 
-                  return _AnimatedListItem(
-                    key: ValueKey(colId),
-                    index: index,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.01),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Parent Row
-                          InkWell(
-                            onTap: () => setItemState(() {
-                              if (isExpanded) {
-                                _expandedIds.remove(colId);
-                              } else {
-                                _expandedIds.add(colId);
-                              }
-                            }),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                children: [
-                                  // Chevron Toggle
-                                  AnimatedRotation(
-                                    turns: isExpanded ? 0.25 : 0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      Icons.chevron_right_rounded,
-                                      size: 20,
-                                      color: subs.isEmpty
-                                          ? AppTheme.textSecondary.withValues(
-                                              alpha: 0.2,
-                                            )
-                                          : AppTheme.textSecondary,
+                    return AnimationConfiguration.staggeredList(
+                      position: index,
+                      duration: const Duration(milliseconds: 400),
+                      child: SlideAnimation(
+                        verticalOffset: 40.0,
+                        curve: Curves.easeOutCubic,
+                        child: FadeInAnimation(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.borderColor),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.01),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Parent Row
+                                InkWell(
+                                  onTap: () => setItemState(() {
+                                    if (isExpanded) {
+                                      _expandedIds.remove(colId);
+                                    } else {
+                                      _expandedIds.add(colId);
+                                    }
+                                  }),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Avatar & Name
-                                  Expanded(
-                                    flex: isMobile ? 1 : 5,
                                     child: Row(
                                       children: [
-                                        _CollectionAvatar(
-                                          name: col['name'] as String,
-                                          isParent: true,
+                                        // Chevron Toggle
+                                        AnimatedRotation(
+                                          turns: isExpanded ? 0.25 : 0,
+                                          duration: const Duration(
+                                            milliseconds: 200,
+                                          ),
+                                          child: Icon(
+                                            Icons.chevron_right_rounded,
+                                            size: 20,
+                                            color: subs.isEmpty
+                                                ? AppTheme.textSecondary
+                                                      .withValues(alpha: 0.2)
+                                                : AppTheme.textSecondary,
+                                          ),
                                         ),
                                         const SizedBox(width: 12),
+                                        // Avatar & Name
                                         Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                          flex: isMobile ? 1 : 5,
+                                          child: Row(
                                             children: [
-                                              Text(
-                                                col['name'] as String,
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: AppTheme.textPrimary,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                              _CollectionAvatar(
+                                                name: col['name'] as String,
+                                                isParent: true,
                                               ),
-                                              if ((col['slug'] as String?)
-                                                      ?.isNotEmpty ==
-                                                  true)
-                                                Container(
-                                                  margin: const EdgeInsets.only(
-                                                    top: 2,
-                                                  ),
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2,
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      col['name'] as String,
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppTheme
+                                                            .textPrimary,
                                                       ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFFF3F4F6,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
+                                                    if ((col['slug'] as String?)
+                                                            ?.isNotEmpty ==
+                                                        true)
+                                                      Container(
+                                                        margin:
+                                                            const EdgeInsets.only(
+                                                              top: 2,
+                                                            ),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(
+                                                            0xFFF3F4F6,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
                                                         ),
-                                                  ),
-                                                  child: Text(
-                                                    '/${col['slug']}',
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: AppTheme
-                                                          .textSecondary,
-                                                    ),
-                                                  ),
+                                                        child: Text(
+                                                          '/${col['slug']}',
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color: AppTheme
+                                                                .textSecondary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
+                                              ),
                                             ],
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (isMobile) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primaryColor.withValues(
-                                          alpha: 0.06,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '${subs.length} Sub${subs.length != 1 ? 's' : ''}',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 11,
-                                          color: AppTheme.primaryColor,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _StatusBadge(isActive: isActive),
-                                  ] else ...[
-                                    // Sub-collection count pill
-                                    Expanded(
-                                      flex: 3,
-                                      child: Row(
-                                        children: [
+                                        if (isMobile) ...[
+                                          const SizedBox(width: 8),
                                           Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 8,
@@ -568,247 +561,273 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                               ),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    // Status Pill
-                                    Expanded(
-                                      flex: 3,
-                                      child: Row(
-                                        children: [
+                                          const SizedBox(width: 8),
                                           _StatusBadge(isActive: isActive),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  // Actions
-                                  SizedBox(
-                                    width: 72,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        _CircleActionButton(
-                                          icon: Icons.edit_outlined,
-                                          tooltip: 'Edit Parent Collection',
-                                          onTap: () =>
-                                              _startEditCollection(col),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _deletingIds.contains(colId)
-                                            ? const SizedBox(
-                                                width: 32,
-                                                height: 32,
-                                                child: Padding(
-                                                  padding: EdgeInsets.all(8.0),
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    valueColor:
-                                                        AlwaysStoppedAnimation<
-                                                          Color
-                                                        >(AppTheme.error),
+                                        ] else ...[
+                                          // Sub-collection count pill
+                                          Expanded(
+                                            flex: 3,
+                                            child: Row(
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: AppTheme.primaryColor
+                                                        .withValues(
+                                                          alpha: 0.06,
+                                                        ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    '${subs.length} Sub${subs.length != 1 ? 's' : ''}',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11,
+                                                      color:
+                                                          AppTheme.primaryColor,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
                                                   ),
                                                 ),
-                                              )
-                                            : _CircleActionButton(
-                                                icon: Icons
-                                                    .delete_outline_rounded,
-                                                tooltip: 'Delete Collection',
-                                                color: AppTheme.error,
+                                              ],
+                                            ),
+                                          ),
+                                          // Status Pill
+                                          Expanded(
+                                            flex: 3,
+                                            child: Row(
+                                              children: [
+                                                _StatusBadge(
+                                                  isActive: isActive,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        // Actions
+                                        SizedBox(
+                                          width: 72,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              _CircleActionButton(
+                                                icon: Icons.edit_outlined,
+                                                tooltip:
+                                                    'Edit Parent Collection',
                                                 onTap: () =>
-                                                    _deleteParentCollection(
-                                                      col,
-                                                    ),
+                                                    _startEditCollection(col),
                                               ),
+                                              const SizedBox(width: 8),
+                                              _deletingIds.contains(colId)
+                                                  ? const SizedBox(
+                                                      width: 32,
+                                                      height: 32,
+                                                      child: Padding(
+                                                        padding: EdgeInsets.all(
+                                                          8.0,
+                                                        ),
+                                                        child: CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          valueColor:
+                                                              AlwaysStoppedAnimation<
+                                                                Color
+                                                              >(AppTheme.error),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : _CircleActionButton(
+                                                      icon: Icons
+                                                          .delete_outline_rounded,
+                                                      tooltip:
+                                                          'Delete Collection',
+                                                      color: AppTheme.error,
+                                                      onTap: () =>
+                                                          _deleteParentCollection(
+                                                            col,
+                                                          ),
+                                                    ),
+                                            ],
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
+                                ),
 
-                          // Expanded Sub-collections
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOutCubic,
-                            alignment: Alignment.topCenter,
-                            child: !isExpanded
-                                ? const SizedBox(
-                                    width: double.infinity,
-                                    height: 0,
-                                  )
-                                : Column(
-                                    children: [
-                                      const Divider(
-                                        height: 1,
-                                        color: AppTheme.lightBorderColor,
-                                      ),
-                                      Container(
-                                        color: const Color(0xFFFAFBFD),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        child: subs.isEmpty
-                                            ? Padding(
-                                                padding: const EdgeInsets.only(
-                                                  left: 64,
-                                                  right: 16,
-                                                  top: 12,
-                                                  bottom: 12,
-                                                ),
-                                                child: Text(
-                                                  'No sub-collections yet. Add sub-collections via product edits.',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 12,
-                                                    color:
-                                                        AppTheme.textSecondary,
-                                                    fontStyle: FontStyle.italic,
+                                // Expanded Sub-collections
+                                AnimatedSize(
+                                  duration: const Duration(milliseconds: 350),
+                                  curve: Curves.easeOutQuart,
+                                  alignment: Alignment.topCenter,
+                                  child: !isExpanded
+                                      ? const SizedBox(
+                                          width: double.infinity,
+                                          height: 0,
+                                        )
+                                      : Column(
+                                          children: [
+                                            const Divider(
+                                              height: 1,
+                                              color: AppTheme.lightBorderColor,
+                                            ),
+                                            Container(
+                                              color: const Color(0xFFFAFBFD),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 8,
                                                   ),
-                                                ),
-                                              )
-                                            : Column(
-                                                children: subs.asMap().entries.map((
-                                                  entry,
-                                                ) {
-                                                  final sub =
-                                                      Map<String, dynamic>.from(
-                                                        entry.value,
-                                                      );
-                                                  final String subId =
-                                                      (sub['id'] ??
-                                                              sub['_id'] ??
-                                                              '')
-                                                          .toString();
-                                                  final bool subActive =
-                                                      sub['isActive']
-                                                          as bool? ??
-                                                      true;
-                                                  final bool isLast =
-                                                      entry.key ==
-                                                      subs.length - 1;
-
-                                                  return Row(
-                                                    children: [
-                                                      const SizedBox(width: 24),
-                                                      // Tree line connector
-                                                      CustomPaint(
-                                                        size: const Size(
-                                                          20,
-                                                          48,
-                                                        ),
-                                                        painter:
-                                                            _TreeLinePainter(
-                                                              isLast: isLast,
+                                              child: subs.isEmpty
+                                                  ? Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            left: 64,
+                                                            right: 16,
+                                                            top: 12,
+                                                            bottom: 12,
+                                                          ),
+                                                      child: Text(
+                                                        'No sub-collections yet. Add sub-collections via product edits.',
+                                                        style:
+                                                            GoogleFonts.outfit(
+                                                              fontSize: 12,
+                                                              color: AppTheme
+                                                                  .textSecondary,
+                                                              fontStyle:
+                                                                  FontStyle
+                                                                      .italic,
                                                             ),
                                                       ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                vertical: 8,
-                                                                horizontal: 12,
+                                                    )
+                                                  : Column(
+                                                      children: subs.asMap().entries.map((
+                                                        entry,
+                                                      ) {
+                                                        final sub =
+                                                            Map<
+                                                              String,
+                                                              dynamic
+                                                            >.from(entry.value);
+                                                        final String subId =
+                                                            (sub['id'] ??
+                                                                    sub['_id'] ??
+                                                                    '')
+                                                                .toString();
+                                                        final bool subActive =
+                                                            sub['isActive']
+                                                                as bool? ??
+                                                            true;
+                                                        final bool isLast =
+                                                            entry.key ==
+                                                            subs.length - 1;
+
+                                                        return Row(
+                                                          children: [
+                                                            const SizedBox(
+                                                              width: 24,
+                                                            ),
+                                                            // Tree line connector
+                                                            CustomPaint(
+                                                              size: const Size(
+                                                                20,
+                                                                48,
                                                               ),
-                                                          margin:
-                                                              const EdgeInsets.only(
-                                                                right: 16,
-                                                                bottom: 4,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.white,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                            border: Border.all(
-                                                              color:
-                                                                  const Color(
-                                                                    0xFFEDF2F7,
+                                                              painter:
+                                                                  _TreeLinePainter(
+                                                                    isLast:
+                                                                        isLast,
                                                                   ),
                                                             ),
-                                                          ),
-                                                          child: Row(
-                                                            children: [
-                                                              _CollectionAvatar(
-                                                                name:
-                                                                    sub['name']
-                                                                        as String,
-                                                                isParent: false,
-                                                              ),
-                                                              const SizedBox(
-                                                                width: 12,
-                                                              ),
-                                                              Expanded(
-                                                                flex: isMobile
-                                                                    ? 1
-                                                                    : 5,
-                                                                child: Column(
-                                                                  crossAxisAlignment:
-                                                                      CrossAxisAlignment
-                                                                          .start,
-                                                                  children: [
-                                                                    Text(
-                                                                      sub['name']
-                                                                          as String,
-                                                                      style: GoogleFonts.outfit(
-                                                                        fontSize:
-                                                                            13,
-                                                                        fontWeight:
-                                                                            FontWeight.w600,
-                                                                        color: AppTheme
-                                                                            .textPrimary,
-                                                                      ),
-                                                                      maxLines:
-                                                                          1,
-                                                                      overflow:
-                                                                          TextOverflow
-                                                                              .ellipsis,
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            Expanded(
+                                                              child: Container(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      vertical:
+                                                                          8,
+                                                                      horizontal:
+                                                                          12,
                                                                     ),
-                                                                    if ((sub['slug']
-                                                                                as String?)
-                                                                            ?.isNotEmpty ==
-                                                                        true)
-                                                                      Text(
-                                                                        '/${sub['slug']}',
-                                                                        style: GoogleFonts.outfit(
-                                                                          fontSize:
-                                                                              11,
-                                                                          color:
-                                                                              AppTheme.textSecondary,
-                                                                        ),
+                                                                margin:
+                                                                    const EdgeInsets.only(
+                                                                      right: 16,
+                                                                      bottom: 4,
+                                                                    ),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  borderRadius:
+                                                                      BorderRadius.circular(
+                                                                        8,
                                                                       ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                              if (isMobile) ...[
-                                                                const SizedBox(
-                                                                  width: 8,
-                                                                ),
-                                                                GestureDetector(
-                                                                  onTap: () =>
-                                                                      _toggleSubStatus(
-                                                                        colId,
-                                                                        sub,
-                                                                      ),
-                                                                  child: Tooltip(
-                                                                    message:
-                                                                        'Tap to toggle status',
-                                                                    child: _StatusBadge(
-                                                                      isActive:
-                                                                          subActive,
+                                                                  border: Border.all(
+                                                                    color: const Color(
+                                                                      0xFFEDF2F7,
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ] else ...[
-                                                                const Expanded(
-                                                                  flex: 3,
-                                                                  child:
-                                                                      SizedBox.shrink(),
-                                                                ),
-                                                                Expanded(
-                                                                  flex: 3,
-                                                                  child: Row(
-                                                                    children: [
+                                                                child: Row(
+                                                                  children: [
+                                                                    _CollectionAvatar(
+                                                                      name:
+                                                                          sub['name']
+                                                                              as String,
+                                                                      isParent:
+                                                                          false,
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 12,
+                                                                    ),
+                                                                    Expanded(
+                                                                      flex:
+                                                                          isMobile
+                                                                          ? 1
+                                                                          : 5,
+                                                                      child: Column(
+                                                                        crossAxisAlignment:
+                                                                            CrossAxisAlignment.start,
+                                                                        children: [
+                                                                          Text(
+                                                                            sub['name']
+                                                                                as String,
+                                                                            style: GoogleFonts.outfit(
+                                                                              fontSize: 13,
+                                                                              fontWeight: FontWeight.w600,
+                                                                              color: AppTheme.textPrimary,
+                                                                            ),
+                                                                            maxLines:
+                                                                                1,
+                                                                            overflow:
+                                                                                TextOverflow.ellipsis,
+                                                                          ),
+                                                                          if ((sub['slug']
+                                                                                      as String?)
+                                                                                  ?.isNotEmpty ==
+                                                                              true)
+                                                                            Text(
+                                                                              '/${sub['slug']}',
+                                                                              style: GoogleFonts.outfit(
+                                                                                fontSize: 11,
+                                                                                color: AppTheme.textSecondary,
+                                                                              ),
+                                                                            ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                    if (isMobile) ...[
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            8,
+                                                                      ),
                                                                       GestureDetector(
                                                                         onTap: () => _toggleSubStatus(
                                                                           colId,
@@ -823,98 +842,117 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                           ),
                                                                         ),
                                                                       ),
+                                                                    ] else ...[
+                                                                      const Expanded(
+                                                                        flex: 3,
+                                                                        child:
+                                                                            SizedBox.shrink(),
+                                                                      ),
+                                                                      Expanded(
+                                                                        flex: 3,
+                                                                        child: Row(
+                                                                          children: [
+                                                                            GestureDetector(
+                                                                              onTap: () => _toggleSubStatus(
+                                                                                colId,
+                                                                                sub,
+                                                                              ),
+                                                                              child: Tooltip(
+                                                                                message: 'Tap to toggle status',
+                                                                                child: _StatusBadge(
+                                                                                  isActive: subActive,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      ),
                                                                     ],
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                              SizedBox(
-                                                                width: 80,
-                                                                child: Row(
-                                                                  mainAxisAlignment:
-                                                                      MainAxisAlignment
-                                                                          .end,
-                                                                  children: [
-                                                                    _CircleActionButton(
-                                                                      icon: Icons
-                                                                          .edit_outlined,
-                                                                      tooltip:
-                                                                          'Edit',
-                                                                      onTap: () {
-                                                                        final copy =
-                                                                            Map<
-                                                                              String,
-                                                                              dynamic
-                                                                            >.from(
-                                                                              sub,
-                                                                            );
-                                                                        copy['parentId'] =
-                                                                            colId;
-                                                                        _startEditCollection(
-                                                                          copy,
-                                                                        );
-                                                                      },
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 8,
-                                                                    ),
-                                                                    _deletingIds.contains(
-                                                                          subId,
-                                                                        )
-                                                                        ? const SizedBox(
-                                                                            width:
-                                                                                32,
-                                                                            height:
-                                                                                32,
-                                                                            child: Padding(
-                                                                              padding: EdgeInsets.all(
-                                                                                8.0,
-                                                                              ),
-                                                                              child: CircularProgressIndicator(
-                                                                                strokeWidth: 2,
-                                                                                valueColor:
-                                                                                    AlwaysStoppedAnimation<
-                                                                                      Color
-                                                                                    >(
-                                                                                      AppTheme.error,
-                                                                                    ),
-                                                                              ),
-                                                                            ),
-                                                                          )
-                                                                        : _CircleActionButton(
+                                                                    SizedBox(
+                                                                      width: 80,
+                                                                      child: Row(
+                                                                        mainAxisAlignment:
+                                                                            MainAxisAlignment.end,
+                                                                        children: [
+                                                                          _CircleActionButton(
                                                                             icon:
-                                                                                Icons.delete_outline_rounded,
+                                                                                Icons.edit_outlined,
                                                                             tooltip:
-                                                                                'Delete',
-                                                                            color:
-                                                                                AppTheme.error,
-                                                                            onTap: () => _deleteSubCollection(
-                                                                              colId,
-                                                                              sub,
-                                                                            ),
+                                                                                'Edit',
+                                                                            onTap: () {
+                                                                              final copy =
+                                                                                  Map<
+                                                                                    String,
+                                                                                    dynamic
+                                                                                  >.from(
+                                                                                    sub,
+                                                                                  );
+                                                                              copy['parentId'] = colId;
+                                                                              _startEditCollection(
+                                                                                copy,
+                                                                              );
+                                                                            },
                                                                           ),
+                                                                          const SizedBox(
+                                                                            width:
+                                                                                8,
+                                                                          ),
+                                                                          _deletingIds.contains(
+                                                                                subId,
+                                                                              )
+                                                                              ? const SizedBox(
+                                                                                  width: 32,
+                                                                                  height: 32,
+                                                                                  child: Padding(
+                                                                                    padding: EdgeInsets.all(
+                                                                                      8.0,
+                                                                                    ),
+                                                                                    child: CircularProgressIndicator(
+                                                                                      strokeWidth: 2,
+                                                                                      valueColor:
+                                                                                          AlwaysStoppedAnimation<
+                                                                                            Color
+                                                                                          >(
+                                                                                            AppTheme.error,
+                                                                                          ),
+                                                                                    ),
+                                                                                  ),
+                                                                                )
+                                                                              : _CircleActionButton(
+                                                                                  icon: Icons.delete_outline_rounded,
+                                                                                  tooltip: 'Delete',
+                                                                                  color: AppTheme.error,
+                                                                                  onTap: () => _deleteSubCollection(
+                                                                                    colId,
+                                                                                    sub,
+                                                                                  ),
+                                                                                ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
                                                                   ],
                                                                 ),
                                                               ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  );
-                                                }).toList(),
-                                              ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                                                            ),
+                                                          ],
+                                                        );
+                                                      }).toList(),
+                                                    ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ), // Closes Container
+                        ), // Closes FadeInAnimation
+                      ), // Closes SlideAnimation
+                    ); // Closes AnimationConfiguration
+                  }, // Closes builder func
+                ); // Closes StatefulBuilder
+              }, // Closes itemBuilder
+            ), // Closes ListView
+          ), // Closes AnimationLimiter
       ],
     );
   }
@@ -1181,66 +1219,36 @@ class _ConfirmDeleteDialog extends StatelessWidget {
   }
 }
 
-class _SkeletonRow extends StatefulWidget {
+class _SkeletonRow extends StatelessWidget {
   const _SkeletonRow();
 
   @override
-  State<_SkeletonRow> createState() => _SkeletonRowState();
-}
-
-class _SkeletonRowState extends State<_SkeletonRow>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-    _anim = Tween<double>(
-      begin: 0.4,
-      end: 0.8,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (_, __) => Opacity(
-        opacity: _anim.value,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              bottom: BorderSide(color: AppTheme.lightBorderColor),
-            ),
-          ),
-          child: Row(
-            children: [
-              _box(20, 20, radius: 4),
-              const SizedBox(width: 24),
-              _box(36, 36, radius: 8),
-              const SizedBox(width: 12),
-              Expanded(child: _box(12, double.infinity, radius: 4)),
-              const SizedBox(width: 16),
-              _box(12, 70, radius: 10),
-              const SizedBox(width: 16),
-              _box(20, 60, radius: 10),
-              const SizedBox(width: 16),
-              _box(32, 32, radius: 16),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.lightBorderColor),
+        ),
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey.shade200,
+        highlightColor: Colors.grey.shade100,
+        child: Row(
+          children: [
+            _box(20, 20, radius: 4),
+            const SizedBox(width: 24),
+            _box(36, 36, radius: 8),
+            const SizedBox(width: 12),
+            Expanded(child: _box(12, double.infinity, radius: 4)),
+            const SizedBox(width: 16),
+            _box(12, 70, radius: 10),
+            const SizedBox(width: 16),
+            _box(20, 60, radius: 10),
+            const SizedBox(width: 16),
+            _box(32, 32, radius: 16),
+          ],
         ),
       ),
     );
@@ -1251,70 +1259,10 @@ class _SkeletonRowState extends State<_SkeletonRow>
       height: h,
       width: w == double.infinity ? null : w,
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(radius),
       ),
     );
   }
 }
 
-class _AnimatedListItem extends StatefulWidget {
-  final int index;
-  final Widget child;
-
-  const _AnimatedListItem({
-    super.key,
-    required this.index,
-    required this.child,
-  });
-
-  @override
-  State<_AnimatedListItem> createState() => _AnimatedListItemState();
-}
-
-class _AnimatedListItemState extends State<_AnimatedListItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-
-    final delayIndex = widget.index.clamp(0, 8);
-    Future.delayed(Duration(milliseconds: delayIndex * 40), () {
-      if (mounted) {
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(position: _slideAnimation, child: widget.child),
-    );
-  }
-}

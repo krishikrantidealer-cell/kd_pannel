@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart';
+import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
@@ -1113,37 +1114,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _isSaving ? null : _handleSave,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.check_rounded, size: 18),
-                    label: Text(
-                      _isSaving
-                          ? 'Saving...'
-                          : (isEdit ? 'Save Changes' : 'Publish Product'),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+                  MorphingSaveButton(
+                    isLoading: _isSaving,
+                    onTap: _handleSave,
+                    text: isEdit ? 'Save Changes' : 'Publish Product',
                   ),
                 ],
               ),
@@ -2769,6 +2743,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 suffixIcon: Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: InkWell(
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
                     onTap: () {
                       final val = _tagController.text;
                       if (val.trim().isNotEmpty &&
@@ -2886,6 +2862,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       ),
                       const SizedBox(width: 6),
                       InkWell(
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
                         onTap: () {
                           setState(() {
                             _tags.remove(tag);

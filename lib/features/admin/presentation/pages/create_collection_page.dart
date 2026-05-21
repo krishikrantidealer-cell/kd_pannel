@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -421,39 +422,12 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveCollection,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : Text(
-                              widget.initialData != null
-                                  ? 'Save Changes'
-                                  : 'Create Collection',
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                    MorphingSaveButton(
+                      isLoading: _isSaving,
+                      onTap: _saveCollection,
+                      text: widget.initialData != null
+                          ? 'Save Changes'
+                          : 'Create Collection',
                     ),
                   ],
                 ),

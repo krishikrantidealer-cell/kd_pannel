@@ -8,8 +8,10 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/create_product_page.dart';
+import 'package:animations/animations.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
+import 'package:shimmer/shimmer.dart';
 
 class ProductsTabView extends StatefulWidget {
   final List<Map<String, dynamic>> products;
@@ -148,8 +150,16 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             },
           ),
         ),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SharedAxisTransition(
+            animation: animation,
+            secondaryAnimation: secondaryAnimation,
+            transitionType: SharedAxisTransitionType.scaled,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }
@@ -551,7 +561,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
     final int totalPages = (totalEntries / _rowsPerPage).ceil();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
@@ -562,36 +572,28 @@ class _ProductsTabViewState extends State<ProductsTabView> {
           Text(
             'Showing $startEntry to $endEntry of $totalEntries entries',
             style: GoogleFonts.outfit(
-              fontSize: 12.5,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
               color: AppTheme.textSecondary,
             ),
           ),
           if (totalPages > 1)
             Row(
               children: [
-                IconButton(
-                  onPressed: _currentPage > 1
+                _buildPageNavButton(
+                  icon: Icons.chevron_left_rounded,
+                  onTap: _currentPage > 1
                       ? () => setState(() => _currentPage--)
                       : null,
-                  icon: const Icon(Icons.chevron_left_rounded, size: 18),
-                  color: AppTheme.textPrimary,
-                  disabledColor: AppTheme.textSecondary.withValues(alpha: 0.3),
                 ),
-                Text(
-                  '$_currentPage / $totalPages',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  onPressed: _currentPage < totalPages
+                const SizedBox(width: 8),
+                ..._buildPageNumbers(totalPages),
+                const SizedBox(width: 8),
+                _buildPageNavButton(
+                  icon: Icons.chevron_right_rounded,
+                  onTap: _currentPage < totalPages
                       ? () => setState(() => _currentPage++)
                       : null,
-                  icon: const Icon(Icons.chevron_right_rounded, size: 18),
-                  color: AppTheme.textPrimary,
-                  disabledColor: AppTheme.textSecondary.withValues(alpha: 0.3),
                 ),
               ],
             ),
@@ -599,6 +601,100 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       ),
     );
   }
+
+  List<Widget> _buildPageNumbers(int totalPages) {
+    final List<Widget> pages = [];
+    for (int i = 1; i <= totalPages; i++) {
+      if (totalPages > 7) {
+        if (i == 1 ||
+            i == totalPages ||
+            (i >= _currentPage - 1 && i <= _currentPage + 1)) {
+          pages.add(_buildPageNumberBtn(i));
+        } else if (i == 2 || i == totalPages - 1) {
+          // Only add ellipsis if we haven't just added one
+          if (pages.isNotEmpty && pages.last.key != const ValueKey('ellipsis')) {
+            pages.add(
+              Padding(
+                key: const ValueKey('ellipsis'),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text('...', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+              ),
+            );
+          }
+        }
+      } else {
+        pages.add(_buildPageNumberBtn(i));
+      }
+    }
+    return pages;
+  }
+
+  Widget _buildPageNumberBtn(int page) {
+    final bool isActive = page == _currentPage;
+    return Padding(
+      key: ValueKey('page_$page'),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        onTap: () => setState(() => _currentPage = page),
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.primaryColor : Colors.white,
+            border: Border.all(
+              color: isActive ? AppTheme.primaryColor : AppTheme.borderColor,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : [],
+          ),
+          child: Text(
+            '$page',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
+              color: isActive ? Colors.white : AppTheme.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageNavButton({required IconData icon, required VoidCallback? onTap}) {
+    final bool disabled = onTap == null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: disabled ? const Color(0xFFF9FAFB) : Colors.white,
+          border: Border.all(
+            color: disabled ? const Color(0xFFE5E7EB) : AppTheme.borderColor,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: disabled ? AppTheme.textSecondary.withValues(alpha: 0.4) : AppTheme.textPrimary,
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildAvailabilityBadge(Map<String, dynamic> prod) {
     final bool inStock = prod['inStock'] ?? false;
@@ -914,172 +1010,140 @@ class _CircleActionButton extends StatelessWidget {
   }
 }
 
-class _TableSkeletonRow extends StatefulWidget {
+class _TableSkeletonRow extends StatelessWidget {
   const _TableSkeletonRow();
 
   @override
-  State<_TableSkeletonRow> createState() => _TableSkeletonRowState();
-}
-
-class _TableSkeletonRowState extends State<_TableSkeletonRow>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-    _animation = Tween<double>(
-      begin: 0.4,
-      end: 0.8,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _animation.value,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                bottom: BorderSide(color: AppTheme.lightBorderColor),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.lightBorderColor),
+        ),
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey.shade200,
+        highlightColor: Colors.grey.shade100,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 8,
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 12,
+                          width: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          height: 10,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 8,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              height: 12,
-                              width: 140,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF3F4F6),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              height: 10,
-                              width: 80,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF3F4F6),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            Expanded(
+              flex: 4,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  height: 12,
+                  width: 90,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 ),
-                Expanded(
-                  flex: 4,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      height: 12,
-                      width: 90,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      height: 12,
-                      width: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      height: 12,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 4,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      height: 20,
-                      width: 75,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                  width: 80,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Color(0xFFF3F4F6),
-                      ),
-                      SizedBox(width: 8),
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Color(0xFFF3F4F6),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  height: 12,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  height: 12,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  height: 20,
+                  width: 75,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(
+              width: 80,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: Colors.white,
+                  ),
+                  SizedBox(width: 8),
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: Colors.white,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
