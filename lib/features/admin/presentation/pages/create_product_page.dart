@@ -315,6 +315,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     String initialPackSize = '';
     if (data?['packSize'] != null) {
       initialPackSize = data!['packSize'].toString();
+    } else if (data?['size'] != null) {
+      initialPackSize = data!['size'].toString();
     } else if (data?['packVolume'] != null) {
       // packVolume is stored in litres as a number, convert back to readable string
       final pvNum = data!['packVolume'];
