@@ -198,6 +198,7 @@ class _LoginPageState extends State<LoginPage> {
       email: email,
       password: password,
       role: role,
+      rememberMe: _isPersistentSession,
     );
 
     if (mounted) {

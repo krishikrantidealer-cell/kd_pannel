@@ -84,22 +84,55 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
         _collectionImage = data['image'] as Uint8List;
       }
 
-      // Auto-populate selected products based on sub-collection name
+      // Auto-populate selected products based on sub-collection name or ID
       final String colName = data['name'] ?? '';
+      final String colId = (data['id'] ?? data['_id'] ?? '').toString();
       for (var prod in widget.allProducts) {
         final List assigned = prod['assignedCollections'] ?? [];
-        if (assigned.contains(colName)) {
+        if (assigned.contains(colName) ||
+            (colId.isNotEmpty && assigned.contains(colId))) {
           final String sku = prod['sku'] ?? '';
           if (sku.isNotEmpty) {
             _selectedProductSkus.add(sku);
           }
         }
       }
+    } else {
+      // Listen to name changes to auto-populate existing products for new collections
+      _nameController.addListener(_onNameChanged);
+    }
+  }
+
+  void _onNameChanged() {
+    if (widget.initialData != null) return; // Only apply for new creations
+    if (_isParentCollection) return; // Only for sub-collections
+
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty) return;
+
+    bool changed = false;
+    for (var prod in widget.allProducts) {
+      final List assigned = prod['assignedCollections'] ?? [];
+      // If the product already has this exact string tag, auto-check it
+      if (assigned.contains(newName)) {
+        final String sku = prod['sku'] ?? '';
+        if (sku.isNotEmpty && !_selectedProductSkus.contains(sku)) {
+          _selectedProductSkus.add(sku);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      setState(() {});
     }
   }
 
   @override
   void dispose() {
+    if (widget.initialData == null) {
+      _nameController.removeListener(_onNameChanged);
+    }
     _nameController.dispose();
     _descController.dispose();
     _priorityController.dispose();
@@ -188,37 +221,87 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final resData = jsonDecode(response.body);
-        final savedCol = _isParentCollection
-            ? (resData['collection'] ?? {})
-            : (resData['subCollection'] ?? {});
 
-        // Sync products with this collection
-        final String colName = name;
-        final String oldName = widget.initialData?['name'] ?? '';
-        for (var prod in widget.allProducts) {
-          final String prodSku = prod['sku'] ?? '';
-          final bool isSelected = _selectedProductSkus.contains(prodSku);
+        Map<String, dynamic> savedCol = {};
+        if (_isParentCollection) {
+          savedCol = resData['collection'] ?? {};
+        } else {
+          // Try multiple common response formats for sub-collection creation
+          savedCol = resData['subCollection'] ?? resData['data'] ?? {};
 
-          final List<String> currentAssigned = List<String>.from(
-            prod['assignedCollections'] ?? [],
-          );
-
-          if (oldName.isNotEmpty && oldName != colName) {
-            currentAssigned.remove(oldName);
-          }
-
-          final bool alreadyAssigned = currentAssigned.contains(colName);
-
-          if (isSelected && !alreadyAssigned) {
-            currentAssigned.add(colName);
-            if (prod['id'] != null) {
-              await ApiClient().put('/products/${prod['id']}', {
-                'assignedCollections': currentAssigned,
-              });
+          // If the backend returned the updated parent collection instead, find our sub-collection in it
+          if (savedCol.isEmpty && resData['collection'] != null) {
+            final List subs = resData['collection']['subCollections'] ?? [];
+            for (var sub in subs) {
+              if (sub['name'] == name) {
+                savedCol = sub;
+                break;
+              }
             }
-          } else if (!isSelected && alreadyAssigned) {
-            currentAssigned.remove(colName);
-            if (prod['id'] != null) {
+          }
+        }
+
+        // Sync products with this collection only if it's a sub-collection
+        if (!_isParentCollection) {
+          final String colId = (savedCol['_id'] ?? savedCol['id'] ?? '')
+              .toString();
+
+          if (colId.isEmpty) {
+            // Fallback: If we STILL can't find the ID, we might have a data structure issue.
+            // We should print/log this, but for now we fallback to the name so it doesn't break entirely.
+            print(
+              'WARNING: Could not extract sub-collection ID from response: $resData',
+            );
+          }
+          final String colName = name;
+          final String oldName = widget.initialData?['name'] ?? '';
+
+          for (var prod in widget.allProducts) {
+            final String prodSku = prod['sku'] ?? '';
+            final bool isSelected = _selectedProductSkus.contains(prodSku);
+
+            final List<String> currentAssigned = List<String>.from(
+              prod['assignedCollections'] ?? [],
+            );
+
+            bool needsUpdate = false;
+
+            if (isSelected) {
+              // Ensure ID is present, remove names to clean up
+              if (colId.isNotEmpty && !currentAssigned.contains(colId)) {
+                currentAssigned.add(colId);
+                needsUpdate = true;
+              }
+              // Fallback to name if ID was somehow not found
+              if (colId.isEmpty && !currentAssigned.contains(colName)) {
+                currentAssigned.add(colName);
+                needsUpdate = true;
+              }
+              if (colId.isNotEmpty && currentAssigned.contains(colName)) {
+                currentAssigned.remove(colName);
+                needsUpdate = true;
+              }
+              if (oldName.isNotEmpty && currentAssigned.contains(oldName)) {
+                currentAssigned.remove(oldName);
+                needsUpdate = true;
+              }
+            } else {
+              // Not selected, remove ID and any variations of the name
+              if (colId.isNotEmpty && currentAssigned.contains(colId)) {
+                currentAssigned.remove(colId);
+                needsUpdate = true;
+              }
+              if (currentAssigned.contains(colName)) {
+                currentAssigned.remove(colName);
+                needsUpdate = true;
+              }
+              if (oldName.isNotEmpty && currentAssigned.contains(oldName)) {
+                currentAssigned.remove(oldName);
+                needsUpdate = true;
+              }
+            }
+
+            if (needsUpdate && prod['id'] != null) {
               await ApiClient().put('/products/${prod['id']}', {
                 'assignedCollections': currentAssigned,
               });
@@ -291,18 +374,22 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(flex: 3, child: _buildLeftForm()),
-                            const SizedBox(width: 24),
-                            Expanded(
-                              flex: 2,
-                              child: _buildRightProductsSelector(),
-                            ),
+                            if (!_isParentCollection) ...[
+                              const SizedBox(width: 24),
+                              Expanded(
+                                flex: 2,
+                                child: _buildRightProductsSelector(),
+                              ),
+                            ],
                           ],
                         )
                       : Column(
                           children: [
                             _buildLeftForm(),
-                            const SizedBox(height: 24),
-                            _buildRightProductsSelector(),
+                            if (!_isParentCollection) ...[
+                              const SizedBox(height: 24),
+                              _buildRightProductsSelector(),
+                            ],
                           ],
                         ),
                 ),

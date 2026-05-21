@@ -50,9 +50,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   final _tagController = TextEditingController();
   List<String> _tags = [];
+  List<String> _assignedCollections = [];
   String _formCategory = '';
   String _formSubCategory = '';
   List<dynamic> _backendCategories = [];
+  Map<String, String> _collectionIdToName = {};
   bool _isSaving = false;
   bool _isLoadingDetails = false;
   bool _isTransitionComplete = false;
@@ -64,6 +66,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     debugPrint('[PERF] CreateProductPage.initState started');
     super.initState();
     _loadCategories();
+    _loadCollections();
 
     final data = widget.initialData;
     quill.Document doc;
@@ -95,6 +98,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       _formCategory = data['category'] ?? '';
       _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
+      _assignedCollections = List<String>.from(data['assignedCollections'] ?? []);
       // Load existing uploaded images for edit mode
       _existingImageUrls = List<String>.from(data['images'] ?? []);
       _existingMediumUrls = List<String>.from(data['mediumImages'] ?? []);
@@ -169,6 +173,48 @@ class _CreateProductPageState extends State<CreateProductPage> {
       }
     } catch (e) {
       debugPrint('[PERF] CreateProductPage._loadCategories - Error fetching categories: $e. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms');
+    }
+  }
+
+  Future<void> _loadCollections() async {
+    try {
+      final response = await ApiClient().get('/collections?all=true');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['collections'] is List) {
+          final List collections = data['collections'];
+          final Map<String, String> map = {};
+          
+          for (var col in collections) {
+            final colId = col['id']?.toString() ?? col['_id']?.toString() ?? '';
+            final colName = col['name']?.toString() ?? '';
+            
+            if (colId.isNotEmpty && colName.isNotEmpty) {
+              map[colId] = colName;
+              // Map legacy name string to itself for fallback
+              map[colName] = colName;
+            }
+            
+            final List subs = col['subCollections'] ?? [];
+            for (var sub in subs) {
+               final subId = sub['id']?.toString() ?? sub['_id']?.toString() ?? '';
+               final subName = sub['name']?.toString() ?? '';
+               if (subId.isNotEmpty && subName.isNotEmpty) {
+                 map[subId] = '$colName > $subName';
+                 // Map legacy sub-collection name as fallback
+                 map[subName] = '$colName > $subName'; 
+               }
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _collectionIdToName = map;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching collections: $e');
     }
   }
 
@@ -1316,6 +1362,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   ),
                   const SizedBox(height: 24),
                   _buildTagsCard(),
+                  if (_assignedCollections.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildAssignedCollectionsCard(),
+                  ],
                 ],
               );
 
@@ -2862,6 +2912,65 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 );
               }).toList(),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignedCollectionsCard() {
+    return _buildSectionCard(
+      title: 'Assigned Collections',
+      icon: Icons.collections_bookmark_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Collections this product belongs to (managed from the Collections tab).',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 10,
+            children: _assignedCollections.map((col) {
+              final displayName = _collectionIdToName[col] ?? col;
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: AppTheme.borderColor,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.folder_outlined,
+                      size: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      displayName,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );

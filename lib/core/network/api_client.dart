@@ -46,15 +46,17 @@ class ApiClient {
     }
   }
 
-  Future<void> setTokens(String access, String refresh) async {
+  Future<void> setTokens(String access, String refresh, {bool persistent = true}) async {
     _accessToken = access;
     _refreshToken = refresh;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('kd_access_token', access);
-      await prefs.setString('kd_refresh_token', refresh);
-    } catch (e) {
-      debugPrint('Failed to persist tokens: $e');
+    if (persistent) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('kd_access_token', access);
+        await prefs.setString('kd_refresh_token', refresh);
+      } catch (e) {
+        debugPrint('Failed to persist tokens: $e');
+      }
     }
   }
 
@@ -82,12 +84,61 @@ class ApiClient {
     return headers;
   }
 
+  Future<bool>? _refreshFuture;
+
+  Future<bool> _refreshAccessToken() async {
+    if (_refreshFuture != null) {
+      return _refreshFuture!;
+    }
+
+    _refreshFuture = () async {
+      try {
+        await _ensureTokensLoaded();
+        if (_refreshToken == null || _refreshToken!.isEmpty) return false;
+
+        final uri = Uri.parse('$baseUrl/auth/refresh');
+        final response = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'refreshToken': _refreshToken}),
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true) {
+            final newAccess = data['accessToken'] ?? data['token'];
+            if (newAccess != null) {
+               // Update but keep old refresh token if a new one isn't provided
+               final newRefresh = data['refreshToken'] ?? _refreshToken;
+               await setTokens(newAccess, newRefresh!, persistent: true); 
+               return true;
+            }
+          }
+        }
+        
+        // If refresh failed with authorization error, clear tokens
+        if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 400) {
+           await clearTokens();
+        }
+        return false;
+      } catch (e) {
+        debugPrint('Token refresh error: $e');
+        return false;
+      } finally {
+        _refreshFuture = null;
+      }
+    }();
+
+    return _refreshFuture!;
+  }
+
   /// Helper to run request with automatic retries and exponential backoff.
   /// Designed to seamlessly handle Render free tier cold starts and network glitches.
   Future<http.Response> _requestWithRetry(
     Future<http.Response> Function(Duration currentTimeout) requestFn, {
     int maxRetries = 4,
     Duration initialDelay = const Duration(seconds: 1),
+    bool isRetryAfterRefresh = false,
   }) async {
     int attempt = 0;
     while (true) {
@@ -99,6 +150,18 @@ class ApiClient {
 
       try {
         final response = await requestFn(currentTimeout);
+
+        // Silent token refresh interceptor
+        if (response.statusCode == 401 && !isRetryAfterRefresh) {
+          final refreshed = await _refreshAccessToken();
+          if (refreshed) {
+            return await _requestWithRetry(
+              requestFn,
+              maxRetries: 1, // Only try once more after a fresh token
+              isRetryAfterRefresh: true,
+            );
+          }
+        }
 
         // Render cold start might return 502 / 503 / 504 gateway errors while booting
         if ((response.statusCode == 502 || 

@@ -29,6 +29,7 @@ class AuthService {
     required String email,
     required String password,
     required UserRole role,
+    bool rememberMe = true,
   }) async {
     try {
       final response = await ApiClient().post('/auth/admin/login', {
@@ -42,11 +43,13 @@ class AuthService {
         if (data['success'] == true) {
           final accessToken = data['accessToken'];
           final refreshToken = data['refreshToken'];
-          await ApiClient().setTokens(accessToken, refreshToken);
+          await ApiClient().setTokens(accessToken, refreshToken, persistent: rememberMe);
           
           final userRoleStr = data['user']['role'];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('kd_user_role', userRoleStr);
+          if (rememberMe) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('kd_user_role', userRoleStr);
+          }
 
           if (userRoleStr == 'admin') {
             _currentUserRole = UserRole.admin;
