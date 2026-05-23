@@ -56,7 +56,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
   String _formCategory = '';
   String _formSubCategory = '';
   List<dynamic> _backendCategories = [];
+  List<dynamic> _backendCollections = [];
   Map<String, String> _collectionIdToName = {};
+  String? _formSelectedCollection;
+  String? _formSelectedSubCollection;
   bool _isSaving = false;
   bool _isLoadingDetails = false;
   bool _isTransitionComplete = false;
@@ -235,6 +238,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           }
           if (mounted) {
             setState(() {
+              _backendCollections = collections;
               _collectionIdToName = map;
             });
           }
@@ -315,18 +319,24 @@ class _CreateProductPageState extends State<CreateProductPage> {
     String initialPackSize = '';
     if (data?['size'] != null && data!['size'].toString().isNotEmpty) {
       initialPackSize = data['size'].toString();
-    } else if (data?['packSize'] != null && data!['packSize'].toString().isNotEmpty) {
+    } else if (data?['packSize'] != null &&
+        data!['packSize'].toString().isNotEmpty) {
       initialPackSize = data['packSize'].toString();
     }
 
     String initialBasePacking = '';
-    if (data?['basePacking'] != null && data!['basePacking'].toString().isNotEmpty) {
+    if (data?['basePacking'] != null &&
+        data!['basePacking'].toString().isNotEmpty) {
       initialBasePacking = data['basePacking'].toString();
     } else if (data?['packVolume'] != null) {
       final pvNum = data!['packVolume'];
-      final pvDouble = pvNum is num ? pvNum.toDouble() : double.tryParse(pvNum.toString());
+      final pvDouble = pvNum is num
+          ? pvNum.toDouble()
+          : double.tryParse(pvNum.toString());
       if (pvDouble != null && pvDouble > 0) {
-        final val = pvDouble % 1 == 0 ? pvDouble.toInt().toString() : pvDouble.toString();
+        final val = pvDouble % 1 == 0
+            ? pvDouble.toInt().toString()
+            : pvDouble.toString();
         String unit = 'lit';
         final parsedPackSize = _parsePackSize(initialPackSize);
         final packU = parsedPackSize['unit']?.toLowerCase() ?? '';
@@ -372,7 +382,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     for (var tier in _priceTiers) {
       final id = tier['id']!;
       // Read rate from data if available
-      dynamic rawRateVal = data?['rates']?[id] ?? data?['unitPriceRate${id == "1" ? "" : id}'];
+      dynamic rawRateVal =
+          data?['rates']?[id] ?? data?['unitPriceRate${id == "1" ? "" : id}'];
       if (rawRateVal == null) {
         if (id == '1') rawRateVal = data?['price10_30'];
         if (id == '2') rawRateVal = data?['price30_50'];
@@ -1009,6 +1020,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'description': description,
         'variants': mappedVariants,
         'tags': _tags,
+        'assignedCollections': _assignedCollections,
         'availabilityStatus': _inStock ? 'In Stock' : 'Out of Stock',
         // Tell the backend which existing images to keep
         if (isEdit) 'keepImages': _existingImageUrls,
@@ -1484,10 +1496,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   ),
                   const SizedBox(height: 24),
                   _buildTagsCard(),
-                  if (_assignedCollections.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    _buildAssignedCollectionsCard(),
-                  ],
+                  const SizedBox(height: 24),
+                  _buildAssignedCollectionsCard(),
                 ],
               );
 
@@ -3015,56 +3025,257 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   Widget _buildAssignedCollectionsCard() {
+    // Generate top-level collection options
+    final List<String> collectionOptions = [];
+    final Map<String, List<Map<String, String>>> subCollectionMap = {};
+    final Map<String, String> collectionNameToId = {};
+
+    for (var col in _backendCollections) {
+      final colId = col['id']?.toString() ?? col['_id']?.toString() ?? '';
+      final colName = col['name']?.toString() ?? '';
+      if (colId.isNotEmpty && colName.isNotEmpty) {
+        collectionOptions.add(colName);
+        collectionNameToId[colName] = colId;
+
+        final List subs = col['subCollections'] ?? [];
+        final List<Map<String, String>> subList = [];
+        for (var sub in subs) {
+          final subId = sub['id']?.toString() ?? sub['_id']?.toString() ?? '';
+          final subName = sub['name']?.toString() ?? '';
+          if (subId.isNotEmpty && subName.isNotEmpty) {
+            subList.add({'id': subId, 'name': subName});
+          }
+        }
+        subCollectionMap[colName] = subList;
+      }
+    }
+
+    final currentSubOptions = _formSelectedCollection != null
+        ? (subCollectionMap[_formSelectedCollection] ?? [])
+        : <Map<String, String>>[];
+
+    final List<String> subCollectionNames = currentSubOptions
+        .map((e) => e['name']!)
+        .toList();
+    subCollectionNames.insert(0, 'All Sub-collections');
+
     return _buildSectionCard(
-      title: 'Assigned Collections',
+      title: 'Collections',
       icon: Icons.collections_bookmark_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Collections this product belongs to (managed from the Collections tab).',
-            style: GoogleFonts.outfit(
-              color: AppTheme.textSecondary,
-              fontSize: 13,
+          if (_assignedCollections.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 10,
+              children: _assignedCollections.map((col) {
+                final displayName = _collectionIdToName[col] ?? col;
+                return Container(
+                  padding: const EdgeInsets.only(
+                    left: 12,
+                    right: 8,
+                    top: 6,
+                    bottom: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _assignedCollections.remove(col);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF1F5F9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: _assignedCollections.map((col) {
-              final displayName = _collectionIdToName[col] ?? col;
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.folder_outlined,
-                      size: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      displayName,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary,
+            const SizedBox(height: 16),
+          ],
+          Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        hint: Text(
+                          'Select Collection',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: const Color(0xFF94A3B8),
+                          ),
+                        ),
+                        value: _formSelectedCollection,
+                        icon: const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                        items: collectionOptions.map((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(
+                              value,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _formSelectedCollection = val;
+                            _formSelectedSubCollection = 'All Sub-collections';
+                          });
+                        },
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              );
-            }).toList(),
+                if (_formSelectedCollection != null) ...[
+                  Container(
+                    width: 1,
+                    height: 24,
+                    color: const Color(0xFFE2E8F0),
+                  ),
+                  Expanded(
+                    flex: 5,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: _formSelectedSubCollection,
+                          icon: const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              // var= 1;
+                              //mid= 98;
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                          items: subCollectionNames.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(
+                                value,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _formSelectedSubCollection = val;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: InkWell(
+                    onTap: _formSelectedCollection == null
+                        ? null
+                        : () {
+                            setState(() {
+                              String idToAssign = '';
+                              if (_formSelectedSubCollection !=
+                                  'All Sub-collections') {
+                                final sub = currentSubOptions.firstWhere(
+                                  (s) =>
+                                      s['name'] == _formSelectedSubCollection,
+                                );
+                                idToAssign = sub['id']!;
+                              } else {
+                                idToAssign =
+                                    collectionNameToId[_formSelectedCollection]!;
+                              }
+                              if (idToAssign.isNotEmpty &&
+                                  !_assignedCollections.contains(idToAssign)) {
+                                _assignedCollections.add(idToAssign);
+                                _formSelectedCollection = null;
+                                _formSelectedSubCollection = null;
+                              }
+                            });
+                          },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: _formSelectedCollection == null
+                            ? const Color(0xFFE2E8F0)
+                            : AppTheme.primaryColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

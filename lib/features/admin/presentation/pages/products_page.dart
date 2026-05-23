@@ -8,7 +8,6 @@ import 'create_product_page.dart';
 import 'create_collection_page.dart';
 import '../widgets/products_tab_view.dart';
 import '../widgets/collections_tab_view.dart';
-import '../widgets/categories_tab_view.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
 import '../bloc/products_state.dart';
@@ -23,7 +22,7 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   final ScrollController _scrollController = ScrollController();
-  String _selectedTab = 'Products'; // 'Products', 'Collections', or 'Categories'
+  String _selectedTab = 'Products'; // 'Products' or 'Collections'
 
   @override
   void dispose() {
@@ -116,9 +115,7 @@ class _ProductsPageState extends State<ProductsPage> {
                           Text(
                             _selectedTab == 'Products'
                                 ? 'Product Catalogue'
-                                : _selectedTab == 'Collections'
-                                    ? 'Product Collections'
-                                    : 'Product Categories',
+                                : 'Product Collections',
                             style: GoogleFonts.outfit(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -129,17 +126,14 @@ class _ProductsPageState extends State<ProductsPage> {
                           Text(
                             _selectedTab == 'Products'
                                 ? 'View and manage agricultural products, categories and sub-categories'
-                                : _selectedTab == 'Collections'
-                                    ? 'Organize products into curated thematic groups and bundles'
-                                    : 'Manage crop categories, nutrient groups, and scientific subcategories',
+                                : 'Organize products into curated thematic groups and bundles',
                             style: GoogleFonts.outfit(
                               fontSize: 13,
                               color: AppTheme.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          if (_selectedTab != 'Categories')
-                            SizedBox(
+                          SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
                                 onPressed: () {
@@ -178,9 +172,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                 Text(
                                   _selectedTab == 'Products'
                                       ? 'Product Catalogue'
-                                      : _selectedTab == 'Collections'
-                                          ? 'Product Collections'
-                                          : 'Product Categories',
+                                      : 'Product Collections',
                                   style: GoogleFonts.outfit(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
@@ -191,9 +183,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                 Text(
                                   _selectedTab == 'Products'
                                       ? 'View and manage agricultural products, categories and sub-categories'
-                                      : _selectedTab == 'Collections'
-                                          ? 'Organize products into curated thematic groups and bundles'
-                                          : 'Manage crop categories, nutrient groups, and scientific subcategories',
+                                      : 'Organize products into curated thematic groups and bundles',
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     color: AppTheme.textSecondary,
@@ -203,8 +193,7 @@ class _ProductsPageState extends State<ProductsPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          if (_selectedTab != 'Categories')
-                            ElevatedButton.icon(
+                          ElevatedButton.icon(
                               onPressed: () {
                                 if (_selectedTab == 'Products') {
                                   _startAddProduct(context);
@@ -255,21 +244,12 @@ class _ProductsPageState extends State<ProductsPage> {
                         isActive: _selectedTab == 'Collections',
                         onTap: () => setState(() => _selectedTab = 'Collections'),
                       ),
-                      _buildSegmentButton(
-                        title: 'Categories',
-                        isActive: _selectedTab == 'Categories',
-                        onTap: () => setState(() => _selectedTab = 'Categories'),
-                      ),
                     ],
                   ),
                 ),
                 SizedBox(height: AppTheme.spacingLarge),
                 IndexedStack(
-                  index: _selectedTab == 'Products'
-                      ? 0
-                      : _selectedTab == 'Collections'
-                          ? 1
-                          : 2,
+                  index: _selectedTab == 'Products' ? 0 : 1,
                   children: [
                     ProductsTabView(
                       products: products,
@@ -283,13 +263,6 @@ class _ProductsPageState extends State<ProductsPage> {
                       collections: collections,
                       products: products,
                       isLoadingCollections: isLoadingCollections,
-                      onRefresh: () {
-                        context.read<ProductsBloc>().add(const LoadProductsEvent(forceRefresh: true));
-                      },
-                    ),
-                    CategoriesTabView(
-                      categories: categories,
-                      products: products,
                       onRefresh: () {
                         context.read<ProductsBloc>().add(const LoadProductsEvent(forceRefresh: true));
                       },
