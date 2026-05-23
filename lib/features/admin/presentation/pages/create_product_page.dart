@@ -3239,14 +3239,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                               String idToAssign = '';
                               if (_formSelectedSubCollection !=
                                   'All Sub-collections') {
-                                final sub = currentSubOptions.firstWhere(
-                                  (s) =>
-                                      s['name'] == _formSelectedSubCollection,
-                                );
-                                idToAssign = sub['id']!;
+                                idToAssign = _formSelectedSubCollection!;
                               } else {
-                                idToAssign =
-                                    collectionNameToId[_formSelectedCollection]!;
+                                idToAssign = _formSelectedCollection!;
                               }
                               if (idToAssign.isNotEmpty &&
                                   !_assignedCollections.contains(idToAssign)) {
