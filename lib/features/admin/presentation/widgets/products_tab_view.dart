@@ -353,10 +353,9 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       color: const Color(0xFFF9FAFB),
       child: Row(
         children: const [
-          Expanded(flex: 8, child: _TableHeaderText('PRODUCT TITLE')),
+          Expanded(flex: 12, child: _TableHeaderText('PRODUCT TITLE')),
           Expanded(flex: 4, child: _TableHeaderText('CATEGORY')),
-          Expanded(flex: 2, child: _TableHeaderText('VARIANTS')),
-          Expanded(flex: 3, child: _TableHeaderText('UNIT PRICE')),
+          Expanded(flex: 4, child: _TableHeaderText('VARIANTS')),
           Expanded(flex: 4, child: _TableHeaderText('AVAILABILITY')),
           SizedBox(width: 80),
         ],
@@ -403,7 +402,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             child: Row(
               children: [
                 Expanded(
-                  flex: 8,
+                  flex: 12,
                   child: Row(
                     children: [
                       _buildProductThumbnail(prod),
@@ -443,6 +442,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                   flex: 4,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    // mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
@@ -476,24 +476,13 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                   ),
                 ),
                 Expanded(
-                  flex: 2,
+                  flex: 4,
                   child: Text(
                     '$variantCount Variant${variantCount > 1 ? 's' : ''}',
                     style: GoogleFonts.outfit(
                       fontSize: 12.5,
                       color: AppTheme.textBody,
                       fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    prod['price'] as String,
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -1051,7 +1040,7 @@ class _TableSkeletonRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              flex: 8,
+              flex: 12,
               child: Row(
                 children: [
                   Container(
@@ -1105,26 +1094,12 @@ class _TableSkeletonRow extends StatelessWidget {
               ),
             ),
             Expanded(
-              flex: 2,
+              flex: 4,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
                   height: 12,
                   width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  height: 12,
-                  width: 60,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(4),
