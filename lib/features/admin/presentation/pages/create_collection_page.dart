@@ -296,10 +296,11 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
               }
             }
 
-            if (needsUpdate && prod['id'] != null) {
-              await ApiClient().put('/products/${prod['id']}', {
+            if (needsUpdate && prodId.isNotEmpty) {
+              await ApiClient().put('/products/$prodId', {
                 'assignedCollections': currentAssigned,
               });
+              prod['assignedCollections'] = currentAssigned;
             }
           }
         }
