@@ -272,8 +272,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                 currentAssigned.add(colName);
                 needsUpdate = true;
               }
-              if (colId.isNotEmpty && currentAssigned.contains(colId)) {
-                currentAssigned.remove(colId);
+              if (colId.isNotEmpty && !currentAssigned.contains(colId)) {
+                currentAssigned.add(colId);
                 needsUpdate = true;
               }
               if (oldName.isNotEmpty && oldName != colName && currentAssigned.contains(oldName)) {

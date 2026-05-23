@@ -1048,7 +1048,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         response = await ApiClient().multipartRequest(
           method: isEdit ? 'PUT' : 'POST',
           endpoint: isEdit
-              ? '/products/${widget.initialData!['id']}'
+              ? '/products/${widget.initialData!['id'] ?? widget.initialData!['_id']}'
               : '/products',
           fields: fields,
           files: files,
@@ -1057,7 +1057,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         // Standard JSON PUT/POST
         response = isEdit
             ? await ApiClient().put(
-                '/products/${widget.initialData!['id']}',
+                '/products/${widget.initialData!['id'] ?? widget.initialData!['_id']}',
                 productData,
               )
             : await ApiClient().post('/products', productData);
