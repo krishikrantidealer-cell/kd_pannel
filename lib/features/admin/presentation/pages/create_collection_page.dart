@@ -34,8 +34,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
   Uint8List? _collectionImage;
   final ImagePicker _picker = ImagePicker();
 
-  // Set of selected product SKUs
-  final Set<String> _selectedProductSkus = {};
+  // Set of selected product IDs
+  final Set<String> _selectedProductIds = {};
   String _productSearchQuery = '';
   bool _isActive = true;
   bool _isParentCollection = false;
@@ -92,9 +92,9 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
         final List assigned = prod['assignedCollections'] ?? [];
         if (assigned.contains(colName) ||
             (colId.isNotEmpty && assigned.contains(colId))) {
-          final String sku = prod['sku'] ?? '';
-          if (sku.isNotEmpty) {
-            _selectedProductSkus.add(sku);
+          final String prodId = (prod['id'] ?? prod['_id'] ?? '').toString();
+          if (prodId.isNotEmpty) {
+            _selectedProductIds.add(prodId);
           }
         }
       }
@@ -116,9 +116,9 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
       final List assigned = prod['assignedCollections'] ?? [];
       // If the product already has this exact string tag, auto-check it
       if (assigned.contains(newName)) {
-        final String sku = prod['sku'] ?? '';
-        if (sku.isNotEmpty && !_selectedProductSkus.contains(sku)) {
-          _selectedProductSkus.add(sku);
+        final String prodId = (prod['id'] ?? prod['_id'] ?? '').toString();
+        if (prodId.isNotEmpty && !_selectedProductIds.contains(prodId)) {
+          _selectedProductIds.add(prodId);
           changed = true;
         }
       }
@@ -258,8 +258,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           final String oldName = widget.initialData?['name'] ?? '';
 
           for (var prod in widget.allProducts) {
-            final String prodSku = prod['sku'] ?? '';
-            final bool isSelected = _selectedProductSkus.contains(prodSku);
+            final String prodId = (prod['id'] ?? prod['_id'] ?? '').toString();
+            final bool isSelected = _selectedProductIds.contains(prodId);
 
             final List<String> currentAssigned = List<String>.from(
               prod['assignedCollections'] ?? [],
@@ -268,32 +268,26 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
             bool needsUpdate = false;
 
             if (isSelected) {
-              // Ensure ID is present, remove names to clean up
-              if (colId.isNotEmpty && !currentAssigned.contains(colId)) {
-                currentAssigned.add(colId);
-                needsUpdate = true;
-              }
-              // Fallback to name if ID was somehow not found
-              if (colId.isEmpty && !currentAssigned.contains(colName)) {
+              if (colName.isNotEmpty && !currentAssigned.contains(colName)) {
                 currentAssigned.add(colName);
                 needsUpdate = true;
               }
-              if (colId.isNotEmpty && currentAssigned.contains(colName)) {
-                currentAssigned.remove(colName);
-                needsUpdate = true;
-              }
-              if (oldName.isNotEmpty && currentAssigned.contains(oldName)) {
-                currentAssigned.remove(oldName);
-                needsUpdate = true;
-              }
-            } else {
-              // Not selected, remove ID and any variations of the name
               if (colId.isNotEmpty && currentAssigned.contains(colId)) {
                 currentAssigned.remove(colId);
                 needsUpdate = true;
               }
-              if (currentAssigned.contains(colName)) {
+              if (oldName.isNotEmpty && oldName != colName && currentAssigned.contains(oldName)) {
+                currentAssigned.remove(oldName);
+                needsUpdate = true;
+              }
+            } else {
+              // Not selected, remove name, ID and oldName
+              if (colName.isNotEmpty && currentAssigned.contains(colName)) {
                 currentAssigned.remove(colName);
+                needsUpdate = true;
+              }
+              if (colId.isNotEmpty && currentAssigned.contains(colId)) {
+                currentAssigned.remove(colId);
                 needsUpdate = true;
               }
               if (oldName.isNotEmpty && currentAssigned.contains(oldName)) {
@@ -813,7 +807,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${_selectedProductSkus.length} Selected',
+                  '${_selectedProductIds.length} Selected',
                   style: GoogleFonts.outfit(
                     fontSize: 11,
                     color: AppTheme.primaryColor,
@@ -876,17 +870,17 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final product = filtered[index];
-                      final sku = product['sku'] as String;
-                      final isSelected = _selectedProductSkus.contains(sku);
+                      final prodId = (product['id'] ?? product['_id'] ?? '').toString();
+                      final isSelected = _selectedProductIds.contains(prodId);
 
                       return CheckboxListTile(
                         value: isSelected,
                         onChanged: (val) {
                           setState(() {
                             if (val == true) {
-                              _selectedProductSkus.add(sku);
+                              _selectedProductIds.add(prodId);
                             } else {
-                              _selectedProductSkus.remove(sku);
+                              _selectedProductIds.remove(prodId);
                             }
                           });
                         },
@@ -901,7 +895,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          sku,
+                          (product['brandName'] ?? 'No Brand').toString(),
                           style: GoogleFonts.outfit(
                             fontSize: 11,
                             color: AppTheme.textSecondary,
