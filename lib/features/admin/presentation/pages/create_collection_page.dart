@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 class CreateCollectionPage extends StatefulWidget {
   final Map<String, dynamic>? initialData;
@@ -32,6 +34,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
   final _priorityController = TextEditingController(text: '0');
 
   Uint8List? _collectionImage;
+  String? _existingImageUrl;
   final ImagePicker _picker = ImagePicker();
 
   // Set of selected product IDs
@@ -81,9 +84,21 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
       if (_isParentCollection) {
         _priorityController.text = (data['priority'] ?? 0).toString();
       }
-      if (data['image'] != null && data['image'] is Uint8List) {
-        _collectionImage = data['image'] as Uint8List;
+      print('=== DEBUG CreateCollectionPage.initState ===');
+      print('initialData: ${widget.initialData}');
+      print('image value: ${data['image']}');
+      print('image type: ${data['image']?.runtimeType}');
+      
+      if (data['image'] != null) {
+        if (data['image'] is String) {
+          _existingImageUrl = data['image'];
+          print('Assigned to _existingImageUrl: $_existingImageUrl');
+        } else if (data['image'] is Uint8List) {
+          _collectionImage = data['image'] as Uint8List;
+          print('Assigned to _collectionImage');
+        }
       }
+      print('============================================');
 
       // Auto-populate selected products based on sub-collection name or ID
       final String colName = data['name'] ?? '';
@@ -160,6 +175,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
         if (editedImage != null) {
           setState(() {
             _collectionImage = editedImage;
+            _existingImageUrl = null;
           });
         }
       }
@@ -178,7 +194,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
     if (!_isParentCollection && _selectedParentId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a parent collection first'),
+          content: Text('Please select a collection first'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -192,33 +208,64 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
     try {
       final String name = _nameController.text.trim();
       final bool isActive = _isActive;
-
-      final body = _isParentCollection
-          ? {
-              'name': name,
-              'description': _descController.text.trim(),
-              'isActive': isActive,
-              'priority': int.tryParse(_priorityController.text) ?? 0,
-            }
-          : {'name': name, 'isActive': isActive};
-
       final bool isEdit = widget.initialData != null;
-      final response = _isParentCollection
-          ? (isEdit
-                ? await ApiClient().put(
-                    '/collections/${widget.initialData!['id'] ?? widget.initialData!['_id']}',
-                    body,
-                  )
-                : await ApiClient().post('/collections', body))
-          : (isEdit
-                ? await ApiClient().put(
-                    '/collections/${widget.initialData!['parentId']}/sub/${widget.initialData!['id'] ?? widget.initialData!['_id']}',
-                    body,
-                  )
-                : await ApiClient().post(
-                    '/collections/$_selectedParentId/sub',
-                    body,
-                  ));
+
+      http.Response response;
+
+      if (!_isParentCollection && _collectionImage != null) {
+        final endpoint = isEdit
+            ? '/collections/${widget.initialData!['parentId']}/sub/${widget.initialData!['id'] ?? widget.initialData!['_id']}'
+            : '/collections/$_selectedParentId/sub';
+
+        final method = isEdit ? 'PUT' : 'POST';
+        
+        final fields = {
+          'name': name,
+          'isActive': isActive.toString(),
+        };
+
+        final files = [
+          http.MultipartFile.fromBytes(
+            'image',
+            _collectionImage!,
+            filename: 'collection_image.jpg',
+            contentType: MediaType('image', 'jpeg'),
+          )
+        ];
+
+        response = await ApiClient().multipartRequest(
+          method: method,
+          endpoint: endpoint,
+          fields: fields,
+          files: files,
+        );
+      } else {
+        final responseBody = _isParentCollection
+            ? {
+                'name': name,
+                'description': _descController.text.trim(),
+                'isActive': isActive,
+                'priority': int.tryParse(_priorityController.text) ?? 0,
+              }
+            : {'name': name, 'isActive': isActive};
+
+        response = _isParentCollection
+            ? (isEdit
+                  ? await ApiClient().put(
+                      '/collections/${widget.initialData!['id'] ?? widget.initialData!['_id']}',
+                      responseBody,
+                    )
+                  : await ApiClient().post('/collections', responseBody))
+            : (isEdit
+                  ? await ApiClient().put(
+                      '/collections/${widget.initialData!['parentId']}/sub/${widget.initialData!['id'] ?? widget.initialData!['_id']}',
+                      responseBody,
+                    )
+                  : await ApiClient().post(
+                      '/collections/$_selectedParentId/sub',
+                      responseBody,
+                    ));
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final resData = jsonDecode(response.body);
@@ -349,7 +396,9 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.initialData != null ? 'Edit Collection' : 'Create Collection',
+          widget.initialData != null 
+              ? 'Edit ${_isParentCollection ? 'Collection' : 'Sub-collection'}'
+              : 'Create ${_isParentCollection ? 'Collection' : 'Sub-collection'}',
           style: GoogleFonts.outfit(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.bold,
@@ -468,7 +517,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Create as Parent Collection',
+                          'Create as Collection',
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -511,7 +560,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
               // Parent Collection Dropdown (only if sub-collection)
               if (!_isParentCollection) ...[
                 Text(
-                  'Parent Collection',
+                  'Collection',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -538,7 +587,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                             value: _selectedParentId,
                             isExpanded: true,
                             hint: Text(
-                              'Select Parent Collection',
+                              'Select Collection',
                               style: GoogleFonts.outfit(
                                 color: AppTheme.textSecondary.withValues(
                                   alpha: 0.6,
@@ -608,13 +657,91 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                   ),
                 ),
                 validator: (val) {
-                  if (val == null || val.trim().isEmpty) {
-                    return 'Please enter a collection name';
+                  if ((val == null || val.trim().isEmpty) && _collectionImage == null) {
+                    return 'Please enter a name or upload an image';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 16),
+              // Image Picker (Only for sub-collections)
+              if (!_isParentCollection) ...[
+                Text(
+                  'Sub-collection Image',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: (_collectionImage != null || _existingImageUrl != null)
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: _collectionImage != null 
+                                  ? Image.memory(_collectionImage!, fit: BoxFit.cover)
+                                  : Image.network(
+                                      _existingImageUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const Center(
+                                          child: Icon(Icons.broken_image, color: Colors.grey),
+                                        );
+                                      },
+                                    ),
+                              ),
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: GestureDetector(
+                                  onTap: () => setState(() {
+                                    _collectionImage = null;
+                                    _existingImageUrl = null;
+                                  }),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cloud_upload_outlined, color: AppTheme.textSecondary, size: 32),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Click to upload image',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
 
               // Description (only if parent collection)
               if (_isParentCollection) ...[
@@ -632,7 +759,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                   maxLines: 3,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: 'Describe this parent collection...',
+                    hintText: 'Describe this collection...',
                     hintStyle: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 13,

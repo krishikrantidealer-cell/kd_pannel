@@ -24,14 +24,17 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       final vendor = prod['vendor']?.toString() ?? '';
       final variants = prod['variants'] as List? ?? [];
 
-      final matchesSearch = name.toLowerCase().contains(query.toLowerCase()) ||
+      final matchesSearch =
+          name.toLowerCase().contains(query.toLowerCase()) ||
           vendor.toLowerCase().contains(query.toLowerCase()) ||
-          variants.any((v) =>
-              (v['packSize']?.toString() ?? '')
-                  .toLowerCase()
-                  .contains(query.toLowerCase()));
+          variants.any(
+            (v) => (v['packSize']?.toString() ?? '').toLowerCase().contains(
+              query.toLowerCase(),
+            ),
+          );
 
-      final matchesCategory = category.isEmpty ||
+      final matchesCategory =
+          category.isEmpty ||
           category.toLowerCase() == 'all' ||
           (prod['category']?.toString().toLowerCase().trim() ==
               category.toLowerCase().trim());
@@ -52,17 +55,19 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
         client.cachedCollections != null &&
         client.cachedCategories != null) {
       final products = client.cachedProducts!;
-      emit(state.copyWith(
-        status: ProductsStatus.success,
-        allProducts: products,
-        filteredProducts: _applyFilter(
-          products: products,
-          query: state.searchQuery,
-          category: state.selectedCategory,
+      emit(
+        state.copyWith(
+          status: ProductsStatus.success,
+          allProducts: products,
+          filteredProducts: _applyFilter(
+            products: products,
+            query: state.searchQuery,
+            category: state.selectedCategory,
+          ),
+          collections: client.cachedCollections!,
+          categories: client.cachedCategories!,
         ),
-        collections: client.cachedCollections!,
-        categories: client.cachedCategories!,
-      ));
+      );
       return;
     }
 
@@ -74,19 +79,23 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       final localCollections = await LocalCacheHelper.getCachedCollections();
       final localCategories = await LocalCacheHelper.getCachedCategories();
 
-      if (localProducts != null || localCollections != null || localCategories != null) {
+      if (localProducts != null ||
+          localCollections != null ||
+          localCategories != null) {
         final products = localProducts ?? [];
-        emit(state.copyWith(
-          status: ProductsStatus.success,
-          allProducts: products,
-          filteredProducts: _applyFilter(
-            products: products,
-            query: state.searchQuery,
-            category: state.selectedCategory,
+        emit(
+          state.copyWith(
+            status: ProductsStatus.success,
+            allProducts: products,
+            filteredProducts: _applyFilter(
+              products: products,
+              query: state.searchQuery,
+              category: state.selectedCategory,
+            ),
+            collections: localCollections ?? [],
+            categories: localCategories ?? [],
           ),
-          collections: localCollections ?? [],
-          categories: localCategories ?? [],
-        ));
+        );
       }
     }
 
@@ -123,9 +132,15 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
           final List rawProducts = data['products'];
           final List<Map<String, dynamic>> preparedProducts = [];
           for (var p in rawProducts) {
-            final String minPriceStr = p['minPrice'] != null ? '₹${p['minPrice']}' : '₹0';
-            final String maxPriceStr = p['maxPrice'] != null ? '₹${p['maxPrice']}' : '₹0';
-            final String priceRange = p['minPrice'] == p['maxPrice'] ? minPriceStr : '$minPriceStr - $maxPriceStr';
+            final String minPriceStr = p['minPrice'] != null
+                ? '₹${p['minPrice']}'
+                : '₹0';
+            final String maxPriceStr = p['maxPrice'] != null
+                ? '₹${p['maxPrice']}'
+                : '₹0';
+            final String priceRange = p['minPrice'] == p['maxPrice']
+                ? minPriceStr
+                : '$minPriceStr - $maxPriceStr';
             final bool inStock = p['availabilityStatus'] != 'Out of Stock';
 
             // Category name
@@ -155,7 +170,9 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'sku': p['_id']
                   .toString()
                   .substring(
-                    p['_id'].toString().length >= 6 ? p['_id'].toString().length - 6 : 0,
+                    p['_id'].toString().length >= 6
+                        ? p['_id'].toString().length - 6
+                        : 0,
                   )
                   .toUpperCase(),
               'name': p['title'] ?? '',
@@ -205,6 +222,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
                       'name': sub['name'] ?? '',
                       'slug': sub['slug'] ?? '',
                       'isActive': sub['isActive'] ?? true,
+                      'image': sub['image'],
                     },
                   )
                   .toList(),
@@ -216,22 +234,26 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
         }
       }
 
-      emit(state.copyWith(
-        status: ProductsStatus.success,
-        allProducts: freshProducts,
-        filteredProducts: _applyFilter(
-          products: freshProducts,
-          query: state.searchQuery,
-          category: state.selectedCategory,
+      emit(
+        state.copyWith(
+          status: ProductsStatus.success,
+          allProducts: freshProducts,
+          filteredProducts: _applyFilter(
+            products: freshProducts,
+            query: state.searchQuery,
+            category: state.selectedCategory,
+          ),
+          collections: freshCollections,
+          categories: freshCategories,
         ),
-        collections: freshCollections,
-        categories: freshCategories,
-      ));
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: ProductsStatus.failure,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: ProductsStatus.failure,
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 
@@ -239,28 +261,32 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
     SearchProductsEvent event,
     Emitter<ProductsState> emit,
   ) {
-    emit(state.copyWith(
-      searchQuery: event.query,
-      filteredProducts: _applyFilter(
-        products: state.allProducts,
-        query: event.query,
-        category: state.selectedCategory,
+    emit(
+      state.copyWith(
+        searchQuery: event.query,
+        filteredProducts: _applyFilter(
+          products: state.allProducts,
+          query: event.query,
+          category: state.selectedCategory,
+        ),
       ),
-    ));
+    );
   }
 
   void _onFilterProductsByCategory(
     FilterProductsByCategoryEvent event,
     Emitter<ProductsState> emit,
   ) {
-    emit(state.copyWith(
-      selectedCategory: event.categoryName,
-      filteredProducts: _applyFilter(
-        products: state.allProducts,
-        query: state.searchQuery,
-        category: event.categoryName,
+    emit(
+      state.copyWith(
+        selectedCategory: event.categoryName,
+        filteredProducts: _applyFilter(
+          products: state.allProducts,
+          query: state.searchQuery,
+          category: event.categoryName,
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> _onDeleteProduct(
@@ -271,25 +297,32 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       final response = await ApiClient().delete('/products/${event.productId}');
       if (response.statusCode == 200) {
         final updatedProducts = state.allProducts
-            .where((p) => (p['id'] ?? p['_id'] ?? '').toString() != event.productId)
+            .where(
+              (p) => (p['id'] ?? p['_id'] ?? '').toString() != event.productId,
+            )
             .toList();
 
         // Update caches
         ApiClient().cachedProducts = updatedProducts;
         LocalCacheHelper.saveCachedProducts(updatedProducts);
 
-        emit(state.copyWith(
-          allProducts: updatedProducts,
-          filteredProducts: _applyFilter(
-            products: updatedProducts,
-            query: state.searchQuery,
-            category: state.selectedCategory,
+        emit(
+          state.copyWith(
+            allProducts: updatedProducts,
+            filteredProducts: _applyFilter(
+              products: updatedProducts,
+              query: state.searchQuery,
+              category: state.selectedCategory,
+            ),
           ),
-        ));
+        );
       } else {
-        emit(state.copyWith(
-          errorMessage: 'Failed to delete product (Status ${response.statusCode})',
-        ));
+        emit(
+          state.copyWith(
+            errorMessage:
+                'Failed to delete product (Status ${response.statusCode})',
+          ),
+        );
       }
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
@@ -308,14 +341,16 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       return p;
     }).toList();
 
-    emit(state.copyWith(
-      allProducts: updatedProducts,
-      filteredProducts: _applyFilter(
-        products: updatedProducts,
-        query: state.searchQuery,
-        category: state.selectedCategory,
+    emit(
+      state.copyWith(
+        allProducts: updatedProducts,
+        filteredProducts: _applyFilter(
+          products: updatedProducts,
+          query: state.searchQuery,
+          category: state.selectedCategory,
+        ),
       ),
-    ));
+    );
 
     try {
       // Use PUT to update just the status
@@ -338,15 +373,17 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
         }
         return p;
       }).toList();
-      emit(state.copyWith(
-        allProducts: revertedProducts,
-        filteredProducts: _applyFilter(
-          products: revertedProducts,
-          query: state.searchQuery,
-          category: state.selectedCategory,
+      emit(
+        state.copyWith(
+          allProducts: revertedProducts,
+          filteredProducts: _applyFilter(
+            products: revertedProducts,
+            query: state.searchQuery,
+            category: state.selectedCategory,
+          ),
+          errorMessage: 'Failed to update availability: $e',
         ),
-        errorMessage: 'Failed to update availability: $e',
-      ));
+      );
     }
   }
 }
