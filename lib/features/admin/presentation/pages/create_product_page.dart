@@ -52,6 +52,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final _tagController = TextEditingController();
   List<String> _tags = [];
   bool _inStock = true;
+  bool _isFeatured = false;
   List<String> _assignedCollections = [];
   String _formCategory = '';
   String _formSubCategory = '';
@@ -110,6 +111,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
       _inStock = data['availabilityStatus'] != 'Out of Stock';
+      _isFeatured = data['isFeatured'] ?? false;
       _assignedCollections = List<String>.from(
         data['assignedCollections'] ?? [],
       );
@@ -1022,6 +1024,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'tags': _tags,
         'assignedCollections': _assignedCollections,
         'availabilityStatus': _inStock ? 'In Stock' : 'Out of Stock',
+        'isFeatured': _isFeatured,
         // Tell the backend which existing images to keep
         if (isEdit) 'keepImages': _existingImageUrls,
         if (isEdit) 'keepMediumImages': _existingMediumUrls,
@@ -1480,6 +1483,118 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                           color: _inStock
                                               ? const Color(0xFF059669)
                                               : const Color(0xFFDC2626),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Featured Product',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Show in featured products section',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isFeatured = !_isFeatured;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.fastOutSlowIn,
+                                height: 36,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _isFeatured
+                                      ? const Color(
+                                          0xFF3B82F6,
+                                        ).withValues(alpha: 0.1)
+                                      : const Color(
+                                          0xFF6B7280,
+                                        ).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: _isFeatured
+                                        ? const Color(
+                                            0xFF3B82F6,
+                                          ).withValues(alpha: 0.3)
+                                        : const Color(
+                                            0xFF6B7280,
+                                          ).withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      transitionBuilder: (child, animation) {
+                                        return ScaleTransition(
+                                          scale: animation,
+                                          child: FadeTransition(
+                                            opacity: animation,
+                                            child: child,
+                                          ),
+                                        );
+                                      },
+                                      child: Icon(
+                                        _isFeatured
+                                            ? Icons.star_rounded
+                                            : Icons.star_outline_rounded,
+                                        key: ValueKey(_isFeatured),
+                                        color: _isFeatured
+                                            ? const Color(0xFF3B82F6)
+                                            : const Color(0xFF6B7280),
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    AnimatedSize(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      curve: Curves.fastOutSlowIn,
+                                      child: Text(
+                                        _isFeatured
+                                            ? 'Featured'
+                                            : 'Not Featured',
+                                        style: GoogleFonts.outfit(
+                                          color: _isFeatured
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFF4B5563),
                                           fontWeight: FontWeight.w600,
                                           fontSize: 12,
                                         ),
