@@ -181,6 +181,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'vendor': p['brandName'] ?? p['vendor'] ?? 'N/A',
               'price': priceRange,
               'inStock': inStock,
+              'availabilityStatus': p['availabilityStatus'] ?? (inStock ? 'In Stock' : 'Out of Stock'),
               'variants': p['variants'] ?? [],
               'images': p['images'] ?? [],
               'thumbnail': p['thumbnail'],

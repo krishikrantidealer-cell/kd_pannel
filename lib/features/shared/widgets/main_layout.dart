@@ -25,14 +25,10 @@ class _MainLayoutState extends State<MainLayout> {
   int _currentIdx = 0;
 
   // Persistent static stack of Admin Pages (Preserves states!)
-  final List<Widget> _adminPages = const [
-    ProductsPage(),
-  ];
+  final List<Widget> _adminPages = const [ProductsPage()];
 
   // Persistent static stack of Sales Pages (Preserves states!)
-  final List<Widget> _salesPages = const [
-    ProductsPage(),
-  ];
+  final List<Widget> _salesPages = const [ProductsPage()];
 
   @override
   void didChangeDependencies() {
@@ -104,13 +100,22 @@ class _MainLayoutState extends State<MainLayout> {
                     if (!isWakingUp) return const SizedBox.shrink();
                     return Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFFFFF3CD), Color(0xFFFFF8E1)], // Soft warning amber
+                          colors: [
+                            Color(0xFFFFF3CD),
+                            Color(0xFFFFF8E1),
+                          ], // Soft warning amber
                         ),
                         border: Border(
-                          bottom: BorderSide(color: Color(0xFFFFEBAA), width: 1),
+                          bottom: BorderSide(
+                            color: Color(0xFFFFEBAA),
+                            width: 1,
+                          ),
                         ),
                       ),
                       child: Row(
@@ -120,7 +125,9 @@ class _MainLayoutState extends State<MainLayout> {
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF856404)),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF856404),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -142,10 +149,13 @@ class _MainLayoutState extends State<MainLayout> {
 
                 // Screen Content
                 Expanded(
-                  child: widget.child ??
+                  child:
+                      widget.child ??
                       IndexedStack(
                         index: _currentIdx,
-                        children: role == UserRole.admin ? _adminPages : _salesPages,
+                        children: role == UserRole.admin
+                            ? _adminPages
+                            : _salesPages,
                       ),
                 ),
               ],

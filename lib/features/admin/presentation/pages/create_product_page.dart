@@ -110,7 +110,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
       _formCategory = data['category'] ?? '';
       _formSubCategory = data['subCategory'] ?? '';
       _tags = List<String>.from(data['tags'] ?? []);
-      _inStock = data['availabilityStatus'] != 'Out of Stock';
+      _inStock = data['availabilityStatus'] != null
+          ? data['availabilityStatus'] != 'Out of Stock'
+          : (data['inStock'] ?? true);
       _isFeatured = data['isFeatured'] ?? false;
       _assignedCollections = List<String>.from(
         data['assignedCollections'] ?? [],
@@ -377,11 +379,47 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final compareRateCtrl = TextEditingController();
     final basePackingValCtrl = TextEditingController(text: basePackVal);
 
+    // Resolve variant-level pricing tiers with proper fallbacks
+    List<Map<String, String>> variantPriceTiers = [];
+    if (data != null && data['priceTiers'] != null) {
+      try {
+        variantPriceTiers = (data['priceTiers'] as List).map((t) {
+          final map = t as Map;
+          return {
+            for (var entry in map.entries)
+              entry.key.toString(): entry.value.toString(),
+          };
+        }).toList();
+      } catch (_) {}
+    }
+
+    if (variantPriceTiers.isEmpty) {
+      // Fallback to global product-level priceTiers if populated from backend
+      if (_priceTiers.isNotEmpty) {
+        variantPriceTiers = _priceTiers.map((t) => Map<String, String>.from(t)).toList();
+      }
+    }
+
+    if (variantPriceTiers.isEmpty && _formVariants.isNotEmpty) {
+      // Copy tiers from the first variant as a smart default
+      final firstVariantTiers = _formVariants.first['priceTiers'] as List<Map<String, String>>;
+      variantPriceTiers = firstVariantTiers.map((t) => Map<String, String>.from(t)).toList();
+    }
+
+    if (variantPriceTiers.isEmpty) {
+      // Fallback to default static tiers
+      variantPriceTiers = [
+        {'id': '1', 'name': 'Tier 1 (10-30)'},
+        {'id': '2', 'name': 'Tier 2 (30-50)'},
+        {'id': '3', 'name': 'Tier 3 (50+)'},
+      ];
+    }
+
     // Map of rates for each tier
     final rates = <String, TextEditingController>{};
     final computed = <String, TextEditingController>{};
 
-    for (var tier in _priceTiers) {
+    for (var tier in variantPriceTiers) {
       final id = tier['id']!;
       // Read rate from data if available
       dynamic rawRateVal =
@@ -428,8 +466,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
     double getFactor() {
       double factor = 1.0;
       final String currentUnit = packUnit.toLowerCase().trim();
-      if (currentUnit == 'ml' || currentUnit == 'gm' || currentUnit == 'g')
+      if (currentUnit == 'ml' || currentUnit == 'gm' || currentUnit == 'g') {
         factor = 0.001;
+      }
       return factor;
     }
 
@@ -464,7 +503,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
               : computedMRP.toStringAsFixed(2);
         }
 
-        for (var tier in _priceTiers) {
+        for (var tier in variantPriceTiers) {
           final id = tier['id']!;
           final rateCtrl = rates[id];
           final compCtrl = computed[id];
@@ -505,6 +544,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'basePackingUnit': basePackUnit,
         'rates': rates,
         'computed': computed,
+        'priceTiers': variantPriceTiers,
         // Maintain recalculate reference for update on unit dropdown change
         'recalculate': recalculate,
       });
@@ -530,58 +570,54 @@ class _CreateProductPageState extends State<CreateProductPage> {
     });
   }
 
-  void _addNewTier(String name) {
+  void _addNewTierForVariant(Map<String, dynamic> variant, String name) {
     final newId = (DateTime.now().millisecondsSinceEpoch).toString();
     setState(() {
-      _priceTiers.add({'id': newId, 'name': name});
+      final priceTiers = variant['priceTiers'] as List<Map<String, String>>;
+      priceTiers.add({'id': newId, 'name': name});
 
-      // Update all variants to have this tier's controllers
-      for (var variant in _formVariants) {
-        final ratesMap = variant['rates'] as Map<String, TextEditingController>;
-        final computedMap =
-            variant['computed'] as Map<String, TextEditingController>;
-        final recalculate = variant['recalculate'] as VoidCallback;
+      final ratesMap = variant['rates'] as Map<String, TextEditingController>;
+      final computedMap = variant['computed'] as Map<String, TextEditingController>;
+      final recalculate = variant['recalculate'] as VoidCallback;
 
-        final rateCtrl = TextEditingController();
-        ratesMap[newId] = rateCtrl;
-        computedMap[newId] = TextEditingController();
+      final rateCtrl = TextEditingController();
+      ratesMap[newId] = rateCtrl;
+      computedMap[newId] = TextEditingController();
 
-        rateCtrl.addListener(recalculate);
-      }
+      rateCtrl.addListener(recalculate);
     });
   }
 
-  void _deleteTier(String id) {
+  void _deleteTierForVariant(Map<String, dynamic> variant, String id) {
     if (id == '1') return; // Primary is required
     setState(() {
-      _priceTiers.removeWhere((t) => t['id'] == id);
+      final priceTiers = variant['priceTiers'] as List<Map<String, String>>;
+      priceTiers.removeWhere((t) => t['id'] == id);
 
-      for (var variant in _formVariants) {
-        final ratesMap = variant['rates'] as Map<String, TextEditingController>;
-        final computedMap =
-            variant['computed'] as Map<String, TextEditingController>;
+      final ratesMap = variant['rates'] as Map<String, TextEditingController>;
+      final computedMap = variant['computed'] as Map<String, TextEditingController>;
 
-        final rateCtrl = ratesMap.remove(id);
-        if (rateCtrl != null) {
-          final recalculate = variant['recalculate'] as VoidCallback;
-          rateCtrl.removeListener(recalculate);
-          rateCtrl.dispose();
-        }
-        final compCtrl = computedMap.remove(id);
-        compCtrl?.dispose();
-
-        // Trigger recalculate after removing tier
+      final rateCtrl = ratesMap.remove(id);
+      if (rateCtrl != null) {
         final recalculate = variant['recalculate'] as VoidCallback;
-        recalculate();
+        rateCtrl.removeListener(recalculate);
+        rateCtrl.dispose();
       }
+      final compCtrl = computedMap.remove(id);
+      compCtrl?.dispose();
+
+      // Trigger recalculate after removing tier
+      final recalculate = variant['recalculate'] as VoidCallback;
+      recalculate();
     });
   }
 
-  void _showManageTiersDialog() {
+  void _showManageTiersDialog(Map<String, dynamic> variant) {
     showDialog(
       context: context,
       builder: (context) {
         final addController = TextEditingController();
+        final priceTiers = variant['priceTiers'] as List<Map<String, String>>;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
@@ -621,7 +657,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Tiers are applied globally. Tier 1 is the primary selling price.',
+                      'Tiers are managed for this variant. Tier 1 is the primary selling price.',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -632,9 +668,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       constraints: const BoxConstraints(maxHeight: 250),
                       child: ListView.builder(
                         shrinkWrap: true,
-                        itemCount: _priceTiers.length,
+                        itemCount: priceTiers.length,
                         itemBuilder: (context, idx) {
-                          final tier = _priceTiers[idx];
+                          final tier = priceTiers[idx];
                           final isPrimary = tier['id'] == '1';
 
                           return Padding(
@@ -686,7 +722,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                       )
                                     : IconButton(
                                         onPressed: () {
-                                          _deleteTier(tier['id']!);
+                                          _deleteTierForVariant(variant, tier['id']!);
                                           setDialogState(() {});
                                         },
                                         icon: const Icon(
@@ -734,7 +770,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         ElevatedButton(
                           onPressed: () {
                             if (addController.text.trim().isNotEmpty) {
-                              _addNewTier(addController.text.trim());
+                              _addNewTierForVariant(variant, addController.text.trim());
                               addController.clear();
                               setDialogState(() {});
                             }
@@ -911,6 +947,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ? '$mrpRateVal$suffix'
             : '';
 
+        final variantPriceTiers = v['priceTiers'] as List<Map<String, String>>;
+
         variantsData.add({
           'price': primaryRateWithSuffix,
           'compareAtPrice': mrpRateWithSuffix,
@@ -919,6 +957,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'unitCompareRate': mrpRateWithSuffix,
           'rates': ratesJson,
           'computedPrices': computedJson,
+          'priceTiers': variantPriceTiers,
 
           // Legacy mappings
           'unitPriceRate': primaryRateWithSuffix,
@@ -1006,7 +1045,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'price30_50': rate2,
           'price50_plus': rate3,
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),
+          'basePacking': v['basePacking'],
           'weight': 0.0,
+          'rates': v['rates'],
+          'computedPrices': v['computedPrices'],
+          'priceTiers': v['priceTiers'],
         };
       }).toList();
 
@@ -1310,37 +1353,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   _buildSectionCard(
                     title: 'Product Variants',
                     icon: Icons.style_outlined,
-                    action: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton.icon(
-                          onPressed: _showManageTiersDialog,
-                          icon: const Icon(Icons.settings_outlined, size: 18),
-                          label: Text(
-                            'Manage Tiers',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppTheme.textSecondary,
-                          ),
+                    action: TextButton.icon(
+                      onPressed: _addVariant,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: Text(
+                        'Add Variant',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(width: 8),
-                        TextButton.icon(
-                          onPressed: _addVariant,
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: Text(
-                            'Add Variant',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppTheme.primaryColor,
-                          ),
-                        ),
-                      ],
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                      ),
                     ),
                     child: Column(
                       children: _formVariants.asMap().entries.map((entry) {
@@ -1788,7 +1812,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Existing uploaded images (from GCS) ──────────────────────────
         if (_existingImageUrls.isNotEmpty) ...[
           Text(
             'Current Images',
@@ -1854,7 +1877,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       child: InkWell(
                         onTap: () {
                           setState(() {
-                            // Remove from all 3 image lists at the same index
                             _existingImageUrls.removeAt(index);
                             if (index < _existingMediumUrls.length) {
                               _existingMediumUrls.removeAt(index);
@@ -1885,8 +1907,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
           const SizedBox(height: 12),
         ],
-
-        // ── New images (picked from device) ─────────────────────────────
         if (_productImages.isNotEmpty) ...[
           Text(
             'New Images (will be uploaded)',
@@ -1986,7 +2006,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           const SizedBox(height: 12),
         ],
 
-        // ── Upload button ────────────────────────────────────────────────
         InkWell(
           onTap: _pickMultipleProductImages,
           borderRadius: BorderRadius.circular(12),
@@ -2051,7 +2070,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
         list.add(name);
       }
     }
-    // Crucially, make sure the current _formCategory is in the list to prevent assertion failure
     if (_formCategory.isNotEmpty && !list.contains(_formCategory)) {
       list.add(_formCategory);
     }
@@ -2799,8 +2817,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
     // Build the fields for each tier dynamically
     final ratesMap = variant['rates'] as Map<String, TextEditingController>;
     final List<Widget> dynamicTierFields = [];
+    final priceTiers = variant['priceTiers'] as List<Map<String, String>>;
 
-    for (var tier in _priceTiers) {
+    for (var tier in priceTiers) {
       final id = tier['id']!;
       final ctrl = ratesMap[id];
       if (ctrl != null) {
@@ -2822,8 +2841,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                     return null;
                   }
                 : (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return null; // Optional
+                    }
                     final numVal = double.tryParse(val);
                     if (numVal == null || numVal <= 0) return 'Must be > 0';
                     // Tier 2/3 rates should be <= Tier 1 (descending price tiers)
@@ -2918,18 +2938,41 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       ),
                     ],
                   ),
-                  if (_formVariants.length > 1)
-                    IconButton(
-                      onPressed: () => _removeVariant(index),
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        size: 18,
-                        color: AppTheme.error,
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _showManageTiersDialog(variant),
+                        icon: const Icon(Icons.settings_outlined, size: 16),
+                        label: Text(
+                          'Manage Tiers',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Remove Variant',
-                    ),
+                      if (_formVariants.length > 1) ...[
+                        const SizedBox(width: 12),
+                        IconButton(
+                          onPressed: () => _removeVariant(index),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: AppTheme.error,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Remove Variant',
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -3217,6 +3260,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         ),
                       ),
                       const SizedBox(width: 8),
+
                       InkWell(
                         onTap: () {
                           setState(() {
