@@ -1504,6 +1504,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = MediaQuery.of(context).size.width < 768;
+    final bool isSmallMobile = MediaQuery.of(context).size.width < 400;
     final filtered = _filteredCategories;
     final selectedCat = _selectedCategory;
 
@@ -1515,55 +1516,72 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              height: 38,
-              width: isMobile ? 180 : 260,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: TextField(
-                onChanged: (val) => setState(() => _categorySearchQuery = val),
-                textAlignVertical: TextAlignVertical.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textPrimary,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Search category name...',
-                  hintStyle: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 13,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    size: 18,
-                    color: AppTheme.textSecondary,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: _createCategory,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add Category'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
+            Expanded(
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: TextField(
+                  onChanged: (val) =>
+                      setState(() => _categorySearchQuery = val),
+                  textAlignVertical: TextAlignVertical.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'Search category name...',
+                    hintStyle: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 12),
+            isSmallMobile
+                ? IconButton(
+                    onPressed: _createCategory,
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.all(10),
+                    ),
+                    tooltip: 'Add Category',
+                  )
+                : ElevatedButton.icon(
+                    onPressed: _createCategory,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(isMobile ? 'Add' : 'Add Category'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1579,12 +1597,12 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: (selectedCat != null && !isMobile)
-                            ? 300
-                            : 400,
-                        mainAxisExtent: 110,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
+                        maxCrossAxisExtent: isMobile
+                            ? MediaQuery.of(context).size.width
+                            : (selectedCat != null ? 300 : 400),
+                        mainAxisExtent: isMobile ? 96 : 110,
+                        crossAxisSpacing: isMobile ? 10 : 16,
+                        mainAxisSpacing: isMobile ? 10 : 16,
                       ),
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
@@ -2594,61 +2612,105 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
           ),
 
           // 3. Subcategories list
-          Expanded(
-            child: subs.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 24,
-                      horizontal: 20,
-                    ),
-                    child: Center(
-                      child: Text(
-                        'No sub-categories created yet.\nType name above and click "Add" to create one.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                          fontStyle: FontStyle.italic,
-                          height: 1.5,
+          if (!widget.isMobileSheet)
+            Expanded(
+              child: subs.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 24,
+                        horizontal: 20,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'No sub-categories created yet.\nType name above and click "Add" to create one.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                            fontStyle: FontStyle.italic,
+                            height: 1.5,
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(
-                      left: 20,
-                      right: 20,
-                      bottom: 20,
-                    ),
-                    shrinkWrap: true,
-                    physics: widget.isMobileSheet
-                        ? const NeverScrollableScrollPhysics()
-                        : const BouncingScrollPhysics(),
-                    itemCount: subs.length,
-                    itemBuilder: (context, index) {
-                      final sub = subs[index];
-                      final subName = sub['name'] ?? '';
-                      final subCount = widget.getSubProductCount(
-                        catName,
-                        subName,
-                      );
-                      final share = totalProds > 0
-                          ? (subCount / totalProds)
-                          : 0.0;
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(
+                        left: 20,
+                        right: 20,
+                        bottom: 20,
+                      ),
+                      itemCount: subs.length,
+                      itemBuilder: (context, index) {
+                        final sub = subs[index];
+                        final subName = sub['name'] ?? '';
+                        final subCount = widget.getSubProductCount(
+                          catName,
+                          subName,
+                        );
+                        final share = totalProds > 0
+                            ? (subCount / totalProds)
+                            : 0.0;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _SubCategoryTileWidget(
-                          sub: sub,
-                          count: subCount,
-                          share: share,
-                          onEdit: () => _showEditSubCategoryDialog(sub),
-                          onDelete: () => _deleteSub(sub),
-                        ),
-                      );
-                    },
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _SubCategoryTileWidget(
+                            sub: sub,
+                            count: subCount,
+                            share: share,
+                            onEdit: () => _showEditSubCategoryDialog(sub),
+                            onDelete: () => _deleteSub(sub),
+                            isMobile: false,
+                          ),
+                        );
+                      },
+                    ),
+            )
+          else ...[
+            if (subs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 24,
+                  horizontal: 20,
+                ),
+                child: Center(
+                  child: Text(
+                    'No sub-categories created yet.\nType name above and click "Add" to create one.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
+                    ),
                   ),
-          ),
+                ),
+              )
+            else
+              ListView.builder(
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: subs.length,
+                itemBuilder: (context, index) {
+                  final sub = subs[index];
+                  final subName = sub['name'] ?? '';
+                  final subCount = widget.getSubProductCount(catName, subName);
+                  final share = totalProds > 0 ? (subCount / totalProds) : 0.0;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _SubCategoryTileWidget(
+                      sub: sub,
+                      count: subCount,
+                      share: share,
+                      onEdit: () => _showEditSubCategoryDialog(sub),
+                      onDelete: () => _deleteSub(sub),
+                      isMobile: true,
+                    ),
+                  );
+                },
+              ),
+          ],
         ],
       ),
     );
@@ -2661,6 +2723,7 @@ class _SubCategoryTileWidget extends StatefulWidget {
   final double share;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool isMobile;
 
   const _SubCategoryTileWidget({
     required this.sub,
@@ -2668,6 +2731,7 @@ class _SubCategoryTileWidget extends StatefulWidget {
     required this.share,
     required this.onEdit,
     required this.onDelete,
+    this.isMobile = false,
   });
 
   @override
@@ -2779,34 +2843,78 @@ class _SubCategoryTileWidgetState extends State<_SubCategoryTileWidget> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                // Actions (Show only on hover)
-                AnimatedOpacity(
-                  opacity: _isHovered ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 14),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        color: AppTheme.textSecondary,
-                        onPressed: widget.onEdit,
+                const SizedBox(width: 8),
+                // Actions: always visible on touch devices, subtle on desktop hover
+                Builder(
+                  builder: (context) {
+                    final isTouchDevice =
+                        MediaQuery.of(context).size.width < 768;
+                    if (isTouchDevice) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: widget.onEdit,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Icon(
+                                Icons.edit_outlined,
+                                size: 15,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: widget.onDelete,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: Icon(
+                                Icons.delete_outline_rounded,
+                                size: 15,
+                                color: AppTheme.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return AnimatedOpacity(
+                      opacity: _isHovered ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 14),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            color: AppTheme.textSecondary,
+                            onPressed: widget.onEdit,
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 14,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            color: AppTheme.error,
+                            onPressed: widget.onDelete,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 14,
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        color: AppTheme.error,
-                        onPressed: widget.onDelete,
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
