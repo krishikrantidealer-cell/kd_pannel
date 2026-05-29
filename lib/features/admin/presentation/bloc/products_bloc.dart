@@ -215,6 +215,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'name': c['name'] ?? '',
               'slug': c['slug'] ?? '',
               'isActive': c['isActive'] ?? true,
+              'bannerImage': c['bannerImage'],
               'subCollections': subList
                   .map(
                     (sub) => {

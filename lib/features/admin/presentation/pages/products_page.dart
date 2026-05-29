@@ -8,6 +8,7 @@ import 'create_product_page.dart';
 import 'create_collection_page.dart';
 import '../widgets/products_tab_view.dart';
 import '../widgets/collections_tab_view.dart';
+import '../widgets/categories_tab_view.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
 import '../bloc/products_state.dart';
@@ -22,7 +23,8 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   final ScrollController _scrollController = ScrollController();
-  String _selectedTab = 'Products'; // 'Products' or 'Collections'
+  String _selectedTab =
+      'Products'; // 'Products', 'Collections', or 'Categories'
 
   @override
   void dispose() {
@@ -35,14 +37,15 @@ class _ProductsPageState extends State<ProductsPage> {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (routeContext, animation, secondaryAnimation) => MainLayout(
-          child: CreateProductPage(
-            preloadedCategories: productsBloc.state.categories,
-            onSave: (newProduct) {
-              productsBloc.add(const LoadProductsEvent(forceRefresh: true));
-            },
-          ),
-        ),
+        pageBuilder: (routeContext, animation, secondaryAnimation) =>
+            MainLayout(
+              child: CreateProductPage(
+                preloadedCategories: productsBloc.state.categories,
+                onSave: (newProduct) {
+                  productsBloc.add(const LoadProductsEvent(forceRefresh: true));
+                },
+              ),
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return SharedAxisTransition(
             animation: animation,
@@ -57,19 +60,23 @@ class _ProductsPageState extends State<ProductsPage> {
     );
   }
 
-  void _startCreateCollection(BuildContext context, List<Map<String, dynamic>> products) {
+  void _startCreateCollection(
+    BuildContext context,
+    List<Map<String, dynamic>> products,
+  ) {
     final productsBloc = BlocProvider.of<ProductsBloc>(context);
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (routeContext, animation, secondaryAnimation) => MainLayout(
-          child: CreateCollectionPage(
-            allProducts: products,
-            onSave: (newCol) {
-              productsBloc.add(const LoadProductsEvent(forceRefresh: true));
-            },
-          ),
-        ),
+        pageBuilder: (routeContext, animation, secondaryAnimation) =>
+            MainLayout(
+              child: CreateCollectionPage(
+                allProducts: products,
+                onSave: (newCol) {
+                  productsBloc.add(const LoadProductsEvent(forceRefresh: true));
+                },
+              ),
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return SharedAxisTransition(
             animation: animation,
@@ -115,7 +122,9 @@ class _ProductsPageState extends State<ProductsPage> {
                           Text(
                             _selectedTab == 'Products'
                                 ? 'Product Catalogue'
-                                : 'Product Collections',
+                                : _selectedTab == 'Collections'
+                                ? 'Product Collections'
+                                : 'Product Categories',
                             style: GoogleFonts.outfit(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -126,14 +135,17 @@ class _ProductsPageState extends State<ProductsPage> {
                           Text(
                             _selectedTab == 'Products'
                                 ? 'View and manage agricultural products, categories and sub-categories'
-                                : 'Organize products into curated thematic groups and bundles',
+                                : _selectedTab == 'Collections'
+                                ? 'Organize products into curated thematic groups and bundles'
+                                : 'Configure categories and custom sub-categories hierarchy',
                             style: GoogleFonts.outfit(
                               fontSize: 13,
                               color: AppTheme.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
+                          if (_selectedTab != 'Categories')
+                            SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
                                 onPressed: () {
@@ -153,7 +165,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                   backgroundColor: AppTheme.primaryColor,
                                   foregroundColor: Colors.white,
                                   elevation: 0,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -172,7 +186,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                 Text(
                                   _selectedTab == 'Products'
                                       ? 'Product Catalogue'
-                                      : 'Product Collections',
+                                      : _selectedTab == 'Collections'
+                                      ? 'Product Collections'
+                                      : 'Product Categories',
                                   style: GoogleFonts.outfit(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
@@ -183,7 +199,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                 Text(
                                   _selectedTab == 'Products'
                                       ? 'View and manage agricultural products, categories and sub-categories'
-                                      : 'Organize products into curated thematic groups and bundles',
+                                      : _selectedTab == 'Collections'
+                                      ? 'Organize products into curated thematic groups and bundles'
+                                      : 'Configure categories and custom sub-categories hierarchy',
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     color: AppTheme.textSecondary,
@@ -193,7 +211,8 @@ class _ProductsPageState extends State<ProductsPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          ElevatedButton.icon(
+                          if (_selectedTab != 'Categories')
+                            ElevatedButton.icon(
                               onPressed: () {
                                 if (_selectedTab == 'Products') {
                                   _startAddProduct(context);
@@ -242,21 +261,34 @@ class _ProductsPageState extends State<ProductsPage> {
                       _buildSegmentButton(
                         title: 'Collections',
                         isActive: _selectedTab == 'Collections',
-                        onTap: () => setState(() => _selectedTab = 'Collections'),
+                        onTap: () =>
+                            setState(() => _selectedTab = 'Collections'),
+                      ),
+                      _buildSegmentButton(
+                        title: 'Categories',
+                        isActive: _selectedTab == 'Categories',
+                        onTap: () =>
+                            setState(() => _selectedTab = 'Categories'),
                       ),
                     ],
                   ),
                 ),
                 SizedBox(height: AppTheme.spacingLarge),
                 IndexedStack(
-                  index: _selectedTab == 'Products' ? 0 : 1,
+                  index: _selectedTab == 'Products'
+                      ? 0
+                      : _selectedTab == 'Collections'
+                      ? 1
+                      : 2,
                   children: [
                     ProductsTabView(
                       products: products,
                       backendCategories: categories,
                       isLoadingProducts: isLoadingProducts,
                       onRefresh: () {
-                        context.read<ProductsBloc>().add(const LoadProductsEvent(forceRefresh: true));
+                        context.read<ProductsBloc>().add(
+                          const LoadProductsEvent(forceRefresh: true),
+                        );
                       },
                     ),
                     CollectionsTabView(
@@ -264,7 +296,18 @@ class _ProductsPageState extends State<ProductsPage> {
                       products: products,
                       isLoadingCollections: isLoadingCollections,
                       onRefresh: () {
-                        context.read<ProductsBloc>().add(const LoadProductsEvent(forceRefresh: true));
+                        context.read<ProductsBloc>().add(
+                          const LoadProductsEvent(forceRefresh: true),
+                        );
+                      },
+                    ),
+                    CategoriesTabView(
+                      categories: categories,
+                      products: products,
+                      onRefresh: () {
+                        context.read<ProductsBloc>().add(
+                          const LoadProductsEvent(forceRefresh: true),
+                        );
                       },
                     ),
                   ],

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_editor_plus/image_editor_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
@@ -26,6 +31,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
   Map<String, int> _categoryProductCounts = {};
   Map<String, int> _subCategoryProductCounts =
       {}; // Key: "categoryName_subCategoryName"
+  String? _selectedCategoryId;
 
   // Filter cache
   List<dynamic> _cachedFilteredCategories = [];
@@ -98,6 +104,8 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
       context: context,
       builder: (ctx) {
         bool isLoading = false;
+        Uint8List? categoryImage;
+
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -108,20 +116,135 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                 'Create Category',
                 style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
               ),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Category Name',
-                    hintText: 'e.g. Fertilizers',
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          labelText: 'Category Name',
+                          hintText: 'e.g. Fertilizers',
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter category name';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Banner Image',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final XFile? image = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 800,
+                              maxHeight: 600,
+                              imageQuality: 85,
+                            );
+                            if (image != null) {
+                              final bytes = await image.readAsBytes();
+                              final Uint8List? editedImage =
+                                  await Navigator.push(
+                                    ctx,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ImageEditor(image: bytes),
+                                    ),
+                                  );
+                              if (editedImage != null) {
+                                setState(() {
+                                  categoryImage = editedImage;
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to pick image: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: categoryImage != null
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.memory(
+                                        categoryImage!,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            categoryImage = null;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.cloud_upload_outlined,
+                                      color: AppTheme.textSecondary,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Click to upload banner image',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Please enter category name';
-                    }
-                    return null;
-                  },
                 ),
               ),
               actions: [
@@ -141,10 +264,27 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             isLoading = true;
                           });
                           try {
-                            final response = await ApiClient().post(
-                              '/products/categories',
-                              {'name': controller.text.trim()},
-                            );
+                            http.Response response;
+                            if (categoryImage != null) {
+                              response = await ApiClient().multipartRequest(
+                                method: 'POST',
+                                endpoint: '/products/categories',
+                                fields: {'name': controller.text.trim()},
+                                files: [
+                                  http.MultipartFile.fromBytes(
+                                    'image',
+                                    categoryImage!,
+                                    filename: 'category_banner.jpg',
+                                    contentType: MediaType('image', 'jpeg'),
+                                  ),
+                                ],
+                              );
+                            } else {
+                              response = await ApiClient().post(
+                                '/products/categories',
+                                {'name': controller.text.trim()},
+                              );
+                            }
                             if (response.statusCode == 201) {
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -218,6 +358,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
       context: context,
       builder: (ctx) {
         bool isLoading = false;
+        Uint8List? categoryImage;
+        String? existingImageUrl = cat['bannerImage'];
+
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -225,20 +368,157 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                 borderRadius: BorderRadius.circular(16),
               ),
               title: Text(
-                'Rename Category',
+                'Edit Category',
                 style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
               ),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: controller,
-                  decoration: const InputDecoration(labelText: 'Category Name'),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Please enter category name';
-                    }
-                    return null;
-                  },
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          labelText: 'Category Name',
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter category name';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Banner Image',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final XFile? image = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 800,
+                              maxHeight: 600,
+                              imageQuality: 85,
+                            );
+                            if (image != null) {
+                              final bytes = await image.readAsBytes();
+                              final Uint8List? editedImage =
+                                  await Navigator.push(
+                                    ctx,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ImageEditor(image: bytes),
+                                    ),
+                                  );
+                              if (editedImage != null) {
+                                setState(() {
+                                  categoryImage = editedImage;
+                                  existingImageUrl = null;
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to pick image: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child:
+                              (categoryImage != null ||
+                                  existingImageUrl != null)
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: categoryImage != null
+                                          ? Image.memory(
+                                              categoryImage!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Image.network(
+                                              existingImageUrl!,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => const Center(
+                                                    child: Icon(
+                                                      Icons.broken_image,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                            ),
+                                    ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            categoryImage = null;
+                                            existingImageUrl = null;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.cloud_upload_outlined,
+                                      color: AppTheme.textSecondary,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Click to upload banner image',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -258,16 +538,39 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             isLoading = true;
                           });
                           try {
-                            final response = await ApiClient().put(
-                              '/products/categories/${cat['_id']}',
-                              {'name': controller.text.trim()},
-                            );
+                            http.Response response;
+                            if (categoryImage != null) {
+                              response = await ApiClient().multipartRequest(
+                                method: 'PUT',
+                                endpoint: '/products/categories/${cat['_id']}',
+                                fields: {'name': controller.text.trim()},
+                                files: [
+                                  http.MultipartFile.fromBytes(
+                                    'image',
+                                    categoryImage!,
+                                    filename: 'category_banner.jpg',
+                                    contentType: MediaType('image', 'jpeg'),
+                                  ),
+                                ],
+                              );
+                            } else {
+                              final Map<String, dynamic> body = {
+                                'name': controller.text.trim(),
+                              };
+                              if (existingImageUrl == null) {
+                                body['bannerImage'] = '';
+                              }
+                              response = await ApiClient().put(
+                                '/products/categories/${cat['_id']}',
+                                body,
+                              );
+                            }
                             if (response.statusCode == 200) {
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                      'Category renamed successfully',
+                                      'Category updated successfully',
                                     ),
                                     backgroundColor: AppTheme.success,
                                   ),
@@ -276,7 +579,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                               widget.onRefresh();
                               Navigator.pop(ctx);
                             } else {
-                              throw Exception('Failed to rename category');
+                              throw Exception('Failed to update category');
                             }
                           } catch (e) {
                             if (mounted) {
@@ -829,10 +1132,82 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
     );
   }
 
+  dynamic get _selectedCategory {
+    if (_selectedCategoryId == null) return null;
+    try {
+      return widget.categories.firstWhere(
+        (cat) => cat['_id'] == _selectedCategoryId,
+        orElse: () => null,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _showMobileCategoryDetails(dynamic cat) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: SingleChildScrollView(
+                controller: controller,
+                child: _CategoryDetailsPanel(
+                  category: cat,
+                  productCount: _getProductCountForCategory(cat['name'] ?? ''),
+                  onEditCategory: _editCategory,
+                  onDeleteCategory: (c) async {
+                    Navigator.pop(ctx);
+                    await _deleteCategory(c);
+                  },
+                  onAddSubCategory: _addSubCategory,
+                  onEditSubCategory: _editSubCategory,
+                  onDeleteSubCategory: _deleteSubCategory,
+                  getSubProductCount: _getProductCountForSubCategory,
+                  onRefresh: widget.onRefresh,
+                  isMobileSheet: true,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(48),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: const Center(
+        child: Text(
+          'No categories found',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isMobile = MediaQuery.of(context).size.width < 768;
     final filtered = _filteredCategories;
+    final selectedCat = _selectedCategory;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -894,366 +1269,1198 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
           ],
         ),
         const SizedBox(height: 16),
-        filtered.isEmpty
-            ? Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(48),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: const Center(
-                  child: Text(
-                    'No categories found',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 14,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left Column: Compact grid of category cards
+            Expanded(
+              flex: (selectedCat != null && !isMobile) ? 3 : 1,
+              child: filtered.isEmpty
+                  ? _buildEmptyState()
+                  : GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: (selectedCat != null && !isMobile)
+                            ? 300
+                            : 400,
+                        mainAxisExtent: 110,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final cat = filtered[index];
+                        final catName = cat['name'] ?? '';
+                        final productCount = _getProductCountForCategory(
+                          catName,
+                        );
+                        final subs = cat['subCategories'] as List? ?? [];
+                        final isSelected = _selectedCategoryId == cat['_id'];
+
+                        return _AnimatedListItem(
+                          index: index,
+                          child: CategoryCompactCardWidget(
+                            category: cat,
+                            productCount: productCount,
+                            subCategoriesCount: subs.length,
+                            isSelected: isSelected && !isMobile,
+                            onTap: () {
+                              if (isMobile) {
+                                _showMobileCategoryDetails(cat);
+                              } else {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedCategoryId = null;
+                                  } else {
+                                    _selectedCategoryId = cat['_id'];
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        );
+                      },
                     ),
+            ),
+            // Right Column: Split details panel on desktop
+            if (selectedCat != null && !isMobile) ...[
+              const SizedBox(width: 20),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 500,
+                  child: _CategoryDetailsPanel(
+                    category: selectedCat,
+                    productCount: _getProductCountForCategory(
+                      selectedCat['name'] ?? '',
+                    ),
+                    onEditCategory: _editCategory,
+                    onDeleteCategory: (c) async {
+                      setState(() {
+                        _selectedCategoryId = null;
+                      });
+                      await _deleteCategory(c);
+                    },
+                    onAddSubCategory: _addSubCategory,
+                    onEditSubCategory: _editSubCategory,
+                    onDeleteSubCategory: _deleteSubCategory,
+                    getSubProductCount: _getProductCountForSubCategory,
+                    onRefresh: widget.onRefresh,
                   ),
                 ),
-              )
-            : GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 400,
-                  mainAxisExtent: 300,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                itemCount: filtered.length,
-                itemBuilder: (context, index) {
-                  final cat = filtered[index];
-                  final catName = cat['name'] ?? '';
-                  final productCount = _getProductCountForCategory(catName);
-                  final subs = cat['subCategories'] as List? ?? [];
-
-                  return _AnimatedListItem(
-                    index: index,
-                    child: CategoryCardWidget(
-                      category: cat,
-                      productCount: productCount,
-                      subCategories: subs,
-                      onEditCategory: _editCategory,
-                      onDeleteCategory: _deleteCategory,
-                      onAddSubCategory: _addSubCategory,
-                      onEditSubCategory: _editSubCategory,
-                      onDeleteSubCategory: _deleteSubCategory,
-                      getSubProductCount: _getProductCountForSubCategory,
-                    ),
-                  );
-                },
               ),
+            ],
+          ],
+        ),
       ],
     );
   }
 }
 
-class CategoryCardWidget extends StatefulWidget {
+class CategoryCompactCardWidget extends StatefulWidget {
   final dynamic category;
   final int productCount;
-  final List<dynamic> subCategories;
+  final int subCategoriesCount;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const CategoryCompactCardWidget({
+    super.key,
+    required this.category,
+    required this.productCount,
+    required this.subCategoriesCount,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<CategoryCompactCardWidget> createState() =>
+      _CategoryCompactCardWidgetState();
+}
+
+class _CategoryCompactCardWidgetState extends State<CategoryCompactCardWidget> {
+  bool _isHovered = false;
+
+  Widget _buildBannerPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryColor.withValues(alpha: 0.12),
+            AppTheme.primaryColor.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.grid_view_rounded,
+          color: AppTheme.primaryColor.withValues(alpha: 0.25),
+          size: 24,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final catName = widget.category['name'] ?? '';
+    final hasBanner =
+        widget.category['bannerImage'] != null &&
+        widget.category['bannerImage'].toString().isNotEmpty;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: widget.isSelected
+                  ? AppTheme.primaryColor
+                  : (_isHovered
+                        ? AppTheme.primaryColor.withValues(alpha: 0.4)
+                        : AppTheme.borderColor),
+              width: (widget.isSelected || _isHovered) ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.isSelected
+                    ? AppTheme.primaryColor.withValues(alpha: 0.04)
+                    : (_isHovered
+                          ? AppTheme.primaryColor.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.015)),
+                blurRadius: _isHovered ? 12 : 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                // Thumbnail Banner Left
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFFF3F4F6),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: hasBanner
+                        ? Image.network(
+                            widget.category['bannerImage'],
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildBannerPlaceholder(),
+                          )
+                        : _buildBannerPlaceholder(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Metadata Right
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        catName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2_rounded,
+                            size: 13,
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.productCount} Product${widget.productCount != 1 ? 's' : ''}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.schema_rounded,
+                            size: 13,
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.subCategoriesCount} Sub-categor${widget.subCategoriesCount != 1 ? 'ies' : 'y'}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: widget.isSelected
+                      ? AppTheme.primaryColor
+                      : Colors.grey.shade300,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryDetailsPanel extends StatefulWidget {
+  final dynamic category;
+  final int productCount;
   final Function(dynamic) onEditCategory;
   final Function(dynamic) onDeleteCategory;
   final Function(dynamic) onAddSubCategory;
   final Function(dynamic, dynamic) onEditSubCategory;
   final Function(dynamic, dynamic) onDeleteSubCategory;
   final int Function(String, String) getSubProductCount;
+  final VoidCallback onRefresh;
+  final bool isMobileSheet;
 
-  const CategoryCardWidget({
-    super.key,
+  const _CategoryDetailsPanel({
     required this.category,
     required this.productCount,
-    required this.subCategories,
     required this.onEditCategory,
     required this.onDeleteCategory,
     required this.onAddSubCategory,
     required this.onEditSubCategory,
     required this.onDeleteSubCategory,
     required this.getSubProductCount,
+    required this.onRefresh,
+    this.isMobileSheet = false,
   });
 
   @override
-  State<CategoryCardWidget> createState() => _CategoryCardWidgetState();
+  State<_CategoryDetailsPanel> createState() => _CategoryDetailsPanelState();
 }
 
-class _CategoryCardWidgetState extends State<CategoryCardWidget> {
-  final ScrollController _scrollController = ScrollController();
-  bool _isHovered = false;
+class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
+  final TextEditingController _newSubNameController = TextEditingController();
+  bool _isAddingSub = false;
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _newSubNameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitNewSub() async {
+    final name = _newSubNameController.text.trim();
+    if (name.isEmpty) return;
+
+    setState(() {
+      _isAddingSub = true;
+    });
+
+    try {
+      final response = await ApiClient().post(
+        '/products/categories/${widget.category['_id']}/subcategories',
+        {'name': name},
+      );
+      if (response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sub-category added successfully'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+        _newSubNameController.clear();
+        widget.onRefresh();
+      } else {
+        throw Exception('Failed to add sub-category');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingSub = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showEditSubCategoryDialog(dynamic sub) async {
+    final TextEditingController controller = TextEditingController(
+      text: sub['name'],
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isLoading = false;
+        Uint8List? subImage;
+        String? existingImageUrl = sub['bannerImage'];
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Edit Sub-category',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          labelText: 'Sub-category Name',
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter sub-category name';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Sub-category Banner Image',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final XFile? image = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 800,
+                              maxHeight: 600,
+                              imageQuality: 85,
+                            );
+                            if (image != null) {
+                              final bytes = await image.readAsBytes();
+                              final Uint8List? editedImage =
+                                  await Navigator.push(
+                                    ctx,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ImageEditor(image: bytes),
+                                    ),
+                                  );
+                              if (editedImage != null) {
+                                setState(() {
+                                  subImage = editedImage;
+                                  existingImageUrl = null;
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to pick image: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child:
+                              (subImage != null ||
+                                  existingImageUrl != null)
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: subImage != null
+                                          ? Image.memory(
+                                              subImage!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Image.network(
+                                              existingImageUrl!,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => const Center(
+                                                    child: Icon(
+                                                      Icons.broken_image,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                            ),
+                                    ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            subImage = null;
+                                            existingImageUrl = null;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.cloud_upload_outlined,
+                                      color: AppTheme.textSecondary,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Click to upload sub-banner image',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+                          setState(() {
+                            isLoading = true;
+                          });
+                          try {
+                            http.Response response;
+                            if (subImage != null) {
+                              response = await ApiClient().multipartRequest(
+                                method: 'PUT',
+                                endpoint: '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
+                                fields: {'name': controller.text.trim()},
+                                files: [
+                                  http.MultipartFile.fromBytes(
+                                    'image',
+                                    subImage!,
+                                    filename: 'subcategory_banner.jpg',
+                                    contentType: MediaType('image', 'jpeg'),
+                                  ),
+                                ],
+                              );
+                            } else {
+                              final Map<String, dynamic> body = {
+                                'name': controller.text.trim(),
+                              };
+                              if (existingImageUrl == null) {
+                                body['bannerImage'] = '';
+                              }
+                              response = await ApiClient().put(
+                                '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
+                                body,
+                              );
+                            }
+                            if (response.statusCode == 200) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Sub-category updated successfully',
+                                    ),
+                                    backgroundColor: AppTheme.success,
+                                  ),
+                                );
+                              }
+                              widget.onRefresh();
+                              Navigator.pop(ctx);
+                            } else {
+                              throw Exception('Failed to update sub-category');
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: AppTheme.error,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                isLoading = false;
+                              });
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          'Save',
+                          style: GoogleFonts.outfit(color: Colors.white),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteSub(dynamic sub) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete Sub-category',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete sub-category "${sub['name']}"? Associated products will lose their sub-category reference.',
+          style: GoogleFonts.outfit(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.outfit(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final response = await ApiClient().delete(
+        '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
+      );
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sub-category deleted successfully'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+        widget.onRefresh();
+      } else {
+        throw Exception('Failed to delete sub-category');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final catName = widget.category['name'] ?? '';
+    final hasBanner =
+        widget.category['bannerImage'] != null &&
+        widget.category['bannerImage'].toString().isNotEmpty;
+    final List subs = widget.category['subCategories'] as List? ?? [];
+    final totalProds = widget.productCount;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: widget.isMobileSheet
+            ? null
+            : Border.all(color: AppTheme.borderColor),
+        boxShadow: widget.isMobileSheet
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Cover Banner Image
+          Stack(
+            children: [
+              Container(
+                height: 160,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.vertical(
+                    top: const Radius.circular(15),
+                    bottom: widget.isMobileSheet
+                        ? const Radius.circular(15)
+                        : Radius.zero,
+                  ),
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.primaryColor.withValues(alpha: 0.9),
+                      AppTheme.primaryColor.withValues(alpha: 0.5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.vertical(
+                    top: const Radius.circular(15),
+                    bottom: widget.isMobileSheet
+                        ? const Radius.circular(15)
+                        : Radius.zero,
+                  ),
+                  child: hasBanner
+                      ? Image.network(
+                          widget.category['bannerImage'],
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.primaryColor.withValues(alpha: 0.2),
+                                AppTheme.primaryColor.withValues(alpha: 0.05),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.grid_view_rounded,
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.3,
+                              ),
+                              size: 48,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              // Dark gradient overlay
+              Container(
+                height: 160,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.vertical(
+                    top: const Radius.circular(15),
+                    bottom: widget.isMobileSheet
+                        ? const Radius.circular(15)
+                        : Radius.zero,
+                  ),
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.black.withValues(alpha: 0.75),
+                      Colors.black.withValues(alpha: 0.1),
+                    ],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                  ),
+                ),
+              ),
+              // Text Metadata overlay
+              Positioned(
+                bottom: 16,
+                left: 20,
+                right: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      catName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$totalProds Total Product${totalProds != 1 ? 's' : ''}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Edit/Delete controls top right
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black38,
+                        hoverColor: Colors.black54,
+                      ),
+                      tooltip: 'Edit Category',
+                      onPressed: () => widget.onEditCategory(widget.category),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
+                        size: 18,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black38,
+                        hoverColor: Colors.black54,
+                      ),
+                      tooltip: 'Delete Category',
+                      onPressed: () => widget.onDeleteCategory(widget.category),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // 2. Sub-categories Section Header
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SUB-CATEGORIES',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Inline insertion textbox
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.add_rounded,
+                        size: 18,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _newSubNameController,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Add new sub-category inline...',
+                            hintStyle: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.only(
+                              left: 8,
+                              bottom: 2,
+                            ),
+                          ),
+                          onSubmitted: (_) => _submitNewSub(),
+                        ),
+                      ),
+                      _isAddingSub
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : TextButton(
+                              onPressed: _submitNewSub,
+                              child: Text(
+                                'Add',
+                                style: GoogleFonts.outfit(
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 3. Subcategories list
+          Expanded(
+            child: subs.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 24,
+                      horizontal: 20,
+                    ),
+                    child: Center(
+                      child: Text(
+                        'No sub-categories created yet.\nType name above and click "Add" to create one.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                          fontStyle: FontStyle.italic,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(
+                      left: 20,
+                      right: 20,
+                      bottom: 20,
+                    ),
+                    shrinkWrap: true,
+                    physics: widget.isMobileSheet
+                        ? const NeverScrollableScrollPhysics()
+                        : const BouncingScrollPhysics(),
+                    itemCount: subs.length,
+                    itemBuilder: (context, index) {
+                      final sub = subs[index];
+                      final subName = sub['name'] ?? '';
+                      final subCount = widget.getSubProductCount(
+                        catName,
+                        subName,
+                      );
+                      final share = totalProds > 0
+                          ? (subCount / totalProds)
+                          : 0.0;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _SubCategoryTileWidget(
+                          sub: sub,
+                          count: subCount,
+                          share: share,
+                          onEdit: () => _showEditSubCategoryDialog(sub),
+                          onDelete: () => _deleteSub(sub),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubCategoryTileWidget extends StatefulWidget {
+  final dynamic sub;
+  final int count;
+  final double share;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _SubCategoryTileWidget({
+    required this.sub,
+    required this.count,
+    required this.share,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SubCategoryTileWidget> createState() => _SubCategoryTileWidgetState();
+}
+
+class _SubCategoryTileWidgetState extends State<_SubCategoryTileWidget> {
+  bool _isHovered = false;
+
+  Widget _buildSubBannerPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryColor.withValues(alpha: 0.1),
+            AppTheme.primaryColor.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.subdirectory_arrow_right_rounded,
+          color: AppTheme.primaryColor.withValues(alpha: 0.35),
+          size: 14,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String subName = widget.sub['name'] ?? '';
+    final percentageDisplay = (widget.share * 100).toStringAsFixed(0);
+    final hasBanner =
+        widget.sub['bannerImage'] != null &&
+        widget.sub['bannerImage'].toString().isNotEmpty;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _isHovered
-                ? AppTheme.primaryColor.withValues(alpha: 0.4)
-                : AppTheme.borderColor,
-            width: _isHovered ? 1.5 : 1,
-          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderColor),
           boxShadow: [
-            BoxShadow(
-              color: _isHovered
-                  ? AppTheme.primaryColor.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.02),
-              blurRadius: _isHovered ? 16 : 10,
-              offset: const Offset(0, 6),
-            ),
+            if (_isHovered)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.015),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFAFBFD),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
+            Row(
+              children: [
+                // Sub-category Thumbnail
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFFF3F4F6),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: hasBanner
+                        ? Image.network(
+                            widget.sub['bannerImage'],
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildSubBannerPlaceholder(),
+                          )
+                        : _buildSubBannerPlaceholder(),
+                  ),
                 ),
-                border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    subName,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
                     ),
-                    child: Icon(
-                      Icons.grid_view_rounded,
+                  ),
+                ),
+                // Badge Count
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${widget.count} Product${widget.count != 1 ? 's' : ''}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                       color: AppTheme.primaryColor,
-                      size: 20,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          catName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${widget.productCount} Product${widget.productCount != 1 ? 's' : ''}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
+                ),
+                const SizedBox(width: 12),
+                // Actions (Show only on hover)
+                AnimatedOpacity(
+                  opacity: _isHovered ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        color: AppTheme.textSecondary,
+                        icon: const Icon(Icons.edit_outlined, size: 14),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () => widget.onEditCategory(widget.category),
+                        color: AppTheme.textSecondary,
+                        onPressed: widget.onEdit,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       IconButton(
                         icon: const Icon(
                           Icons.delete_outline_rounded,
-                          size: 18,
+                          size: 14,
                         ),
-                        color: AppTheme.error,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () =>
-                            widget.onDeleteCategory(widget.category),
+                        color: AppTheme.error,
+                        onPressed: widget.onDelete,
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                trackVisibility: false,
-                thickness: 4,
-                radius: const Radius.circular(10),
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'SUB-CATEGORIES (${widget.subCategories.length})',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (widget.subCategories.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            'No sub-categories yet.',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        )
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: widget.subCategories.map((sub) {
-                            final subName = sub['name'] ?? '';
-                            final subCount = widget.getSubProductCount(
-                              catName,
-                              subName,
-                            );
-                            return Container(
-                              padding: const EdgeInsets.only(
-                                left: 10,
-                                right: 6,
-                                top: 4,
-                                bottom: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withValues(
-                                  alpha: 0.04,
-                                ),
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(
-                                  color: AppTheme.primaryColor.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: InkWell(
-                                      onTap: () => widget.onEditSubCategory(
-                                        widget.category,
-                                        sub,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Text(
-                                        subName,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 1.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '$subCount',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primaryColor,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: GestureDetector(
-                                      onTap: () => widget.onDeleteSubCategory(
-                                        widget.category,
-                                        sub,
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.primaryColor
-                                              .withValues(alpha: 0.06),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.close_rounded,
-                                          size: 11,
-                                          color: AppTheme.primaryColor
-                                              .withValues(alpha: 0.7),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: OutlinedButton.icon(
-                onPressed: () => widget.onAddSubCategory(widget.category),
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(
-                  'Add Sub-category',
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: widget.share,
+                      backgroundColor: const Color(0xFFF3F4F6),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryColor.withValues(alpha: 0.6),
+                      ),
+                      minHeight: 5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$percentageDisplay%',
                   style: GoogleFonts.outfit(
-                    fontSize: 13,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 40),
-                  foregroundColor: AppTheme.textSecondary,
-                  side: BorderSide(color: AppTheme.borderColor),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
+              ],
             ),
           ],
         ),

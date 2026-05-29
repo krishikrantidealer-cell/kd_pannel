@@ -480,6 +480,7 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                               _CollectionAvatar(
                                                 name: col['name'] as String,
                                                 isParent: true,
+                                                imageUrl: col['bannerImage'] as String?,
                                               ),
                                               const SizedBox(width: 12),
                                               Expanded(
@@ -783,6 +784,9 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                               as String,
                                                                       isParent:
                                                                           false,
+                                                                       imageUrl:
+                                                                           sub['image']
+                                                                               as String?,
                                                                     ),
                                                                     const SizedBox(
                                                                       width: 12,
@@ -1005,10 +1009,30 @@ class _TreeLinePainter extends CustomPainter {
 class _CollectionAvatar extends StatelessWidget {
   final String name;
   final bool isParent;
-  const _CollectionAvatar({required this.name, required this.isParent});
+  final String? imageUrl;
+  const _CollectionAvatar({
+    required this.name,
+    required this.isParent,
+    this.imageUrl,
+  });
+
+  Widget _buildPlaceholder() {
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : 'C',
+        style: GoogleFonts.outfit(
+          fontSize: isParent ? 14 : 12,
+          color: AppTheme.primaryColor,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = imageUrl != null && imageUrl!.toString().isNotEmpty;
+
     return Container(
       width: isParent ? 36 : 30,
       height: isParent ? 36 : 30,
@@ -1021,15 +1045,16 @@ class _CollectionAvatar extends StatelessWidget {
           color: AppTheme.primaryColor.withValues(alpha: isParent ? 0.2 : 0.1),
         ),
       ),
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : 'C',
-          style: GoogleFonts.outfit(
-            fontSize: isParent ? 14 : 12,
-            color: AppTheme.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(isParent ? 8 : 6),
+        child: hasImage
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildPlaceholder(),
+              )
+            : _buildPlaceholder(),
       ),
     );
   }
