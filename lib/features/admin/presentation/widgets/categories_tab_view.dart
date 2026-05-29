@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:file_picker/file_picker.dart' as fp;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
@@ -105,6 +107,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
       builder: (ctx) {
         bool isLoading = false;
         Uint8List? categoryImage;
+        fp.PlatformFile? cataloguePdfFile;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -243,6 +246,117 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                 ),
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Catalogue PDF',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            fp.FilePickerResult? result =
+                                await fp.FilePicker.pickFiles(
+                                  type: fp.FileType.custom,
+                                  allowedExtensions: ['pdf'],
+                                  withData: true,
+                                );
+                            if (result != null && result.files.isNotEmpty) {
+                              setState(() {
+                                cataloguePdfFile = result.files.first;
+                              });
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Failed to pick PDF: $e')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 72,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: cataloguePdfFile != null
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 16),
+                                    const Icon(
+                                      Icons.picture_as_pdf_rounded,
+                                      color: Colors.redAccent,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            cataloguePdfFile!.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: AppTheme.textSecondary,
+                                        size: 18,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          cataloguePdfFile = null;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.document_scanner_outlined,
+                                      color: AppTheme.textSecondary,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Click to upload catalogue PDF',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -265,19 +379,35 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           });
                           try {
                             http.Response response;
+                            final List<http.MultipartFile> multipartFiles = [];
                             if (categoryImage != null) {
+                              multipartFiles.add(
+                                http.MultipartFile.fromBytes(
+                                  'image',
+                                  categoryImage!,
+                                  filename: 'category_banner.jpg',
+                                  contentType: MediaType('image', 'jpeg'),
+                                ),
+                              );
+                            }
+                            if (cataloguePdfFile != null &&
+                                cataloguePdfFile!.bytes != null) {
+                              multipartFiles.add(
+                                http.MultipartFile.fromBytes(
+                                  'cataloguePdf',
+                                  cataloguePdfFile!.bytes!,
+                                  filename: cataloguePdfFile!.name,
+                                  contentType: MediaType('application', 'pdf'),
+                                ),
+                              );
+                            }
+
+                            if (multipartFiles.isNotEmpty) {
                               response = await ApiClient().multipartRequest(
                                 method: 'POST',
                                 endpoint: '/products/categories',
                                 fields: {'name': controller.text.trim()},
-                                files: [
-                                  http.MultipartFile.fromBytes(
-                                    'image',
-                                    categoryImage!,
-                                    filename: 'category_banner.jpg',
-                                    contentType: MediaType('image', 'jpeg'),
-                                  ),
-                                ],
+                                files: multipartFiles,
                               );
                             } else {
                               response = await ApiClient().post(
@@ -360,6 +490,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         Uint8List? categoryImage;
         String? existingImageUrl = cat['bannerImage'];
+        fp.PlatformFile? cataloguePdfFile;
+        String? existingPdfUrl = cat['cataloguePdf'];
+        bool deletedExistingPdf = false;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -517,6 +650,149 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                 ),
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Catalogue PDF',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            fp.FilePickerResult? result =
+                                await fp.FilePicker.pickFiles(
+                                  type: fp.FileType.custom,
+                                  allowedExtensions: ['pdf'],
+                                  withData: true,
+                                );
+                            if (result != null && result.files.isNotEmpty) {
+                              setState(() {
+                                cataloguePdfFile = result.files.first;
+                                existingPdfUrl = null;
+                                deletedExistingPdf = false;
+                              });
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Failed to pick PDF: $e')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 72,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child:
+                              (cataloguePdfFile != null ||
+                                  (existingPdfUrl != null &&
+                                      existingPdfUrl!.isNotEmpty))
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 16),
+                                    const Icon(
+                                      Icons.picture_as_pdf_rounded,
+                                      color: Colors.redAccent,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            cataloguePdfFile != null
+                                                ? cataloguePdfFile!.name
+                                                : 'catalogue_document.pdf',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          if (cataloguePdfFile != null)
+                                            Text(
+                                              '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            )
+                                          else
+                                            GestureDetector(
+                                              onTap: () async {
+                                                if (existingPdfUrl != null) {
+                                                  final uri = Uri.parse(
+                                                    existingPdfUrl!,
+                                                  );
+                                                  if (await canLaunchUrl(uri)) {
+                                                    await launchUrl(uri);
+                                                  }
+                                                }
+                                              },
+                                              child: Text(
+                                                'Click to view uploaded PDF',
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 11,
+                                                  color: AppTheme.primaryColor,
+                                                  decoration:
+                                                      TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: AppTheme.textSecondary,
+                                        size: 18,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          cataloguePdfFile = null;
+                                          existingPdfUrl = null;
+                                          deletedExistingPdf = true;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.document_scanner_outlined,
+                                      color: AppTheme.textSecondary,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Click to upload catalogue PDF',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -539,27 +815,49 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           });
                           try {
                             http.Response response;
+                            final List<http.MultipartFile> multipartFiles = [];
+                            final Map<String, String> fields = {
+                              'name': controller.text.trim(),
+                            };
+
                             if (categoryImage != null) {
+                              multipartFiles.add(
+                                http.MultipartFile.fromBytes(
+                                  'image',
+                                  categoryImage!,
+                                  filename: 'category_banner.jpg',
+                                  contentType: MediaType('image', 'jpeg'),
+                                ),
+                              );
+                            } else if (existingImageUrl == null) {
+                              fields['bannerImage'] = '';
+                            }
+
+                            if (cataloguePdfFile != null &&
+                                cataloguePdfFile!.bytes != null) {
+                              multipartFiles.add(
+                                http.MultipartFile.fromBytes(
+                                  'cataloguePdf',
+                                  cataloguePdfFile!.bytes!,
+                                  filename: cataloguePdfFile!.name,
+                                  contentType: MediaType('application', 'pdf'),
+                                ),
+                              );
+                            } else if (deletedExistingPdf) {
+                              fields['cataloguePdf'] = '';
+                            }
+
+                            if (multipartFiles.isNotEmpty) {
                               response = await ApiClient().multipartRequest(
                                 method: 'PUT',
                                 endpoint: '/products/categories/${cat['_id']}',
-                                fields: {'name': controller.text.trim()},
-                                files: [
-                                  http.MultipartFile.fromBytes(
-                                    'image',
-                                    categoryImage!,
-                                    filename: 'category_banner.jpg',
-                                    contentType: MediaType('image', 'jpeg'),
-                                  ),
-                                ],
+                                fields: fields,
+                                files: multipartFiles,
                               );
                             } else {
-                              final Map<String, dynamic> body = {
-                                'name': controller.text.trim(),
-                              };
-                              if (existingImageUrl == null) {
-                                body['bannerImage'] = '';
-                              }
+                              final Map<String, dynamic> body = Map.from(
+                                fields,
+                              );
                               response = await ApiClient().put(
                                 '/products/categories/${cat['_id']}',
                                 body,
@@ -1718,9 +2016,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppTheme.borderColor),
                           ),
-                          child:
-                              (subImage != null ||
-                                  existingImageUrl != null)
+                          child: (subImage != null || existingImageUrl != null)
                               ? Stack(
                                   fit: StackFit.expand,
                                   children: [
@@ -1818,7 +2114,8 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                             if (subImage != null) {
                               response = await ApiClient().multipartRequest(
                                 method: 'PUT',
-                                endpoint: '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
+                                endpoint:
+                                    '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
                                 fields: {'name': controller.text.trim()},
                                 files: [
                                   http.MultipartFile.fromBytes(
@@ -2136,6 +2433,75 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
               ),
             ],
           ),
+          // Catalogue PDF Preview
+          if (widget.category['cataloguePdf'] != null &&
+              widget.category['cataloguePdf'].toString().isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CATALOGUE PDF',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textSecondary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.picture_as_pdf_rounded,
+                          color: Colors.redAccent,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Catalogue Document',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.parse(
+                              widget.category['cataloguePdf'],
+                            );
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri);
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                          label: Text(
+                            'View PDF',
+                            style: GoogleFonts.outfit(fontSize: 12),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // 2. Sub-categories Section Header
           Padding(
@@ -2163,6 +2529,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                     border: Border.all(color: AppTheme.borderColor),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(width: 12),
                       Icon(
@@ -2173,17 +2540,18 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                       Expanded(
                         child: TextField(
                           controller: _newSubNameController,
-                          style: const TextStyle(fontSize: 13),
+                          style: GoogleFonts.outfit(fontSize: 13),
                           decoration: InputDecoration(
-                            hintText: 'Add new sub-category inline...',
+                            hintText: 'Add new sub-category...',
                             hintStyle: GoogleFonts.outfit(
                               fontSize: 13,
                               color: AppTheme.textSecondary,
                             ),
                             border: InputBorder.none,
-                            contentPadding: const EdgeInsets.only(
-                              left: 8,
-                              bottom: 2,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 0,
                             ),
                           ),
                           onSubmitted: (_) => _submitNewSub(),
@@ -2202,6 +2570,13 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                             )
                           : TextButton(
                               onPressed: _submitNewSub,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 0,
+                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
                               child: Text(
                                 'Add',
                                 style: GoogleFonts.outfit(
