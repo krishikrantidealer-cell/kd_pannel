@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http_parser/http_parser.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -254,12 +255,15 @@ class ApiClient {
     });
   }
 
-  // Multipart request helper for creating/updating products with images
+  // Multipart request helper for creating/updating products with images.
+  // [filesBuilder] is called on EVERY attempt so each retry gets
+  // fresh MultipartFile instances — reusing the same instances across
+  // retries causes "Bad state: Can not finalize a finalized MultipartFile".
   Future<http.Response> multipartRequest({
     required String method,
     required String endpoint,
     required Map<String, String> fields,
-    required List<http.MultipartFile> files,
+    required List<http.MultipartFile> Function() filesBuilder,
   }) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {
@@ -275,11 +279,164 @@ class ApiClient {
       // Add fields
       request.fields.addAll(fields);
 
-      // Add files
-      request.files.addAll(files);
+      // Build fresh file instances for this attempt
+      request.files.addAll(filesBuilder());
 
       final streamedResponse = await request.send().timeout(timeoutDuration);
       return await http.Response.fromStream(streamedResponse);
     });
+  }
+
+  // Like multipartRequest but calls [onProgress] with 0.0–1.0 as bytes upload.
+  // Note: Does NOT retry network failures — progress streams cannot be rewound.
+  // However, it does handle 401 unauthorized token refresh and retries the entire request once.
+  Future<http.Response> multipartRequestWithProgress({
+    required String method,
+    required String endpoint,
+    required Map<String, String> fields,
+    required List<http.MultipartFile> Function() filesBuilder,
+    required void Function(double progress) onProgress,
+    bool isRetryAfterRefresh = false,
+  }) async {
+    await _ensureTokensLoaded();
+
+    final uri = Uri.parse('$baseUrl$endpoint');
+
+    // Build the multipart request to get its finalized stream + content type
+    final mpRequest = http.MultipartRequest(method, uri);
+    mpRequest.headers.addAll({'Accept': 'application/json'});
+    if (_accessToken != null) {
+      mpRequest.headers['Authorization'] = 'Bearer $_accessToken';
+    }
+    mpRequest.fields.addAll(fields);
+    mpRequest.files.addAll(filesBuilder());
+
+    final totalBytes = mpRequest.contentLength;
+    final bodyStream = mpRequest.finalize(); // consumes the MultipartRequest
+
+    int sentBytes = 0;
+    final countingStream = bodyStream.map((chunk) {
+      sentBytes += chunk.length;
+      if (totalBytes != null && totalBytes > 0) {
+        onProgress((sentBytes / totalBytes).clamp(0.0, 1.0));
+      }
+      return chunk;
+    });
+
+    // Build a StreamedRequest and pipe our counting stream into it
+    final streamedReq = http.StreamedRequest(method, uri);
+    streamedReq.headers.addAll(mpRequest.headers);
+    if (totalBytes != null) streamedReq.contentLength = totalBytes;
+
+    // Pipe counting stream → StreamedRequest sink (non-blocking)
+    countingStream.listen(
+      streamedReq.sink.add,
+      onError: streamedReq.sink.addError,
+      onDone: streamedReq.sink.close,
+    );
+
+    final streamedResponse =
+        await http.Client().send(streamedReq).timeout(const Duration(minutes: 5));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 401 && !isRetryAfterRefresh) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        return await multipartRequestWithProgress(
+          method: method,
+          endpoint: endpoint,
+          fields: fields,
+          filesBuilder: filesBuilder,
+          onProgress: onProgress,
+          isRetryAfterRefresh: true,
+        );
+      }
+    }
+
+    return response;
+  }
+
+  /// Uploads a large file in smaller chunks to the backend to prevent OOM errors,
+  /// bypass Cloudflare's payload limits, and avoid browser CORS errors.
+  Future<String> uploadFileInChunks({
+    required Uint8List fileBytes,
+    required String fileName,
+    required String categoryName,
+    required void Function(double progress) onProgress,
+  }) async {
+    const int chunkSize = 5 * 1024 * 1024; // 5 MB chunks
+    final int totalChunks = (fileBytes.length / chunkSize).ceil();
+
+    // 1. Initialize chunked upload
+    final initResponse = await post('/products/categories/upload/init', {
+      'fileName': fileName,
+      'totalChunks': totalChunks,
+      'categoryName': categoryName,
+    });
+
+    if (initResponse.statusCode != 200) {
+      final err = jsonDecode(initResponse.body);
+      throw Exception(err['message'] ?? 'Failed to initialize chunked upload');
+    }
+
+    final initData = jsonDecode(initResponse.body);
+    if (initData['success'] != true) {
+      throw Exception('Failed to initialize chunked upload');
+    }
+
+    final String uploadId = initData['uploadId'];
+
+    // 2. Upload chunks sequentially
+    for (int i = 0; i < totalChunks; i++) {
+      final int start = i * chunkSize;
+      final int end = (start + chunkSize < fileBytes.length) ? start + chunkSize : fileBytes.length;
+      final Uint8List chunkBytes = fileBytes.sublist(start, end);
+
+      final ext = fileName.split('.').last.toLowerCase();
+      final contentType = ext == 'pdf' 
+          ? MediaType('application', 'pdf') 
+          : MediaType('application', 'octet-stream');
+
+      final chunkResponse = await multipartRequest(
+        method: 'POST',
+        endpoint: '/products/categories/upload/chunk',
+        fields: {
+          'uploadId': uploadId,
+          'chunkIndex': i.toString(),
+        },
+        filesBuilder: () => [
+          http.MultipartFile.fromBytes(
+            'file',
+            chunkBytes,
+            filename: '${fileName}_chunk_$i',
+            contentType: contentType,
+          )
+        ],
+      );
+
+      if (chunkResponse.statusCode != 200) {
+        final err = jsonDecode(chunkResponse.body);
+        throw Exception(err['message'] ?? 'Failed to upload chunk $i');
+      }
+
+      onProgress(((i + 1) / totalChunks).clamp(0.0, 1.0));
+    }
+
+    // 3. Complete chunked upload
+    final completeResponse = await post('/products/categories/upload/complete', {
+      'uploadId': uploadId,
+    });
+
+    if (completeResponse.statusCode != 200) {
+      final err = jsonDecode(completeResponse.body);
+      throw Exception(err['message'] ?? 'Failed to finalize chunked upload');
+    }
+
+    final completeData = jsonDecode(completeResponse.body);
+    if (completeData['success'] != true || completeData['fileUrl'] == null) {
+      throw Exception('Failed to finalize chunked upload');
+    }
+
+    return completeData['fileUrl'];
   }
 }

@@ -54,8 +54,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
   bool _inStock = true;
   bool _isFeatured = false;
   List<String> _assignedCollections = [];
-  String _formCategory = '';
-  String _formSubCategory = '';
+  List<String> _formCategories = [];
+  List<String> _formSubCategories = [];
   List<dynamic> _backendCategories = [];
   List<dynamic> _backendCollections = [];
   Map<String, String> _collectionIdToName = {};
@@ -71,8 +71,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     _perfStopwatch = Stopwatch()..start();
     debugPrint('[PERF] CreateProductPage.initState started');
     super.initState();
-    _loadCategories();
-    _loadCollections();
 
     final data = widget.initialData;
     quill.Document doc;
@@ -107,8 +105,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
       );
       _nameController.text = data['name'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
-      _formCategory = data['category'] ?? '';
-      _formSubCategory = data['subCategory'] ?? '';
+      _formCategories = [];
+      _formSubCategories = [];
       _tags = List<String>.from(data['tags'] ?? []);
       _inStock = data['availabilityStatus'] != null
           ? data['availabilityStatus'] != 'Out of Stock'
@@ -148,6 +146,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
       );
       _addVariant();
     }
+
+    _loadCategories();
+    _loadCollections();
   }
 
   Future<void> _loadCategories() async {
@@ -254,10 +255,129 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   void _initializeCategorySelection() {
-    if (widget.initialData == null && _backendCategories.isNotEmpty) {
-      _formCategory = _backendCategories.first['name']?.toString() ?? '';
-      final subCats = getFormSubCategories(_formCategory);
-      _formSubCategory = subCats.isNotEmpty ? subCats.first : '';
+    if (widget.initialData != null) {
+      final String catString = widget.initialData?['category']?.toString() ?? '';
+      final String subCatString = widget.initialData?['subCategory']?.toString() ?? '';
+
+      final List<String> resolvedCategories = [];
+      if (catString.isNotEmpty && catString != 'N/A') {
+        resolvedCategories.addAll(
+          catString.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+        );
+      }
+
+      final List<String> resolvedSubCategories = [];
+      if (subCatString.isNotEmpty && subCatString != 'N/A') {
+        resolvedSubCategories.addAll(
+          subCatString.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+        );
+      }
+
+      // If category string was not found/parsed (e.g. from local cache with stale model fields),
+      // fallback to resolving them via categoryIds/categoryId from _backendCategories
+      if (resolvedCategories.isEmpty) {
+        final initialCatIds = widget.initialData?['categoryIds'] as List?;
+        final List<dynamic> catIds =
+            (initialCatIds != null && initialCatIds.isNotEmpty)
+                ? initialCatIds
+                : (widget.initialData?['categoryId'] != null
+                    ? [widget.initialData?['categoryId']]
+                    : []);
+
+        String getCleanId(dynamic item) {
+          if (item == null) return '';
+          if (item is String) return item;
+          if (item is Map) {
+            return item['id']?.toString() ??
+                item['_id']?.toString() ??
+                item['\$oid']?.toString() ??
+                '';
+          }
+          return item.toString();
+        }
+
+        for (var catId in catIds) {
+          if (catId is Map && catId['name'] != null && catId['name'].toString().isNotEmpty) {
+            final String name = catId['name'].toString();
+            if (!resolvedCategories.contains(name)) {
+              resolvedCategories.add(name);
+            }
+            continue;
+          }
+          final cleanCatId = getCleanId(catId);
+          if (cleanCatId.isEmpty) continue;
+          final matchingCat = _backendCategories.firstWhere(
+            (c) => (c['id']?.toString() ?? c['_id']?.toString()) == cleanCatId,
+            orElse: () => null,
+          );
+          if (matchingCat != null) {
+            final catName = matchingCat['name']?.toString() ?? '';
+            if (catName.isNotEmpty && !resolvedCategories.contains(catName)) {
+              resolvedCategories.add(catName);
+            }
+          }
+        }
+      }
+
+      if (resolvedSubCategories.isEmpty) {
+        final initialSubCatIds = widget.initialData?['subCategoryIds'] as List?;
+        final List<dynamic> subCatIds =
+            (initialSubCatIds != null && initialSubCatIds.isNotEmpty)
+                ? initialSubCatIds
+                : (widget.initialData?['subCategoryId'] != null
+                    ? [widget.initialData?['subCategoryId']]
+                    : []);
+
+        String getCleanId(dynamic item) {
+          if (item == null) return '';
+          if (item is String) return item;
+          if (item is Map) {
+            return item['id']?.toString() ??
+                item['_id']?.toString() ??
+                item['\$oid']?.toString() ??
+                '';
+          }
+          return item.toString();
+        }
+
+        for (var subCatId in subCatIds) {
+          if (subCatId is Map && subCatId['name'] != null && subCatId['name'].toString().isNotEmpty) {
+            final String name = subCatId['name'].toString();
+            if (!resolvedSubCategories.contains(name)) {
+              resolvedSubCategories.add(name);
+            }
+            continue;
+          }
+          final cleanSubCatId = getCleanId(subCatId);
+          if (cleanSubCatId.isEmpty) continue;
+          for (var cat in _backendCategories) {
+            final List subs = cat['subCategories'] ?? [];
+            final matchingSub = subs.firstWhere(
+              (s) =>
+                  (s['id']?.toString() ?? s['_id']?.toString()) == cleanSubCatId,
+              orElse: () => null,
+            );
+            if (matchingSub != null) {
+              final subName = matchingSub['name']?.toString() ?? '';
+              if (subName.isNotEmpty &&
+                  !resolvedSubCategories.contains(subName)) {
+                resolvedSubCategories.add(subName);
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      setState(() {
+        _formCategories = resolvedCategories;
+        _formSubCategories = resolvedSubCategories;
+      });
+    } else {
+      setState(() {
+        _formCategories = [];
+        _formSubCategories = [];
+      });
     }
   }
 
@@ -396,14 +516,19 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (variantPriceTiers.isEmpty) {
       // Fallback to global product-level priceTiers if populated from backend
       if (_priceTiers.isNotEmpty) {
-        variantPriceTiers = _priceTiers.map((t) => Map<String, String>.from(t)).toList();
+        variantPriceTiers = _priceTiers
+            .map((t) => Map<String, String>.from(t))
+            .toList();
       }
     }
 
     if (variantPriceTiers.isEmpty && _formVariants.isNotEmpty) {
       // Copy tiers from the first variant as a smart default
-      final firstVariantTiers = _formVariants.first['priceTiers'] as List<Map<String, String>>;
-      variantPriceTiers = firstVariantTiers.map((t) => Map<String, String>.from(t)).toList();
+      final firstVariantTiers =
+          _formVariants.first['priceTiers'] as List<Map<String, String>>;
+      variantPriceTiers = firstVariantTiers
+          .map((t) => Map<String, String>.from(t))
+          .toList();
     }
 
     if (variantPriceTiers.isEmpty) {
@@ -577,7 +702,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
       priceTiers.add({'id': newId, 'name': name});
 
       final ratesMap = variant['rates'] as Map<String, TextEditingController>;
-      final computedMap = variant['computed'] as Map<String, TextEditingController>;
+      final computedMap =
+          variant['computed'] as Map<String, TextEditingController>;
       final recalculate = variant['recalculate'] as VoidCallback;
 
       final rateCtrl = TextEditingController();
@@ -595,7 +721,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
       priceTiers.removeWhere((t) => t['id'] == id);
 
       final ratesMap = variant['rates'] as Map<String, TextEditingController>;
-      final computedMap = variant['computed'] as Map<String, TextEditingController>;
+      final computedMap =
+          variant['computed'] as Map<String, TextEditingController>;
 
       final rateCtrl = ratesMap.remove(id);
       if (rateCtrl != null) {
@@ -722,7 +849,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                       )
                                     : IconButton(
                                         onPressed: () {
-                                          _deleteTierForVariant(variant, tier['id']!);
+                                          _deleteTierForVariant(
+                                            variant,
+                                            tier['id']!,
+                                          );
                                           setDialogState(() {});
                                         },
                                         icon: const Icon(
@@ -770,7 +900,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         ElevatedButton(
                           onPressed: () {
                             if (addController.text.trim().isNotEmpty) {
-                              _addNewTierForVariant(variant, addController.text.trim());
+                              _addNewTierForVariant(
+                                variant,
+                                addController.text.trim(),
+                              );
                               addController.clear();
                               setDialogState(() {});
                             }
@@ -806,45 +939,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     ).then((_) {
       setState(() {});
     });
-  }
-
-  List<String> getFormSubCategories(String cat) {
-    if (_backendCategories.isNotEmpty) {
-      final matchingCat = _backendCategories.firstWhere(
-        (c) => c['name'].toString().toLowerCase() == cat.toLowerCase(),
-        orElse: () => null,
-      );
-      if (matchingCat != null) {
-        final List subs = matchingCat['subCategories'] ?? [];
-        final List<String> list = [];
-        for (var sub in subs) {
-          final sName = sub['name']?.toString();
-          if (sName != null && sName.isNotEmpty) {
-            list.add(sName);
-          }
-        }
-        if (list.isNotEmpty) {
-          // Make sure current subcategory is in list to prevent crashes
-          if (!list.contains(_formSubCategory) &&
-              cat.toLowerCase() == _formCategory.toLowerCase()) {
-            list.add(_formSubCategory);
-          }
-          list.add('+ Create Custom...');
-          return list;
-        }
-      }
-    }
-
-    final List<String> list = [];
-    if (_formSubCategory.isNotEmpty &&
-        cat.toLowerCase() == _formCategory.toLowerCase()) {
-      list.add(_formSubCategory);
-    }
-    if (list.isEmpty) {
-      list.add('');
-    }
-    list.add('+ Create Custom...');
-    return list;
   }
 
   Future<void> _pickMultipleProductImages() async {
@@ -979,40 +1073,41 @@ class _CreateProductPageState extends State<CreateProductPage> {
             : '₹${variantsData.first['price']}';
       }
 
-      // Find Category ID and Sub-category ID from backendCategories
-      String? categoryId;
-      String? subCategoryId;
+      // Find Category IDs and Sub-category IDs from backendCategories
+      final List<String> categoryIds = [];
+      final List<String> subCategoryIds = [];
 
-      if (_backendCategories.isNotEmpty) {
+      for (var catName in _formCategories) {
         final matchingCat = _backendCategories.firstWhere(
-          (c) =>
-              c['name'].toString().toLowerCase() == _formCategory.toLowerCase(),
-          orElse: () => _backendCategories.first,
+          (c) => c['name'].toString().toLowerCase() == catName.toLowerCase(),
+          orElse: () => null,
         );
         if (matchingCat != null) {
-          categoryId =
+          final id =
               matchingCat['id']?.toString() ?? matchingCat['_id']?.toString();
-          final List subs = matchingCat['subCategories'] ?? [];
-          if (subs.isNotEmpty) {
-            final matchingSub = subs.firstWhere(
-              (s) =>
-                  s['name'].toString().toLowerCase() ==
-                  _formSubCategory.toLowerCase(),
-              orElse: () => subs.first,
-            );
-            if (matchingSub != null) {
-              subCategoryId =
-                  matchingSub['id']?.toString() ??
-                  matchingSub['_id']?.toString();
-            }
+          if (id != null) categoryIds.add(id);
+        }
+      }
+
+      for (var subCatName in _formSubCategories) {
+        for (var cat in _backendCategories) {
+          final List subs = cat['subCategories'] ?? [];
+          final matchingSub = subs.firstWhere(
+            (s) =>
+                s['name'].toString().toLowerCase() == subCatName.toLowerCase(),
+            orElse: () => null,
+          );
+          if (matchingSub != null) {
+            final id =
+                matchingSub['id']?.toString() ?? matchingSub['_id']?.toString();
+            if (id != null) subCategoryIds.add(id);
+            break;
           }
         }
       }
 
-      if (categoryId == null) {
-        throw Exception(
-          'Product category hierarchy could not be resolved. Please wait or reload.',
-        );
+      if (categoryIds.isEmpty) {
+        throw Exception('Please select at least one primary category.');
       }
 
       final mappedVariants = variantsData.map((v) {
@@ -1060,8 +1155,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'brandName': _vendorController.text.trim(),
         'technicalName': _nameController.text.trim(),
         'vendor': _vendorController.text.trim(),
-        'categoryId': categoryId,
-        'subCategoryId': subCategoryId,
+        'categoryId': categoryIds.first,
+        'subCategoryId': subCategoryIds.isNotEmpty
+            ? subCategoryIds.first
+            : null,
+        'categoryIds': categoryIds,
+        'subCategoryIds': subCategoryIds,
         'description': description,
         'variants': mappedVariants,
         'tags': _tags,
@@ -1091,13 +1190,27 @@ class _CreateProductPageState extends State<CreateProductPage> {
           );
         }
 
+        final capturedImages = List<Uint8List>.from(_productImages);
         response = await ApiClient().multipartRequest(
           method: isEdit ? 'PUT' : 'POST',
           endpoint: isEdit
               ? '/products/${widget.initialData!['id'] ?? widget.initialData!['_id']}'
               : '/products',
           fields: fields,
-          files: files,
+          filesBuilder: () {
+            final builtFiles = <http.MultipartFile>[];
+            for (int i = 0; i < capturedImages.length; i++) {
+              builtFiles.add(
+                http.MultipartFile.fromBytes(
+                  'images',
+                  capturedImages[i],
+                  filename: 'product_image_$i.png',
+                  contentType: MediaType('image', 'png'),
+                ),
+              );
+            }
+            return builtFiles;
+          },
         );
       } else {
         // Standard JSON PUT/POST
@@ -1358,9 +1471,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: Text(
                         'Add Variant',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
                       ),
                       style: TextButton.styleFrom(
                         foregroundColor: AppTheme.primaryColor,
@@ -2062,73 +2173,350 @@ class _CreateProductPageState extends State<CreateProductPage> {
     );
   }
 
-  List<String> get _dropdownCategories {
-    final List<String> list = [];
+  Widget _buildCategoryDropdowns() {
+    // Generate dropdown options for categories
+    final List<String> categoryOptions = [];
     for (var cat in _backendCategories) {
-      final name = cat['name']?.toString();
-      if (name != null && name.isNotEmpty && !list.contains(name)) {
-        list.add(name);
+      final name = cat['name']?.toString() ?? '';
+      if (name.isNotEmpty && !_formCategories.contains(name)) {
+        categoryOptions.add(name);
       }
     }
-    if (_formCategory.isNotEmpty && !list.contains(_formCategory)) {
-      list.add(_formCategory);
-    }
-    if (list.isEmpty) {
-      list.add('');
-    }
-    list.add('+ Create Custom...');
-    return list;
-  }
+    categoryOptions.add('+ Create Custom...');
 
-  Widget _buildCategoryDropdowns() {
-    final subCats = getFormSubCategories(_formCategory);
-    if (!subCats.contains(_formSubCategory)) _formSubCategory = subCats.first;
+    // Generate subcategory options under all selected categories
+    final List<String> subCategoryOptions = [];
+    for (var catName in _formCategories) {
+      final matchingCat = _backendCategories.firstWhere(
+        (c) => c['name'].toString().toLowerCase() == catName.toLowerCase(),
+        orElse: () => null,
+      );
+      if (matchingCat != null) {
+        final List subs = matchingCat['subCategories'] ?? [];
+        for (var sub in subs) {
+          final sName = sub['name']?.toString() ?? '';
+          if (sName.isNotEmpty &&
+              !_formSubCategories.contains(sName) &&
+              !subCategoryOptions.contains(sName)) {
+            subCategoryOptions.add(sName);
+          }
+        }
+      }
+    }
+    subCategoryOptions.add('+ Create Custom...');
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: _buildFormDropdown(
-                label: 'Primary Category',
-                value: _formCategory,
-                options: _dropdownCategories,
-                onChanged: (val) {
-                  if (val == '+ Create Custom...') {
-                    _showCreateCategoryDialog();
-                    return;
-                  }
-                  setState(() {
-                    _formCategory = val!;
-                    _formSubCategory = getFormSubCategories(
-                      _formCategory,
-                    ).first;
-                  });
-                },
-              ),
-            ),
-          ],
+        // Categories list & selection
+        Text(
+          'Categories',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
         ),
-        const SizedBox(height: 20),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: _buildFormDropdown(
-                label: 'Sub-category',
-                value: _formSubCategory,
-                options: subCats,
-                onChanged: (val) {
-                  if (val == '+ Create Custom...') {
-                    _showCreateSubCategoryDialog();
-                    return;
-                  }
-                  setState(() => _formSubCategory = val!);
-                },
+        const SizedBox(height: 8),
+        if (_formCategories.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _formCategories.map((cat) {
+              return Container(
+                padding: const EdgeInsets.only(
+                  left: 12,
+                  right: 8,
+                  top: 6,
+                  bottom: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        cat,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _formCategories.remove(cat);
+                          // Also remove subcategories that belong only to this removed category
+                          final List<String> subsToRemove = [];
+                          final matchingCat = _backendCategories.firstWhere(
+                            (c) =>
+                                c['name'].toString().toLowerCase() ==
+                                cat.toLowerCase(),
+                            orElse: () => null,
+                          );
+                          if (matchingCat != null) {
+                            final List subs =
+                                matchingCat['subCategories'] ?? [];
+                            for (var sub in subs) {
+                              subsToRemove.add(sub['name']?.toString() ?? '');
+                            }
+                          }
+                          _formSubCategories.removeWhere(
+                            (sub) => subsToRemove.contains(sub),
+                          );
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      hint: Text(
+                        'Add Category',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                      ),
+                      icon: const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      items: categoryOptions.map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(
+                            value,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val == null) return;
+                        if (val == '+ Create Custom...') {
+                          _showCreateCategoryDialog();
+                          return;
+                        }
+                        setState(() {
+                          if (!_formCategories.contains(val)) {
+                            _formCategories.add(val);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Sub-categories list & selection
+        Text(
+          'Sub-categories',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_formSubCategories.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _formSubCategories.map((sub) {
+              return Container(
+                padding: const EdgeInsets.only(
+                  left: 12,
+                  right: 8,
+                  top: 6,
+                  bottom: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        sub,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _formSubCategories.remove(sub);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      hint: Text(
+                        _formCategories.isEmpty
+                            ? 'Select Category First'
+                            : 'Add Sub-category',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                      ),
+                      disabledHint: Text(
+                        'Select Category First',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      icon: const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      items: _formCategories.isEmpty
+                          ? null
+                          : subCategoryOptions.map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(
+                                  value,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                      onChanged: _formCategories.isEmpty
+                          ? null
+                          : (val) {
+                              if (val == null) return;
+                              if (val == '+ Create Custom...') {
+                                _showCreateSubCategoryDialog();
+                                return;
+                              }
+                              setState(() {
+                                if (!_formSubCategories.contains(val)) {
+                                  _formSubCategories.add(val);
+                                }
+                              });
+                            },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2236,10 +2624,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 // Reload categories
                                 await _loadCategories();
                                 setState(() {
-                                  _formCategory = name;
-                                  _formSubCategory = getFormSubCategories(
-                                    _formCategory,
-                                  ).first;
+                                  if (!_formCategories.contains(name)) {
+                                    _formCategories.add(name);
+                                  }
                                 });
                                 if (context.mounted) Navigator.pop(context);
                                 return;
@@ -2302,37 +2689,36 @@ class _CreateProductPageState extends State<CreateProductPage> {
     bool isLoading = false;
     String? errorText;
 
-    // Find the category ID from the _backendCategories list
-    String? categoryId;
-    if (_backendCategories.isNotEmpty) {
-      final matchingCat = _backendCategories.firstWhere(
-        (c) =>
-            c['name'].toString().toLowerCase() == _formCategory.toLowerCase(),
-        orElse: () => null,
-      );
-      if (matchingCat != null) {
-        categoryId =
-            matchingCat['id']?.toString() ?? matchingCat['_id']?.toString();
-      }
-    }
-
-    if (categoryId == null) {
+    if (_formCategories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Cannot add subcategory to an unsaved category. Please select or create a primary category first.',
-          ),
+          content: Text('Please select or create a primary category first.'),
           backgroundColor: AppTheme.error,
         ),
       );
       return;
     }
 
+    String targetCategoryName = _formCategories.first;
+
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            String? categoryId;
+            final matchingCat = _backendCategories.firstWhere(
+              (c) =>
+                  c['name'].toString().toLowerCase() ==
+                  targetCategoryName.toLowerCase(),
+              orElse: () => null,
+            );
+            if (matchingCat != null) {
+              categoryId =
+                  matchingCat['id']?.toString() ??
+                  matchingCat['_id']?.toString();
+            }
+
             return AlertDialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
@@ -2350,8 +2736,51 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_formCategories.length > 1) ...[
+                    Text(
+                      'Select Category:',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: targetCategoryName,
+                          items: _formCategories
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(
+                                    c,
+                                    style: GoogleFonts.outfit(fontSize: 14),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setDialogState(() {
+                                targetCategoryName = val;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
-                    'Enter sub-category name to add under $_formCategory.',
+                    'Enter sub-category name to add under $targetCategoryName.',
                     style: GoogleFonts.outfit(
                       color: AppTheme.textSecondary,
                       fontSize: 13.5,
@@ -2397,7 +2826,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: isLoading
+                  onPressed: isLoading || categoryId == null
                       ? null
                       : () async {
                           final name = textCtrl.text.trim();
@@ -2425,7 +2854,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 // Reload categories
                                 await _loadCategories();
                                 setState(() {
-                                  _formSubCategory = name;
+                                  if (!_formSubCategories.contains(name)) {
+                                    _formSubCategories.add(name);
+                                  }
                                 });
                                 if (context.mounted) Navigator.pop(context);
                                 return;
@@ -2952,7 +3383,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         ),
                         style: TextButton.styleFrom(
                           foregroundColor: AppTheme.primaryColor,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -3251,12 +3685,16 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        displayName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textPrimary,
+                      Flexible(
+                        child: Text(
+                          displayName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),

@@ -120,10 +120,10 @@ class _ProductsTabViewState extends State<ProductsTabView> {
           );
       final matchesCategory =
           _selectedCategory == 'All Categories' ||
-          prod['category'] == _selectedCategory;
+          (prod['category']?.toString().toLowerCase().contains(_selectedCategory.toLowerCase()) ?? false);
       final matchesSubCategory =
           _selectedSubCategory == 'All Sub-categories' ||
-          prod['subCategory'] == _selectedSubCategory;
+          (prod['subCategory']?.toString().toLowerCase().contains(_selectedSubCategory.toLowerCase()) ?? false);
       final matchesAvailability =
           _selectedAvailability == 'All Availability' ||
           (prod['inStock'] as bool) == (_selectedAvailability == 'In Stock');
@@ -441,39 +441,58 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                 //importing
                 Expanded(
                   flex: 4,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    // mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        prod['category'] as String,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          prod['subCategory'] as String,
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            color: AppTheme.primaryColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Builder(
+                    builder: (context) {
+                      final String catStr = (prod['category'] ?? '').toString();
+                      final String subCatStr = (prod['subCategory'] ?? '').toString();
+                      final bool hasCategory = catStr.isNotEmpty && catStr != 'N/A';
+                      final bool hasSubCategory = subCatStr.isNotEmpty && subCatStr != 'N/A';
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (hasCategory)
+                            Text(
+                              catStr,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          if (hasCategory && hasSubCategory)
+                            const SizedBox(height: 3),
+                          if (hasSubCategory)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                subCatStr,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          if (!hasCategory && !hasSubCategory)
+                            Text(
+                              '—',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 Expanded(

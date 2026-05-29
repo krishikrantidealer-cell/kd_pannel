@@ -5,6 +5,17 @@ import 'products_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 
+String _extractId(dynamic item) {
+  if (item == null) return '';
+  if (item is String) return item;
+  if (item is Map) {
+    if (item['\$oid'] != null) return item['\$oid'].toString();
+    if (item['_id'] != null) return _extractId(item['_id']);
+    if (item['id'] != null) return _extractId(item['id']);
+  }
+  return item.toString();
+}
+
 class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
   ProductsBloc() : super(const ProductsState()) {
     on<LoadProductsEvent>(_onLoadProducts);
@@ -36,8 +47,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       final matchesCategory =
           category.isEmpty ||
           category.toLowerCase() == 'all' ||
-          (prod['category']?.toString().toLowerCase().trim() ==
-              category.toLowerCase().trim());
+          (prod['category']?.toString().toLowerCase().trim().contains(category.toLowerCase().trim()) ?? false);
 
       return matchesSearch && matchesCategory;
     }).toList();
@@ -143,26 +153,74 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
                 : '$minPriceStr - $maxPriceStr';
             final bool inStock = p['availabilityStatus'] != 'Out of Stock';
 
-            // Category name
+            // Category name(s)
             String categoryName = 'N/A';
-            if (p['categoryId'] != null && p['categoryId'] is Map) {
-              categoryName = p['categoryId']['name'] ?? 'N/A';
+            final List<String> catNames = [];
+            final List<dynamic> catIds = p['categoryIds'] is List && (p['categoryIds'] as List).isNotEmpty
+                ? p['categoryIds']
+                : (p['categoryId'] != null ? [p['categoryId']] : []);
+
+            for (var catId in catIds) {
+              if (catId is Map && catId['name'] != null && catId['name'].toString().isNotEmpty) {
+                final name = catId['name'].toString();
+                if (!catNames.contains(name)) {
+                  catNames.add(name);
+                }
+                continue;
+              }
+              final cleanCatId = _extractId(catId);
+              if (cleanCatId.isNotEmpty) {
+                final matchingCat = freshCategories.firstWhere(
+                  (c) => _extractId(c) == cleanCatId,
+                  orElse: () => null,
+                );
+                if (matchingCat != null) {
+                  final name = matchingCat['name']?.toString() ?? '';
+                  if (name.isNotEmpty && !catNames.contains(name)) {
+                    catNames.add(name);
+                  }
+                }
+              }
+            }
+            if (catNames.isNotEmpty) {
+              categoryName = catNames.join(', ');
             }
 
-            // Subcategory name
+            // Subcategory name(s)
             String subCategoryName = 'N/A';
-            if (p['subCategoryId'] != null &&
-                p['categoryId'] != null &&
-                p['categoryId'] is Map &&
-                p['categoryId']['subCategories'] is List) {
-              final List subs = p['categoryId']['subCategories'];
-              final matchingSub = subs.firstWhere(
-                (s) => s['_id'] == p['subCategoryId'],
-                orElse: () => null,
-              );
-              if (matchingSub != null) {
-                subCategoryName = matchingSub['name'] ?? 'N/A';
+            final List<String> subNames = [];
+            final List<dynamic> subCatIds = p['subCategoryIds'] is List 
+                ? p['subCategoryIds'] 
+                : (p['subCategoryId'] != null ? [p['subCategoryId']] : []);
+
+            for (var subId in subCatIds) {
+              if (subId is Map && subId['name'] != null && subId['name'].toString().isNotEmpty) {
+                final name = subId['name'].toString();
+                if (!subNames.contains(name)) {
+                  subNames.add(name);
+                }
+                continue;
               }
+              final cleanSubId = _extractId(subId);
+              if (cleanSubId.isNotEmpty) {
+                for (var cat in freshCategories) {
+                  final List subs = cat['subCategories'] ?? [];
+                  final matchingSub = subs.firstWhere(
+                    (s) => _extractId(s) == cleanSubId,
+                    orElse: () => null,
+                  );
+                  if (matchingSub != null) {
+                    final name = matchingSub['name']?.toString() ?? '';
+                    if (name.isNotEmpty && !subNames.contains(name)) {
+                      subNames.add(name);
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+            if (subNames.isNotEmpty) {
+              subCategoryName = subNames.join(', ');
             }
 
             preparedProducts.add({
@@ -187,6 +245,10 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'thumbnail': p['thumbnail'],
               'thumbnailBytes': null,
               'assignedCollections': p['assignedCollections'] ?? [],
+              'categoryIds': p['categoryIds'] ?? [],
+              'subCategoryIds': p['subCategoryIds'] ?? [],
+              'categoryId': p['categoryId'],
+              'subCategoryId': p['subCategoryId'],
               'description': p['description'] ?? '',
               'specifications': p['specifications'] ?? {},
               'tags': p['tags'] ?? [],

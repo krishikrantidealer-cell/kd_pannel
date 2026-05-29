@@ -108,6 +108,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         Uint8List? categoryImage;
         fp.PlatformFile? cataloguePdfFile;
+        double? uploadProgress; // null = not uploading, 0.0-1.0 = progress
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -379,40 +380,54 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           });
                           try {
                             http.Response response;
-                            final List<http.MultipartFile> multipartFiles = [];
-                            if (categoryImage != null) {
-                              multipartFiles.add(
-                                http.MultipartFile.fromBytes(
-                                  'image',
-                                  categoryImage!,
-                                  filename: 'category_banner.jpg',
-                                  contentType: MediaType('image', 'jpeg'),
-                                ),
-                              );
-                            }
+                            String? publicPdfUrl;
+
                             if (cataloguePdfFile != null &&
                                 cataloguePdfFile!.bytes != null) {
-                              multipartFiles.add(
-                                http.MultipartFile.fromBytes(
-                                  'cataloguePdf',
-                                  cataloguePdfFile!.bytes!,
-                                  filename: cataloguePdfFile!.name,
-                                  contentType: MediaType('application', 'pdf'),
-                                ),
+                              setState(() => uploadProgress = 0.0);
+                              
+                              final finalUrl = await ApiClient().uploadFileInChunks(
+                                fileBytes: cataloguePdfFile!.bytes!,
+                                fileName: cataloguePdfFile!.name,
+                                categoryName: controller.text.trim(),
+                                onProgress: (p) {
+                                  if (mounted) {
+                                    setState(() => uploadProgress = p);
+                                  }
+                                },
                               );
+
+                              publicPdfUrl = finalUrl;
                             }
 
-                            if (multipartFiles.isNotEmpty) {
+                            // 3. Submit category creation request
+                            final Map<String, String> fields = {
+                              'name': controller.text.trim(),
+                            };
+                            if (publicPdfUrl != null) {
+                              fields['cataloguePdf'] = publicPdfUrl;
+                            }
+
+                            if (categoryImage != null) {
                               response = await ApiClient().multipartRequest(
                                 method: 'POST',
                                 endpoint: '/products/categories',
-                                fields: {'name': controller.text.trim()},
-                                files: multipartFiles,
+                                fields: fields,
+                                filesBuilder: () {
+                                  return [
+                                    http.MultipartFile.fromBytes(
+                                      'image',
+                                      categoryImage!,
+                                      filename: 'category_banner.jpg',
+                                      contentType: MediaType('image', 'jpeg'),
+                                    ),
+                                  ];
+                                },
                               );
                             } else {
                               response = await ApiClient().post(
                                 '/products/categories',
-                                {'name': controller.text.trim()},
+                                fields,
                               );
                             }
                             if (response.statusCode == 201) {
@@ -447,6 +462,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             if (mounted) {
                               setState(() {
                                 isLoading = false;
+                                uploadProgress = null;
                               });
                             }
                           }
@@ -455,15 +471,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                     backgroundColor: AppTheme.primaryColor,
                   ),
                   child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
+                      ? _buildUploadProgressButton(
+                          uploadProgress: uploadProgress,
+                          label: 'Create',
                         )
                       : Text(
                           'Create',
@@ -493,6 +503,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         fp.PlatformFile? cataloguePdfFile;
         String? existingPdfUrl = cat['cataloguePdf'];
         bool deletedExistingPdf = false;
+        double? uploadProgress;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -815,52 +826,59 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           });
                           try {
                             http.Response response;
-                            final List<http.MultipartFile> multipartFiles = [];
                             final Map<String, String> fields = {
                               'name': controller.text.trim(),
                             };
 
-                            if (categoryImage != null) {
-                              multipartFiles.add(
-                                http.MultipartFile.fromBytes(
-                                  'image',
-                                  categoryImage!,
-                                  filename: 'category_banner.jpg',
-                                  contentType: MediaType('image', 'jpeg'),
-                                ),
-                              );
-                            } else if (existingImageUrl == null) {
+                            if (categoryImage == null && existingImageUrl == null) {
                               fields['bannerImage'] = '';
                             }
 
+                            String? publicPdfUrl;
                             if (cataloguePdfFile != null &&
                                 cataloguePdfFile!.bytes != null) {
-                              multipartFiles.add(
-                                http.MultipartFile.fromBytes(
-                                  'cataloguePdf',
-                                  cataloguePdfFile!.bytes!,
-                                  filename: cataloguePdfFile!.name,
-                                  contentType: MediaType('application', 'pdf'),
-                                ),
+                              setState(() => uploadProgress = 0.0);
+                              
+                              final finalUrl = await ApiClient().uploadFileInChunks(
+                                fileBytes: cataloguePdfFile!.bytes!,
+                                fileName: cataloguePdfFile!.name,
+                                categoryName: controller.text.trim(),
+                                onProgress: (p) {
+                                  if (mounted) {
+                                    setState(() => uploadProgress = p);
+                                  }
+                                },
                               );
+
+                              publicPdfUrl = finalUrl;
                             } else if (deletedExistingPdf) {
                               fields['cataloguePdf'] = '';
                             }
 
-                            if (multipartFiles.isNotEmpty) {
+                            if (publicPdfUrl != null) {
+                              fields['cataloguePdf'] = publicPdfUrl;
+                            }
+
+                            if (categoryImage != null) {
                               response = await ApiClient().multipartRequest(
                                 method: 'PUT',
                                 endpoint: '/products/categories/${cat['_id']}',
                                 fields: fields,
-                                files: multipartFiles,
+                                filesBuilder: () {
+                                  return [
+                                    http.MultipartFile.fromBytes(
+                                      'image',
+                                      categoryImage!,
+                                      filename: 'category_banner.jpg',
+                                      contentType: MediaType('image', 'jpeg'),
+                                    ),
+                                  ];
+                                },
                               );
                             } else {
-                              final Map<String, dynamic> body = Map.from(
-                                fields,
-                              );
                               response = await ApiClient().put(
                                 '/products/categories/${cat['_id']}',
-                                body,
+                                fields,
                               );
                             }
                             if (response.statusCode == 200) {
@@ -877,7 +895,10 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                               widget.onRefresh();
                               Navigator.pop(ctx);
                             } else {
-                              throw Exception('Failed to update category');
+                              final err = jsonDecode(response.body);
+                              throw Exception(
+                                err['message'] ?? 'Failed to update category',
+                              );
                             }
                           } catch (e) {
                             if (mounted) {
@@ -892,6 +913,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             if (mounted) {
                               setState(() {
                                 isLoading = false;
+                                uploadProgress = null;
                               });
                             }
                           }
@@ -900,15 +922,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                     backgroundColor: AppTheme.primaryColor,
                   ),
                   child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
+                      ? _buildUploadProgressButton(
+                          uploadProgress: uploadProgress,
+                          label: 'Save',
                         )
                       : Text(
                           'Save',
@@ -1498,6 +1514,49 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
         ),
       ),
+    );
+  }
+
+  Widget _buildUploadProgressButton({
+    required double? uploadProgress,
+    required String label,
+  }) {
+    if (uploadProgress == null) {
+      return const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    }
+
+    final percentage = (uploadProgress * 100).toStringAsFixed(0);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            value: uploadProgress,
+            strokeWidth: 2,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            backgroundColor: Colors.white24,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$label ($percentage%)',
+          style: GoogleFonts.outfit(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ],
     );
   }
 
@@ -2130,15 +2189,16 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                           try {
                             http.Response response;
                             if (subImage != null) {
+                              final capturedSubImage = subImage;
                               response = await ApiClient().multipartRequest(
                                 method: 'PUT',
                                 endpoint:
                                     '/products/categories/${widget.category['_id']}/subcategories/${sub['_id']}',
                                 fields: {'name': controller.text.trim()},
-                                files: [
+                                filesBuilder: () => [
                                   http.MultipartFile.fromBytes(
                                     'image',
-                                    subImage!,
+                                    capturedSubImage!,
                                     filename: 'subcategory_banner.jpg',
                                     contentType: MediaType('image', 'jpeg'),
                                   ),

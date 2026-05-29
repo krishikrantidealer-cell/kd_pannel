@@ -224,20 +224,19 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           'isActive': isActive.toString(),
         };
 
-        final files = [
-          http.MultipartFile.fromBytes(
-            'image',
-            _collectionImage!,
-            filename: 'collection_image.jpg',
-            contentType: MediaType('image', 'jpeg'),
-          )
-        ];
-
+        final capturedCollectionImage = _collectionImage!;
         response = await ApiClient().multipartRequest(
           method: method,
           endpoint: endpoint,
           fields: fields,
-          files: files,
+          filesBuilder: () => [
+            http.MultipartFile.fromBytes(
+              'image',
+              capturedCollectionImage,
+              filename: 'collection_image.jpg',
+              contentType: MediaType('image', 'jpeg'),
+            )
+          ],
         );
       } else {
         final responseBody = _isParentCollection
