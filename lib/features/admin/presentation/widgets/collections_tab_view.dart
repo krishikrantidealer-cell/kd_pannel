@@ -330,8 +330,8 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
+            if (!isMobile)
+              Text(
                 'Collections Directory',
                 style: GoogleFonts.outfit(
                   fontSize: 16,
@@ -339,37 +339,37 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                   color: AppTheme.textPrimary,
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              height: 36,
-              width: isMobile ? 180 : 260,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: TextField(
-                onChanged: (val) => setState(() => _searchQuery = val),
-                textAlignVertical: TextAlignVertical.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textPrimary,
+            if (!isMobile) const SizedBox(width: 16),
+            Expanded(
+              child: Container(
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.borderColor),
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'Search collections...',
-                  hintStyle: TextStyle(
-                    color: AppTheme.textSecondary,
+                child: TextField(
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  textAlignVertical: TextAlignVertical.center,
+                  style: const TextStyle(
                     fontSize: 13,
+                    color: AppTheme.textPrimary,
                   ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    size: 16,
-                    color: AppTheme.textSecondary,
+                  decoration: const InputDecoration(
+                    hintText: 'Search collections...',
+                    hintStyle: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
@@ -450,9 +450,9 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                   }),
                                   borderRadius: BorderRadius.circular(12),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isMobile ? 12 : 16,
+                                      vertical: 10,
                                     ),
                                     child: Row(
                                       children: [
@@ -471,18 +471,19 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                 : AppTheme.textSecondary,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
+                                        SizedBox(width: isMobile ? 8 : 12),
                                         // Avatar & Name
                                         Expanded(
-                                          flex: isMobile ? 1 : 5,
                                           child: Row(
                                             children: [
                                               _CollectionAvatar(
                                                 name: col['name'] as String,
                                                 isParent: true,
-                                                imageUrl: col['bannerImage'] as String?,
+                                                imageUrl:
+                                                    col['bannerImage']
+                                                        as String?,
                                               ),
-                                              const SizedBox(width: 12),
+                                              const SizedBox(width: 10),
                                               Expanded(
                                                 child: Column(
                                                   crossAxisAlignment:
@@ -491,7 +492,9 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                     Text(
                                                       col['name'] as String,
                                                       style: GoogleFonts.outfit(
-                                                        fontSize: 14,
+                                                        fontSize: isMobile
+                                                            ? 13
+                                                            : 14,
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         color: AppTheme
@@ -501,9 +504,10 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                     ),
-                                                    if ((col['slug'] as String?)
-                                                            ?.isNotEmpty ==
-                                                        true)
+                                                    if (!isMobile &&
+                                                        (col['slug'] as String?)
+                                                                ?.isNotEmpty ==
+                                                            true)
                                                       Container(
                                                         margin:
                                                             const EdgeInsets.only(
@@ -540,123 +544,74 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                             ],
                                           ),
                                         ),
-                                        if (isMobile) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.primaryColor
-                                                  .withValues(alpha: 0.06),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '${subs.length} Sub${subs.length != 1 ? 's' : ''}',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                color: AppTheme.primaryColor,
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                        const SizedBox(width: 8),
+                                        // Sub count pill
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor
+                                                .withValues(alpha: 0.06),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
+                                          child: Text(
+                                            '${subs.length}S',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              color: AppTheme.primaryColor,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        if (!isMobile) ...[
+                                          const SizedBox(width: 12),
                                           _StatusBadge(isActive: isActive),
-                                        ] else ...[
-                                          // Sub-collection count pill
-                                          Expanded(
-                                            flex: 3,
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: AppTheme.primaryColor
-                                                        .withValues(
-                                                          alpha: 0.06,
-                                                        ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                  ),
-                                                  child: Text(
-                                                    '${subs.length} Sub${subs.length != 1 ? 's' : ''}',
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 11,
-                                                      color:
-                                                          AppTheme.primaryColor,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          // Status Pill
-                                          Expanded(
-                                            flex: 3,
-                                            child: Row(
-                                              children: [
-                                                _StatusBadge(
-                                                  isActive: isActive,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
                                         ],
+                                        const SizedBox(width: 8),
                                         // Actions
-                                        SizedBox(
-                                          width: 72,
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.end,
-                                            children: [
-                                              _CircleActionButton(
-                                                icon: Icons.edit_outlined,
-                                                tooltip:
-                                                    'Edit Parent Collection',
-                                                onTap: () =>
-                                                    _startEditCollection(col),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _deletingIds.contains(colId)
-                                                  ? const SizedBox(
-                                                      width: 32,
-                                                      height: 32,
-                                                      child: Padding(
-                                                        padding: EdgeInsets.all(
-                                                          8.0,
-                                                        ),
-                                                        child: CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                          valueColor:
-                                                              AlwaysStoppedAnimation<
-                                                                Color
-                                                              >(AppTheme.error),
-                                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _CircleActionButton(
+                                              icon: Icons.edit_outlined,
+                                              tooltip: 'Edit Parent Collection',
+                                              onTap: () =>
+                                                  _startEditCollection(col),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            _deletingIds.contains(colId)
+                                                ? const SizedBox(
+                                                    width: 32,
+                                                    height: 32,
+                                                    child: Padding(
+                                                      padding: EdgeInsets.all(
+                                                        8.0,
                                                       ),
-                                                    )
-                                                  : _CircleActionButton(
-                                                      icon: Icons
-                                                          .delete_outline_rounded,
-                                                      tooltip:
-                                                          'Delete Collection',
-                                                      color: AppTheme.error,
-                                                      onTap: () =>
-                                                          _deleteParentCollection(
-                                                            col,
-                                                          ),
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        valueColor:
+                                                            AlwaysStoppedAnimation<
+                                                              Color
+                                                            >(AppTheme.error),
+                                                      ),
                                                     ),
-                                            ],
-                                          ),
+                                                  )
+                                                : _CircleActionButton(
+                                                    icon: Icons
+                                                        .delete_outline_rounded,
+                                                    tooltip:
+                                                        'Delete Collection',
+                                                    color: AppTheme.error,
+                                                    onTap: () =>
+                                                        _deleteParentCollection(
+                                                          col,
+                                                        ),
+                                                  ),
+                                          ],
                                         ),
                                       ],
                                     ),
@@ -731,13 +686,18 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
 
                                                         return Row(
                                                           children: [
-                                                            const SizedBox(
-                                                              width: 24,
+                                                            // Reduced indent on mobile
+                                                            SizedBox(
+                                                              width: isMobile
+                                                                  ? 12
+                                                                  : 24,
                                                             ),
                                                             // Tree line connector
                                                             CustomPaint(
-                                                              size: const Size(
-                                                                20,
+                                                              size: Size(
+                                                                isMobile
+                                                                    ? 14
+                                                                    : 20,
                                                                 48,
                                                               ),
                                                               painter:
@@ -747,20 +707,25 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                   ),
                                                             ),
                                                             const SizedBox(
-                                                              width: 8,
+                                                              width: 6,
                                                             ),
                                                             Expanded(
                                                               child: Container(
                                                                 padding:
-                                                                    const EdgeInsets.symmetric(
+                                                                    EdgeInsets.symmetric(
                                                                       vertical:
                                                                           8,
                                                                       horizontal:
-                                                                          12,
+                                                                          isMobile
+                                                                          ? 8
+                                                                          : 12,
                                                                     ),
                                                                 margin:
-                                                                    const EdgeInsets.only(
-                                                                      right: 16,
+                                                                    EdgeInsets.only(
+                                                                      right:
+                                                                          isMobile
+                                                                          ? 8
+                                                                          : 16,
                                                                       bottom: 4,
                                                                     ),
                                                                 decoration: BoxDecoration(
@@ -784,156 +749,114 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                               as String,
                                                                       isParent:
                                                                           false,
-                                                                       imageUrl:
-                                                                           sub['image']
-                                                                               as String?,
+                                                                      imageUrl:
+                                                                          sub['image']
+                                                                              as String?,
                                                                     ),
                                                                     const SizedBox(
-                                                                      width: 12,
+                                                                      width: 8,
                                                                     ),
                                                                     Expanded(
-                                                                      flex:
-                                                                          isMobile
-                                                                          ? 1
-                                                                          : 5,
-                                                                      child: Column(
-                                                                        crossAxisAlignment:
-                                                                            CrossAxisAlignment.start,
-                                                                        children: [
-                                                                          Text(
-                                                                            sub['name']
-                                                                                as String,
-                                                                            style: GoogleFonts.outfit(
-                                                                              fontSize: 13,
-                                                                              fontWeight: FontWeight.w600,
-                                                                              color: AppTheme.textPrimary,
-                                                                            ),
-                                                                            maxLines:
-                                                                                1,
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                          ),
-                                                                          if ((sub['slug']
-                                                                                      as String?)
-                                                                                  ?.isNotEmpty ==
-                                                                              true)
-                                                                            Text(
-                                                                              '/${sub['slug']}',
-                                                                              style: GoogleFonts.outfit(
-                                                                                fontSize: 11,
-                                                                                color: AppTheme.textSecondary,
-                                                                              ),
-                                                                            ),
-                                                                        ],
+                                                                      child: Text(
+                                                                        sub['name']
+                                                                            as String,
+                                                                        style: GoogleFonts.outfit(
+                                                                          fontSize:
+                                                                              isMobile
+                                                                              ? 12
+                                                                              : 13,
+                                                                          fontWeight:
+                                                                              FontWeight.w600,
+                                                                          color:
+                                                                              AppTheme.textPrimary,
+                                                                        ),
+                                                                        maxLines:
+                                                                            1,
+                                                                        overflow:
+                                                                            TextOverflow.ellipsis,
                                                                       ),
                                                                     ),
-                                                                    if (isMobile) ...[
-                                                                      const SizedBox(
-                                                                        width:
-                                                                            8,
-                                                                      ),
-                                                                      GestureDetector(
-                                                                        onTap: () => _toggleSubStatus(
-                                                                          colId,
-                                                                          sub,
-                                                                        ),
-                                                                        child: Tooltip(
-                                                                          message:
-                                                                              'Tap to toggle status',
-                                                                          child: _StatusBadge(
-                                                                            isActive:
-                                                                                subActive,
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    // Status badge — tappable to toggle
+                                                                    GestureDetector(
+                                                                      onTap: () =>
+                                                                          _toggleSubStatus(
+                                                                            colId,
+                                                                            sub,
                                                                           ),
+                                                                      child: Tooltip(
+                                                                        message:
+                                                                            'Tap to toggle status',
+                                                                        child: _StatusBadge(
+                                                                          isActive:
+                                                                              subActive,
                                                                         ),
                                                                       ),
-                                                                    ] else ...[
-                                                                      const Expanded(
-                                                                        flex: 3,
-                                                                        child:
-                                                                            SizedBox.shrink(),
-                                                                      ),
-                                                                      Expanded(
-                                                                        flex: 3,
-                                                                        child: Row(
-                                                                          children: [
-                                                                            GestureDetector(
-                                                                              onTap: () => _toggleSubStatus(
-                                                                                colId,
-                                                                                sub,
-                                                                              ),
-                                                                              child: Tooltip(
-                                                                                message: 'Tap to toggle status',
-                                                                                child: _StatusBadge(
-                                                                                  isActive: subActive,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                    SizedBox(
-                                                                      width: 80,
-                                                                      child: Row(
-                                                                        mainAxisAlignment:
-                                                                            MainAxisAlignment.end,
-                                                                        children: [
-                                                                          _CircleActionButton(
-                                                                            icon:
-                                                                                Icons.edit_outlined,
-                                                                            tooltip:
-                                                                                'Edit',
-                                                                            onTap: () {
-                                                                              final copy =
-                                                                                  Map<
-                                                                                    String,
-                                                                                    dynamic
-                                                                                  >.from(
-                                                                                    sub,
-                                                                                  );
-                                                                              copy['parentId'] = colId;
-                                                                              _startEditCollection(
-                                                                                copy,
-                                                                              );
-                                                                            },
-                                                                          ),
-                                                                          const SizedBox(
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    // Action buttons
+                                                                    _CircleActionButton(
+                                                                      icon: Icons
+                                                                          .edit_outlined,
+                                                                      tooltip:
+                                                                          'Edit',
+                                                                      onTap: () {
+                                                                        final copy =
+                                                                            Map<
+                                                                              String,
+                                                                              dynamic
+                                                                            >.from(
+                                                                              sub,
+                                                                            );
+                                                                        copy['parentId'] =
+                                                                            colId;
+                                                                        _startEditCollection(
+                                                                          copy,
+                                                                        );
+                                                                      },
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    _deletingIds.contains(
+                                                                          subId,
+                                                                        )
+                                                                        ? const SizedBox(
                                                                             width:
-                                                                                8,
+                                                                                32,
+                                                                            height:
+                                                                                32,
+                                                                            child: Padding(
+                                                                              padding: EdgeInsets.all(
+                                                                                8.0,
+                                                                              ),
+                                                                              child: CircularProgressIndicator(
+                                                                                strokeWidth: 2,
+                                                                                valueColor:
+                                                                                    AlwaysStoppedAnimation<
+                                                                                      Color
+                                                                                    >(
+                                                                                      AppTheme.error,
+                                                                                    ),
+                                                                              ),
+                                                                            ),
+                                                                          )
+                                                                        : _CircleActionButton(
+                                                                            icon:
+                                                                                Icons.delete_outline_rounded,
+                                                                            tooltip:
+                                                                                'Delete',
+                                                                            color:
+                                                                                AppTheme.error,
+                                                                            onTap: () => _deleteSubCollection(
+                                                                              colId,
+                                                                              sub,
+                                                                            ),
                                                                           ),
-                                                                          _deletingIds.contains(
-                                                                                subId,
-                                                                              )
-                                                                              ? const SizedBox(
-                                                                                  width: 32,
-                                                                                  height: 32,
-                                                                                  child: Padding(
-                                                                                    padding: EdgeInsets.all(
-                                                                                      8.0,
-                                                                                    ),
-                                                                                    child: CircularProgressIndicator(
-                                                                                      strokeWidth: 2,
-                                                                                      valueColor:
-                                                                                          AlwaysStoppedAnimation<
-                                                                                            Color
-                                                                                          >(
-                                                                                            AppTheme.error,
-                                                                                          ),
-                                                                                    ),
-                                                                                  ),
-                                                                                )
-                                                                              : _CircleActionButton(
-                                                                                  icon: Icons.delete_outline_rounded,
-                                                                                  tooltip: 'Delete',
-                                                                                  color: AppTheme.error,
-                                                                                  onTap: () => _deleteSubCollection(
-                                                                                    colId,
-                                                                                    sub,
-                                                                                  ),
-                                                                                ),
-                                                                        ],
-                                                                      ),
-                                                                    ),
                                                                   ],
                                                                 ),
                                                               ),
@@ -1253,9 +1176,7 @@ class _SkeletonRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.lightBorderColor),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
       ),
       child: Shimmer.fromColors(
         baseColor: Colors.grey.shade200,
@@ -1290,4 +1211,3 @@ class _SkeletonRow extends StatelessWidget {
     );
   }
 }
-
