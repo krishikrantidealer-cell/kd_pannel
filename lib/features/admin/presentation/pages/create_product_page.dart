@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -8,7 +10,7 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
-import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart';
+import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart' hide TableRow;
 import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:image_picker/image_picker.dart';
@@ -459,6 +461,193 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleEditorMode() async {
+    if (_isHtmlMode) {
+      // HTML -> Visual: check if there are advanced/complex tags that could be lost
+      final htmlText = _htmlDescriptionController.text.trim();
+      final hasComplexHtml = htmlText.contains('<table') ||
+          htmlText.contains('<details') ||
+          htmlText.contains('class="intro"') ||
+          htmlText.contains("class='intro'") ||
+          htmlText.contains('class="warn"') ||
+          htmlText.contains("class='warn'") ||
+          htmlText.contains('class="highlight"') ||
+          htmlText.contains("class='highlight'") ||
+          htmlText.contains('class="table-note"') ||
+          htmlText.contains("class='table-note'");
+
+      if (hasComplexHtml) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(
+              'Switch to Visual Editor?',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Your HTML contains advanced layout elements (such as tables, FAQ accordions, or custom styled callout boxes) that the Visual Editor does not support.\n\nSwitching to the Visual Editor will discard these advanced formats.',
+              style: GoogleFonts.outfit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  'Stay in HTML',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.error,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(
+                  'Switch Anyway',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+
+      // Code -> Visual conversion
+      quill.Document doc;
+      if (htmlText.isNotEmpty) {
+        try {
+          final sanitizedHtml = htmlText
+              .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
+              .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
+              .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
+              .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
+              .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
+              .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
+          final delta = HtmlToDelta().convert(sanitizedHtml);
+          doc = quill.Document.fromDelta(delta);
+        } catch (e) {
+          debugPrint('Error parsing HTML to Quill Delta: $e');
+          doc = quill.Document();
+        }
+      } else {
+        doc = quill.Document();
+      }
+      setState(() {
+        _descriptionController.document = doc;
+        _isHtmlMode = false;
+      });
+    } else {
+      // Visual -> Code conversion
+      try {
+        final deltaJson = _descriptionController.document.toDelta().toJson();
+        final List<Map<String, dynamic>> normalizedDeltaJson =
+            List<Map<String, dynamic>>.from(deltaJson).map((op) {
+          if (op.containsKey('attributes')) {
+            final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
+            bool modified = false;
+            if (attrs.containsKey('color') && attrs['color'] is String) {
+              final color = attrs['color'] as String;
+              if (color.startsWith('#') && color.length == 9) {
+                attrs['color'] = '#${color.substring(3)}';
+                modified = true;
+              }
+            }
+            if (attrs.containsKey('background') && attrs['background'] is String) {
+              final bg = attrs['background'] as String;
+              if (bg.startsWith('#') && bg.length == 9) {
+                attrs['background'] = '#${bg.substring(3)}';
+                modified = true;
+              }
+            }
+            if (modified) {
+              return {
+                ...op,
+                'attributes': attrs,
+              };
+            }
+          }
+          return op;
+        }).toList();
+
+        final converter = QuillDeltaToHtmlConverter(
+          normalizedDeltaJson,
+          ConverterOptions.forEmail(),
+        );
+        _htmlDescriptionController.text = converter.convert();
+      } catch (e) {
+        debugPrint('Error converting Quill Delta to HTML: $e');
+        _htmlDescriptionController.text = '';
+      }
+      setState(() {
+        _isHtmlMode = true;
+      });
+    }
+  }
+
+  void _showMobilePreview() {
+    String html = '';
+    if (_isHtmlMode) {
+      html = _htmlDescriptionController.text;
+    } else {
+      try {
+        final deltaJson = _descriptionController.document.toDelta().toJson();
+        final List<Map<String, dynamic>> normalizedDeltaJson =
+            List<Map<String, dynamic>>.from(deltaJson).map((op) {
+          if (op.containsKey('attributes')) {
+            final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
+            bool modified = false;
+            if (attrs.containsKey('color') && attrs['color'] is String) {
+              final color = attrs['color'] as String;
+              if (color.startsWith('#') && color.length == 9) {
+                attrs['color'] = '#' + color.substring(3);
+                modified = true;
+              }
+            }
+            if (attrs.containsKey('background') && attrs['background'] is String) {
+              final bg = attrs['background'] as String;
+              if (bg.startsWith('#') && bg.length == 9) {
+                attrs['background'] = '#' + bg.substring(3);
+                modified = true;
+              }
+            }
+            if (modified) {
+              return {
+                ...op,
+                'attributes': attrs,
+              };
+            }
+          }
+          return op;
+        }).toList();
+
+        final converter = QuillDeltaToHtmlConverter(
+          normalizedDeltaJson,
+          ConverterOptions.forEmail(),
+        );
+        html = converter.convert();
+      } catch (e) {
+        debugPrint('Error converting Quill Delta to HTML for preview: $e');
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _MobilePreviewDialog(html: html);
+      },
+    );
   }
 
   void _addVariant({Map<String, dynamic>? data}) {
@@ -1429,91 +1618,42 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 color: AppTheme.textPrimary,
                               ),
                             ),
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  if (_isHtmlMode) {
-                                    // Code -> Visual
-                                    final htmlText = _htmlDescriptionController.text.trim();
-                                    quill.Document doc;
-                                    if (htmlText.isNotEmpty) {
-                                      try {
-                                        final sanitizedHtml = htmlText
-                                            .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
-                                            .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
-                                            .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
-                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
-                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
-                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
-                                        final delta = HtmlToDelta().convert(sanitizedHtml);
-                                        doc = quill.Document.fromDelta(delta);
-                                      } catch (e) {
-                                        debugPrint('Error parsing HTML to Quill Delta: $e');
-                                        doc = quill.Document();
-                                      }
-                                    } else {
-                                      doc = quill.Document();
-                                    }
-                                    _descriptionController.document = doc;
-                                  } else {
-                                    // Visual -> Code
-                                    try {
-                                      final deltaJson = _descriptionController.document.toDelta().toJson();
-                                      final List<Map<String, dynamic>> normalizedDeltaJson =
-                                          List<Map<String, dynamic>>.from(deltaJson).map((op) {
-                                        if (op.containsKey('attributes')) {
-                                          final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
-                                          bool modified = false;
-                                          if (attrs.containsKey('color') && attrs['color'] is String) {
-                                            final color = attrs['color'] as String;
-                                            if (color.startsWith('#') && color.length == 9) {
-                                              attrs['color'] = '#' + color.substring(3);
-                                              modified = true;
-                                            }
-                                          }
-                                          if (attrs.containsKey('background') && attrs['background'] is String) {
-                                            final bg = attrs['background'] as String;
-                                            if (bg.startsWith('#') && bg.length == 9) {
-                                              attrs['background'] = '#' + bg.substring(3);
-                                              modified = true;
-                                            }
-                                          }
-                                          if (modified) {
-                                            return {
-                                              ...op,
-                                              'attributes': attrs,
-                                            };
-                                          }
-                                        }
-                                        return op;
-                                      }).toList();
-
-                                      final converter = QuillDeltaToHtmlConverter(
-                                        normalizedDeltaJson,
-                                        ConverterOptions.forEmail(),
-                                      );
-                                      _htmlDescriptionController.text = converter.convert();
-                                    } catch (e) {
-                                      debugPrint('Error converting Quill Delta to HTML: $e');
-                                      _htmlDescriptionController.text = '';
-                                    }
-                                  }
-                                  _isHtmlMode = !_isHtmlMode;
-                                });
-                              },
-                              icon: Icon(
-                                _isHtmlMode ? Icons.remove_red_eye_rounded : Icons.code_rounded,
-                                size: 16,
-                                color: AppTheme.primaryColor,
-                              ),
-                              label: Text(
-                                _isHtmlMode ? 'Visual Editor' : 'HTML Editor',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.primaryColor,
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _showMobilePreview,
+                                  icon: const Icon(
+                                    Icons.phone_android_rounded,
+                                    size: 16,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  label: Text(
+                                    'Mobile Preview',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 8),
+                                TextButton.icon(
+                                  onPressed: _toggleEditorMode,
+                                  icon: Icon(
+                                    _isHtmlMode ? Icons.remove_red_eye_rounded : Icons.code_rounded,
+                                    size: 16,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  label: Text(
+                                    _isHtmlMode ? 'Visual Editor' : 'HTML Editor',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -4063,4 +4203,1170 @@ class _CreateProductPageState extends State<CreateProductPage> {
       ),
     );
   }
+}
+
+class PreviewHtmlBlock {
+  final List<InlineSpan> spans;
+  final TextAlign alignment;
+  final String blockType;
+  final Widget? widget;
+
+  PreviewHtmlBlock({
+    required this.spans,
+    this.alignment = TextAlign.left,
+    this.blockType = 'p',
+    this.widget,
+  });
+}
+
+class _MobilePreviewDialog extends StatefulWidget {
+  final String html;
+
+  const _MobilePreviewDialog({required this.html});
+
+  @override
+  State<_MobilePreviewDialog> createState() => _MobilePreviewDialogState();
+}
+
+class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
+  bool _isDarkMode = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+
+    // Simulated phone background and text colors
+    final phoneBg = _isDarkMode ? const Color(0xFF121212) : Colors.white;
+    final phoneAppBarBg = _isDarkMode ? const Color(0xFF1F1F1F) : const Color(0xFF00A651);
+    final phoneAppBarText = Colors.white;
+
+    return Container(
+      height: screenHeight * 0.9,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1F5F9), // Slate background behind the phone
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header of the Bottom Sheet
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.phone_android_rounded, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'KrishiKranti Mobile Simulator',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    // Theme Toggle
+                    IconButton(
+                      icon: Icon(
+                        _isDarkMode ? Icons.wb_sunny_rounded : Icons.nights_stay_rounded,
+                        color: AppTheme.primaryColor,
+                      ),
+                      tooltip: 'Toggle Light/Dark Preview',
+                      onPressed: () {
+                        setState(() {
+                          _isDarkMode = !_isDarkMode;
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Content Area containing the simulated phone frame
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Container(
+                  width: 375, // Standard iPhone/Android width
+                  height: 680,
+                  decoration: BoxDecoration(
+                    color: phoneBg,
+                    borderRadius: BorderRadius.circular(36),
+                    border: Border.all(color: const Color(0xFF1E293B), width: 12), // Phone Bezel
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      // Simulated Phone Status Bar
+                      Container(
+                        height: 24,
+                        color: phoneAppBarBg,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '9:41',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: phoneAppBarText,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Icon(Icons.signal_cellular_4_bar, size: 11, color: phoneAppBarText),
+                                const SizedBox(width: 4),
+                                Icon(Icons.wifi, size: 11, color: phoneAppBarText),
+                                const SizedBox(width: 4),
+                                Icon(Icons.battery_std_rounded, size: 11, color: phoneAppBarText),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Simulated App Bar
+                      Container(
+                        height: 48,
+                        color: phoneAppBarBg,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: phoneAppBarText),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Product Details',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: phoneAppBarText,
+                                ),
+                              ),
+                            ),
+                            Icon(Icons.share_rounded, size: 18, color: phoneAppBarText),
+                            const SizedBox(width: 12),
+                            Icon(Icons.shopping_cart_rounded, size: 18, color: phoneAppBarText),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                      
+                      // Simulated Mobile Screen Body (Scrollable description details)
+                      Expanded(
+                        child: Container(
+                          color: phoneBg,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Mock Product Media / Title Header just to frame the description nicely
+                                Container(
+                                  height: 180,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: _isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.image,
+                                      size: 48,
+                                      color: _isDarkMode ? Colors.white30 : Colors.black26,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Container(
+                                  width: 120,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: _isDarkMode ? Colors.white12 : Colors.black12,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: 220,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: _isDarkMode ? Colors.white24 : Colors.black26,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                
+                                // Tab selection simulated
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      decoration: const BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: Color(0xFF00A651),
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Description',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Color(0xFF00A651),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Text(
+                                      'Specifications',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: _isDarkMode ? Colors.white54 : Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Divider(height: 1, color: _isDarkMode ? Colors.white12 : Colors.black12),
+                                const SizedBox(height: 16),
+                                
+                                // Actual Rich HTML Description Rendered
+                                Builder(
+                                  builder: (context) {
+                                    final parsedBlocks = previewParseHtml(widget.html);
+                                    if (parsedBlocks.isEmpty) {
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(top: 32.0),
+                                          child: Text(
+                                            'No description provided.',
+                                            style: TextStyle(
+                                              color: _isDarkMode ? Colors.white54 : Colors.black54,
+                                              fontStyle: FontStyle.italic,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return previewBuildHtmlContent(
+                                      context,
+                                      parsedBlocks,
+                                      isDarkMode: _isDarkMode,
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 32),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewFaqExpansionTile extends StatefulWidget {
+  final String question;
+  final String answerHtml;
+  final Map<String, Widget> widgetMap;
+
+  const _PreviewFaqExpansionTile({
+    required this.question,
+    required this.answerHtml,
+    required this.widgetMap,
+  });
+
+  @override
+  State<_PreviewFaqExpansionTile> createState() => _PreviewFaqExpansionTileState();
+}
+
+class _PreviewFaqExpansionTileState extends State<_PreviewFaqExpansionTile> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanQuestion = widget.question
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .trim();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEEE), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text(
+            cleanQuestion,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          trailing: Icon(
+            _isExpanded ? Icons.remove : Icons.add,
+            color: const Color(0xFF00A651),
+          ),
+          onExpansionChanged: (expanded) {
+            setState(() {
+              _isExpanded = expanded;
+            });
+          },
+          childrenPadding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: 16,
+          ),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Builder(
+              builder: (context) {
+                final innerBlocks = previewParseHtml(
+                  widget.answerHtml,
+                  widgetMap: widget.widgetMap,
+                );
+                return previewBuildHtmlContent(context, innerBlocks);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewFaqTableWidget extends StatelessWidget {
+  final String tableHtml;
+
+  const _PreviewFaqTableWidget({required this.tableHtml});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDoseTable = tableHtml.contains(
+      RegExp(r'''class=["'][^"']*dose-table''', caseSensitive: false),
+    );
+
+    final trRegex = RegExp(
+      r'<tr[^>]*>(.*?)</tr>',
+      dotAll: true,
+      caseSensitive: false,
+    );
+    final cellRegex = RegExp(
+      r'<(td|th)[^>]*>(.*?)</\1>',
+      dotAll: true,
+      caseSensitive: false,
+    );
+
+    final trMatches = trRegex.allMatches(tableHtml).toList();
+    if (trMatches.isEmpty) return const SizedBox.shrink();
+
+    final List<TableRow> rows = [];
+
+    for (int rowIndex = 0; rowIndex < trMatches.length; rowIndex++) {
+      final trHtml = trMatches[rowIndex].group(1)!;
+      final cellMatches = cellRegex.allMatches(trHtml).toList();
+
+      final List<Widget> rowCells = [];
+      final bool isHeader =
+          trMatches[rowIndex].group(0)!.toLowerCase().startsWith('<tr') &&
+          trHtml.toLowerCase().contains('<th');
+
+      final Color rowBg = isHeader
+          ? const Color(0xFF00A651)
+          : (rowIndex % 2 == 0 ? const Color(0xFFF5F5F5) : Colors.white);
+
+      for (int colIndex = 0; colIndex < cellMatches.length; colIndex++) {
+        final cellMatch = cellMatches[colIndex];
+        final cellInnerHtml = cellMatch.group(2)!;
+
+        Widget cellContent;
+        if (isHeader) {
+          final cellBlocks = previewParseHtml(cellInnerHtml);
+          cellContent = previewBuildHtmlContent(
+            context,
+            cellBlocks,
+            defaultTextColor: Colors.white,
+          );
+        } else {
+          Color? customTextColor;
+          bool enforceBold = false;
+
+          if (colIndex == 0) {
+            enforceBold = true;
+          }
+          if (isDoseTable && colIndex == 4) {
+            customTextColor = const Color(0xFF00A651);
+            enforceBold = true;
+          }
+
+          final cellBlocks = previewParseHtml(cellInnerHtml);
+          Widget child = previewBuildHtmlContent(
+            context,
+            cellBlocks,
+            defaultTextColor: customTextColor,
+          );
+
+          if (enforceBold) {
+            child = DefaultTextStyle.merge(
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              child: child,
+            );
+          }
+          cellContent = child;
+        }
+
+        rowCells.add(
+          Container(
+            color: rowBg,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            alignment: Alignment.centerLeft,
+            child: cellContent,
+          ),
+        );
+      }
+
+      if (rowCells.isNotEmpty) {
+        rows.add(TableRow(children: rowCells));
+      }
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDDDDD), width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Table(
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          border: TableBorder.symmetric(
+            inside: const BorderSide(color: Color(0xFFDDDDDD), width: 1),
+          ),
+          children: rows,
+        ),
+      ),
+    );
+  }
+}
+
+Widget _buildPreviewStyledBox(
+  String innerHtml,
+  String boxClass,
+  Map<String, Widget> wMap,
+) {
+  Color? defaultTextColor;
+  BoxDecoration decoration;
+
+  if (boxClass == 'intro') {
+    decoration = const BoxDecoration(
+      color: Color(0xFFF9F9F9),
+      border: Border(left: BorderSide(color: Color(0xFF00A651), width: 6)),
+    );
+  } else if (boxClass == 'warn') {
+    defaultTextColor = const Color(0xFFCC0000);
+    decoration = const BoxDecoration(
+      color: Color(0xFFFFF5F5),
+      border: Border(left: BorderSide(color: Color(0xFFCC0000), width: 6)),
+    );
+  } else if (boxClass == 'highlight') {
+    decoration = const BoxDecoration(
+      color: Color(0xFFF9F9F9),
+      border: Border(left: BorderSide(color: Colors.black, width: 6)),
+    );
+  } else {
+    // table-note
+    decoration = const BoxDecoration(
+      color: Color(0xFFF9F9F9),
+      border: Border(
+        top: BorderSide(color: Color(0xFF00A651), width: 3),
+        left: BorderSide(color: Color(0xFFDDDDDD), width: 1),
+        right: BorderSide(color: Color(0xFFDDDDDD), width: 1),
+        bottom: BorderSide(color: Color(0xFFDDDDDD), width: 1),
+      ),
+    );
+  }
+
+  return Container(
+    width: double.infinity,
+    margin: const EdgeInsets.symmetric(vertical: 12),
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+    decoration: decoration,
+    child: Builder(
+      builder: (context) {
+        final innerBlocks = previewParseHtml(innerHtml, widgetMap: wMap);
+        return previewBuildHtmlContent(
+          context,
+          innerBlocks,
+          defaultTextColor: defaultTextColor,
+        );
+      },
+    ),
+  );
+}
+
+Widget _buildPreviewTableWidget(String tableHtml) {
+  return _PreviewFaqTableWidget(tableHtml: tableHtml);
+}
+
+Widget _buildPreviewFaqWidget(String detailsHtml, Map<String, Widget> wMap) {
+  final summaryRegex = RegExp(
+    r'<summary[^>]*>(.*?)</summary>',
+    dotAll: true,
+    caseSensitive: false,
+  );
+  final summaryMatch = summaryRegex.firstMatch(detailsHtml);
+  String question = 'FAQ';
+  if (summaryMatch != null) {
+    question = summaryMatch.group(1)!;
+  }
+
+  String answerHtml = detailsHtml
+      .replaceFirst(summaryRegex, '')
+      .replaceFirst(RegExp(r'^<details[^>]*>', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'</details>$', caseSensitive: false), '')
+      .trim();
+
+  return _PreviewFaqExpansionTile(
+    question: question,
+    answerHtml: answerHtml,
+    widgetMap: wMap,
+  );
+}
+
+Color? _previewParseColor(String colorStr) {
+  if (colorStr.startsWith('#')) {
+    final hex = colorStr.substring(1);
+    if (hex.length == 8) {
+      return Color(int.parse(hex, radix: 16));
+    } else if (hex.length == 6) {
+      return Color(int.parse('FF$hex', radix: 16));
+    } else if (hex.length == 3) {
+      final r = hex[0];
+      final g = hex[1];
+      final b = hex[2];
+      return Color(int.parse('FF$r$r$g$g$b$b', radix: 16));
+    }
+  }
+  if (colorStr.startsWith('rgb')) {
+    final match = RegExp(
+      r'rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)',
+    ).firstMatch(colorStr);
+    if (match != null) {
+      final r = int.parse(match.group(1)!);
+      final g = int.parse(match.group(2)!);
+      final b = int.parse(match.group(3)!);
+      return Color.fromARGB(255, r, g, b);
+    }
+  }
+  final lower = colorStr.toLowerCase();
+  if (lower == 'red') return Colors.red;
+  if (lower == 'blue') return Colors.blue;
+  if (lower == 'green') return Colors.green;
+  if (lower == 'yellow') return Colors.yellow;
+  if (lower == 'orange') return Colors.orange;
+  if (lower == 'black') return Colors.black;
+  if (lower == 'white') return Colors.white;
+  if (lower == 'grey' || lower == 'gray') return Colors.grey;
+  return null;
+}
+
+List<PreviewHtmlBlock> previewParseHtml(String html, {Map<String, Widget>? widgetMap}) {
+  final List<PreviewHtmlBlock> blocks = [];
+  final Map<String, Widget> wMap = widgetMap ?? {};
+
+  String cleanHtml = html
+      .replaceAll('\r', '')
+      .replaceAll(
+        RegExp(
+          r'<style[^>]*>.*?</style>',
+          dotAll: true,
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceAll(
+        RegExp(
+          r'<script[^>]*>.*?</script>',
+          dotAll: true,
+          caseSensitive: false,
+        ),
+        '',
+      );
+
+  int placeholderCount = wMap.length;
+
+  // 1. Extract <details> (FAQ)
+  final detailsRegex = RegExp(
+    r'<details[^>]*>.*?</details>',
+    dotAll: true,
+    caseSensitive: false,
+  );
+  while (true) {
+    final match = detailsRegex.firstMatch(cleanHtml);
+    if (match == null) break;
+    final detailsHtml = match.group(0)!;
+    final placeholder = '<!--W_${placeholderCount++}-->';
+    wMap[placeholder] = _buildPreviewFaqWidget(detailsHtml, wMap);
+    cleanHtml = cleanHtml.replaceRange(match.start, match.end, placeholder);
+  }
+
+  // 2. Extract <table>
+  final tableRegex = RegExp(
+    r'<table[^>]*>.*?</table>',
+    dotAll: true,
+    caseSensitive: false,
+  );
+  while (true) {
+    final match = tableRegex.firstMatch(cleanHtml);
+    if (match == null) break;
+    final tableHtml = match.group(0)!;
+    final placeholder = '<!--W_${placeholderCount++}-->';
+    wMap[placeholder] = _buildPreviewTableWidget(tableHtml);
+    cleanHtml = cleanHtml.replaceRange(match.start, match.end, placeholder);
+  }
+
+  // 3. Extract styled boxes (divs with class intro, warn, highlight, table-note)
+  final divRegex = RegExp(
+    r'''<div\s+class=["'](intro|warn|highlight|table-note)["'][^>]*>(.*?)</div>''',
+    dotAll: true,
+    caseSensitive: false,
+  );
+  while (true) {
+    final match = divRegex.firstMatch(cleanHtml);
+    if (match == null) break;
+    final boxClass = match.group(1)!.toLowerCase();
+    final innerHtml = match.group(2)!;
+    final placeholder = '<!--W_${placeholderCount++}-->';
+    wMap[placeholder] = _buildPreviewStyledBox(innerHtml, boxClass, wMap);
+    cleanHtml = cleanHtml.replaceRange(match.start, match.end, placeholder);
+  }
+
+  final regex = RegExp(r'<!--W_\d+-->|<[^>]+>|[^<]+');
+  final matches = regex.allMatches(cleanHtml);
+
+  bool isBold = false;
+  bool isItalic = false;
+  bool isUnderline = false;
+  bool isStrike = false;
+  List<Color> colorStack = [];
+  List<Color> bgStack = [];
+  List<String> fontStack = [];
+  List<Map<String, bool>> spanPushedStack = [];
+  String? currentLinkUrl;
+
+  List<InlineSpan> currentSpans = [];
+  TextAlign currentAlignment = TextAlign.left;
+  String currentBlockType = 'p';
+
+  bool inOrderedList = false;
+  int orderedListIndex = 0;
+
+  void commitBlock() {
+    if (currentSpans.isNotEmpty) {
+      blocks.add(
+        PreviewHtmlBlock(
+          spans: List.from(currentSpans),
+          alignment: currentAlignment,
+          blockType: currentBlockType,
+        ),
+      );
+      currentSpans.clear();
+    }
+    currentAlignment = TextAlign.left;
+    currentBlockType = 'p';
+  }
+
+  for (final match in matches) {
+    final token = match.group(0)!;
+    if (token.startsWith('<!--W_') && token.endsWith('-->')) {
+      commitBlock();
+      final widget = wMap[token];
+      if (widget != null) {
+        blocks.add(PreviewHtmlBlock(spans: [], blockType: 'widget', widget: widget));
+      }
+      continue;
+    }
+    if (token.startsWith('<') && token.endsWith('>')) {
+      final tag = token.toLowerCase();
+
+      if (tag.startsWith('<span')) {
+        final styleMatch = RegExp(
+          r'''style=["']([^"']*)["']''',
+        ).firstMatch(token);
+        bool pushedColor = false;
+        bool pushedBg = false;
+        bool pushedFont = false;
+        if (styleMatch != null) {
+          final styleContent = styleMatch.group(1)!;
+          final colorMatch = RegExp(
+            r'(?<!-)color:\s*([^;]+)',
+          ).firstMatch(styleContent);
+          if (colorMatch != null) {
+            final colorStr = colorMatch.group(1)!.trim();
+            final parsedColor = _previewParseColor(colorStr);
+            if (parsedColor != null) {
+              colorStack.add(parsedColor);
+              pushedColor = true;
+            }
+          }
+          final bgMatch = RegExp(
+            r'background-color:\s*([^;]+)',
+          ).firstMatch(styleContent);
+          if (bgMatch != null) {
+            final bgStr = bgMatch.group(1)!.trim();
+            final parsedBg = _previewParseColor(bgStr);
+            if (parsedBg != null) {
+              bgStack.add(parsedBg);
+              pushedBg = true;
+            }
+          }
+          final fontMatch = RegExp(
+            r'font-family:\s*([^;]+)',
+          ).firstMatch(styleContent);
+          if (fontMatch != null) {
+            final fontStr = fontMatch
+                .group(1)!
+                .trim()
+                .replaceAll(RegExp(r'''['"]'''), '');
+            if (fontStr.isNotEmpty) {
+              fontStack.add(fontStr);
+              pushedFont = true;
+            }
+          }
+        }
+        spanPushedStack.add({
+          'color': pushedColor,
+          'bg': pushedBg,
+          'font': pushedFont,
+        });
+      } else if (tag == '</span>') {
+        if (spanPushedStack.isNotEmpty) {
+          final pushed = spanPushedStack.removeLast();
+          if (pushed['color'] == true && colorStack.isNotEmpty) {
+            colorStack.removeLast();
+          }
+          if (pushed['bg'] == true && bgStack.isNotEmpty) {
+            bgStack.removeLast();
+          }
+          if (pushed['font'] == true && fontStack.isNotEmpty) {
+            fontStack.removeLast();
+          }
+        } else {
+          if (colorStack.isNotEmpty) colorStack.removeLast();
+          if (bgStack.isNotEmpty) bgStack.removeLast();
+          if (fontStack.isNotEmpty) fontStack.removeLast();
+        }
+      } else if (tag.startsWith('<a')) {
+        final hrefMatch = RegExp(
+          r'''href=["']([^"']*)["']''',
+        ).firstMatch(token);
+        if (hrefMatch != null) {
+          currentLinkUrl = hrefMatch.group(1);
+        }
+      } else if (tag == '</a>') {
+        currentLinkUrl = null;
+      } else if (tag.startsWith('<p') || tag.startsWith('<div')) {
+        commitBlock();
+        if (tag.contains('ql-align-center') ||
+            tag.contains('text-align: center') ||
+            tag.contains('text-align:center')) {
+          currentAlignment = TextAlign.center;
+        } else if (tag.contains('ql-align-right') ||
+            tag.contains('text-align: right') ||
+            tag.contains('text-align:right')) {
+          currentAlignment = TextAlign.right;
+        } else if (tag.contains('ql-align-justify') ||
+            tag.contains('text-align: justify') ||
+            tag.contains('text-align:justify')) {
+          currentAlignment = TextAlign.justify;
+        }
+      } else if (tag == '<strong>' || tag == '<b>') {
+        isBold = true;
+      } else if (tag == '</strong>' || tag == '</b>') {
+        isBold = false;
+      } else if (tag == '<em>' || tag == '<i>') {
+        isItalic = true;
+      } else if (tag == '</em>' || tag == '</i>') {
+        isItalic = false;
+      } else if (tag == '<u>') {
+        isUnderline = true;
+      } else if (tag == '</u>') {
+        isUnderline = false;
+      } else if (tag == '<s>' || tag == '<strike>' || tag == '<del>') {
+        isStrike = true;
+      } else if (tag == '</s>' || tag == '</strike>' || tag == '</del>') {
+        isStrike = false;
+      } else if (tag == '<ol>') {
+        inOrderedList = true;
+        orderedListIndex = 0;
+      } else if (tag == '</ol>') {
+        inOrderedList = false;
+      } else if (tag == '<ul>') {
+        inOrderedList = false;
+      } else if (tag == '</ul>') {
+        // No-op
+      } else if (tag.startsWith('<li')) {
+        commitBlock();
+        if (inOrderedList) {
+          orderedListIndex++;
+          currentBlockType = 'ol-li-$orderedListIndex';
+        } else {
+          currentBlockType = 'ul-li';
+        }
+      } else if (tag == '</li>') {
+        commitBlock();
+      } else if (tag.startsWith('<h1')) {
+        commitBlock();
+        currentBlockType = 'h1';
+      } else if (tag == '</h1>') {
+        commitBlock();
+      } else if (tag.startsWith('<h2')) {
+        commitBlock();
+        currentBlockType = 'h2';
+      } else if (tag == '</h2>') {
+        commitBlock();
+      } else if (tag.startsWith('<h3')) {
+        commitBlock();
+        currentBlockType = 'h3';
+      } else if (tag == '</h3>') {
+        commitBlock();
+      } else if (tag == '<br>' || tag == '<br/>' || tag == '<br />') {
+        currentSpans.add(const TextSpan(text: '\n'));
+      }
+    } else {
+      final text = token;
+      if (text.isNotEmpty) {
+        final Color? textColor = colorStack.isNotEmpty ? colorStack.last : null;
+        final Color? bgColor = bgStack.isNotEmpty ? bgStack.last : null;
+        final String? fontFam = fontStack.isNotEmpty ? fontStack.last : null;
+
+        TextStyle textStyle = TextStyle(
+          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
+          decoration: TextDecoration.combine([
+            if (isUnderline) TextDecoration.underline,
+            if (isStrike) TextDecoration.lineThrough,
+          ]),
+          color: textColor,
+          backgroundColor: bgColor,
+        );
+
+        if (fontFam != null) {
+          try {
+            textStyle = GoogleFonts.getFont(fontFam, textStyle: textStyle);
+          } catch (_) {
+            textStyle = textStyle.copyWith(fontFamily: fontFam);
+          }
+        }
+
+        if (currentLinkUrl != null) {
+          final targetUrl = currentLinkUrl;
+          textStyle = textStyle.copyWith(
+            color: Colors.blue.shade800,
+            decoration: TextDecoration.underline,
+          );
+          currentSpans.add(
+            TextSpan(
+              text: text,
+              style: textStyle,
+              recognizer: TapGestureRecognizer()
+                ..onTap = () async {
+                  final uri = Uri.tryParse(targetUrl);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+            ),
+          );
+        } else {
+          currentSpans.add(TextSpan(text: text, style: textStyle));
+        }
+      }
+    }
+  }
+  commitBlock();
+  return blocks;
+}
+
+Widget previewBuildHtmlContent(
+  BuildContext context,
+  List<PreviewHtmlBlock> blocks, {
+  Color? defaultTextColor,
+  bool isDarkMode = false,
+}) {
+  final Color kBodyColor = defaultTextColor ?? (isDarkMode ? Colors.white70 : const Color(0xFF111111));
+  const Color kGreen = Color(0xFF00A651);
+  const double kBodyFontSize = 13.0;
+  const double kLineHeight = 1.9;
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: blocks.map((block) {
+      if (block.widget != null) {
+        final blockPadding = block.blockType == 'widget'
+            ? EdgeInsets.zero
+            : const EdgeInsets.only(bottom: 12);
+        return Padding(padding: blockPadding, child: block.widget!);
+      }
+
+      final spans = block.spans.map((span) {
+        if (span is TextSpan && span.text != null) {
+          final existing = span.style;
+          return TextSpan(
+            text: span.text,
+            style: (existing ?? const TextStyle()).copyWith(
+              color: existing?.color ?? kBodyColor,
+              height: existing?.height ?? kLineHeight,
+              fontSize: existing?.fontSize ?? kBodyFontSize,
+            ),
+            recognizer: span.recognizer,
+          );
+        }
+        return span;
+      }).toList();
+
+      Widget widget;
+
+      // ── ORDERED LIST ITEM ──
+      if (block.blockType.startsWith('ol-li-')) {
+        final number = block.blockType.substring(6);
+        widget = Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$number. ',
+                style: TextStyle(
+                  fontSize: kBodyFontSize,
+                  height: kLineHeight,
+                  color: kBodyColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(children: spans),
+                  textAlign: block.alignment,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        // ── UNORDERED LIST ITEM ──
+      } else if (block.blockType == 'ul-li' || block.blockType == 'li') {
+        widget = Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '• ',
+                style: const TextStyle(
+                  fontSize: kBodyFontSize,
+                  height: kLineHeight,
+                  color: kGreen,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(children: spans),
+                  textAlign: block.alignment,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        // ── H1 ──
+      } else if (block.blockType == 'h1') {
+        widget = Container(
+          width: double.infinity,
+          padding: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isDarkMode ? Colors.white24 : const Color(0xFF000000),
+                width: 2.5,
+              ),
+            ),
+          ),
+          child: RichText(
+            text: TextSpan(
+              children: spans.map((s) {
+                if (s is TextSpan) {
+                  return TextSpan(
+                    text: s.text,
+                    recognizer: s.recognizer,
+                    style: (s.style ?? const TextStyle()).copyWith(
+                      fontSize: 20.0,
+                      fontWeight: FontWeight.w800,
+                      color: s.style?.color ?? (isDarkMode ? Colors.white : const Color(0xFF000000)),
+                      height: 1.35,
+                    ),
+                  );
+                }
+                return s;
+              }).toList(),
+            ),
+            textAlign: block.alignment,
+          ),
+        );
+
+        // ── H2 ──
+      } else if (block.blockType == 'h2') {
+        widget = Container(
+          width: double.infinity,
+          padding: const EdgeInsets.only(bottom: 6),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: kGreen, width: 2)),
+          ),
+          child: RichText(
+            text: TextSpan(
+              children: spans.map((s) {
+                if (s is TextSpan) {
+                  return TextSpan(
+                    text: s.text,
+                    recognizer: s.recognizer,
+                    style: (s.style ?? const TextStyle()).copyWith(
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.w700,
+                      color: s.style?.color ?? (isDarkMode ? Colors.white : const Color(0xFF000000)),
+                      height: 1.4,
+                    ),
+                  );
+                }
+                return s;
+              }).toList(),
+            ),
+            textAlign: block.alignment,
+          ),
+        );
+
+        // ── H3 ──
+      } else if (block.blockType == 'h3') {
+        widget = SizedBox(
+          width: double.infinity,
+          child: RichText(
+            text: TextSpan(
+              children: spans.map((s) {
+                if (s is TextSpan) {
+                  return TextSpan(
+                    text: s.text,
+                    recognizer: s.recognizer,
+                    style: (s.style ?? const TextStyle()).copyWith(
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w700,
+                      color: s.style?.color ?? (isDarkMode ? Colors.white70 : const Color(0xFF111111)),
+                      height: 1.5,
+                    ),
+                  );
+                }
+                return s;
+              }).toList(),
+            ),
+            textAlign: block.alignment,
+          ),
+        );
+
+        // ── PARAGRAPH / DEFAULT ──
+      } else {
+        widget = SizedBox(
+          width: double.infinity,
+          child: RichText(
+            text: TextSpan(children: spans),
+            textAlign: block.alignment,
+          ),
+        );
+      }
+
+      // Spacing between blocks
+      EdgeInsets blockPadding;
+      if (block.blockType == 'h1') {
+        blockPadding = const EdgeInsets.only(bottom: 14, top: 4);
+      } else if (block.blockType == 'h2') {
+        blockPadding = const EdgeInsets.only(top: 24, bottom: 12);
+      } else if (block.blockType == 'h3') {
+        blockPadding = const EdgeInsets.only(top: 14, bottom: 8);
+      } else if (block.blockType == 'ul-li' ||
+          block.blockType == 'li' ||
+          block.blockType.startsWith('ol-li-')) {
+        blockPadding = const EdgeInsets.only(bottom: 6);
+      } else {
+        blockPadding = const EdgeInsets.only(bottom: 12);
+      }
+
+      return Padding(padding: blockPadding, child: widget);
+    }).toList(),
+  );
 }
