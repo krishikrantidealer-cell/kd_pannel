@@ -1090,18 +1090,25 @@ class _CreateProductPageState extends State<CreateProductPage> {
       }
 
       for (var subCatName in _formSubCategories) {
-        for (var cat in _backendCategories) {
-          final List subs = cat['subCategories'] ?? [];
-          final matchingSub = subs.firstWhere(
-            (s) =>
-                s['name'].toString().toLowerCase() == subCatName.toLowerCase(),
+        for (var catName in _formCategories) {
+          final matchingCat = _backendCategories.firstWhere(
+            (c) => c['name'].toString().toLowerCase() == catName.toLowerCase(),
             orElse: () => null,
           );
-          if (matchingSub != null) {
-            final id =
-                matchingSub['id']?.toString() ?? matchingSub['_id']?.toString();
-            if (id != null) subCategoryIds.add(id);
-            break;
+          if (matchingCat != null) {
+            final List subs = matchingCat['subCategories'] ?? [];
+            final matchingSub = subs.firstWhere(
+              (s) =>
+                  s['name'].toString().toLowerCase() == subCatName.toLowerCase(),
+              orElse: () => null,
+            );
+            if (matchingSub != null) {
+              final id =
+                  matchingSub['id']?.toString() ?? matchingSub['_id']?.toString();
+              if (id != null && !subCategoryIds.contains(id)) {
+                subCategoryIds.add(id);
+              }
+            }
           }
         }
       }
@@ -2263,22 +2270,41 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         setState(() {
                           _formCategories.remove(cat);
                           // Also remove subcategories that belong only to this removed category
+                          final remainingCategories = _formCategories.where((c) => c != cat).toList();
+                          final List<String> retainedSubs = [];
+                          for (var rCat in remainingCategories) {
+                            final matchingCat = _backendCategories.firstWhere(
+                              (c) => c['name'].toString().toLowerCase() == rCat.toLowerCase(),
+                              orElse: () => null,
+                            );
+                            if (matchingCat != null) {
+                              final List subs = matchingCat['subCategories'] ?? [];
+                              for (var sub in subs) {
+                                final name = sub['name']?.toString() ?? '';
+                                if (name.isNotEmpty) {
+                                  retainedSubs.add(name.toLowerCase());
+                                }
+                              }
+                            }
+                          }
+
                           final List<String> subsToRemove = [];
                           final matchingCat = _backendCategories.firstWhere(
-                            (c) =>
-                                c['name'].toString().toLowerCase() ==
-                                cat.toLowerCase(),
+                            (c) => c['name'].toString().toLowerCase() == cat.toLowerCase(),
                             orElse: () => null,
                           );
                           if (matchingCat != null) {
                             final List subs =
                                 matchingCat['subCategories'] ?? [];
                             for (var sub in subs) {
-                              subsToRemove.add(sub['name']?.toString() ?? '');
+                              final name = sub['name']?.toString() ?? '';
+                              if (name.isNotEmpty && !retainedSubs.contains(name.toLowerCase())) {
+                                subsToRemove.add(name);
+                              }
                             }
                           }
                           _formSubCategories.removeWhere(
-                            (sub) => subsToRemove.contains(sub),
+                            (sub) => subsToRemove.any((s) => s.toLowerCase() == sub.toLowerCase()),
                           );
                         });
                       },

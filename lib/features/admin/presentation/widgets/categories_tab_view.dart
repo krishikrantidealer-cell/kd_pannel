@@ -385,17 +385,18 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             if (cataloguePdfFile != null &&
                                 cataloguePdfFile!.bytes != null) {
                               setState(() => uploadProgress = 0.0);
-                              
-                              final finalUrl = await ApiClient().uploadFileInChunks(
-                                fileBytes: cataloguePdfFile!.bytes!,
-                                fileName: cataloguePdfFile!.name,
-                                categoryName: controller.text.trim(),
-                                onProgress: (p) {
-                                  if (mounted) {
-                                    setState(() => uploadProgress = p);
-                                  }
-                                },
-                              );
+
+                              final finalUrl = await ApiClient()
+                                  .uploadFileInChunks(
+                                    fileBytes: cataloguePdfFile!.bytes!,
+                                    fileName: cataloguePdfFile!.name,
+                                    categoryName: controller.text.trim(),
+                                    onProgress: (p) {
+                                      if (mounted) {
+                                        setState(() => uploadProgress = p);
+                                      }
+                                    },
+                                  );
 
                               publicPdfUrl = finalUrl;
                             }
@@ -830,7 +831,8 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                               'name': controller.text.trim(),
                             };
 
-                            if (categoryImage == null && existingImageUrl == null) {
+                            if (categoryImage == null &&
+                                existingImageUrl == null) {
                               fields['bannerImage'] = '';
                             }
 
@@ -838,17 +840,18 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             if (cataloguePdfFile != null &&
                                 cataloguePdfFile!.bytes != null) {
                               setState(() => uploadProgress = 0.0);
-                              
-                              final finalUrl = await ApiClient().uploadFileInChunks(
-                                fileBytes: cataloguePdfFile!.bytes!,
-                                fileName: cataloguePdfFile!.name,
-                                categoryName: controller.text.trim(),
-                                onProgress: (p) {
-                                  if (mounted) {
-                                    setState(() => uploadProgress = p);
-                                  }
-                                },
-                              );
+
+                              final finalUrl = await ApiClient()
+                                  .uploadFileInChunks(
+                                    fileBytes: cataloguePdfFile!.bytes!,
+                                    fileName: cataloguePdfFile!.name,
+                                    categoryName: controller.text.trim(),
+                                    onProgress: (p) {
+                                      if (mounted) {
+                                        setState(() => uploadProgress = p);
+                                      }
+                                    },
+                                  );
 
                               publicPdfUrl = finalUrl;
                             } else if (deletedExistingPdf) {
