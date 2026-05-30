@@ -36,12 +36,30 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final _nameController = TextEditingController();
   final _vendorController = TextEditingController();
   late final quill.QuillController _descriptionController;
+  bool _isHtmlMode = false;
+  final _htmlDescriptionController = TextEditingController();
   List<Map<String, dynamic>> _formVariants = [];
   List<Map<String, String>> _priceTiers = [
     {'id': '1', 'name': 'Tier 1 (10-30)'},
     {'id': '2', 'name': 'Tier 2 (30-50)'},
     {'id': '3', 'name': 'Tier 3 (50+)'},
   ];
+  final Map<String, String> _googleFontFamilies = {
+    'Roboto': 'Roboto',
+    'Lato': 'Lato',
+    'Poppins': 'Poppins',
+    'Montserrat': 'Montserrat',
+    'Open Sans': 'Open Sans',
+    'Oswald': 'Oswald',
+    'Merriweather': 'Merriweather',
+    'Playfair Display': 'Playfair Display',
+    'Nunito': 'Nunito',
+    'Raleway': 'Raleway',
+    'Ubuntu': 'Ubuntu',
+    'Pacifico': 'Pacifico',
+    'Outfit': 'Outfit',
+    'Inter': 'Inter',
+  };
   List<Uint8List> _productImages = [];
   // URLs of images already uploaded to GCS (shown in edit mode)
   List<String> _existingImageUrls = [];
@@ -78,7 +96,17 @@ class _CreateProductPageState extends State<CreateProductPage> {
         data['description'] != null &&
         data['description'].toString().isNotEmpty) {
       try {
-        final delta = HtmlToDelta().convert(data['description'].toString());
+        final rawHtml = data['description'].toString();
+        // Convert class-based alignment to inline styles so HtmlToDelta can parse them
+        final sanitizedHtml = rawHtml
+            .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
+            .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
+            .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
+            .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
+            .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
+            .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
+
+        final delta = HtmlToDelta().convert(sanitizedHtml);
         doc = quill.Document.fromDelta(delta);
         debugPrint(
           '[PERF] CreateProductPage.initState - Parsed description HTML to Quill Delta. Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
@@ -105,6 +133,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       );
       _nameController.text = data['name'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
+      _htmlDescriptionController.text = data['description']?.toString() ?? '';
       _formCategories = [];
       _formSubCategories = [];
       _tags = List<String>.from(data['tags'] ?? []);
@@ -413,6 +442,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   void dispose() {
     _nameController.dispose();
     _vendorController.dispose();
+    _htmlDescriptionController.dispose();
     for (var variant in _formVariants) {
       variant['price']?.dispose();
       variant['compareAtPrice']?.dispose();
@@ -432,6 +462,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   void _addVariant({Map<String, dynamic>? data}) {
+    final String? variantId = data?['id']?.toString() ?? data?['_id']?.toString();
     final String initialPrice = data?['price'] != null
         ? data!['price'].toString()
         : '';
@@ -660,6 +691,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     setState(() {
       _formVariants.add({
+        if (variantId != null) 'id': variantId,
+        if (variantId != null) '_id': variantId,
         'price': priceCtrl,
         'compareAtPrice': compareCtrl,
         'packSizeVal': packValCtrl,
@@ -985,8 +1018,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
 
     // Check description is not empty
-    final descPlainText = _descriptionController.document.toPlainText().trim();
-    if (descPlainText.isEmpty || descPlainText == '\n') {
+    final bool isDescEmpty = _isHtmlMode
+        ? _htmlDescriptionController.text.trim().isEmpty
+        : (_descriptionController.document.toPlainText().trim().isEmpty ||
+            _descriptionController.document.toPlainText().trim() == '\n');
+
+    if (isDescEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Product description cannot be empty.'),
@@ -1002,15 +1039,48 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     try {
       String description = '';
-      try {
-        final deltaJson = _descriptionController.document.toDelta().toJson();
-        final converter = QuillDeltaToHtmlConverter(
-          List<Map<String, dynamic>>.from(deltaJson),
-          ConverterOptions.forEmail(),
-        );
-        description = converter.convert();
-      } catch (e) {
-        debugPrint('[PERF] Error converting Quill Delta to HTML: $e');
+      if (_isHtmlMode) {
+        description = _htmlDescriptionController.text.trim();
+      } else {
+        try {
+          final deltaJson = _descriptionController.document.toDelta().toJson();
+          final List<Map<String, dynamic>> normalizedDeltaJson =
+              List<Map<String, dynamic>>.from(deltaJson).map((op) {
+            if (op.containsKey('attributes')) {
+              final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
+              bool modified = false;
+              if (attrs.containsKey('color') && attrs['color'] is String) {
+                final color = attrs['color'] as String;
+                if (color.startsWith('#') && color.length == 9) {
+                  attrs['color'] = '#' + color.substring(3);
+                  modified = true;
+                }
+              }
+              if (attrs.containsKey('background') && attrs['background'] is String) {
+                final bg = attrs['background'] as String;
+                if (bg.startsWith('#') && bg.length == 9) {
+                  attrs['background'] = '#' + bg.substring(3);
+                  modified = true;
+                }
+              }
+              if (modified) {
+                return {
+                  ...op,
+                  'attributes': attrs,
+                };
+              }
+            }
+            return op;
+          }).toList();
+
+          final converter = QuillDeltaToHtmlConverter(
+            normalizedDeltaJson,
+            ConverterOptions.forEmail(),
+          );
+          description = converter.convert();
+        } catch (e) {
+          debugPrint('[PERF] Error converting Quill Delta to HTML: $e');
+        }
       }
 
       List<Map<String, dynamic>> variantsData = [];
@@ -1044,6 +1114,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final variantPriceTiers = v['priceTiers'] as List<Map<String, String>>;
 
         variantsData.add({
+          if (v['id'] != null) 'id': v['id'],
+          if (v['_id'] != null) '_id': v['_id'],
           'price': primaryRateWithSuffix,
           'compareAtPrice': mrpRateWithSuffix,
           'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
@@ -1052,17 +1124,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'rates': ratesJson,
           'computedPrices': computedJson,
           'priceTiers': variantPriceTiers,
-
-          // Legacy mappings
-          'unitPriceRate': primaryRateWithSuffix,
-          'unitPriceRate2': (ratesMap['2']?.text.isNotEmpty ?? false)
-              ? '${ratesMap['2']!.text}$suffix'
-              : '',
-          'unitPriceRate3': (ratesMap['3']?.text.isNotEmpty ?? false)
-              ? '${ratesMap['3']!.text}$suffix'
-              : '',
-          'price2': computedMap['2']?.text ?? '',
-          'price3': computedMap['3']?.text ?? '',
         });
       }
 
@@ -1127,25 +1188,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ) ??
             0.0;
 
-        final rates = v['rates'] as Map<String, String>;
-        final rate2 =
-            double.tryParse(
-              rates['2']?.replaceAll(RegExp(r'[^0-9.]'), '') ?? '',
-            ) ??
-            priceVal;
-        final rate3 =
-            double.tryParse(
-              rates['3']?.replaceAll(RegExp(r'[^0-9.]'), '') ?? '',
-            ) ??
-            priceVal;
-
         return {
+          if (v['id'] != null) 'id': v['id'],
+          if (v['_id'] != null) '_id': v['_id'],
           'size': v['packSize'],
           'price': priceVal,
           'compareAtPrice': compareVal,
-          'price10_30': priceVal,
-          'price30_50': rate2,
-          'price50_plus': rate3,
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),
           'basePacking': v['basePacking'],
           'weight': 0.0,
@@ -1370,13 +1418,104 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           },
                         ),
                         const SizedBox(height: 24),
-                        Text(
-                          'Description',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Description',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  if (_isHtmlMode) {
+                                    // Code -> Visual
+                                    final htmlText = _htmlDescriptionController.text.trim();
+                                    quill.Document doc;
+                                    if (htmlText.isNotEmpty) {
+                                      try {
+                                        final sanitizedHtml = htmlText
+                                            .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
+                                            .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
+                                            .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
+                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
+                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
+                                            .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
+                                        final delta = HtmlToDelta().convert(sanitizedHtml);
+                                        doc = quill.Document.fromDelta(delta);
+                                      } catch (e) {
+                                        debugPrint('Error parsing HTML to Quill Delta: $e');
+                                        doc = quill.Document();
+                                      }
+                                    } else {
+                                      doc = quill.Document();
+                                    }
+                                    _descriptionController.document = doc;
+                                  } else {
+                                    // Visual -> Code
+                                    try {
+                                      final deltaJson = _descriptionController.document.toDelta().toJson();
+                                      final List<Map<String, dynamic>> normalizedDeltaJson =
+                                          List<Map<String, dynamic>>.from(deltaJson).map((op) {
+                                        if (op.containsKey('attributes')) {
+                                          final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
+                                          bool modified = false;
+                                          if (attrs.containsKey('color') && attrs['color'] is String) {
+                                            final color = attrs['color'] as String;
+                                            if (color.startsWith('#') && color.length == 9) {
+                                              attrs['color'] = '#' + color.substring(3);
+                                              modified = true;
+                                            }
+                                          }
+                                          if (attrs.containsKey('background') && attrs['background'] is String) {
+                                            final bg = attrs['background'] as String;
+                                            if (bg.startsWith('#') && bg.length == 9) {
+                                              attrs['background'] = '#' + bg.substring(3);
+                                              modified = true;
+                                            }
+                                          }
+                                          if (modified) {
+                                            return {
+                                              ...op,
+                                              'attributes': attrs,
+                                            };
+                                          }
+                                        }
+                                        return op;
+                                      }).toList();
+
+                                      final converter = QuillDeltaToHtmlConverter(
+                                        normalizedDeltaJson,
+                                        ConverterOptions.forEmail(),
+                                      );
+                                      _htmlDescriptionController.text = converter.convert();
+                                    } catch (e) {
+                                      debugPrint('Error converting Quill Delta to HTML: $e');
+                                      _htmlDescriptionController.text = '';
+                                    }
+                                  }
+                                  _isHtmlMode = !_isHtmlMode;
+                                });
+                              },
+                              icon: Icon(
+                                _isHtmlMode ? Icons.remove_red_eye_rounded : Icons.code_rounded,
+                                size: 16,
+                                color: AppTheme.primaryColor,
+                              ),
+                              label: Text(
+                                _isHtmlMode ? 'Visual Editor' : 'HTML Editor',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -1399,50 +1538,75 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 borderRadius: BorderRadius.circular(12),
                                 child: Column(
                                   children: [
-                                    quill.QuillSimpleToolbar(
-                                      controller: _descriptionController,
-                                      config:
-                                          const quill.QuillSimpleToolbarConfig(
-                                            showFontFamily: false,
-                                            showFontSize: false,
-
-                                            showInlineCode: false,
-                                            showSubscript: false,
-                                            showSuperscript: false,
-                                            showCodeBlock: false,
-                                            showSearchButton: false,
-                                            showUndo: true,
-                                            showRedo: true,
-                                            showBoldButton: true,
-                                            showItalicButton: true,
-                                            showUnderLineButton: true,
-                                            showStrikeThrough: true,
-                                            showColorButton: true,
-                                            showBackgroundColorButton: true,
-                                            showListNumbers: true,
-                                            showListBullets: true,
-                                            showListCheck: false,
-                                            showIndent: true,
-                                            showAlignmentButtons: true,
-                                            showLink: true,
-                                            showQuote: true,
-                                            showClearFormat: true,
-                                          ),
-                                    ),
-                                    const Divider(
-                                      height: 1,
-                                      color: AppTheme.borderColor,
-                                    ),
+                                    if (!_isHtmlMode) ...[
+                                      quill.QuillSimpleToolbar(
+                                        controller: _descriptionController,
+                                        config:
+                                            quill.QuillSimpleToolbarConfig(
+                                              showFontFamily: true,
+                                              showFontSize: false,
+                                              buttonOptions: quill.QuillSimpleToolbarButtonOptions(
+                                                fontFamily: quill.QuillToolbarFontFamilyButtonOptions(
+                                                  items: _googleFontFamilies,
+                                                ),
+                                              ),
+                                              showInlineCode: false,
+                                              showSubscript: false,
+                                              showSuperscript: false,
+                                              showCodeBlock: false,
+                                              showSearchButton: false,
+                                              showUndo: true,
+                                              showRedo: true,
+                                              showBoldButton: true,
+                                              showItalicButton: true,
+                                              showUnderLineButton: true,
+                                              showStrikeThrough: true,
+                                              showColorButton: true,
+                                              showBackgroundColorButton: true,
+                                              showListNumbers: true,
+                                              showListBullets: true,
+                                              showListCheck: false,
+                                              showIndent: true,
+                                              showAlignmentButtons: true,
+                                              showLink: true,
+                                              showQuote: true,
+                                              showClearFormat: true,
+                                            ),
+                                      ),
+                                      const Divider(
+                                        height: 1,
+                                        color: AppTheme.borderColor,
+                                      ),
+                                    ],
                                     Container(
                                       height: 350,
                                       padding: const EdgeInsets.all(16),
-                                      child: quill.QuillEditor.basic(
-                                        controller: _descriptionController,
-                                        config: const quill.QuillEditorConfig(
-                                          placeholder:
-                                              'Provide a detailed description of the product features, benefits, and specifications...',
-                                        ),
-                                      ),
+                                      child: _isHtmlMode
+                                          ? TextField(
+                                              controller: _htmlDescriptionController,
+                                              maxLines: null,
+                                              minLines: 15,
+                                              keyboardType: TextInputType.multiline,
+                                              style: GoogleFonts.robotoMono(
+                                                fontSize: 13,
+                                                color: Colors.blueGrey.shade900,
+                                              ),
+                                              decoration: const InputDecoration(
+                                                border: InputBorder.none,
+                                                hintText: 'Write raw HTML here (e.g. <p>Hello <b>World</b></p>)...',
+                                                hintStyle: TextStyle(
+                                                  color: AppTheme.textSecondary,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            )
+                                          : quill.QuillEditor.basic(
+                                              controller: _descriptionController,
+                                              config: const quill.QuillEditorConfig(
+                                                placeholder:
+                                                    'Provide a detailed description of the product features, benefits, and specifications...',
+                                              ),
+                                            ),
                                     ),
                                   ],
                                 ),
