@@ -583,7 +583,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           normalizedDeltaJson,
           ConverterOptions.forEmail(),
         );
-        _htmlDescriptionController.text = converter.convert();
+        _htmlDescriptionController.text = _stripHtmlCssAndClasses(converter.convert());
       } catch (e) {
         debugPrint('Error converting Quill Delta to HTML: $e');
         _htmlDescriptionController.text = '';
@@ -1184,6 +1184,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
   }
 
+  String _stripHtmlCssAndClasses(String html) {
+    return _topLevelStripHtmlCssAndClasses(html);
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1271,6 +1275,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           debugPrint('[PERF] Error converting Quill Delta to HTML: $e');
         }
       }
+      description = _stripHtmlCssAndClasses(description);
 
       List<Map<String, dynamic>> variantsData = [];
       for (var v in _formVariants) {
@@ -1683,13 +1688,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                         controller: _descriptionController,
                                         config:
                                             quill.QuillSimpleToolbarConfig(
-                                              showFontFamily: true,
+                                              showFontFamily: false,
                                               showFontSize: false,
-                                              buttonOptions: quill.QuillSimpleToolbarButtonOptions(
-                                                fontFamily: quill.QuillToolbarFontFamilyButtonOptions(
-                                                  items: _googleFontFamilies,
-                                                ),
-                                              ),
                                               showInlineCode: false,
                                               showSubscript: false,
                                               showSuperscript: false,
@@ -1701,8 +1701,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                               showItalicButton: true,
                                               showUnderLineButton: true,
                                               showStrikeThrough: true,
-                                              showColorButton: true,
-                                              showBackgroundColorButton: true,
+                                              showColorButton: false,
+                                              showBackgroundColorButton: false,
                                               showListNumbers: true,
                                               showListBullets: true,
                                               showListCheck: false,
@@ -4515,7 +4515,7 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
   }
 }
 
-class _PreviewFaqExpansionTile extends StatefulWidget {
+class _PreviewFaqExpansionTile extends StatelessWidget {
   final String question;
   final String answerHtml;
   final Map<String, Widget> widgetMap;
@@ -4527,36 +4527,17 @@ class _PreviewFaqExpansionTile extends StatefulWidget {
   });
 
   @override
-  State<_PreviewFaqExpansionTile> createState() => _PreviewFaqExpansionTileState();
-}
-
-class _PreviewFaqExpansionTileState extends State<_PreviewFaqExpansionTile> {
-  bool _isExpanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    final cleanQuestion = widget.question
+    final cleanQuestion = question
         .replaceAll(RegExp(r'<[^>]*>'), '')
         .trim();
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEEEEEE), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          title: Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
             cleanQuestion,
             style: const TextStyle(
               fontWeight: FontWeight.w700,
@@ -4564,33 +4545,17 @@ class _PreviewFaqExpansionTileState extends State<_PreviewFaqExpansionTile> {
               color: Colors.black87,
             ),
           ),
-          trailing: Icon(
-            _isExpanded ? Icons.remove : Icons.add,
-            color: const Color(0xFF00A651),
+          const SizedBox(height: 6),
+          Builder(
+            builder: (context) {
+              final innerBlocks = previewParseHtml(
+                answerHtml,
+                widgetMap: widgetMap,
+              );
+              return previewBuildHtmlContent(context, innerBlocks);
+            },
           ),
-          onExpansionChanged: (expanded) {
-            setState(() {
-              _isExpanded = expanded;
-            });
-          },
-          childrenPadding: const EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: 16,
-          ),
-          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Builder(
-              builder: (context) {
-                final innerBlocks = previewParseHtml(
-                  widget.answerHtml,
-                  widgetMap: widget.widgetMap,
-                );
-                return previewBuildHtmlContent(context, innerBlocks);
-              },
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -4603,10 +4568,6 @@ class _PreviewFaqTableWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isDoseTable = tableHtml.contains(
-      RegExp(r'''class=["'][^"']*dose-table''', caseSensitive: false),
-    );
-
     final trRegex = RegExp(
       r'<tr[^>]*>(.*?)</tr>',
       dotAll: true,
@@ -4632,10 +4593,6 @@ class _PreviewFaqTableWidget extends StatelessWidget {
           trMatches[rowIndex].group(0)!.toLowerCase().startsWith('<tr') &&
           trHtml.toLowerCase().contains('<th');
 
-      final Color rowBg = isHeader
-          ? const Color(0xFF00A651)
-          : (rowIndex % 2 == 0 ? const Color(0xFFF5F5F5) : Colors.white);
-
       for (int colIndex = 0; colIndex < cellMatches.length; colIndex++) {
         final cellMatch = cellMatches[colIndex];
         final cellInnerHtml = cellMatch.group(2)!;
@@ -4646,17 +4603,11 @@ class _PreviewFaqTableWidget extends StatelessWidget {
           cellContent = previewBuildHtmlContent(
             context,
             cellBlocks,
-            defaultTextColor: Colors.white,
+            defaultTextColor: Colors.black87,
           );
         } else {
-          Color? customTextColor;
           bool enforceBold = false;
-
           if (colIndex == 0) {
-            enforceBold = true;
-          }
-          if (isDoseTable && colIndex == 4) {
-            customTextColor = const Color(0xFF00A651);
             enforceBold = true;
           }
 
@@ -4664,7 +4615,6 @@ class _PreviewFaqTableWidget extends StatelessWidget {
           Widget child = previewBuildHtmlContent(
             context,
             cellBlocks,
-            defaultTextColor: customTextColor,
           );
 
           if (enforceBold) {
@@ -4678,10 +4628,10 @@ class _PreviewFaqTableWidget extends StatelessWidget {
 
         rowCells.add(
           Container(
-            color: rowBg,
+            color: Colors.transparent,
             padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
+              horizontal: 10,
+              vertical: 8,
             ),
             alignment: Alignment.centerLeft,
             child: cellContent,
@@ -4698,18 +4648,11 @@ class _PreviewFaqTableWidget extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDDDDD), width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Table(
           defaultColumnWidth: const IntrinsicColumnWidth(),
-          border: TableBorder.symmetric(
-            inside: const BorderSide(color: Color(0xFFDDDDDD), width: 1),
-          ),
+          border: TableBorder.all(color: const Color(0xFFDDDDDD), width: 1),
           children: rows,
         ),
       ),
@@ -4838,28 +4781,21 @@ Color? _previewParseColor(String colorStr) {
   return null;
 }
 
+String _topLevelStripHtmlCssAndClasses(String html) {
+  return html
+      .replaceAll('\r', '')
+      .replaceAll(RegExp(r'''\s*style\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
+      .replaceAll(RegExp(r'''\s*class\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
+      .replaceAll(RegExp(r'''\s*id\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
+      .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false), '')
+      .replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true, caseSensitive: false), '');
+}
+
 List<PreviewHtmlBlock> previewParseHtml(String html, {Map<String, Widget>? widgetMap}) {
   final List<PreviewHtmlBlock> blocks = [];
   final Map<String, Widget> wMap = widgetMap ?? {};
 
-  String cleanHtml = html
-      .replaceAll('\r', '')
-      .replaceAll(
-        RegExp(
-          r'<style[^>]*>.*?</style>',
-          dotAll: true,
-          caseSensitive: false,
-        ),
-        '',
-      )
-      .replaceAll(
-        RegExp(
-          r'<script[^>]*>.*?</script>',
-          dotAll: true,
-          caseSensitive: false,
-        ),
-        '',
-      );
+  String cleanHtml = _topLevelStripHtmlCssAndClasses(html);
 
   int placeholderCount = wMap.length;
 
@@ -5231,10 +5167,10 @@ Widget previewBuildHtmlContent(
             children: [
               Text(
                 '• ',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: kBodyFontSize,
                   height: kLineHeight,
-                  color: kGreen,
+                  color: kBodyColor,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -5250,67 +5186,48 @@ Widget previewBuildHtmlContent(
 
         // ── H1 ──
       } else if (block.blockType == 'h1') {
-        widget = Container(
-          width: double.infinity,
-          padding: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isDarkMode ? Colors.white24 : const Color(0xFF000000),
-                width: 2.5,
-              ),
-            ),
+        widget = RichText(
+          text: TextSpan(
+            children: spans.map((s) {
+              if (s is TextSpan) {
+                return TextSpan(
+                  text: s.text,
+                  recognizer: s.recognizer,
+                  style: (s.style ?? const TextStyle()).copyWith(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.w800,
+                    color: s.style?.color ?? kBodyColor,
+                    height: 1.35,
+                  ),
+                );
+              }
+              return s;
+            }).toList(),
           ),
-          child: RichText(
-            text: TextSpan(
-              children: spans.map((s) {
-                if (s is TextSpan) {
-                  return TextSpan(
-                    text: s.text,
-                    recognizer: s.recognizer,
-                    style: (s.style ?? const TextStyle()).copyWith(
-                      fontSize: 20.0,
-                      fontWeight: FontWeight.w800,
-                      color: s.style?.color ?? (isDarkMode ? Colors.white : const Color(0xFF000000)),
-                      height: 1.35,
-                    ),
-                  );
-                }
-                return s;
-              }).toList(),
-            ),
-            textAlign: block.alignment,
-          ),
+          textAlign: block.alignment,
         );
 
         // ── H2 ──
       } else if (block.blockType == 'h2') {
-        widget = Container(
-          width: double.infinity,
-          padding: const EdgeInsets.only(bottom: 6),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: kGreen, width: 2)),
+        widget = RichText(
+          text: TextSpan(
+            children: spans.map((s) {
+              if (s is TextSpan) {
+                return TextSpan(
+                  text: s.text,
+                  recognizer: s.recognizer,
+                  style: (s.style ?? const TextStyle()).copyWith(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w700,
+                    color: s.style?.color ?? kBodyColor,
+                    height: 1.4,
+                  ),
+                );
+              }
+              return s;
+            }).toList(),
           ),
-          child: RichText(
-            text: TextSpan(
-              children: spans.map((s) {
-                if (s is TextSpan) {
-                  return TextSpan(
-                    text: s.text,
-                    recognizer: s.recognizer,
-                    style: (s.style ?? const TextStyle()).copyWith(
-                      fontSize: 16.0,
-                      fontWeight: FontWeight.w700,
-                      color: s.style?.color ?? (isDarkMode ? Colors.white : const Color(0xFF000000)),
-                      height: 1.4,
-                    ),
-                  );
-                }
-                return s;
-              }).toList(),
-            ),
-            textAlign: block.alignment,
-          ),
+          textAlign: block.alignment,
         );
 
         // ── H3 ──
@@ -5327,7 +5244,7 @@ Widget previewBuildHtmlContent(
                     style: (s.style ?? const TextStyle()).copyWith(
                       fontSize: 14.0,
                       fontWeight: FontWeight.w700,
-                      color: s.style?.color ?? (isDarkMode ? Colors.white70 : const Color(0xFF111111)),
+                      color: s.style?.color ?? kBodyColor,
                       height: 1.5,
                     ),
                   );
