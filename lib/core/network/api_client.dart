@@ -13,7 +13,7 @@ class ApiClient {
 
   // The local Node.js server runs on port 5000 by default.
   // Using localhost is correct for Web.
-  final String baseUrl = 'https://api.krishikrantiorganics.com/api';
+  final String baseUrl = 'https://krishi-backend-123180953109.asia-south1.run.app/api';
 
   String? _accessToken;
   String? _refreshToken;

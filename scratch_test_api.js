@@ -1,6 +1,6 @@
 async function testSubCategory() {
   try {
-    const response = await fetch('https://api.krishikrantiorganics.com/api/products/categories/6a0d6b0228bb0a2b352ed8b3/subcategories', {
+    const response = await fetch('https://krishi-backend-123180953109.asia-south1.run.app/api/products/categories/6a0d6b0228bb0a2b352ed8b3/subcategories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'TestSub' })

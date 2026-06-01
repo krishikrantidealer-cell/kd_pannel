@@ -1,6 +1,6 @@
 const https = require('https');
 
-https.get('https://api.krishikrantiorganics.com/api/products?limit=1', (res) => {
+https.get('https://krishi-backend-123180953109.asia-south1.run.app/api/products?limit=1', (res) => {
   let data = '';
   res.on('data', (chunk) => data += chunk);
   res.on('end', () => {
