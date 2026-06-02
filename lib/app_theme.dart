@@ -209,7 +209,6 @@ class AppTheme {
         seedColor: primaryColor,
         primary: primaryColor,
         surface: cardColor,
-        background: backgroundColor,
         error: error,
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -228,7 +227,7 @@ class AppTheme {
   // Shadow
   static List<BoxShadow> get softShadow => [
     BoxShadow(
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       blurRadius: 15,
       offset: const Offset(0, 4),
     ),
@@ -236,7 +235,7 @@ class AppTheme {
 
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
-      color: Colors.black.withOpacity(0.02),
+      color: Colors.black.withValues(alpha: 0.02),
       blurRadius: 10,
       offset: const Offset(0, 4),
     ),

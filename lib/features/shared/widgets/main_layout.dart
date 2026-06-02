@@ -22,6 +22,7 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
+  String? _lastProcessedRoute;
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = const [
@@ -50,7 +51,8 @@ class _MainLayoutState extends State<MainLayout> {
     final String? routeName = ModalRoute.of(context)?.settings.name;
     final role = AuthService().currentUserRole ?? UserRole.admin;
 
-    if (routeName != null) {
+    if (routeName != null && routeName != _lastProcessedRoute) {
+      _lastProcessedRoute = routeName;
       if (role == UserRole.admin) {
         if (routeName == '/dashboard') _currentIdx = 0;
         if (routeName == '/products') _currentIdx = 1;
@@ -67,13 +69,34 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   void _handleTabSelected(int index) {
+    // 1. Close drawer if open (Mobile/Tablet)
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
+
+    // 2. Handle cross-page navigation vs. internal stack switching
+    if (widget.child != null) {
+      final role = AuthService().currentUserRole ?? UserRole.admin;
+      String route = '/dashboard';
+      if (role == UserRole.admin) {
+        if (index == 1) route = '/products';
+        if (index == 2) route = '/leads';
+        if (index == 3) route = '/dealers';
+        if (index == 4) route = '/support';
+      } else {
+        if (index == 1) route = '/products';
+        if (index == 2) route = '/leads';
+        if (index == 3) route = '/dealers';
+      }
+      
+      // Navigate to the target main route
+      Navigator.pushNamed(context, route);
+      return;
+    }
+
     setState(() {
       _currentIdx = index;
     });
-    // If mobile drawer is open, auto-close it
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
   }
 
   void _handleLogout() {
@@ -86,6 +109,26 @@ class _MainLayoutState extends State<MainLayout> {
     final bool isDesktop = Responsive.isDesktop(context);
     final role = AuthService().currentUserRole ?? UserRole.admin;
 
+    final Widget content = Column(
+      children: [
+        // Topbar (fixed height)
+        TopbarWidget(
+          onMenuPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
+        ),
+
+        // Screen Content
+        Expanded(
+          child: widget.child ??
+              IndexedStack(
+                index: _currentIdx,
+                children: role == UserRole.admin ? _adminPages : _salesPages,
+              ),
+        ),
+      ],
+    );
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: !isDesktop
@@ -95,46 +138,22 @@ class _MainLayoutState extends State<MainLayout> {
                 currentIdx: _currentIdx,
                 onTabSelected: _handleTabSelected,
                 onLogout: _handleLogout,
+                forceExpanded: true,
               ),
             )
           : null,
-      body: Row(
-        children: [
-          // Sidebar (fixed width) - Only show on desktop
-          if (isDesktop)
-            SidebarWidget(
-              currentIdx: _currentIdx,
-              onTabSelected: _handleTabSelected,
-              onLogout: _handleLogout,
-            ),
-
-          // Right Side (Topbar + Content)
-          Expanded(
-            child: Column(
+      body: isDesktop
+          ? Row(
               children: [
-                // Topbar (fixed height)
-                TopbarWidget(
-                  onMenuPressed: () {
-                    _scaffoldKey.currentState?.openDrawer();
-                  },
+                SidebarWidget(
+                  currentIdx: _currentIdx,
+                  onTabSelected: _handleTabSelected,
+                  onLogout: _handleLogout,
                 ),
-
-                // Screen Content
-                Expanded(
-                  child:
-                      widget.child ??
-                      IndexedStack(
-                        index: _currentIdx,
-                        children: role == UserRole.admin
-                            ? _adminPages
-                            : _salesPages,
-                      ),
-                ),
+                Expanded(child: content),
               ],
-            ),
-          ),
-        ],
-      ),
+            )
+          : content,
     );
   }
 }
