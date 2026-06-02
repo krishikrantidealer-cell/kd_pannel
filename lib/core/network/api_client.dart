@@ -134,7 +134,7 @@ class ApiClient {
   }
 
   /// Helper to run request with automatic retries and exponential backoff.
-  /// Designed to seamlessly handle Render free tier cold starts and network glitches.
+  /// Designed to seamlessly handle backend server cold starts and network glitches.
   Future<http.Response> _requestWithRetry(
     Future<http.Response> Function(Duration currentTimeout) requestFn, {
     int maxRetries = 4,
@@ -164,7 +164,7 @@ class ApiClient {
           }
         }
 
-        // Render cold start might return 502 / 503 / 504 gateway errors while booting
+        // Server cold start might return 502 / 503 / 504 gateway errors while booting
         if ((response.statusCode == 502 || 
              response.statusCode == 503 || 
              response.statusCode == 504) && 

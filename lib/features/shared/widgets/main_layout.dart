@@ -93,7 +93,7 @@ class _MainLayoutState extends State<MainLayout> {
                   },
                 ),
 
-                // Global Wakeup Alert banner (Render Free Tier Cold-Start handling)
+                // Global Wakeup Alert banner (Backend Cold-Start handling)
                 ValueListenableBuilder<bool>(
                   valueListenable: ApiClient().isBackendWakingUp,
                   builder: (context, isWakingUp, child) {
@@ -133,7 +133,7 @@ class _MainLayoutState extends State<MainLayout> {
                           const SizedBox(width: 12),
                           const Expanded(
                             child: Text(
-                              '⚡ Waking up the server (Render Free Tier)... This may take up to 50 seconds on the first request.',
+                              '⚡ Waking up the server... This may take a few seconds on the first request.',
                               style: TextStyle(
                                 color: Color(0xFF856404),
                                 fontSize: 13,

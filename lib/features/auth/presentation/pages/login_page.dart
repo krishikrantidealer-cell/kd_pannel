@@ -27,7 +27,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    // Warm up the server in the background (proactively wake up Render instance)
+    // Warm up the server in the background (proactively trigger cold start if any)
     _warmUpServer();
   }
 
@@ -604,7 +604,7 @@ class _LoginPageState extends State<LoginPage> {
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Text(
-                                            '⚡ Server warming up (Render Free Tier)... This may take up to 50 seconds.',
+                                            '⚡ Server warming up... This may take a few seconds.',
                                             style: TextStyle(
                                               color: isDesktop
                                                   ? const Color(0xFF856404)

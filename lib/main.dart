@@ -124,7 +124,6 @@ class MyApp extends StatelessWidget {
         '/settings': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Settings'))),
         ),
-
         // Sales Routes
         '/sales/dashboard': (context) => const MainLayout(),
       },
