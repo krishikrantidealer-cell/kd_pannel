@@ -637,10 +637,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 800,
-        child: tableWidget,
-      ),
+      child: SizedBox(width: 800, child: tableWidget),
     );
   }
 

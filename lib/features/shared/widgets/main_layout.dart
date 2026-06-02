@@ -23,6 +23,7 @@ class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
   String? _lastProcessedRoute;
+  bool _isSidebarPinned = true;
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = const [
@@ -88,7 +89,7 @@ class _MainLayoutState extends State<MainLayout> {
         if (index == 2) route = '/leads';
         if (index == 3) route = '/dealers';
       }
-      
+
       // Navigate to the target main route
       Navigator.pushNamed(context, route);
       return;
@@ -120,7 +121,8 @@ class _MainLayoutState extends State<MainLayout> {
 
         // Screen Content
         Expanded(
-          child: widget.child ??
+          child:
+              widget.child ??
               IndexedStack(
                 index: _currentIdx,
                 children: role == UserRole.admin ? _adminPages : _salesPages,
@@ -139,6 +141,7 @@ class _MainLayoutState extends State<MainLayout> {
                 onTabSelected: _handleTabSelected,
                 onLogout: _handleLogout,
                 forceExpanded: true,
+                isPinned: true,
               ),
             )
           : null,
@@ -149,6 +152,12 @@ class _MainLayoutState extends State<MainLayout> {
                   currentIdx: _currentIdx,
                   onTabSelected: _handleTabSelected,
                   onLogout: _handleLogout,
+                  isPinned: _isSidebarPinned,
+                  onPinToggle: () {
+                    setState(() {
+                      _isSidebarPinned = !_isSidebarPinned;
+                    });
+                  },
                 ),
                 Expanded(child: content),
               ],

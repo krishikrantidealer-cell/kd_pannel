@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 
@@ -7,6 +8,8 @@ class SidebarWidget extends StatefulWidget {
   final ValueChanged<int> onTabSelected;
   final VoidCallback onLogout;
   final bool forceExpanded;
+  final bool isPinned;
+  final VoidCallback? onPinToggle;
 
   const SidebarWidget({
     super.key,
@@ -14,6 +17,8 @@ class SidebarWidget extends StatefulWidget {
     required this.onTabSelected,
     required this.onLogout,
     this.forceExpanded = false,
+    this.isPinned = true,
+    this.onPinToggle,
   });
 
   @override
@@ -22,6 +27,7 @@ class SidebarWidget extends StatefulWidget {
 
 class _SidebarWidgetState extends State<SidebarWidget> {
   bool _isHovered = false;
+  bool _tempDisableHover = false;
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
     {'icon': Icons.dashboard_rounded, 'title': 'Dashboard'},
@@ -41,18 +47,32 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   @override
   Widget build(BuildContext context) {
     final role = AuthService().currentUserRole ?? UserRole.admin;
-    final menuItems = role == UserRole.admin ? _adminMenuItems : _salesMenuItems;
-    
-    const double collapsedWidth = 72.0; 
+    final menuItems = role == UserRole.admin
+        ? _adminMenuItems
+        : _salesMenuItems;
+
+    const double collapsedWidth = 72.0;
     const double expandedWidth = 250.0;
-    
-    final bool isExpanded = widget.forceExpanded || _isHovered;
+
+    final bool isExpanded =
+        widget.forceExpanded ||
+        widget.isPinned ||
+        (_isHovered && !_tempDisableHover);
     final Color deepGreen = const Color(0xFF164D29);
     final Color midGreen = AppTheme.primaryColor;
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        if (!_tempDisableHover) {
+          setState(() => _isHovered = true);
+        }
+      },
+      onExit: (_) {
+        setState(() {
+          _isHovered = false;
+          _tempDisableHover = false;
+        });
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 240),
         curve: Curves.easeOutCubic,
@@ -90,7 +110,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   ),
                 ),
               ),
-  
+
               // 2. Subtle Radial Glow
               Positioned(
                 top: -80,
@@ -111,7 +131,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   ),
                 ),
               ),
-  
+
               // 3. Subtle Right Border
               Positioned(
                 right: 0,
@@ -122,14 +142,26 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   color: Colors.white.withValues(alpha: 0.08),
                 ),
               ),
-  
+
               // 4. Main Content
               Column(
                 children: [
-                  _SidebarHeader(isExpanded: isExpanded),
-                  
-                  const SizedBox(height: 12), 
-                  
+                  _SidebarHeader(
+                    isExpanded: isExpanded,
+                    isPinned: widget.isPinned,
+                    onPinToggle: () {
+                      if (widget.isPinned) {
+                        setState(() {
+                          _tempDisableHover = true;
+                          _isHovered = false;
+                        });
+                      }
+                      widget.onPinToggle?.call();
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
                   // Navigation Section
                   Expanded(
                     child: ListView.builder(
@@ -139,7 +171,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       itemBuilder: (context, index) {
                         final item = menuItems[index];
                         final isActive = widget.currentIdx == index;
-  
+
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: _SidebarItem(
@@ -153,10 +185,13 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       },
                     ),
                   ),
-  
+
                   // Footer Section
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 12,
+                    ),
                     child: Column(
                       children: [
                         Container(
@@ -197,73 +232,160 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
 class _SidebarHeader extends StatelessWidget {
   final bool isExpanded;
+  final bool isPinned;
+  final VoidCallback? onPinToggle;
 
-  const _SidebarHeader({required this.isExpanded});
+  const _SidebarHeader({
+    required this.isExpanded,
+    required this.isPinned,
+    this.onPinToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final double headerHeight = isExpanded ? 110 : 72;
+    final role = AuthService().currentUserRole ?? UserRole.admin;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 240),
-      height: headerHeight,
+    return Container(
+      height: 80,
       width: double.infinity,
-      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(-0.6, -0.2),
+          radius: 1.4,
+          colors: [
+            Colors.white.withValues(alpha: isExpanded ? 0.12 : 0.0),
+            Colors.transparent,
+          ],
+        ),
+      ),
       child: Stack(
-        clipBehavior: Clip.none,
+        alignment: Alignment.centerLeft,
         children: [
-          // 1. Collapsed State: Mathematically Centered
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 180),
-            opacity: isExpanded ? 0 : 1,
-            child: SizedBox(
-              width: 72, 
-              child: Center(
+          // Unified Logo & Text Sliding Container
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Logo Icon: Smoothly moves horizontally via AnimatedPadding
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                padding: EdgeInsets.only(
+                  left: isExpanded
+                      ? 0.0
+                      : 7.0, // Mathematical offset to center inside 72px collapsed width (72 - 30 logo width = 42/2 = 21px padding total, minus 14px container padding = 7px)
+                ),
                 child: Image.asset(
                   'assets/images/logo_copy.png',
-                  width: 32,
-                  height: 32,
+                  width: 30,
+                  height: 30,
                   fit: BoxFit.contain,
                 ),
               ),
-            ),
-          ),
-          
-          // 2. Expanded State: Compact Branding Zone
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: isExpanded ? 1 : 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 48, 20, 4),
-              alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.6, -0.2),
-                  radius: 1.4,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.12),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-              child: Image.asset(
-                'assets/images/logo.png',
-                width: 180,
-                fit: BoxFit.fitWidth,
-                alignment: Alignment.centerLeft,
-                filterQuality: FilterQuality.high,
-                errorBuilder: (context, error, stackTrace) => Text(
-                  'KRISHI DEALER',
-                  style: AppTheme.headingXL.copyWith(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.2,
+
+              // Sliding Typographic Branding & Role Badge
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                width: isExpanded ? 132 : 0,
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: isExpanded ? 1.0 : 0.0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 8),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'KRISHI',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.2,
+                              height: 1.1,
+                            ),
+                          ),
+                          Text(
+                            'DEALER',
+                            style: GoogleFonts.outfit(
+                              color: AppTheme.accentColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                              height: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          role == UserRole.admin ? 'ADMIN' : 'SALES',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
+
+          // Pinned Toggle Button on Right: Fades & slides
+          if (onPinToggle != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: isExpanded ? 1.0 : 0.0,
+                child: isExpanded
+                    ? Material(
+                        color: Colors.transparent,
+                        child: IconButton(
+                          icon: Icon(
+                            isPinned
+                                ? Icons.chevron_left_rounded
+                                : Icons.push_pin_outlined,
+                            color: Colors.white.withValues(alpha: 0.65),
+                            size: 20,
+                          ),
+                          tooltip: isPinned
+                              ? 'Collapse Sidebar'
+                              : 'Pin Sidebar',
+                          onPressed: onPinToggle,
+                          hoverColor: Colors.white.withValues(alpha: 0.1),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(6),
+                          splashRadius: 18,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
         ],
       ),
     );
@@ -297,7 +419,7 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final bool showActive = widget.isActive;
-    
+
     return RepaintBoundary(
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
@@ -317,20 +439,20 @@ class _SidebarItemState extends State<_SidebarItem> {
                       ],
                     )
                   : (_isHovered
-                      ? LinearGradient(
-                          colors: [
-                            Colors.white.withValues(alpha: 0.08),
-                            Colors.white.withValues(alpha: 0.02),
-                          ],
-                        )
-                      : null),
+                        ? LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.08),
+                              Colors.white.withValues(alpha: 0.02),
+                            ],
+                          )
+                        : null),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: showActive
                     ? Colors.white.withValues(alpha: 0.15)
                     : (_isHovered
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.transparent),
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.transparent),
                 width: 1,
               ),
             ),
@@ -347,19 +469,26 @@ class _SidebarItemState extends State<_SidebarItem> {
                   width: 3,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: widget.isLogout ? AppTheme.error : AppTheme.accentColor,
-                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(3)),
+                      color: widget.isLogout
+                          ? AppTheme.error
+                          : AppTheme.accentColor,
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(3),
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: (widget.isLogout ? AppTheme.error : AppTheme.accentColor)
-                              .withValues(alpha: 0.5),
+                          color:
+                              (widget.isLogout
+                                      ? AppTheme.error
+                                      : AppTheme.accentColor)
+                                  .withValues(alpha: 0.5),
                           blurRadius: 8,
                         ),
                       ],
                     ),
                   ),
                 ),
-  
+
                 Row(
                   children: [
                     // Icon Container: Sized to fit perfectly within collapsed width (72 - 10 - 10 = 52)
@@ -372,37 +501,50 @@ class _SidebarItemState extends State<_SidebarItem> {
                           scale: _isHovered ? 1.05 : 1.0,
                           child: Icon(
                             widget.icon,
-                            size: 19, 
+                            size: 19,
                             color: showActive
-                                ? (widget.isLogout ? AppTheme.error : AppTheme.accentColor)
-                                : Colors.white.withValues(alpha: _isHovered ? 1.0 : 0.65),
+                                ? (widget.isLogout
+                                      ? AppTheme.error
+                                      : AppTheme.accentColor)
+                                : Colors.white.withValues(
+                                    alpha: _isHovered ? 1.0 : 0.65,
+                                  ),
                           ),
                         ),
                       ),
                     ),
-  
-                    // Label Text: Wrapped in Flexible with ellipsis to prevent overflow
-                    if (widget.isExpanded) 
-                      Flexible(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: widget.isExpanded ? 1 : 0,
+
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      width: widget.isExpanded ? 160 : 0,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: const BoxDecoration(),
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 180),
+                        opacity: widget.isExpanded ? 1 : 0,
+                        child: Container(
+                          width: 160,
+                          alignment: Alignment.centerLeft,
                           child: Text(
                             widget.title,
                             style: AppTheme.bodyLG.copyWith(
                               color: Colors.white.withValues(
                                 alpha: showActive || _isHovered ? 1.0 : 0.75,
                               ),
-                              fontWeight: showActive ? FontWeight.w800 : FontWeight.w600,
+                              fontWeight: showActive
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
                               fontSize: 13.5,
                               letterSpacing: -0.2,
                             ),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            overflow: TextOverflow.clip,
                             softWrap: false,
                           ),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ],
