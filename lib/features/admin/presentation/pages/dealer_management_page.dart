@@ -20,10 +20,13 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   PickerDateRange? _selectedRange;
   int currentPage = 1;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _tableHorizontalController = ScrollController();
+  String? _hoveredDealerKey;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tableHorizontalController.dispose();
     super.dispose();
   }
 
@@ -550,57 +553,83 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   Widget _buildDealerTable(bool isMobile) {
     final dealersToShow = filteredDealers;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
-        boxShadow: AppTheme.softShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: isMobile
-                ? const EdgeInsets.all(16)
-                : const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            child: Text(
-              'Dealer Records',
-              style: GoogleFonts.outfit(
-                fontSize: isMobile ? 15 : 16,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.textPrimary,
-                letterSpacing: isMobile ? 0.2 : 0.0,
-              ),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Ensure table never gets clipped on smaller laptop widths.
+        const double minTableWidth = 980;
+        final bool needsHorizontalScroll = constraints.maxWidth < minTableWidth;
+        final double tableWidth =
+            needsHorizontalScroll ? minTableWidth : constraints.maxWidth;
+
+        final table = Container(
+          width: tableWidth,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+            border:
+                Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+            boxShadow: AppTheme.softShadow,
           ),
-          _buildTableHeader(isMobile),
-          if (dealersToShow.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(40),
-              child: Center(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: isMobile
+                    ? const EdgeInsets.all(16)
+                    : const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 child: Text(
-                  'No dealers found matching your criteria',
+                  'Dealer Records',
                   style: GoogleFonts.outfit(
-                    color: AppTheme.textSecondary,
-                    fontSize: 14,
+                    fontSize: isMobile ? 15 : 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: isMobile ? 0.2 : 0.0,
                   ),
                 ),
               ),
-            )
-          else
-            ...dealersToShow.asMap().entries.map(
-              (entry) =>
-                  _buildDealerRow(entry.value, entry.key % 2 == 1, isMobile),
-            ),
-          _buildTableFooter(isMobile),
-        ],
-      ),
+              _buildTableHeader(),
+              if (dealersToShow.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  child: Center(
+                    child: Text(
+                      'No dealers found matching your criteria',
+                      style: GoogleFonts.outfit(
+                        color: AppTheme.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ...dealersToShow.asMap().entries.map(
+                  (entry) => _buildDealerRow(
+                    entry.value,
+                    entry.key % 2 == 1,
+                  ),
+                ),
+              _buildTableFooter(isMobile),
+            ],
+          ),
+        );
+
+        return Scrollbar(
+          controller: _tableHorizontalController,
+          thumbVisibility: needsHorizontalScroll,
+          trackVisibility: needsHorizontalScroll,
+          child: SingleChildScrollView(
+            controller: _tableHorizontalController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: table,
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTableHeader(bool isMobile) {
-    final header = Container(
+  Widget _buildTableHeader() {
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       color: const Color(0xFFF9FAFB),
       child: const Row(
@@ -615,28 +644,22 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             flex: 2,
             child: Center(child: _HeaderText('PURCHASE VALUE')),
           ),
-          Expanded(flex: 1, child: Center(child: _HeaderText('ACTIONS'))),
         ],
-      ),
-    );
-
-    if (!isMobile) return header;
-    return ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: SizedBox(width: 900, child: header),
       ),
     );
   }
 
-  Widget _buildDealerRow(Dealer dealer, bool isAlternate, bool isMobile) {
+  Widget _buildDealerRow(Dealer dealer, bool isAlternate) {
     return _DealerRow(
       dealer: dealer,
       isAlternate: isAlternate,
-      isMobile: isMobile,
       onTap: () => Navigator.pushNamed(context, '/dealers/profile'),
+      isHovered: _hoveredDealerKey == dealer.phone,
+      onHoverChanged: (isHovered) {
+        setState(() {
+          _hoveredDealerKey = isHovered ? dealer.phone : null;
+        });
+      },
     );
   }
 
@@ -807,14 +830,16 @@ class _StatusBadge extends StatelessWidget {
 class _DealerRow extends StatefulWidget {
   final Dealer dealer;
   final bool isAlternate;
-  final bool isMobile;
   final VoidCallback onTap;
+  final bool isHovered;
+  final ValueChanged<bool> onHoverChanged;
 
   const _DealerRow({
     required this.dealer,
     required this.isAlternate,
-    required this.isMobile,
     required this.onTap,
+    required this.isHovered,
+    required this.onHoverChanged,
   });
 
   @override
@@ -824,75 +849,41 @@ class _DealerRow extends StatefulWidget {
 class _DealerRowState extends State<_DealerRow> {
   @override
   Widget build(BuildContext context) {
-    final content = GestureDetector(
-      onTap: widget.onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white,
-          border: const Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Text(
-                widget.dealer.name,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => widget.onHoverChanged(true),
+      onExit: (_) => widget.onHoverChanged(false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: widget.isHovered
+                ? AppTheme.primaryColor.withValues(alpha: 0.04)
+                : (widget.isAlternate
+                    ? const Color(0xFFFAFBFC)
+                    : Colors.white),
+            border: Border(
+              bottom: const BorderSide(
+                color: Color(0xFFF3F4F6),
+                width: 0.5,
+              ),
+              left: BorderSide(
+                color: widget.isHovered
+                    ? AppTheme.primaryColor.withValues(alpha: 0.55)
+                    : Colors.transparent,
+                width: 2,
               ),
             ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                widget.dealer.phone,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 1,
-              child: Text(
-                widget.dealer.city,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                widget.dealer.agent,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(flex: 1, child: _StatusBadge(status: widget.dealer.gstStatus)),
-            Expanded(
-              flex: 1,
-              child: Center(
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
                 child: Text(
-                  widget.dealer.totalOrders.toString(),
+                  widget.dealer.name,
                   style: GoogleFonts.outfit(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w800,
@@ -902,12 +893,36 @@ class _DealerRowState extends State<_DealerRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Center(
+              Expanded(
+                flex: 2,
                 child: Text(
-                  widget.dealer.purchaseValue,
+                  widget.dealer.phone,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                flex: 1,
+                child: Text(
+                  widget.dealer.city,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  widget.dealer.agent,
                   style: GoogleFonts.outfit(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w800,
@@ -917,48 +932,53 @@ class _DealerRowState extends State<_DealerRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: Container(
-                  height: 28,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
+              Expanded(
+                flex: 1,
+                child: _StatusBadge(status: widget.dealer.gstStatus),
+              ),
+              Expanded(
+                flex: 1,
+                child: Center(
                   child: Text(
-                    'View',
+                    widget.dealer.totalOrders.toString(),
                     style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Text(
+                    widget.dealer.purchaseValue,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 22,
+                child: Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: widget.isHovered
+                      ? AppTheme.primaryColor.withValues(alpha: 0.9)
+                      : AppTheme.textSecondary.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-
-    if (!widget.isMobile) return content;
-    return ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: SizedBox(width: 900, child: content),
       ),
     );
   }
