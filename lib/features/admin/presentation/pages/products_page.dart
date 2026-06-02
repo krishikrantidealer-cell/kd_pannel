@@ -452,11 +452,11 @@ class _ProductsPageState extends State<ProductsPage> {
       color: const Color(0xFFF9FAFB),
       child: Row(
         children: const [
-          Expanded(flex: 3, child: _TableHeaderText('PRODUCT DETAIL')),
-          Expanded(flex: 2, child: _TableHeaderText('CATEGORY')),
-          Expanded(flex: 1, child: _TableHeaderText('VARIANTS')),
-          Expanded(flex: 1, child: _TableHeaderText('UNIT PRICE')),
-          Expanded(flex: 1, child: _TableHeaderText('AVAILABILITY')),
+          SizedBox(width: 250, child: _TableHeaderText('PRODUCT DETAIL')),
+          SizedBox(width: 150, child: _TableHeaderText('CATEGORY')),
+          SizedBox(width: 100, child: _TableHeaderText('VARIANTS')),
+          SizedBox(width: 100, child: _TableHeaderText('UNIT PRICE')),
+          SizedBox(width: 120, child: _TableHeaderText('AVAILABILITY')),
           SizedBox(width: 80),
         ],
       ),
@@ -491,8 +491,8 @@ class _ProductsPageState extends State<ProductsPage> {
             ),
             child: Row(
               children: [
-                Expanded(
-                  flex: 3,
+                SizedBox(
+                  width: 250,
                   child: Row(
                     children: [
                       _buildProductThumbnail(prod),
@@ -500,6 +500,7 @@ class _ProductsPageState extends State<ProductsPage> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               prod['name'] as String,
@@ -528,11 +529,12 @@ class _ProductsPageState extends State<ProductsPage> {
                     ],
                   ),
                 ),
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: 150,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         prod['category'] as String,
@@ -541,6 +543,8 @@ class _ProductsPageState extends State<ProductsPage> {
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
                       Container(
@@ -559,13 +563,15 @@ class _ProductsPageState extends State<ProductsPage> {
                             color: AppTheme.primaryColor,
                             fontWeight: FontWeight.w600,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Expanded(
-                  flex: 1,
+                SizedBox(
+                  width: 100,
                   child: Text(
                     '$variantCount Variant${variantCount > 1 ? 's' : ''}',
                     style: GoogleFonts.outfit(
@@ -573,10 +579,12 @@ class _ProductsPageState extends State<ProductsPage> {
                       color: AppTheme.textBody,
                       fontWeight: FontWeight.w500,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Expanded(
-                  flex: 1,
+                SizedBox(
+                  width: 100,
                   child: Text(
                     prod['price'] as String,
                     style: GoogleFonts.outfit(
@@ -584,10 +592,12 @@ class _ProductsPageState extends State<ProductsPage> {
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w700,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Expanded(
-                  flex: 1,
+                SizedBox(
+                  width: 120,
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: _buildAvailabilityBadge(prod),
@@ -627,8 +637,8 @@ class _ProductsPageState extends State<ProductsPage> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 750),
+      child: SizedBox(
+        width: 800,
         child: tableWidget,
       ),
     );

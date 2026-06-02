@@ -4,12 +4,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/main.dart';
-import 'package:lottie/lottie.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
-import 'package:kd_pannel/features/shared/widgets/table_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class DashboardPage extends StatefulWidget {
