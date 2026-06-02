@@ -34,6 +34,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
     {'icon': Icons.campaign_rounded, 'title': 'Leads'},
     {'icon': Icons.storefront_rounded, 'title': 'Dealers'},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders'},
     {'icon': Icons.support_agent_rounded, 'title': 'Support'},
   ];
 
@@ -42,6 +43,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
     {'icon': Icons.campaign_rounded, 'title': 'My Leads'},
     {'icon': Icons.storefront_rounded, 'title': 'My Dealers'},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders'},
   ];
 
   @override
@@ -294,61 +296,65 @@ class _SidebarHeader extends StatelessWidget {
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 180),
                   opacity: isExpanded ? 1.0 : 0.0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'KRISHI',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.2,
-                              height: 1.1,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'KRISHI',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.2,
+                                height: 1.1,
+                              ),
+                            ),
+                            Text(
+                              'DEALER',
+                              style: GoogleFonts.outfit(
+                                color: AppTheme.accentColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.2,
+                                height: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              width: 0.5,
                             ),
                           ),
-                          Text(
-                            'DEALER',
+                          child: Text(
+                            role == UserRole.admin ? 'ADMIN' : 'SALES',
                             style: GoogleFonts.outfit(
-                              color: AppTheme.accentColor,
-                              fontSize: 11,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 8,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
-                              height: 1.1,
+                              letterSpacing: 0.3,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.12),
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(
-                          role == UserRole.admin ? 'ADMIN' : 'SALES',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

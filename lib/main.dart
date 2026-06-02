@@ -5,6 +5,7 @@ import 'package:kd_pannel/features/auth/presentation/pages/login_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -76,9 +77,7 @@ class MyApp extends StatelessWidget {
         '/dealers': (context) => const MainLayout(),
         '/dealers/profile': (context) =>
             const MainLayout(child: DealerProfilePage()),
-        '/orders': (context) => const MainLayout(
-          child: Scaffold(body: Center(child: Text('Orders'))),
-        ),
+        '/orders': (context) => const MainLayout(child: OrdersPage()),
         '/products': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Marketing'))),

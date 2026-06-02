@@ -8,7 +8,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_pa
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'sidebar_widget.dart';
-import 'topbar_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget? child;
@@ -31,6 +32,7 @@ class _MainLayoutState extends State<MainLayout> {
     ProductsPage(),
     LeadsPage(),
     DealerManagementPage(),
+    OrdersPage(),
     SupportDashboardPage(),
   ];
 
@@ -40,6 +42,7 @@ class _MainLayoutState extends State<MainLayout> {
     ProductsPage(),
     LeadsPage(),
     DealerManagementPage(),
+    OrdersPage(),
   ];
 
   @override
@@ -59,12 +62,14 @@ class _MainLayoutState extends State<MainLayout> {
         if (routeName == '/products') _currentIdx = 1;
         if (routeName == '/leads') _currentIdx = 2;
         if (routeName == '/dealers') _currentIdx = 3;
-        if (routeName == '/support') _currentIdx = 4;
+        if (routeName == '/orders') _currentIdx = 4;
+        if (routeName == '/support') _currentIdx = 5;
       } else {
         if (routeName == '/sales/dashboard') _currentIdx = 0;
         if (routeName == '/products') _currentIdx = 1;
         if (routeName == '/leads') _currentIdx = 2;
         if (routeName == '/dealers') _currentIdx = 3;
+        if (routeName == '/orders') _currentIdx = 4;
       }
     }
   }
@@ -83,11 +88,13 @@ class _MainLayoutState extends State<MainLayout> {
         if (index == 1) route = '/products';
         if (index == 2) route = '/leads';
         if (index == 3) route = '/dealers';
-        if (index == 4) route = '/support';
+        if (index == 4) route = '/orders';
+        if (index == 5) route = '/support';
       } else {
         if (index == 1) route = '/products';
         if (index == 2) route = '/leads';
         if (index == 3) route = '/dealers';
+        if (index == 4) route = '/orders';
       }
 
       // Navigate to the target main route
