@@ -31,19 +31,17 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
     // {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
-    {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'index': 1},
-    // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
-    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 3},
-    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 4},
-    // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'index': 5},
+    // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 1},
+    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 2},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 3},
+    // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'index': 4},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
     // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
-    {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'index': 1},
-    // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 2},
-    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 3},
-    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 4},
+    // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
+    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 2},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 3},
   ];
 
   @override

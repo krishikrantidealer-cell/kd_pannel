@@ -6,7 +6,6 @@ import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_pa
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
@@ -29,7 +28,6 @@ class _MainLayoutState extends State<MainLayout> {
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = const [
     DashboardPage(),
-    ProductsPage(),
     LeadsPage(),
     DealerManagementPage(),
     OrdersPage(),
@@ -39,7 +37,6 @@ class _MainLayoutState extends State<MainLayout> {
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = const [
     SalesDashboardPage(),
-    ProductsPage(),
     LeadsPage(),
     DealerManagementPage(),
     OrdersPage(),
@@ -59,17 +56,15 @@ class _MainLayoutState extends State<MainLayout> {
       _lastProcessedRoute = routeName;
       if (role == UserRole.admin) {
         if (routeName == '/dashboard') _currentIdx = 0;
-        if (routeName == '/products') _currentIdx = 1;
-        if (routeName == '/leads') _currentIdx = 2;
-        if (routeName == '/dealers') _currentIdx = 3;
-        if (routeName == '/orders') _currentIdx = 4;
-        if (routeName == '/support') _currentIdx = 5;
+        if (routeName == '/leads') _currentIdx = 1;
+        if (routeName == '/dealers') _currentIdx = 2;
+        if (routeName == '/orders') _currentIdx = 3;
+        if (routeName == '/support') _currentIdx = 4;
       } else {
         if (routeName == '/sales/dashboard') _currentIdx = 0;
-        if (routeName == '/products') _currentIdx = 1;
-        if (routeName == '/leads') _currentIdx = 2;
-        if (routeName == '/dealers') _currentIdx = 3;
-        if (routeName == '/orders') _currentIdx = 4;
+        if (routeName == '/leads') _currentIdx = 1;
+        if (routeName == '/dealers') _currentIdx = 2;
+        if (routeName == '/orders') _currentIdx = 3;
       }
     }
   }
@@ -85,16 +80,14 @@ class _MainLayoutState extends State<MainLayout> {
       final role = AuthService().currentUserRole ?? UserRole.admin;
       String route = '/dashboard';
       if (role == UserRole.admin) {
-        if (index == 1) route = '/products';
-        if (index == 2) route = '/leads';
-        if (index == 3) route = '/dealers';
-        if (index == 4) route = '/orders';
-        if (index == 5) route = '/support';
+        if (index == 1) route = '/leads';
+        if (index == 2) route = '/dealers';
+        if (index == 3) route = '/orders';
+        if (index == 4) route = '/support';
       } else {
-        if (index == 1) route = '/products';
-        if (index == 2) route = '/leads';
-        if (index == 3) route = '/dealers';
-        if (index == 4) route = '/orders';
+        if (index == 1) route = '/leads';
+        if (index == 2) route = '/dealers';
+        if (index == 3) route = '/orders';
       }
 
       // Navigate to the target main route
