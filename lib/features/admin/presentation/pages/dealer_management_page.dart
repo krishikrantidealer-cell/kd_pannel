@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/dealer_details_page.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
@@ -447,8 +448,15 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
         decoration: InputDecoration(
           hintText: 'Search dealers...',
-          hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
-          prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.textSecondary),
+          hintStyle: GoogleFonts.outfit(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            size: 18,
+            color: AppTheme.textSecondary,
+          ),
           border: InputBorder.none,
           isDense: true,
           contentPadding: EdgeInsets.zero,
@@ -558,16 +566,18 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         // Ensure table never gets clipped on smaller laptop widths.
         const double minTableWidth = 980;
         final bool needsHorizontalScroll = constraints.maxWidth < minTableWidth;
-        final double tableWidth =
-            needsHorizontalScroll ? minTableWidth : constraints.maxWidth;
+        final double tableWidth = needsHorizontalScroll
+            ? minTableWidth
+            : constraints.maxWidth;
 
         final table = Container(
           width: tableWidth,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-            border:
-                Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+            border: Border.all(
+              color: AppTheme.borderColor.withValues(alpha: 0.5),
+            ),
             boxShadow: AppTheme.softShadow,
           ),
           child: Column(
@@ -603,10 +613,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 )
               else
                 ...dealersToShow.asMap().entries.map(
-                  (entry) => _buildDealerRow(
-                    entry.value,
-                    entry.key % 2 == 1,
-                  ),
+                  (entry) => _buildDealerRow(entry.value, entry.key % 2 == 1),
                 ),
               _buildTableFooter(isMobile),
             ],
@@ -653,7 +660,10 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return _DealerRow(
       dealer: dealer,
       isAlternate: isAlternate,
-      onTap: () => Navigator.pushNamed(context, '/dealers/profile'),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DealerDetailsPage(dealer: dealer)),
+      ),
       isHovered: _hoveredDealerKey == dealer.phone,
       onHoverChanged: (isHovered) {
         setState(() {
@@ -672,7 +682,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       padding: footerPadding,
       decoration: const BoxDecoration(
         color: Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppTheme.borderRadiusLarge)),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(AppTheme.borderRadiusLarge),
+        ),
       ),
       child: isMobile
           ? Column(
@@ -775,10 +787,7 @@ class _HeaderText extends StatelessWidget {
   const _HeaderText(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: AppTheme.tableHeader,
-  );
+  Widget build(BuildContext context) => Text(text, style: AppTheme.tableHeader);
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -862,14 +871,9 @@ class _DealerRowState extends State<_DealerRow> {
           decoration: BoxDecoration(
             color: widget.isHovered
                 ? AppTheme.primaryColor.withValues(alpha: 0.04)
-                : (widget.isAlternate
-                    ? const Color(0xFFFAFBFC)
-                    : Colors.white),
+                : (widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white),
             border: Border(
-              bottom: const BorderSide(
-                color: Color(0xFFF3F4F6),
-                width: 0.5,
-              ),
+              bottom: const BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
               left: BorderSide(
                 color: widget.isHovered
                     ? AppTheme.primaryColor.withValues(alpha: 0.55)

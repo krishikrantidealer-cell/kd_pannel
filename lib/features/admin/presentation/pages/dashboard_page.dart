@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'user_events_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -17,7 +19,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  String selectedDropdown = 'This Month';
+  String selectedDropdown = 'Today';
   PickerDateRange? _selectedRange;
 
   // Modern dashboard state variables
@@ -28,6 +30,337 @@ class _DashboardPageState extends State<DashboardPage> {
   int activeTableTab =
       0; // 0: Recent Orders, 1: Recent Leads, 2: Active Dealers
   bool isExporting = false;
+
+  String _selectedEventType = 'login_success';
+
+  final List<Map<String, dynamic>> _eventTypes = [
+    {
+      'id': 'login_success',
+      'label': 'Login Success',
+      'icon': Icons.login_rounded,
+      'color': Colors.green,
+      'description': 'User successfully authenticated',
+    },
+    {
+      'id': 'profile_view',
+      'label': 'Profile View',
+      'icon': Icons.visibility_rounded,
+      'color': Colors.blue,
+      'description': 'Dealer profile page visited',
+    },
+    {
+      'id': 'product_search',
+      'label': 'Product Search',
+      'icon': Icons.search_rounded,
+      'color': Colors.teal,
+      'description': 'Inventory search queries executed',
+    },
+    {
+      'id': 'add_to_cart',
+      'label': 'Add to Cart',
+      'icon': Icons.add_shopping_cart_rounded,
+      'color': Colors.orange,
+      'description': 'Items added to purchasing cart',
+    },
+    {
+      'id': 'checkout_started',
+      'label': 'Checkout Started',
+      'icon': Icons.shopping_bag_rounded,
+      'color': Colors.purple,
+      'description': 'Checkout process initiated',
+    },
+    {
+      'id': 'apply_coupon',
+      'label': 'Apply Coupon',
+      'icon': Icons.local_offer_rounded,
+      'color': Colors.indigo,
+      'description': 'Discount codes attempted',
+    },
+    {
+      'id': 'payment_initiated',
+      'label': 'Payment Initiated',
+      'icon': Icons.payment_rounded,
+      'color': Colors.cyan,
+      'description': 'Payment gateway request sent',
+    },
+    {
+      'id': 'payment_failed',
+      'label': 'Payment Failed',
+      'icon': Icons.error_outline_rounded,
+      'color': Colors.red,
+      'description': 'Unsuccessful transaction attempts',
+    },
+    {
+      'id': 'payment_success',
+      'label': 'Payment Success',
+      'icon': Icons.check_circle_outline_rounded,
+      'color': const Color(0xFF10B981), // Emerald green
+      'description': 'Completed payments received',
+    },
+  ];
+
+  static final Map<String, List<Map<String, dynamic>>> _mockEventsLogs = {
+    'login_success': [
+      {
+        'user': 'Vijay D. (King Agro)',
+        'time': 'Just now',
+        'device': 'Android 14 (Samsung S23)',
+        'details': 'IP: 157.45.12.8 • Method: OTP Verification',
+        'payload': {
+          'action': 'login_verify',
+          'status': 'success',
+          'method': 'otp',
+          'phone': '+91 98765 43210',
+          'device_fingerprint': 'dev_samsung_s23_9fa1',
+          'location': 'Indore, Madhya Pradesh',
+        },
+      },
+      {
+        'user': 'Rajesh Kumar',
+        'time': '4 mins ago',
+        'device': 'Chrome 122 (Windows 11)',
+        'details': 'IP: 103.88.22.45 • Method: Google Auth',
+        'payload': {
+          'action': 'login_verify',
+          'status': 'success',
+          'method': 'google_sso',
+          'email': 'rajesh.k@krishidealer.com',
+          'device_fingerprint': 'dev_win_chrome_e3f2',
+          'location': 'Bhopal, Madhya Pradesh',
+        },
+      },
+      {
+        'user': 'Suresh Patil',
+        'time': '12 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'IP: 223.187.9.11 • Method: Password',
+        'payload': {
+          'action': 'login_verify',
+          'status': 'success',
+          'method': 'credentials',
+          'username': 'suresh_patel_agro',
+          'device_fingerprint': 'dev_iphone15_22b4',
+          'location': 'Ujjain, Madhya Pradesh',
+        },
+      },
+    ],
+    'profile_view': [
+      {
+        'user': 'Gupta Seeds',
+        'time': '1 min ago',
+        'device': 'Android 13 (Realme 9)',
+        'details': 'Visited: KYC & Documents page',
+        'payload': {
+          'action': 'profile_view',
+          'section': 'kyc_verification',
+          'view_duration_sec': 42,
+          'documents_uploaded': ['gst_cert.pdf', 'pan_card.jpg'],
+        },
+      },
+      {
+        'user': 'Shiva Enterprises',
+        'time': '8 mins ago',
+        'device': 'Chrome 122 (macOS 14)',
+        'details': 'Visited: Account Settings',
+        'payload': {
+          'action': 'profile_view',
+          'section': 'settings_billing',
+          'view_duration_sec': 15,
+        },
+      },
+    ],
+    'product_search': [
+      {
+        'user': 'King Agro',
+        'time': '2 mins ago',
+        'device': 'Android 14 (Samsung S23)',
+        'details': 'Searched: "High flow drip nozzle" • 12 results',
+        'payload': {
+          'action': 'search',
+          'query': 'High flow drip nozzle',
+          'category': 'Irrigation',
+          'results_count': 12,
+          'applied_filters': {'sort': 'price_asc', 'stock': 'in_stock_only'},
+        },
+      },
+      {
+        'user': 'Patel Agro',
+        'time': '15 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'Searched: "NPK 19-19-19 Fertilizer" • 4 results',
+        'payload': {
+          'action': 'search',
+          'query': 'NPK 19-19-19 Fertilizer',
+          'category': 'Fertilizers',
+          'results_count': 4,
+          'applied_filters': {},
+        },
+      },
+    ],
+    'add_to_cart': [
+      {
+        'user': 'Patel Agro',
+        'time': '5 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'Added: 3 items to cart • Value: ₹48,000',
+        'payload': {
+          'action': 'cart_add',
+          'items': [
+            {
+              'product_id': 'prod_pump_5hp',
+              'product_name': 'Water Pump 5HP',
+              'variant_id': 'var_pump_5hp_single',
+              'variant_name': 'Single Phase',
+              'quantity': 2,
+              'price': 11250.00,
+            },
+            {
+              'product_id': 'prod_pump_5hp',
+              'product_name': 'Water Pump 5HP',
+              'variant_id': 'var_pump_5hp_three',
+              'variant_name': 'Three Phase',
+              'quantity': 1,
+              'price': 13500.00,
+            },
+            {
+              'product_id': 'prod_npk_19',
+              'product_name': 'NPK Fertilizer 19-19-19',
+              'variant_id': 'var_npk_50kg',
+              'variant_name': '50kg Bag',
+              'quantity': 10,
+              'price': 1200.00,
+            },
+          ],
+          'cart_total_after': 48000.00,
+        },
+      },
+      {
+        'user': 'King Agro',
+        'time': '18 mins ago',
+        'device': 'Android 14 (Samsung S23)',
+        'details': 'Added: 2 items to cart • Value: ₹21,000',
+        'payload': {
+          'action': 'cart_add',
+          'items': [
+            {
+              'product_id': 'prod_drip_kit_standard',
+              'product_name': 'Drip Irrigation Kit Standard',
+              'variant_id': 'var_drip_1acre',
+              'variant_name': '1 Acre',
+              'quantity': 5,
+              'price': 2400.00,
+            },
+            {
+              'product_id': 'prod_drip_kit_standard',
+              'product_name': 'Drip Irrigation Kit Standard',
+              'variant_id': 'var_drip_2acre',
+              'variant_name': '2 Acre',
+              'quantity': 2,
+              'price': 4500.00,
+            },
+          ],
+          'cart_total_after': 21000.00,
+        },
+      },
+    ],
+    'checkout_started': [
+      {
+        'user': 'Patel Agro',
+        'time': '5 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'Items: 1 • Cart Subtotal: ₹22,500',
+        'payload': {
+          'action': 'checkout_start',
+          'items_count': 1,
+          'subtotal': 22500.00,
+          'tax': 1125.00,
+          'shipping': 0.00,
+          'grand_total': 23625.00,
+          'selected_address_id': 'addr_patel_indore_01',
+        },
+      },
+    ],
+    'apply_coupon': [
+      {
+        'user': 'Patel Agro',
+        'time': '5 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'Code: "MONSOON10" • Discount: ₹2,250 (10%)',
+        'payload': {
+          'action': 'coupon_apply',
+          'coupon_code': 'MONSOON10',
+          'valid': true,
+          'discount_type': 'percentage',
+          'discount_value': 10,
+          'discount_amount': 2250.00,
+        },
+      },
+    ],
+    'payment_initiated': [
+      {
+        'user': 'Patel Agro',
+        'time': '4 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'Gateway: Razorpay UPI • Amount: ₹21,375',
+        'payload': {
+          'action': 'payment_init',
+          'order_id': 'ord_patel_9827a',
+          'amount': 21375.00,
+          'gateway': 'razorpay',
+          'method': 'upi',
+          'currency': 'INR',
+        },
+      },
+      {
+        'user': 'King Agro',
+        'time': '20 mins ago',
+        'device': 'Android 14 (Samsung S23)',
+        'details': 'Gateway: Razorpay Cards • Amount: ₹27,000',
+        'payload': {
+          'action': 'payment_init',
+          'order_id': 'ord_king_1182c',
+          'amount': 27000.00,
+          'gateway': 'razorpay',
+          'method': 'card',
+          'currency': 'INR',
+        },
+      },
+    ],
+    'payment_failed': [
+      {
+        'user': 'King Agro',
+        'time': '19 mins ago',
+        'device': 'Android 14 (Samsung S23)',
+        'details': 'Error: Authentication Timeout • Code: FAIL_504',
+        'payload': {
+          'action': 'payment_callback',
+          'status': 'failed',
+          'order_id': 'ord_king_1182c',
+          'amount': 27000.00,
+          'transaction_id': 'txn_king_fa8912',
+          'error_code': 'FAIL_504',
+          'error_message': '3D Secure Authentication timed out by issuer bank',
+        },
+      },
+    ],
+    'payment_success': [
+      {
+        'user': 'Patel Agro',
+        'time': '3 mins ago',
+        'device': 'iOS 17.2 (iPhone 15)',
+        'details': 'TXN ID: txn_patel_su9281 • Amount Paid: ₹21,375',
+        'payload': {
+          'action': 'payment_callback',
+          'status': 'success',
+          'order_id': 'ord_patel_9827a',
+          'amount': 21375.00,
+          'transaction_id': 'txn_patel_su9281',
+          'invoice_number': 'INV-2026-KD8827',
+          'payment_completed_at': '2026-06-04T10:58:02Z',
+        },
+      },
+    ],
+  };
 
   // Clock and Scroll state variables
   Timer? _clockTimer;
@@ -42,10 +375,12 @@ class _DashboardPageState extends State<DashboardPage> {
       _dealersData.where((dealer) => dealer['gst'] == 'Verified').length;
 
   // Cached futures to prevent visual shifting during hover/rebuild states
-  late Future<String> _totalSalesFuture;
-  late Future<String> _totalOrdersFuture;
-  late Future<String> _totalDealersFuture;
-  late Future<String> _totalLeadsFuture;
+  late Future<String> _revenueTodayFuture;
+  late Future<String> _orderTodayFuture;
+  late Future<String> _activeDealersFuture;
+  late Future<String> _newLeadsFuture;
+  late Future<String> _transactingDealsFuture;
+  late Future<String> _eventsTodayFuture;
 
   @override
   void initState() {
@@ -152,21 +487,17 @@ class _DashboardPageState extends State<DashboardPage> {
     final service = DashboardService();
     // In a real app, pass [selectedDropdown] to each service call
     // so the backend returns period-specific values.
-    _totalSalesFuture = service.getTotalSales(period: selectedDropdown);
-    _totalOrdersFuture = service.getTotalOrders(period: selectedDropdown);
-    _totalDealersFuture = service.getTotalDealers(period: selectedDropdown);
-    _totalLeadsFuture = service.getTotalLeads(period: selectedDropdown);
+    _revenueTodayFuture = service.getRevenueToday(period: selectedDropdown);
+    _orderTodayFuture = service.getOrderToday(period: selectedDropdown);
+    _activeDealersFuture = service.getActiveDealers(period: selectedDropdown);
+    _newLeadsFuture = service.getNewLeads(period: selectedDropdown);
+    _transactingDealsFuture = service.getTransactingDeals(
+      period: selectedDropdown,
+    );
+    _eventsTodayFuture = service.getEventsToday(period: selectedDropdown);
   }
 
-  final List<String> dropdownOptions = [
-    'Last 1 Week',
-    'Last 2 Weeks',
-    'Last 3 Weeks',
-    'Last 1 Month',
-    'Last 3 Months',
-    'Last 6 Months',
-    'This Month',
-  ];
+  final List<String> dropdownOptions = ['Today', '1 Week'];
 
   // Mock data for trends based on timeframe
   List<double> _getSalesData() {
@@ -328,30 +659,29 @@ class _DashboardPageState extends State<DashboardPage> {
 
           // 2. Custom Elite Visual Stats Grid
           _buildVisualStatsGrid(isDesktop),
-          SizedBox(height: gap),
 
-          // 3. Interactive Operations Terminal in Full Width
-          _buildInteractiveOperationsTable(),
-          SizedBox(height: gap),
+          // // 3. Interactive Operations Terminal in Full Width
+          // _buildInteractiveOperationsTable(),
+          // SizedBox(height: gap),
 
-          // 4. Graphical Analytics Layer
-          if (MediaQuery.of(context).size.width >= 850)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
-                const SizedBox(width: 20),
-                Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _buildInteractiveBezierTrendCard(),
-                SizedBox(height: gap),
-                _buildLeadPipelineBreakdownCard(),
-              ],
-            ),
+          // // 4. Graphical Analytics Layer
+          // if (MediaQuery.of(context).size.width >= 850)
+          //   Row(
+          //     crossAxisAlignment: CrossAxisAlignment.start,
+          //     children: [
+          //       Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
+          //       const SizedBox(width: 20),
+          //       Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
+          //     ],
+          //   )
+          // else
+          //   Column(
+          //     children: [
+          //       _buildInteractiveBezierTrendCard(),
+          //       SizedBox(height: gap),
+          //       _buildLeadPipelineBreakdownCard(),
+          //     ],
+          //   ),
         ],
       ),
     );
@@ -781,13 +1111,15 @@ class _DashboardPageState extends State<DashboardPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double spacing = isDesktop ? 16.0 : 12.0;
-        int columns = 4;
+        int columns = 6;
         if (constraints.maxWidth < 600) {
           columns = 1;
-        } else if (constraints.maxWidth < 1150) {
+        } else if (constraints.maxWidth < 950) {
           columns = 2;
+        } else if (constraints.maxWidth < 1200) {
+          columns = 3;
         } else {
-          columns = 4;
+          columns = 6;
         }
         final double width =
             (constraints.maxWidth - (spacing * (columns - 1))) / columns;
@@ -796,19 +1128,19 @@ class _DashboardPageState extends State<DashboardPage> {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            // 1. Total Sales Card
+            // 1. Revenue Today Card
             FutureBuilder<String>(
-              future: _totalSalesFuture,
+              future: _revenueTodayFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return StatCardShimmer(isCompact: true, width: width);
                 }
                 return _buildAdvancedStatCard(
                   width: width,
-                  title: 'Total Sales',
+                  title: 'Revenue Today',
                   value: snapshot.data ?? '₹0',
                   color: AppTheme.success,
-                  trendLabel: '+12.4% vs last month',
+                  trendLabel: '+12.4% vs yesterday',
                   trendIcon: Icons.trending_up,
                   visualWidget: SizedBox(
                     width: 50,
@@ -829,26 +1161,26 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
 
-            // 2. Total Orders Card
+            // 2. Order Today Card
             FutureBuilder<String>(
-              future: _totalOrdersFuture,
+              future: _orderTodayFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return StatCardShimmer(isCompact: true, width: width);
                 }
                 return _buildAdvancedStatCard(
                   width: width,
-                  title: 'Total Orders',
+                  title: 'Order Today',
                   value: snapshot.data ?? '0',
                   color: AppTheme.lightGreen,
-                  trendLabel: '85% Fulfilled',
+                  trendLabel: '90% Fulfilled',
                   trendIcon: Icons.check_circle_outline,
                   visualWidget: SizedBox(
                     width: 28,
                     height: 28,
                     child: CustomPaint(
                       painter: FulfillmentProgressPainter(
-                        0.85,
+                        0.90,
                         AppTheme.lightGreen,
                       ),
                     ),
@@ -857,16 +1189,16 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
 
-            // 3. Total Dealers Card
+            // 3. Active Dealers Card
             FutureBuilder<String>(
-              future: _totalDealersFuture,
+              future: _activeDealersFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return StatCardShimmer(isCompact: true, width: width);
                 }
                 return _buildAdvancedStatCard(
                   width: width,
-                  title: 'Total Dealers',
+                  title: 'Active Dealers',
                   value: snapshot.data ?? '0',
                   color: AppTheme.info,
                   trendLabel: '+42 new this week',
@@ -876,16 +1208,16 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
 
-            // 4. Total Leads Card
+            // 4. New Leads Card
             FutureBuilder<String>(
-              future: _totalLeadsFuture,
+              future: _newLeadsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return StatCardShimmer(isCompact: true, width: width);
                 }
                 return _buildAdvancedStatCard(
                   width: width,
-                  title: 'Total Leads',
+                  title: 'New Leads',
                   value: snapshot.data ?? '0',
                   color: AppTheme.warning,
                   trendLabel: '5 high priority',
@@ -908,6 +1240,80 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
               },
             ),
+
+            // 5. Transacting Deals Card
+            FutureBuilder<String>(
+              future: _transactingDealsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return StatCardShimmer(isCompact: true, width: width);
+                }
+                return _buildAdvancedStatCard(
+                  width: width,
+                  title: 'Transacting Deals',
+                  value: snapshot.data ?? '0',
+                  color: AppTheme.accentColor,
+                  trendLabel: '₹1.2L value',
+                  trendIcon: Icons.trending_up,
+                  visualWidget: SizedBox(
+                    width: 50,
+                    height: 24,
+                    child: CustomPaint(
+                      painter: SparklinePainter([
+                        5,
+                        12,
+                        8,
+                        15,
+                        22,
+                        19,
+                        25,
+                      ], AppTheme.accentColor),
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // 6. Events Today Card
+            FutureBuilder<String>(
+              future: _eventsTodayFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return StatCardShimmer(isCompact: true, width: width);
+                }
+                return _buildAdvancedStatCard(
+                  width: width,
+                  title: 'Events Today',
+                  value: snapshot.data ?? '0',
+                  color: const Color(0xFF8B5CF6), // Vibrant violet
+                  trendLabel: '9 event types tracked',
+                  trendIcon: Icons.bolt_rounded,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const UserEventsPage(),
+                      ),
+                    );
+                  },
+                  visualWidget: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const LivePulsingBadge(color: Color(0xFF8B5CF6)),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Live',
+                        style: GoogleFonts.outfit(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF8B5CF6),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         );
       },
@@ -922,77 +1328,88 @@ class _DashboardPageState extends State<DashboardPage> {
     required String trendLabel,
     required IconData trendIcon,
     required Widget visualWidget,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      width: width,
-      height: 96,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium + 2),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontSize: 11.5,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  style: GoogleFonts.outfit(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(trendIcon, size: 10, color: color),
-                      const SizedBox(width: 3),
-                      Text(
-                        trendLabel,
-                        style: GoogleFonts.outfit(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return MouseRegion(
+      cursor: onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: 96,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor,
+            borderRadius: BorderRadius.circular(
+              AppTheme.borderRadiusMedium + 2,
             ),
+            boxShadow: AppTheme.cardShadow,
+            border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
           ),
-          const SizedBox(width: 10),
-          visualWidget,
-        ],
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      value,
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(trendIcon, size: 10, color: color),
+                          const SizedBox(width: 3),
+                          Text(
+                            trendLabel,
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              visualWidget,
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2481,6 +2898,337 @@ class _DashboardPageState extends State<DashboardPage> {
   // Keep legacy stubs so the call-sites in build() resolve
   Widget _buildTableTabs() => const SizedBox.shrink();
   Widget _buildTerminalContent() => const SizedBox.shrink();
+
+  void _scrollToEventsTracker() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  Widget _buildUserEventsTracker(bool isDesktop) {
+    final double gap = isDesktop ? 20.0 : 14.0;
+
+    final Widget trackerHeader = Row(
+      children: [
+        const Icon(
+          Icons.analytics_outlined,
+          color: AppTheme.primaryColor,
+          size: 24,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'User Events Tracker',
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF8B5CF6).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF8B5CF6).withOpacity(0.25),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const LivePulsingBadge(color: Color(0xFF8B5CF6)),
+              const SizedBox(width: 4),
+              Text(
+                'LIVE TELEMETRY',
+                style: GoogleFonts.outfit(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF8B5CF6),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (isDesktop) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            trackerHeader,
+            SizedBox(height: gap),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildEventTypesList(isDesktop)),
+                SizedBox(width: gap),
+                Expanded(flex: 3, child: _buildEventLogsFeed()),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            trackerHeader,
+            SizedBox(height: gap),
+            _buildEventTypesList(isDesktop),
+            SizedBox(height: gap),
+            _buildEventLogsFeed(),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildEventTypesList(bool isDesktop) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+        boxShadow: AppTheme.cardShadow,
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Event Category',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          isDesktop
+              ? ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _eventTypes.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final type = _eventTypes[index];
+                    final String id = type['id'] as String;
+                    final String label = type['label'] as String;
+                    final IconData icon = type['icon'] as IconData;
+                    final Color color = type['color'] as Color;
+                    final String description = type['description'] as String;
+                    final isSelected = _selectedEventType == id;
+                    final logs = _mockEventsLogs[id] ?? [];
+                    final count = logs.length;
+
+                    return _EventCategoryTile(
+                      label: label,
+                      description: description,
+                      icon: icon,
+                      color: color,
+                      count: count,
+                      isSelected: isSelected,
+                      onTap: () {
+                        setState(() {
+                          _selectedEventType = id;
+                        });
+                      },
+                    );
+                  },
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: List.generate(_eventTypes.length, (index) {
+                      final type = _eventTypes[index];
+                      final String id = type['id'] as String;
+                      final String label = type['label'] as String;
+                      final IconData icon = type['icon'] as IconData;
+                      final Color color = type['color'] as Color;
+                      final isSelected = _selectedEventType == id;
+                      final logs = _mockEventsLogs[id] ?? [];
+                      final count = logs.length;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ChoiceChip(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                icon,
+                                size: 14,
+                                color: isSelected ? Colors.white : color,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                label,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white.withOpacity(0.2)
+                                      : color.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? Colors.white : color,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          selected: isSelected,
+                          selectedColor: color,
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: isSelected ? color : AppTheme.borderColor,
+                            width: 1,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() {
+                                _selectedEventType = id;
+                              });
+                            }
+                          },
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventLogsFeed() {
+    final typeData = _eventTypes.firstWhere(
+      (t) => t['id'] == _selectedEventType,
+      orElse: () => _eventTypes.first,
+    );
+    final String label = typeData['label'] as String;
+    final Color color = typeData['color'] as Color;
+
+    final logs = _mockEventsLogs[_selectedEventType] ?? [];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+        boxShadow: AppTheme.cardShadow,
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Active Feed: $label',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${logs.length} Live events',
+                  style: GoogleFonts.outfit(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (logs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.hourglass_empty_rounded,
+                      size: 32,
+                      color: AppTheme.textSecondary.withOpacity(0.4),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No events recorded in this session',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: logs.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final log = logs[index];
+                return _EventLogCard(
+                  user: log['user'] as String,
+                  time: log['time'] as String,
+                  device: log['device'] as String,
+                  details: log['details'] as String,
+                  payload: log['payload'] as Map<String, dynamic>,
+                  accentColor: color,
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Hoverable table row — isolated StatefulWidget for per-row hover state ──
@@ -3227,10 +3975,7 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
             child: TextField(
               controller: _controller,
               maxLines: 3,
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                color: AppTheme.textBody,
-              ),
+              style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textBody),
               decoration: const InputDecoration(
                 hintText: 'Type announcement content here...',
                 hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
@@ -3272,10 +4017,7 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
                         behavior: SnackBarBehavior.floating,
                         content: Row(
                           children: [
-                            const Icon(
-                              Icons.check_circle,
-                              color: Colors.white,
-                            ),
+                            const Icon(Icons.check_circle, color: Colors.white),
                             const SizedBox(width: 8),
                             Text(
                               'Broadcast dispatched successfully!',
@@ -3315,6 +4057,542 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _EventCategoryTile extends StatefulWidget {
+  final String label;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final int count;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _EventCategoryTile({
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.count,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_EventCategoryTile> createState() => _EventCategoryTileState();
+}
+
+class _EventCategoryTileState extends State<_EventCategoryTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? widget.color.withOpacity(0.08)
+                : _hovered
+                ? AppTheme.backgroundColor
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: widget.isSelected
+                  ? widget.color.withOpacity(0.3)
+                  : _hovered
+                  ? AppTheme.borderColor
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: widget.color.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(widget.icon, size: 16, color: widget.color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.label,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: widget.isSelected
+                            ? widget.color
+                            : AppTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      widget.description,
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: widget.isSelected
+                      ? widget.color
+                      : AppTheme.borderColor.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  widget.count.toString(),
+                  style: GoogleFonts.outfit(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: widget.isSelected
+                        ? Colors.white
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EventLogCard extends StatefulWidget {
+  final String user;
+  final String time;
+  final String device;
+  final String details;
+  final Map<String, dynamic> payload;
+  final Color accentColor;
+
+  const _EventLogCard({
+    required this.user,
+    required this.time,
+    required this.device,
+    required this.details,
+    required this.payload,
+    required this.accentColor,
+  });
+
+  @override
+  State<_EventLogCard> createState() => _EventLogCardState();
+}
+
+class _EventLogCardState extends State<_EventLogCard> {
+  bool _expanded = false;
+
+  Widget _buildCartAddDetails(Map<String, dynamic> payload) {
+    List<dynamic> items = [];
+    if (payload['items'] != null && payload['items'] is List) {
+      items = payload['items'] as List;
+    } else if (payload['product_id'] != null) {
+      items = [
+        {
+          'product_id': payload['product_id'],
+          'product_name': payload['product_name'] ?? 'Unknown Product',
+          'variant_id': payload['variant_id'] ?? '',
+          'variant_name': payload['variant_name'] ?? '',
+          'quantity': payload['quantity'] ?? 1,
+          'price': payload['unit_price'] ?? 0.0,
+        },
+      ];
+    }
+
+    if (items.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+        ),
+        child: Text(
+          widget.details,
+          style: GoogleFonts.outfit(
+            fontSize: 11.5,
+            color: AppTheme.textBody,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (final item in items) {
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final prodId = map['product_id']?.toString() ?? 'unknown';
+        grouped.putIfAbsent(prodId, () => []).add(map);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0, left: 2.0),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.shopping_cart_outlined,
+                size: 13,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Added Items',
+                style: GoogleFonts.outfit(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...grouped.entries.map((entry) {
+          final prodItems = entry.value;
+          final prodName =
+              prodItems.first['product_name']?.toString() ?? 'Unknown Product';
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.borderColor.withOpacity(0.8)),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isNarrow = constraints.maxWidth < 450;
+
+                final productHeader = Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        Icons.inventory_2_outlined,
+                        size: 12,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        prodName,
+                        style: GoogleFonts.outfit(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                );
+
+                final variantList = Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: prodItems.map<Widget>((item) {
+                    final variantName = item['variant_name']?.toString() ?? '';
+                    final qty = item['quantity'] ?? 1;
+                    final price = item['price'] ?? 0.0;
+                    final formattedPrice =
+                        '₹${(price * qty).toStringAsFixed(2).replaceAll('.00', '')}';
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.lightBorderColor,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: AppTheme.borderColor.withOpacity(0.4),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (variantName.isNotEmpty) ...[
+                            Text(
+                              variantName,
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textBody,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              width: 1,
+                              height: 8,
+                              color: AppTheme.textSecondary.withOpacity(0.3),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            '${qty}x',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '($formattedPrice)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      productHeader,
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4.0),
+                        child: variantList,
+                      ),
+                    ],
+                  );
+                } else {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(flex: 4, child: productHeader),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 6,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: variantList,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String fullInitials = widget.user
+        .split(' ')
+        .map((e) => e.isNotEmpty ? e[0] : '')
+        .join()
+        .toUpperCase();
+    final String initials = fullInitials.length <= 2
+        ? fullInitials
+        : fullInitials.substring(0, 2);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      widget.accentColor.withOpacity(0.2),
+                      widget.accentColor.withOpacity(0.05),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: widget.accentColor.withOpacity(0.2),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initials.isNotEmpty ? initials : 'U',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: widget.accentColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.user,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.time,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10.5,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.device,
+                      style: GoogleFonts.outfit(
+                        fontSize: 10.5,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          widget.payload['action'] == 'cart_add'
+              ? _buildCartAddDetails(widget.payload)
+              : Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.borderColor.withOpacity(0.6),
+                    ),
+                  ),
+                  child: Text(
+                    widget.details,
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      color: AppTheme.textBody,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expanded = !_expanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 14,
+                    color: widget.accentColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _expanded ? 'Hide Payload' : 'View Raw Payload',
+                    style: GoogleFonts.outfit(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: widget.accentColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                const JsonEncoder.withIndent('  ').convert(widget.payload),
+                style: GoogleFonts.sourceCodePro(
+                  fontSize: 10,
+                  color: const Color(0xFF38BDF8),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -22,6 +22,9 @@ class DashboardService {
   /// Maps a period string to a numeric multiplier for simulating different data.
   static double _periodMultiplier(String period) {
     switch (period) {
+      case 'Today':
+        return 0.05;
+      case '1 Week':
       case 'Last 1 Week':
         return 0.22;
       case 'Last 2 Weeks':
@@ -41,29 +44,45 @@ class DashboardService {
     }
   }
 
-  Future<String> getTotalSales({String period = 'This Month'}) async {
+  Future<String> getRevenueToday({String period = 'Today'}) async {
     await Future.delayed(_salesDelay);
-    final double base = 2450;
+    final double base = 28400;
     final int val = (base * _periodMultiplier(period)).round();
     return '₹${_formatNumber(val)}';
   }
 
-  Future<String> getTotalOrders({String period = 'This Month'}) async {
+  Future<String> getOrderToday({String period = 'Today'}) async {
     await Future.delayed(_ordersDelay);
-    final int val = (32 * _periodMultiplier(period)).round();
+    final int base = 18;
+    final int val = (base * _periodMultiplier(period)).round();
     return '$val';
   }
 
-  Future<String> getTotalDealers({String period = 'This Month'}) async {
+  Future<String> getActiveDealers({String period = 'Today'}) async {
     await Future.delayed(_dealersDelay);
-    // Dealers is cumulative, so it grows slowly
-    final int val = (900 + (20 * _periodMultiplier(period))).round();
+    final int base = 842;
+    final int val = (base + (10 * _periodMultiplier(period))).round();
     return '$val';
   }
 
-  Future<String> getTotalLeads({String period = 'This Month'}) async {
+  Future<String> getNewLeads({String period = 'Today'}) async {
     await Future.delayed(_leadsDelay);
-    final int val = (24 * _periodMultiplier(period)).round();
+    final int base = 15;
+    final int val = (base * _periodMultiplier(period)).round();
+    return '$val';
+  }
+
+  Future<String> getTransactingDeals({String period = 'Today'}) async {
+    await Future.delayed(_salesDelay);
+    final int base = 24;
+    final int val = (base * _periodMultiplier(period)).round();
+    return '$val';
+  }
+
+  Future<String> getEventsToday({String period = 'Today'}) async {
+    await Future.delayed(_leadsDelay);
+    final int base = 142;
+    final int val = (base * _periodMultiplier(period)).round();
     return '$val';
   }
 

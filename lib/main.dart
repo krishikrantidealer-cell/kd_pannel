@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/features/auth/presentation/pages/login_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.dart';
+
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
@@ -75,8 +75,6 @@ class MyApp extends StatelessWidget {
         '/leads/profile': (context) =>
             const MainLayout(child: LeadProfilePage()),
         '/dealers': (context) => const MainLayout(),
-        '/dealers/profile': (context) =>
-            const MainLayout(child: DealerProfilePage()),
         '/orders': (context) => const MainLayout(child: OrdersPage()),
         '/products': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(
@@ -92,7 +90,6 @@ class MyApp extends StatelessWidget {
         '/settings': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Settings'))),
         ),
-
         // Sales Routes
         '/sales/dashboard': (context) => const MainLayout(),
       },
