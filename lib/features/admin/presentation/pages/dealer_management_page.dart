@@ -10,7 +10,8 @@ import 'package:kd_pannel/util/dealers.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class DealerManagementPage extends StatefulWidget {
-  const DealerManagementPage({super.key});
+  final bool isStandalone;
+  const DealerManagementPage({super.key, this.isStandalone = false});
 
   @override
   State<DealerManagementPage> createState() => _DealerManagementPageState();
@@ -127,7 +128,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     final isDesktop = Responsive.isDesktop(context);
     final isMobile = Responsive.isMobile(context);
 
-    return ScrollConfiguration(
+    final Widget body = ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: SingleChildScrollView(
         child: Padding(
@@ -151,19 +152,47 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         ),
       ),
     );
+
+    if (widget.isStandalone) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        appBar: AppBar(
+          title: Text(
+            'Dealer Management',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          foregroundColor: AppTheme.textPrimary,
+          elevation: 0,
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: AppTheme.lightBorderColor),
+          ),
+        ),
+        body: body,
+      );
+    }
+
+    return body;
   }
 
   Widget _buildHeader(bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          isMobile ? 'Dealers' : 'Dealer Management',
-          style: AppTheme.headingXL.copyWith(
-            letterSpacing: -0.5,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        if (!widget.isStandalone)
+          Text(
+            isMobile ? 'Dealers' : 'Dealer Management',
+            style: AppTheme.headingXL.copyWith(
+              letterSpacing: -0.5,
+              fontWeight: FontWeight.w800,
+            ),
+          )
+        else
+          const SizedBox.shrink(),
         _buildTimeframeFilter(isMobile),
       ],
     );

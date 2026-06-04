@@ -50,7 +50,11 @@ class _StatCardWidgetState extends State<StatCardWidget> {
           width: widget.width,
           height: cardHeight,
           padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          transform: Matrix4.diagonal3Values(isHovered ? 1.02 : 1.0, isHovered ? 1.02 : 1.0, 1.0),
+          transform: Matrix4.diagonal3Values(
+            isHovered ? 1.02 : 1.0,
+            isHovered ? 1.02 : 1.0,
+            1.0,
+          ),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
             color: AppTheme.cardColor,
@@ -191,7 +195,11 @@ class _StatCardWidgetState extends State<StatCardWidget> {
         curve: Curves.easeOut,
         width: widget.width,
         height: cardHeight,
-        transform: Matrix4.diagonal3Values(isHovered ? 1.02 : 1.0, isHovered ? 1.02 : 1.0, 1.0),
+        transform: Matrix4.diagonal3Values(
+          isHovered ? 1.02 : 1.0,
+          isHovered ? 1.02 : 1.0,
+          1.0,
+        ),
         transformAlignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppTheme.cardColor,
@@ -208,7 +216,10 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                 ]
               : AppTheme.softShadow,
           border: isHovered
-              ? Border.all(color: widget.color.withValues(alpha: 0.2), width: 1.5)
+              ? Border.all(
+                  color: widget.color.withValues(alpha: 0.2),
+                  width: 1.5,
+                )
               : null,
         ),
         child: Stack(
@@ -252,7 +263,9 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                   color: widget.color.withValues(alpha: isHovered ? 0.2 : 0.12),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isHovered ? widget.color.withValues(alpha: 0.3) : AppTheme.cardColor,
+                    color: isHovered
+                        ? widget.color.withValues(alpha: 0.3)
+                        : AppTheme.cardColor,
                     width: 2,
                   ),
                   boxShadow: isHovered
@@ -261,7 +274,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                             color: widget.color.withValues(alpha: 0.2),
                             blurRadius: 8,
                             spreadRadius: 1,
-                          )
+                          ),
                         ]
                       : null,
                 ),
@@ -280,7 +293,11 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                           ),
                         )
                       : (widget.icon != null
-                            ? Icon(widget.icon, color: widget.color, size: isMobile ? 20 : 24)
+                            ? Icon(
+                                widget.icon,
+                                color: widget.color,
+                                size: isMobile ? 20 : 24,
+                              )
                             : Icon(
                                 Icons.analytics_outlined,
                                 color: widget.color,
@@ -386,8 +403,8 @@ class _StatCardShimmerState extends State<StatCardShimmer>
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
-        final Color shimmerColor = Colors.grey.withValues(alpha: 
-          _pulseAnimation.value * 0.15 + 0.05,
+        final Color shimmerColor = Colors.grey.withValues(
+          alpha: _pulseAnimation.value * 0.15 + 0.05,
         );
 
         if (widget.isCompact) {
@@ -401,7 +418,9 @@ class _StatCardShimmerState extends State<StatCardShimmer>
                 AppTheme.borderRadiusMedium + 2,
               ),
               boxShadow: AppTheme.cardShadow,
-              border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: AppTheme.borderColor.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -436,8 +455,8 @@ class _StatCardShimmerState extends State<StatCardShimmer>
                         width: 96,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: shimmerColor.withValues(alpha: 
-                            (shimmerColor.a * 0.6).clamp(0.0, 1.0),
+                          color: shimmerColor.withValues(
+                            alpha: (shimmerColor.a * 0.6).clamp(0.0, 1.0),
                           ),
                           borderRadius: BorderRadius.circular(4),
                         ),

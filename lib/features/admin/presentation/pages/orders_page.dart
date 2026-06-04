@@ -118,7 +118,8 @@ class OrderModel {
 // --- ORDERS PAGE ---
 
 class OrdersPage extends StatefulWidget {
-  const OrdersPage({super.key});
+  final bool isStandalone;
+  const OrdersPage({super.key, this.isStandalone = false});
 
   @override
   State<OrdersPage> createState() => _OrdersPageState();
@@ -599,7 +600,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final bool isMobile = Responsive.isMobile(context);
     final filtered = _filteredOrders;
 
-    return Stack(
+    final Widget body = Stack(
       children: [
         // Main Screen Scrollable content (Non-positioned child with expand constraints!)
         SizedBox.expand(
@@ -611,8 +612,10 @@ class _OrdersPageState extends State<OrdersPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header
-                _buildHeader(),
-                const SizedBox(height: 24),
+                if (!widget.isStandalone) ...[
+                  _buildHeader(),
+                  const SizedBox(height: 24),
+                ],
 
                 // Statistics Grid
                 _buildStatsGrid(),
@@ -633,6 +636,31 @@ class _OrdersPageState extends State<OrdersPage> {
         _buildSlideDrawer(context),
       ],
     );
+
+    if (widget.isStandalone) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        appBar: AppBar(
+          title: Text(
+            'Order Management',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          foregroundColor: AppTheme.textPrimary,
+          elevation: 0,
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: AppTheme.lightBorderColor),
+          ),
+        ),
+        body: body,
+      );
+    }
+
+    return body;
   }
 
   Widget _buildHeader() {

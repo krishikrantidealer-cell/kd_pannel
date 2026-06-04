@@ -30,20 +30,20 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   bool _tempDisableHover = false;
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
-    {'icon': Icons.dashboard_rounded, 'title': 'Dashboard'},
-    {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
-    {'icon': Icons.campaign_rounded, 'title': 'Leads'},
-    {'icon': Icons.storefront_rounded, 'title': 'Dealers'},
-    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders'},
-    {'icon': Icons.support_agent_rounded, 'title': 'Support'},
+    // {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
+    {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'index': 1},
+    // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
+    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 3},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 4},
+    // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'index': 5},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
-    {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard'},
-    {'icon': Icons.inventory_2_rounded, 'title': 'Products'},
-    {'icon': Icons.campaign_rounded, 'title': 'My Leads'},
-    {'icon': Icons.storefront_rounded, 'title': 'My Dealers'},
-    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders'},
+    // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
+    {'icon': Icons.inventory_2_rounded, 'title': 'Products', 'index': 1},
+    // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 2},
+    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 3},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 4},
   ];
 
   @override
@@ -172,7 +172,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       physics: const BouncingScrollPhysics(),
                       itemBuilder: (context, index) {
                         final item = menuItems[index];
-                        final isActive = widget.currentIdx == index;
+                        final targetIdx = item['index'] as int;
+                        final isActive = widget.currentIdx == targetIdx;
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 6),
@@ -181,7 +182,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             title: item['title'] as String,
                             isActive: isActive,
                             isExpanded: isExpanded,
-                            onTap: () => widget.onTabSelected(index),
+                            onTap: () => widget.onTabSelected(targetIdx),
                           ),
                         );
                       },

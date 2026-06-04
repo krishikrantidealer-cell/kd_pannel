@@ -8,7 +8,8 @@ import 'package:kd_pannel/util/leads.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class LeadsPage extends StatefulWidget {
-  const LeadsPage({super.key});
+  final bool isStandalone;
+  const LeadsPage({super.key, this.isStandalone = false});
 
   @override
   State<LeadsPage> createState() => _LeadsPageState();
@@ -160,7 +161,7 @@ class _LeadsPageState extends State<LeadsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
 
-    return ScrollConfiguration(
+    final Widget body = ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: SingleChildScrollView(
         child: Padding(
@@ -175,13 +176,16 @@ class _LeadsPageState extends State<LeadsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    isMobile ? 'Leads' : 'Leads Management',
-                    style: AppTheme.headingXL.copyWith(
-                      letterSpacing: -0.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  if (!widget.isStandalone)
+                    Text(
+                      isMobile ? 'Leads' : 'Leads Management',
+                      style: AppTheme.headingXL.copyWith(
+                        letterSpacing: -0.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   _buildTimeframeRow(isMobile),
                 ],
               ),
@@ -201,6 +205,31 @@ class _LeadsPageState extends State<LeadsPage> {
         ),
       ),
     );
+
+    if (widget.isStandalone) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        appBar: AppBar(
+          title: Text(
+            'Leads Management',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          foregroundColor: AppTheme.textPrimary,
+          elevation: 0,
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: AppTheme.lightBorderColor),
+          ),
+        ),
+        body: body,
+      );
+    }
+
+    return body;
   }
 
   Widget _buildTimeframeRow(bool isMobile) {
@@ -306,12 +335,15 @@ class _LeadsPageState extends State<LeadsPage> {
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(), // Forced single-line rhythm
+              physics:
+                  const NeverScrollableScrollPhysics(), // Forced single-line rhythm
               child: Row(
                 children: filterChips
                     .map(
                       (chip) => Padding(
-                        padding: const EdgeInsets.only(right: 8), // Refined 8px spacing
+                        padding: const EdgeInsets.only(
+                          right: 8,
+                        ), // Refined 8px spacing
                         child: _FilterChipItem(
                           label: chip,
                           icon: _getChipIcon(chip),
@@ -319,7 +351,8 @@ class _LeadsPageState extends State<LeadsPage> {
                           onTap: () => setState(() {
                             selectedFilterChip = chip;
                             currentPage = 1;
-                            _searchController.clear(); // Clear search on filter change
+                            _searchController
+                                .clear(); // Clear search on filter change
                           }),
                         ),
                       ),
@@ -403,7 +436,11 @@ class _LeadsPageState extends State<LeadsPage> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.search_rounded, size: 20, color: AppTheme.textSecondary),
+          const Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: AppTheme.textSecondary,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
@@ -470,7 +507,9 @@ class _FilterChipItemState extends State<_FilterChipItem> {
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 12 : 16, // Reduced from 18 to 16 for micro-alignment
+            horizontal: isMobile
+                ? 12
+                : 16, // Reduced from 18 to 16 for micro-alignment
             vertical: isMobile ? 6 : 8,
           ),
           decoration: BoxDecoration(
@@ -484,15 +523,15 @@ class _FilterChipItemState extends State<_FilterChipItem> {
                     ],
                   )
                 : (isHovered
-                    ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppTheme.primaryColor.withValues(alpha: 0.06),
-                          AppTheme.primaryColor.withValues(alpha: 0.04),
-                        ],
-                      )
-                    : null),
+                      ? LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppTheme.primaryColor.withValues(alpha: 0.06),
+                            AppTheme.primaryColor.withValues(alpha: 0.04),
+                          ],
+                        )
+                      : null),
             color: (widget.isSelected || isHovered) ? null : Colors.white,
             borderRadius: BorderRadius.circular(10),
             boxShadow: widget.isSelected
@@ -501,34 +540,30 @@ class _FilterChipItemState extends State<_FilterChipItem> {
                       color: AppTheme.primaryColor.withValues(alpha: 0.08),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ]
                 : (isHovered
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        )
-                      ]
-                    : null),
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null),
             border: Border.all(
               color: widget.isSelected
                   ? AppTheme.primaryColor
                   : (isHovered
-                      ? AppTheme.primaryColor.withValues(alpha: 0.4)
-                      : AppTheme.borderColor),
+                        ? AppTheme.primaryColor.withValues(alpha: 0.4)
+                        : AppTheme.borderColor),
               width: 1.2,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                widget.icon,
-                size: 16,
-                color: iconColor,
-              ),
+              Icon(widget.icon, size: 16, color: iconColor),
               const SizedBox(width: 8),
               Text(
                 widget.label,
@@ -569,7 +604,6 @@ class _FilterChipItemState extends State<_FilterChipItem> {
   }
 }
 
-
 class _LeadsTableCard extends StatefulWidget {
   final List<Map<String, dynamic>> leads;
   final int totalEntries;
@@ -597,7 +631,20 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
         _selectedTableRange!.endDate != null) {
       final start = _selectedTableRange!.startDate!;
       final end = _selectedTableRange!.endDate!;
-      final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       return '${start.day.toString().padLeft(2, '0')} ${months[start.month - 1]} - ${end.day.toString().padLeft(2, '0')} ${months[end.month - 1]}';
     }
     return selectedTableDropdown;
@@ -624,7 +671,9 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
             endRangeSelectionColor: AppTheme.primaryColor,
             initialSelectedRange: _selectedTableRange,
             onSubmit: (Object? val) {
-              if (val is PickerDateRange && val.startDate != null && val.endDate != null) {
+              if (val is PickerDateRange &&
+                  val.startDate != null &&
+                  val.endDate != null) {
                 setState(() => _selectedTableRange = val);
                 Navigator.pop(context);
               }
@@ -708,19 +757,17 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
           (val) => setState(() => selectedSource = val!),
         ),
         const SizedBox(width: 12),
-        _buildTableDropdown(
-          'Assign',
-          selectedAssign,
-          ['All', 'Amit Patel', 'Priya Singh', 'Unassigned'],
-          (val) => setState(() => selectedAssign = val!),
-        ),
+        _buildTableDropdown('Assign', selectedAssign, [
+          'All',
+          'Amit Patel',
+          'Priya Singh',
+          'Unassigned',
+        ], (val) => setState(() => selectedAssign = val!)),
         const SizedBox(width: 12),
         _buildTableDateSection(),
       ],
     );
   }
-
-
 
   Widget _buildTableDateSection() {
     return Container(
@@ -793,23 +840,20 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                   });
                 }
               },
-              items: [
-                'Today',
-                'Yesterday',
-                'Last 7 Days',
-                'Last 30 Days',
-              ].map<DropdownMenuItem<String>>((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(
-                    value,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              }).toList(),
+              items: ['Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days']
+                  .map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(
+                        value,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  })
+                  .toList(),
             ),
           ),
         ],
@@ -877,13 +921,18 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   Widget _buildTableFooter(bool isMobile) {
     final footerPadding = isMobile
         ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-        : const EdgeInsets.symmetric(horizontal: 12, vertical: 12); // Aligned with card header grid
+        : const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ); // Aligned with card header grid
 
     return Container(
       padding: footerPadding,
       decoration: const BoxDecoration(
         color: Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppTheme.borderRadiusLarge)),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(AppTheme.borderRadiusLarge),
+        ),
       ),
       child: isMobile
           ? Column(
@@ -959,7 +1008,7 @@ class _LeadsTableState extends State<_LeadsTable> {
   final Set<String> selectedPhones = {};
 
   bool get isAllSelected =>
-      widget.leads.isNotEmpty && 
+      widget.leads.isNotEmpty &&
       widget.leads.every((l) => selectedPhones.contains(l['phone'] ?? ''));
 
   void _toggleAll() {
@@ -1019,12 +1068,48 @@ class _LeadsTableState extends State<_LeadsTable> {
               ),
             ),
           ),
-          Expanded(flex: 18, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[1]))),
-          Expanded(flex: 14, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[2]))),
-          Expanded(flex: 10, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[3]))),
-          Expanded(flex: 11, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[4]))),
-          Expanded(flex: 12, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[5]))),
-          Expanded(flex: 10, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _HeaderText(columns[6]))),
+          Expanded(
+            flex: 18,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[1]),
+            ),
+          ),
+          Expanded(
+            flex: 14,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[2]),
+            ),
+          ),
+          Expanded(
+            flex: 10,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[3]),
+            ),
+          ),
+          Expanded(
+            flex: 11,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[4]),
+            ),
+          ),
+          Expanded(
+            flex: 12,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[5]),
+            ),
+          ),
+          Expanded(
+            flex: 10,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _HeaderText(columns[6]),
+            ),
+          ),
           Expanded(flex: 12, child: Center(child: _HeaderText(columns[7]))),
           Expanded(flex: 13, child: Center(child: _HeaderText(columns[8]))),
         ],
@@ -1062,7 +1147,8 @@ class _LeadsTableState extends State<_LeadsTable> {
                         isSelected: selectedPhones.contains(phone),
                         isAllSelected: isAllSelected,
                         onToggleSelection: () => _toggleSelection(phone),
-                        onTap: () => Navigator.pushNamed(context, '/leads/profile'),
+                        onTap: () =>
+                            Navigator.pushNamed(context, '/leads/profile'),
                         onHover: () => setState(() => hoveredRowIndex = index),
                         onExit: () => setState(() => hoveredRowIndex = null),
                       );
@@ -1117,15 +1203,19 @@ class _LeadRow extends StatelessWidget {
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
-          border: const Border(bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5)),
+          border: const Border(
+            bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+          ),
           color: rowBgColor,
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: AppTheme.primaryColor.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            )
-          ] : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Stack(
           children: [
@@ -1143,7 +1233,9 @@ class _LeadRow extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppTheme.primaryColor,
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+                    borderRadius: const BorderRadius.horizontal(
+                      right: Radius.circular(4),
+                    ),
                   ),
                 ),
               ),
@@ -1153,10 +1245,12 @@ class _LeadRow extends StatelessWidget {
                 SizedBox(
                   width: 40,
                   child: Center(
-                    child: (isHovered || isSelected) ? _CustomCheckbox(
-                      isSelected: isSelected,
-                      onTap: onToggleSelection,
-                    ) : const SizedBox.shrink(),
+                    child: (isHovered || isSelected)
+                        ? _CustomCheckbox(
+                            isSelected: isSelected,
+                            onTap: onToggleSelection,
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
                 _cell(lead['name'], flex: 1.8, isBold: true),
@@ -1174,7 +1268,10 @@ class _LeadRow extends StatelessWidget {
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: _ConnectedActionButtons(onCall: () {}, onView: onTap),
+                      child: _ConnectedActionButtons(
+                        onCall: () {},
+                        onView: onTap,
+                      ),
                     ),
                   ),
                 ),
@@ -1186,7 +1283,13 @@ class _LeadRow extends StatelessWidget {
     );
   }
 
-  Widget _cell(String text, {double flex = 1.0, bool isBold = false, bool isSecondary = false, TextAlign textAlign = TextAlign.left}) {
+  Widget _cell(
+    String text, {
+    double flex = 1.0,
+    bool isBold = false,
+    bool isSecondary = false,
+    TextAlign textAlign = TextAlign.left,
+  }) {
     return Expanded(
       flex: (flex * 10).toInt(),
       child: Padding(
@@ -1216,7 +1319,8 @@ class _ConnectedActionButtons extends StatefulWidget {
   const _ConnectedActionButtons({required this.onCall, required this.onView});
 
   @override
-  State<_ConnectedActionButtons> createState() => _ConnectedActionButtonsState();
+  State<_ConnectedActionButtons> createState() =>
+      _ConnectedActionButtonsState();
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
@@ -1239,24 +1343,36 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
               child: GestureDetector(
                 onTap: widget.onCall,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140), // Snappy fast hover
+                  duration: const Duration(
+                    milliseconds: 140,
+                  ), // Snappy fast hover
                   curve: Curves.easeOutCubic,
                   width: double.infinity,
                   height: double.infinity,
-                  transform: Matrix4.translationValues(0, isCallHovered ? -2.0 : 0.0, 0),
+                  transform: Matrix4.translationValues(
+                    0,
+                    isCallHovered ? -2.0 : 0.0,
+                    0,
+                  ),
                   decoration: BoxDecoration(
                     color: isCallHovered ? AppTheme.primaryColor : Colors.white,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(6)),
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(6),
+                    ),
                     border: Border.all(
-                      color: isCallHovered ? AppTheme.primaryColor : AppTheme.borderColor.withValues(alpha: 0.4),
+                      color: isCallHovered
+                          ? AppTheme.primaryColor
+                          : AppTheme.borderColor.withValues(alpha: 0.4),
                     ),
                     boxShadow: isCallHovered
                         ? [
                             BoxShadow(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.15,
+                              ),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
-                            )
+                            ),
                           ]
                         : null,
                   ),
@@ -1270,7 +1386,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                           child: Icon(
                             Icons.phone_rounded,
                             size: 16,
-                            color: isCallHovered ? Colors.white : AppTheme.primaryColor,
+                            color: isCallHovered
+                                ? Colors.white
+                                : AppTheme.primaryColor,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -1279,7 +1397,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: isCallHovered ? Colors.white : AppTheme.textPrimary,
+                            color: isCallHovered
+                                ? Colors.white
+                                : AppTheme.textPrimary,
                           ),
                         ),
                       ],
@@ -1297,18 +1417,40 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
               child: GestureDetector(
                 onTap: widget.onView,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140), // Snappy fast hover
+                  duration: const Duration(
+                    milliseconds: 140,
+                  ), // Snappy fast hover
                   curve: Curves.easeOutCubic,
                   width: double.infinity,
                   height: double.infinity,
-                  transform: Matrix4.translationValues(0, isViewHovered ? -2.0 : 0.0, 0),
+                  transform: Matrix4.translationValues(
+                    0,
+                    isViewHovered ? -2.0 : 0.0,
+                    0,
+                  ),
                   decoration: BoxDecoration(
-                    color: isViewHovered ? const Color(0xFFF1F9F3) : Colors.white,
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                    color: isViewHovered
+                        ? const Color(0xFFF1F9F3)
+                        : Colors.white,
+                    borderRadius: const BorderRadius.horizontal(
+                      right: Radius.circular(6),
+                    ),
                     border: Border(
-                      top: BorderSide(color: isViewHovered ? AppTheme.primaryColor.withValues(alpha: 0.3) : AppTheme.borderColor.withValues(alpha: 0.4)),
-                      bottom: BorderSide(color: isViewHovered ? AppTheme.primaryColor.withValues(alpha: 0.3) : AppTheme.borderColor.withValues(alpha: 0.4)),
-                      right: BorderSide(color: isViewHovered ? AppTheme.primaryColor.withValues(alpha: 0.3) : AppTheme.borderColor.withValues(alpha: 0.4)),
+                      top: BorderSide(
+                        color: isViewHovered
+                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                            : AppTheme.borderColor.withValues(alpha: 0.4),
+                      ),
+                      bottom: BorderSide(
+                        color: isViewHovered
+                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                            : AppTheme.borderColor.withValues(alpha: 0.4),
+                      ),
+                      right: BorderSide(
+                        color: isViewHovered
+                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                            : AppTheme.borderColor.withValues(alpha: 0.4),
+                      ),
                       // No left border for seamless visual connection
                     ),
                     boxShadow: isViewHovered
@@ -1317,7 +1459,7 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                               color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 6,
                               offset: const Offset(0, 3),
-                            )
+                            ),
                           ]
                         : null,
                   ),
@@ -1328,11 +1470,18 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 140),
                           curve: Curves.easeOutCubic,
-                          transform: Matrix4.translationValues(isViewHovered ? 2.0 : 0.0, 0.0, 0.0),
+                          transform: Matrix4.translationValues(
+                            isViewHovered ? 2.0 : 0.0,
+                            0.0,
+                            0.0,
+                          ),
                           child: Icon(
-                            Icons.visibility_outlined, // Replaced with premium view icon
+                            Icons
+                                .visibility_outlined, // Replaced with premium view icon
                             size: 16,
-                            color: isViewHovered ? AppTheme.primaryColor : AppTheme.textSecondary,
+                            color: isViewHovered
+                                ? AppTheme.primaryColor
+                                : AppTheme.textSecondary,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -1341,7 +1490,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: isViewHovered ? AppTheme.primaryColor : AppTheme.textSecondary,
+                            color: isViewHovered
+                                ? AppTheme.primaryColor
+                                : AppTheme.textSecondary,
                           ),
                         ),
                       ],
@@ -1356,7 +1507,6 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
     );
   }
 }
-
 
 class _StatusBadge extends StatelessWidget {
   final String status;
@@ -1417,7 +1567,8 @@ class _HeaderText extends StatelessWidget {
     return Text(
       text.toUpperCase(),
       style: AppTheme.tableHeader.copyWith(
-        fontWeight: FontWeight.w800, // Softer weight matching other management pages
+        fontWeight:
+            FontWeight.w800, // Softer weight matching other management pages
         letterSpacing: 0.5,
         fontSize: 11,
         color: AppTheme.textSecondary, // Softer neutral color
@@ -1690,7 +1841,9 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
     return MouseRegion(
       onEnter: (_) => setState(() => isHovered = true),
       onExit: (_) => setState(() => isHovered = false),
-      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -1701,21 +1854,21 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
           decoration: BoxDecoration(
             color: widget.isSelected
                 ? AppTheme.primaryColor
-                : (isHovered ? AppTheme.primaryColor.withValues(alpha: 0.05) : Colors.white),
+                : (isHovered
+                      ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                      : Colors.white),
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
               color: widget.isSelected
                   ? AppTheme.primaryColor
-                  : (isHovered ? AppTheme.primaryColor.withValues(alpha: 0.5) : AppTheme.borderColor),
+                  : (isHovered
+                        ? AppTheme.primaryColor.withValues(alpha: 0.5)
+                        : AppTheme.borderColor),
               width: 1.5,
             ),
           ),
           child: widget.isSelected
-              ? const Icon(
-                  Icons.check_rounded,
-                  size: 12,
-                  color: Colors.white,
-                )
+              ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
               : null,
         ),
       ),

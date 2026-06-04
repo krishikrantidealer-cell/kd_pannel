@@ -10,6 +10,9 @@ import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'user_events_page.dart';
+import 'orders_page.dart';
+import 'leads_page.dart';
+import 'dealer_management_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -1142,6 +1145,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: AppTheme.success,
                   trendLabel: '+12.4% vs yesterday',
                   trendIcon: Icons.trending_up,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const OrdersPage(isStandalone: true),
+                      ),
+                    );
+                  },
                   visualWidget: SizedBox(
                     width: 50,
                     height: 24,
@@ -1175,6 +1187,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: AppTheme.lightGreen,
                   trendLabel: '90% Fulfilled',
                   trendIcon: Icons.check_circle_outline,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const OrdersPage(isStandalone: true),
+                      ),
+                    );
+                  },
                   visualWidget: SizedBox(
                     width: 28,
                     height: 28,
@@ -1203,6 +1224,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: AppTheme.info,
                   trendLabel: '+42 new this week',
                   trendIcon: Icons.trending_up,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const DealerManagementPage(isStandalone: true),
+                      ),
+                    );
+                  },
                   visualWidget: _buildAvatarCluster(),
                 );
               },
@@ -1222,6 +1252,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: AppTheme.warning,
                   trendLabel: '5 high priority',
                   trendIcon: Icons.warning_amber_rounded,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const LeadsPage(isStandalone: true),
+                      ),
+                    );
+                  },
                   visualWidget: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1255,6 +1294,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: AppTheme.accentColor,
                   trendLabel: '₹1.2L value',
                   trendIcon: Icons.trending_up,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const LeadsPage(isStandalone: true),
+                      ),
+                    );
+                  },
                   visualWidget: SizedBox(
                     width: 50,
                     height: 24,
