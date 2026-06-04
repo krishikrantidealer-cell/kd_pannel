@@ -372,7 +372,7 @@ packages:
     source: hosted
     version: "1.1.1"
   flutter_switch:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_switch
       sha256: b91477f926bba135d2d203d7b24367492662d8d9c3aa6adb960b14c1087d3c41

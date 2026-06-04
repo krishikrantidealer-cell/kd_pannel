@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 
@@ -29,201 +30,197 @@ class StatCardWidget extends StatefulWidget {
 }
 
 class _StatCardWidgetState extends State<StatCardWidget> {
-  bool _isHovered = false;
-
-  Widget _buildAnimatedValue(String val, TextStyle style) {
-    final cleanVal = val.replaceAll(RegExp(r'[^\d.]'), '');
-    final double? targetVal = double.tryParse(cleanVal);
-
-    if (targetVal == null) {
-      return Text(
-        val,
-        style: style,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-      );
-    }
-
-    final prefix = val.split(cleanVal).first;
-    final suffix = val.split(cleanVal).last;
-    final isInt = !cleanVal.contains('.');
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: targetVal),
-      duration: const Duration(milliseconds: 1500),
-      curve: Curves.easeOutCubic,
-      builder: (context, current, child) {
-        final displayNum = isInt
-            ? current.toInt().toString()
-            : current.toStringAsFixed(2);
-        return Text(
-          '$prefix$displayNum$suffix',
-          style: style,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-        );
-      },
-    );
-  }
+  bool isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
 
-    Widget content;
     if (widget.isCompact) {
-      final double cardHeight = isMobile ? 64.0 : 72.0;
-      final double padding = isMobile ? 10.0 : 12.0;
+      final double cardHeight = isMobile ? 68.0 : 82.0;
+      final double horizontalPadding = isMobile ? 12.0 : 16.0;
 
-      content = Container(
-        width: widget.width,
-        height: cardHeight,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: AppTheme.cardColor,
-          borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-          boxShadow: [
-            BoxShadow(
-              color: widget.color.withOpacity(_isHovered ? 0.15 : 0.08),
-              blurRadius: _isHovered ? 15 : 10,
-              offset: Offset(0, _isHovered ? 6 : 4),
+      return MouseRegion(
+        onEnter: (_) => setState(() => isHovered = true),
+        onExit: (_) => setState(() => isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: widget.width,
+          height: cardHeight,
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          transform: Matrix4.diagonal3Values(
+            isHovered ? 1.02 : 1.0,
+            isHovered ? 1.02 : 1.0,
+            1.0,
+          ),
+          transformAlignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isHovered
+                ? [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                      spreadRadius: 0,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+            border: Border.all(
+              color: isHovered
+                  ? widget.color.withValues(alpha: 0.25)
+                  : AppTheme.borderColor.withValues(alpha: 0.5),
             ),
-            AppTheme.cardShadow.first,
-          ],
-          border: Border.all(color: widget.color.withOpacity(0.15), width: 1),
-        ),
-        child: Stack(
-          children: [
-            // Background Watermark Icon
-            Positioned(
-              right: -5,
-              bottom: -5,
-              child: Transform.rotate(
-                angle: -0.2,
-                child: Icon(
-                  widget.icon ?? Icons.analytics_outlined,
-                  size: 45,
-                  color: widget.color.withOpacity(0.04),
+          ),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: isMobile ? 38 : 46,
+                height: isMobile ? 38 : 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      widget.color.withValues(alpha: isHovered ? 0.22 : 0.16),
+                      widget.color.withValues(alpha: isHovered ? 0.12 : 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: 0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                    if (isHovered)
+                      BoxShadow(
+                        color: widget.color.withValues(alpha: 0.15),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                  ],
+                ),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                    child: widget.imagePath != null
+                        ? Image.asset(
+                            widget.imagePath!,
+                            color: widget.color,
+                            height: isMobile ? 22 : 26,
+                            width: isMobile ? 22 : 26,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => Icon(
+                              widget.icon ?? Icons.analytics_rounded,
+                              color: widget.color,
+                              size: isMobile ? 22 : 26,
+                            ),
+                          )
+                        : Icon(
+                            widget.icon ?? Icons.analytics_rounded,
+                            color: widget.color,
+                            size: isMobile ? 22 : 26,
+                          ),
+                  ),
                 ),
               ),
-            ),
-            // Main Content
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: padding),
-              child: Row(
-                children: [
-                  Container(
-                    width: isMobile ? 32 : 38,
-                    height: isMobile ? 32 : 38,
-                    decoration: BoxDecoration(
-                      color: widget.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: widget.color.withOpacity(0.2),
-                        width: 1,
+              SizedBox(width: isMobile ? 12 : 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: GoogleFonts.outfit(
+                        fontSize: isMobile ? 10.5 : 11.5,
+                        color: AppTheme.textPrimary.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    child: Center(
-                      child: widget.imagePath != null
-                          ? Image.asset(
-                              widget.imagePath!,
-                              color: widget.color,
-                              height: isMobile ? 16 : 18,
-                              width: isMobile ? 16 : 18,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Icon(
-                                    widget.icon ?? Icons.analytics_outlined,
-                                    color: widget.color,
-                                    size: isMobile ? 16 : 18,
-                                  ),
-                            )
-                          : Icon(
-                              widget.icon ?? Icons.analytics_outlined,
-                              color: widget.color,
-                              size: isMobile ? 16 : 18,
-                            ),
+                    const SizedBox(height: 1),
+                    Text(
+                      widget.value,
+                      style: GoogleFonts.outfit(
+                        fontSize: isMobile ? 18 : 22,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textPrimary,
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  SizedBox(width: isMobile ? 8 : 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            fontSize: isMobile ? 10.5 : 11.5,
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 1),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Flexible(
-                              child: _buildAnimatedValue(
-                                widget.value,
-                                TextStyle(
-                                  fontSize: isMobile ? 16 : 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (widget.subtext != null) ...[
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  widget.subtext!,
-                                  style: TextStyle(
-                                    fontSize: isMobile ? 9 : 10,
-                                    color: widget.color,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
-    } else {
-      // Dynamic height adaptation for premium mobile vs desktop/tablet layout
-      final double cardHeight = isMobile ? 145.0 : 175.0;
+    }
 
-      content = Container(
+    // Dynamic height adaptation for premium mobile vs desktop/tablet layout
+    final double cardHeight = isMobile ? 145.0 : 175.0;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
         width: widget.width,
         height: cardHeight,
+        transform: Matrix4.diagonal3Values(
+          isHovered ? 1.02 : 1.0,
+          isHovered ? 1.02 : 1.0,
+          1.0,
+        ),
+        transformAlignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppTheme.cardColor,
           borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
-          boxShadow: _isHovered
+          boxShadow: isHovered
               ? [
                   BoxShadow(
-                    color: widget.color.withOpacity(0.12),
+                    color: widget.color.withValues(alpha: 0.1),
                     blurRadius: 20,
-                    offset: const Offset(0, 8),
+                    offset: const Offset(0, 10),
+                    spreadRadius: 2,
                   ),
                   ...AppTheme.softShadow,
                 ]
               : AppTheme.softShadow,
+          border: isHovered
+              ? Border.all(
+                  color: widget.color.withValues(alpha: 0.2),
+                  width: 1.5,
+                )
+              : null,
         ),
         child: Stack(
           alignment: Alignment.topCenter,
@@ -233,15 +230,16 @@ class _StatCardWidgetState extends State<StatCardWidget> {
               borderRadius: BorderRadius.vertical(
                 top: Radius.circular(AppTheme.borderRadiusXLarge),
               ),
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 height: isMobile ? 65 : 80,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      widget.color.withOpacity(0.18),
-                      widget.color.withOpacity(0.01),
+                      widget.color.withValues(alpha: isHovered ? 0.25 : 0.18),
+                      widget.color.withValues(alpha: 0.01),
                     ],
                   ),
                   borderRadius: BorderRadius.vertical(
@@ -257,13 +255,28 @@ class _StatCardWidgetState extends State<StatCardWidget> {
             // 2. Premium circular container for the Icon or Image Asset
             Positioned(
               top: isMobile ? 16 : 20,
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 width: isMobile ? 40 : 48,
                 height: isMobile ? 40 : 48,
                 decoration: BoxDecoration(
-                  color: widget.color.withOpacity(0.12),
+                  color: widget.color.withValues(alpha: isHovered ? 0.2 : 0.12),
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.cardColor, width: 2),
+                  border: Border.all(
+                    color: isHovered
+                        ? widget.color.withValues(alpha: 0.3)
+                        : AppTheme.cardColor,
+                    width: 2,
+                  ),
+                  boxShadow: isHovered
+                      ? [
+                          BoxShadow(
+                            color: widget.color.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Center(
                   child: widget.imagePath != null
@@ -314,13 +327,16 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: isMobile ? 3 : 5),
-                  _buildAnimatedValue(
+                  Text(
                     widget.value,
-                    TextStyle(
+                    style: TextStyle(
                       fontSize: isMobile ? 18 : 22,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
                     ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (widget.subtext != null) ...[
                     const SizedBox(height: 2),
@@ -341,18 +357,6 @@ class _StatCardWidgetState extends State<StatCardWidget> {
             ),
           ],
         ),
-      );
-    }
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.basic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        transform: Matrix4.identity()..scale(_isHovered ? 1.01 : 1.0),
-        child: content,
       ),
     );
   }
@@ -399,8 +403,8 @@ class _StatCardShimmerState extends State<StatCardShimmer>
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
-        final Color shimmerColor = Colors.grey.withOpacity(
-          _pulseAnimation.value * 0.15 + 0.05,
+        final Color shimmerColor = Colors.grey.withValues(
+          alpha: _pulseAnimation.value * 0.15 + 0.05,
         );
 
         if (widget.isCompact) {
@@ -414,7 +418,9 @@ class _StatCardShimmerState extends State<StatCardShimmer>
                 AppTheme.borderRadiusMedium + 2,
               ),
               boxShadow: AppTheme.cardShadow,
-              border: Border.all(color: AppTheme.borderColor.withOpacity(0.4)),
+              border: Border.all(
+                color: AppTheme.borderColor.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -449,8 +455,8 @@ class _StatCardShimmerState extends State<StatCardShimmer>
                         width: 96,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: shimmerColor.withOpacity(
-                            (shimmerColor.opacity * 0.6).clamp(0.0, 1.0),
+                          color: shimmerColor.withValues(
+                            alpha: (shimmerColor.a * 0.6).clamp(0.0, 1.0),
                           ),
                           borderRadius: BorderRadius.circular(4),
                         ),
