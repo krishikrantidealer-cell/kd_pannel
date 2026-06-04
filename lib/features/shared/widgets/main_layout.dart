@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
-// import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
-// import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
-// import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
-// import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
-// import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
+import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
-import 'topbar_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget? child;
@@ -23,12 +22,23 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
+  String? _lastProcessedRoute;
+  bool _isSidebarPinned = true;
 
   // Persistent static stack of Admin Pages (Preserves states!)
-  final List<Widget> _adminPages = const [ProductsPage()];
+  final List<Widget> _adminPages = [
+    const DashboardPage(),
+    const DealerManagementPage(),
+    const ProductsPage(),
+  ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
-  final List<Widget> _salesPages = const [ProductsPage()];
+  final List<Widget> _salesPages = [
+    const SalesDashboardPage(),
+    const LeadsPage(),
+    const DealerManagementPage(),
+    const ProductsPage(),
+  ];
 
   @override
   void didChangeDependencies() {
@@ -37,17 +47,55 @@ class _MainLayoutState extends State<MainLayout> {
     precacheImage(const AssetImage('assets/images/logo.png'), context);
     precacheImage(const AssetImage('assets/images/admin.png'), context);
 
-    _currentIdx = 0;
+    final String? routeName = ModalRoute.of(context)?.settings.name;
+    final role = AuthService().currentUserRole ?? UserRole.admin;
+
+    if (routeName != null && routeName != _lastProcessedRoute) {
+      _lastProcessedRoute = routeName;
+      if (role == UserRole.admin) {
+        if (routeName == '/dashboard') _currentIdx = 0;
+        if (routeName == '/leads') _currentIdx = 1;
+        if (routeName == '/dealers') _currentIdx = 2;
+        if (routeName == '/orders') _currentIdx = 3;
+        if (routeName == '/support') _currentIdx = 4;
+      } else {
+        if (routeName == '/sales/dashboard') _currentIdx = 0;
+        if (routeName == '/leads') _currentIdx = 1;
+        if (routeName == '/dealers') _currentIdx = 2;
+        if (routeName == '/orders') _currentIdx = 3;
+      }
+    }
   }
 
   void _handleTabSelected(int index) {
-    setState(() {
-      _currentIdx = 0;
-    });
-    // If mobile drawer is open, auto-close it
+    // 1. Close drawer if open (Mobile/Tablet)
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
+      _scaffoldKey.currentState?.closeDrawer();
     }
+
+    // 2. Handle cross-page navigation vs. internal stack switching
+    if (widget.child != null) {
+      final role = AuthService().currentUserRole ?? UserRole.admin;
+      String route = '/dashboard';
+      if (role == UserRole.admin) {
+        if (index == 1) route = '/leads';
+        if (index == 2) route = '/dealers';
+        if (index == 3) route = '/orders';
+        if (index == 4) route = '/support';
+      } else {
+        if (index == 1) route = '/leads';
+        if (index == 2) route = '/dealers';
+        if (index == 3) route = '/orders';
+      }
+
+      // Navigate to the target main route
+      Navigator.pushNamed(context, route);
+      return;
+    }
+
+    setState(() {
+      _currentIdx = index;
+    });
   }
 
   void _handleLogout() {
@@ -60,6 +108,27 @@ class _MainLayoutState extends State<MainLayout> {
     final bool isDesktop = Responsive.isDesktop(context);
     final role = AuthService().currentUserRole ?? UserRole.admin;
 
+    final Widget content = Column(
+      children: [
+        // Topbar (fixed height)
+        TopbarWidget(
+          onMenuPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
+        ),
+
+        // Screen Content
+        Expanded(
+          child:
+              widget.child ??
+              IndexedStack(
+                index: _currentIdx,
+                children: role == UserRole.admin ? _adminPages : _salesPages,
+              ),
+        ),
+      ],
+    );
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: !isDesktop
@@ -69,100 +138,29 @@ class _MainLayoutState extends State<MainLayout> {
                 currentIdx: _currentIdx,
                 onTabSelected: _handleTabSelected,
                 onLogout: _handleLogout,
+                forceExpanded: true,
+                isPinned: true,
               ),
             )
           : null,
-      body: Row(
-        children: [
-          // Sidebar (fixed width) - Only show on desktop
-          if (isDesktop)
-            SidebarWidget(
-              currentIdx: _currentIdx,
-              onTabSelected: _handleTabSelected,
-              onLogout: _handleLogout,
-            ),
-
-          // Right Side (Topbar + Content)
-          Expanded(
-            child: Column(
+      body: isDesktop
+          ? Row(
               children: [
-                // Topbar (fixed height)
-                TopbarWidget(
-                  onMenuPressed: () {
-                    _scaffoldKey.currentState?.openDrawer();
+                SidebarWidget(
+                  currentIdx: _currentIdx,
+                  onTabSelected: _handleTabSelected,
+                  onLogout: _handleLogout,
+                  isPinned: _isSidebarPinned,
+                  onPinToggle: () {
+                    setState(() {
+                      _isSidebarPinned = !_isSidebarPinned;
+                    });
                   },
                 ),
-
-                // Global Wakeup Alert banner (Backend Cold-Start handling)
-                ValueListenableBuilder<bool>(
-                  valueListenable: ApiClient().isBackendWakingUp,
-                  builder: (context, isWakingUp, child) {
-                    if (!isWakingUp) return const SizedBox.shrink();
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0xFFFFF3CD),
-                            Color(0xFFFFF8E1),
-                          ], // Soft warning amber
-                        ),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Color(0xFFFFEBAA),
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF856404),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              '⚡ Waking up the server... This may take a few seconds on the first request.',
-                              style: TextStyle(
-                                color: Color(0xFF856404),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                // Screen Content
-                Expanded(
-                  child:
-                      widget.child ??
-                      IndexedStack(
-                        index: _currentIdx,
-                        children: role == UserRole.admin
-                            ? _adminPages
-                            : _salesPages,
-                      ),
-                ),
+                Expanded(child: content),
               ],
-            ),
-          ),
-        ],
-      ),
+            )
+          : content,
     );
   }
 }
