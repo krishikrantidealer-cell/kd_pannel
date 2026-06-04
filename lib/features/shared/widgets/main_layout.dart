@@ -4,6 +4,7 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
@@ -29,6 +30,7 @@ class _MainLayoutState extends State<MainLayout> {
   final List<Widget> _adminPages = [
     const DashboardPage(),
     const DealerManagementPage(),
+    const OrdersPage(),
     const ProductsPage(),
   ];
 
@@ -38,6 +40,7 @@ class _MainLayoutState extends State<MainLayout> {
     const LeadsPage(),
     const DealerManagementPage(),
     const ProductsPage(),
+    const OrdersPage(),
   ];
 
   @override
