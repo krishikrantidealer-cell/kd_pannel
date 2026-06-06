@@ -10,7 +10,8 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
-import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart' hide TableRow;
+import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart'
+    hide TableRow;
 import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
 import 'package:image_editor_plus/image_editor_plus.dart';
 import 'package:image_picker/image_picker.dart';
@@ -101,12 +102,36 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final rawHtml = data['description'].toString();
         // Convert class-based alignment to inline styles so HtmlToDelta can parse them
         final sanitizedHtml = rawHtml
-            .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
+            .replaceAll(
+              'class="ql-align-center"',
+              'style="text-align: center;"',
+            )
             .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
-            .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
-            .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
-            .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
-            .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
+            .replaceAll(
+              'class="ql-align-justify"',
+              'style="text-align: justify;"',
+            )
+            .replaceAll(
+              RegExp(
+                r'''class=\s*["']ql-align-center["']''',
+                caseSensitive: false,
+              ),
+              'style="text-align: center;"',
+            )
+            .replaceAll(
+              RegExp(
+                r'''class=\s*["']ql-align-right["']''',
+                caseSensitive: false,
+              ),
+              'style="text-align: right;"',
+            )
+            .replaceAll(
+              RegExp(
+                r'''class=\s*["']ql-align-justify["']''',
+                caseSensitive: false,
+              ),
+              'style="text-align: justify;"',
+            );
 
         final delta = HtmlToDelta().convert(sanitizedHtml);
         doc = quill.Document.fromDelta(delta);
@@ -287,8 +312,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   void _initializeCategorySelection() {
     if (widget.initialData != null) {
-      final String catString = widget.initialData?['category']?.toString() ?? '';
-      final String subCatString = widget.initialData?['subCategory']?.toString() ?? '';
+      final String catString =
+          widget.initialData?['category']?.toString() ?? '';
+      final String subCatString =
+          widget.initialData?['subCategory']?.toString() ?? '';
 
       final List<String> resolvedCategories = [];
       if (catString.isNotEmpty && catString != 'N/A') {
@@ -300,7 +327,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
       final List<String> resolvedSubCategories = [];
       if (subCatString.isNotEmpty && subCatString != 'N/A') {
         resolvedSubCategories.addAll(
-          subCatString.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+          subCatString
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty),
         );
       }
 
@@ -310,10 +340,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final initialCatIds = widget.initialData?['categoryIds'] as List?;
         final List<dynamic> catIds =
             (initialCatIds != null && initialCatIds.isNotEmpty)
-                ? initialCatIds
-                : (widget.initialData?['categoryId'] != null
-                    ? [widget.initialData?['categoryId']]
-                    : []);
+            ? initialCatIds
+            : (widget.initialData?['categoryId'] != null
+                  ? [widget.initialData?['categoryId']]
+                  : []);
 
         String getCleanId(dynamic item) {
           if (item == null) return '';
@@ -328,7 +358,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
         }
 
         for (var catId in catIds) {
-          if (catId is Map && catId['name'] != null && catId['name'].toString().isNotEmpty) {
+          if (catId is Map &&
+              catId['name'] != null &&
+              catId['name'].toString().isNotEmpty) {
             final String name = catId['name'].toString();
             if (!resolvedCategories.contains(name)) {
               resolvedCategories.add(name);
@@ -354,10 +386,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final initialSubCatIds = widget.initialData?['subCategoryIds'] as List?;
         final List<dynamic> subCatIds =
             (initialSubCatIds != null && initialSubCatIds.isNotEmpty)
-                ? initialSubCatIds
-                : (widget.initialData?['subCategoryId'] != null
-                    ? [widget.initialData?['subCategoryId']]
-                    : []);
+            ? initialSubCatIds
+            : (widget.initialData?['subCategoryId'] != null
+                  ? [widget.initialData?['subCategoryId']]
+                  : []);
 
         String getCleanId(dynamic item) {
           if (item == null) return '';
@@ -372,7 +404,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
         }
 
         for (var subCatId in subCatIds) {
-          if (subCatId is Map && subCatId['name'] != null && subCatId['name'].toString().isNotEmpty) {
+          if (subCatId is Map &&
+              subCatId['name'] != null &&
+              subCatId['name'].toString().isNotEmpty) {
             final String name = subCatId['name'].toString();
             if (!resolvedSubCategories.contains(name)) {
               resolvedSubCategories.add(name);
@@ -385,7 +419,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
             final List subs = cat['subCategories'] ?? [];
             final matchingSub = subs.firstWhere(
               (s) =>
-                  (s['id']?.toString() ?? s['_id']?.toString()) == cleanSubCatId,
+                  (s['id']?.toString() ?? s['_id']?.toString()) ==
+                  cleanSubCatId,
               orElse: () => null,
             );
             if (matchingSub != null) {
@@ -433,8 +468,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     return match?.group(1) ?? rateString.trim();
   }
 
-  String _getRateSuffix(String packUnit) {
-    final unit = packUnit.toLowerCase().trim();
+  String _getRateSuffix(String baseUnit) {
+    final unit = baseUnit.toLowerCase().trim();
     if (unit == 'ml' || unit == 'lit') return '/lit';
     if (unit == 'gm' || unit == 'kg') return '/kg';
     return '/pcs';
@@ -467,7 +502,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (_isHtmlMode) {
       // HTML -> Visual: check if there are advanced/complex tags that could be lost
       final htmlText = _htmlDescriptionController.text.trim();
-      final hasComplexHtml = htmlText.contains('<table') ||
+      final hasComplexHtml =
+          htmlText.contains('<table') ||
           htmlText.contains('<details') ||
           htmlText.contains('class="intro"') ||
           htmlText.contains("class='intro'") ||
@@ -527,12 +563,39 @@ class _CreateProductPageState extends State<CreateProductPage> {
       if (htmlText.isNotEmpty) {
         try {
           final sanitizedHtml = htmlText
-              .replaceAll('class="ql-align-center"', 'style="text-align: center;"')
-              .replaceAll('class="ql-align-right"', 'style="text-align: right;"')
-              .replaceAll('class="ql-align-justify"', 'style="text-align: justify;"')
-              .replaceAll(RegExp(r'''class=\s*["']ql-align-center["']''', caseSensitive: false), 'style="text-align: center;"')
-              .replaceAll(RegExp(r'''class=\s*["']ql-align-right["']''', caseSensitive: false), 'style="text-align: right;"')
-              .replaceAll(RegExp(r'''class=\s*["']ql-align-justify["']''', caseSensitive: false), 'style="text-align: justify;"');
+              .replaceAll(
+                'class="ql-align-center"',
+                'style="text-align: center;"',
+              )
+              .replaceAll(
+                'class="ql-align-right"',
+                'style="text-align: right;"',
+              )
+              .replaceAll(
+                'class="ql-align-justify"',
+                'style="text-align: justify;"',
+              )
+              .replaceAll(
+                RegExp(
+                  r'''class=\s*["']ql-align-center["']''',
+                  caseSensitive: false,
+                ),
+                'style="text-align: center;"',
+              )
+              .replaceAll(
+                RegExp(
+                  r'''class=\s*["']ql-align-right["']''',
+                  caseSensitive: false,
+                ),
+                'style="text-align: right;"',
+              )
+              .replaceAll(
+                RegExp(
+                  r'''class=\s*["']ql-align-justify["']''',
+                  caseSensitive: false,
+                ),
+                'style="text-align: justify;"',
+              );
           final delta = HtmlToDelta().convert(sanitizedHtml);
           doc = quill.Document.fromDelta(delta);
         } catch (e) {
@@ -552,38 +615,40 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final deltaJson = _descriptionController.document.toDelta().toJson();
         final List<Map<String, dynamic>> normalizedDeltaJson =
             List<Map<String, dynamic>>.from(deltaJson).map((op) {
-          if (op.containsKey('attributes')) {
-            final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
-            bool modified = false;
-            if (attrs.containsKey('color') && attrs['color'] is String) {
-              final color = attrs['color'] as String;
-              if (color.startsWith('#') && color.length == 9) {
-                attrs['color'] = '#${color.substring(3)}';
-                modified = true;
+              if (op.containsKey('attributes')) {
+                final attrs = Map<String, dynamic>.from(
+                  op['attributes'] as Map,
+                );
+                bool modified = false;
+                if (attrs.containsKey('color') && attrs['color'] is String) {
+                  final color = attrs['color'] as String;
+                  if (color.startsWith('#') && color.length == 9) {
+                    attrs['color'] = '#${color.substring(3)}';
+                    modified = true;
+                  }
+                }
+                if (attrs.containsKey('background') &&
+                    attrs['background'] is String) {
+                  final bg = attrs['background'] as String;
+                  if (bg.startsWith('#') && bg.length == 9) {
+                    attrs['background'] = '#${bg.substring(3)}';
+                    modified = true;
+                  }
+                }
+                if (modified) {
+                  return {...op, 'attributes': attrs};
+                }
               }
-            }
-            if (attrs.containsKey('background') && attrs['background'] is String) {
-              final bg = attrs['background'] as String;
-              if (bg.startsWith('#') && bg.length == 9) {
-                attrs['background'] = '#${bg.substring(3)}';
-                modified = true;
-              }
-            }
-            if (modified) {
-              return {
-                ...op,
-                'attributes': attrs,
-              };
-            }
-          }
-          return op;
-        }).toList();
+              return op;
+            }).toList();
 
         final converter = QuillDeltaToHtmlConverter(
           normalizedDeltaJson,
           ConverterOptions.forEmail(),
         );
-        _htmlDescriptionController.text = _stripHtmlCssAndClasses(converter.convert());
+        _htmlDescriptionController.text = _stripHtmlCssAndClasses(
+          converter.convert(),
+        );
       } catch (e) {
         debugPrint('Error converting Quill Delta to HTML: $e');
         _htmlDescriptionController.text = '';
@@ -603,32 +668,32 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final deltaJson = _descriptionController.document.toDelta().toJson();
         final List<Map<String, dynamic>> normalizedDeltaJson =
             List<Map<String, dynamic>>.from(deltaJson).map((op) {
-          if (op.containsKey('attributes')) {
-            final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
-            bool modified = false;
-            if (attrs.containsKey('color') && attrs['color'] is String) {
-              final color = attrs['color'] as String;
-              if (color.startsWith('#') && color.length == 9) {
-                attrs['color'] = '#' + color.substring(3);
-                modified = true;
+              if (op.containsKey('attributes')) {
+                final attrs = Map<String, dynamic>.from(
+                  op['attributes'] as Map,
+                );
+                bool modified = false;
+                if (attrs.containsKey('color') && attrs['color'] is String) {
+                  final color = attrs['color'] as String;
+                  if (color.startsWith('#') && color.length == 9) {
+                    attrs['color'] = '#' + color.substring(3);
+                    modified = true;
+                  }
+                }
+                if (attrs.containsKey('background') &&
+                    attrs['background'] is String) {
+                  final bg = attrs['background'] as String;
+                  if (bg.startsWith('#') && bg.length == 9) {
+                    attrs['background'] = '#' + bg.substring(3);
+                    modified = true;
+                  }
+                }
+                if (modified) {
+                  return {...op, 'attributes': attrs};
+                }
               }
-            }
-            if (attrs.containsKey('background') && attrs['background'] is String) {
-              final bg = attrs['background'] as String;
-              if (bg.startsWith('#') && bg.length == 9) {
-                attrs['background'] = '#' + bg.substring(3);
-                modified = true;
-              }
-            }
-            if (modified) {
-              return {
-                ...op,
-                'attributes': attrs,
-              };
-            }
-          }
-          return op;
-        }).toList();
+              return op;
+            }).toList();
 
         final converter = QuillDeltaToHtmlConverter(
           normalizedDeltaJson,
@@ -651,7 +716,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   void _addVariant({Map<String, dynamic>? data}) {
-    final String? variantId = data?['id']?.toString() ?? data?['_id']?.toString();
+    final String? variantId =
+        data?['id']?.toString() ?? data?['_id']?.toString();
     final String initialPrice = data?['price'] != null
         ? data!['price'].toString()
         : '';
@@ -808,41 +874,48 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final double? finalCompare = double.tryParse(initialCompare);
     final double? sizeVal = double.tryParse(packVal);
 
-    double getFactor() {
-      double factor = 1.0;
-      final String currentUnit = packUnit.toLowerCase().trim();
-      if (currentUnit == 'ml' || currentUnit == 'gm' || currentUnit == 'g') {
-        factor = 0.001;
-      }
-      return factor;
-    }
+    // --- Industry-standard factor: converts pack size value to base unit quantity ---
+    // Rate is per BASE unit; pack size is measured in PACK unit.
+    // factor = how many base units one pack-unit equals.
+
+
+    // Temporary variant map ref for the closure to read live values from.
+    // We use a late-bound reference via a list so the closure captures the list,
+    // not a String variable that was set at add-time.
+    final variantRef = <Map<String, dynamic>>[];
+
+    final double? initBasePackingVal = double.tryParse(basePackingValCtrl.text);
+    final double initialCanonicalVolume = initBasePackingVal != null && initBasePackingVal > 0
+        ? _getPackVolume('${basePackingValCtrl.text}$basePackUnit')
+        : 1.0;
 
     if (rates['1']!.text.isEmpty &&
         finalPrice != null &&
-        sizeVal != null &&
-        sizeVal > 0) {
-      rates['1']!.text = (finalPrice / (sizeVal * getFactor())).toStringAsFixed(
+        initialCanonicalVolume > 0) {
+      rates['1']!.text = (finalPrice / initialCanonicalVolume).toStringAsFixed(
         2,
       );
     }
     if (compareRateCtrl.text.isEmpty &&
         finalCompare != null &&
-        sizeVal != null &&
-        sizeVal > 0) {
-      compareRateCtrl.text = (finalCompare / (sizeVal * getFactor()))
+        initialCanonicalVolume > 0) {
+      compareRateCtrl.text = (finalCompare / initialCanonicalVolume)
           .toStringAsFixed(2);
     }
 
     // Setup listeners to calculate prices on the fly!
     void recalculate() {
       final double? cRateVal = double.tryParse(compareRateCtrl.text);
-      final double? sVal = double.tryParse(packValCtrl.text);
+      final double? bpVal = double.tryParse(basePackingValCtrl.text);
+      final String bpUnit = variantRef.isNotEmpty
+          ? (variantRef[0]['basePackingUnit'] as String? ?? basePackUnit)
+          : basePackUnit;
 
-      if (sVal != null && sVal > 0) {
-        final factor = getFactor();
+      if (bpVal != null && bpVal > 0) {
+        final double canonicalVolume = _getPackVolume('$bpVal$bpUnit');
 
         if (cRateVal != null) {
-          final computedMRP = cRateVal * sVal * factor;
+          final computedMRP = cRateVal * canonicalVolume;
           compareCtrl.text = computedMRP % 1 == 0
               ? computedMRP.toStringAsFixed(0)
               : computedMRP.toStringAsFixed(2);
@@ -855,7 +928,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           if (rateCtrl != null && compCtrl != null) {
             final double? rVal = double.tryParse(rateCtrl.text);
             if (rVal != null) {
-              final computedVal = rVal * sVal * factor;
+              final computedVal = rVal * canonicalVolume;
               compCtrl.text = computedVal % 1 == 0
                   ? computedVal.toStringAsFixed(0)
                   : computedVal.toStringAsFixed(2);
@@ -874,12 +947,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     compareRateCtrl.addListener(recalculate);
     packValCtrl.addListener(recalculate);
+    basePackingValCtrl.addListener(recalculate);
     for (var controller in rates.values) {
       controller.addListener(recalculate);
     }
 
     setState(() {
-      _formVariants.add({
+      final variantMap = {
         if (variantId != null) 'id': variantId,
         if (variantId != null) '_id': variantId,
         'price': priceCtrl,
@@ -894,7 +968,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'priceTiers': variantPriceTiers,
         // Maintain recalculate reference for update on unit dropdown change
         'recalculate': recalculate,
-      });
+      };
+      _formVariants.add(variantMap);
+      // Wire the live-factor closure to the actual variant map
+      variantRef.add(variantMap);
     });
   }
 
@@ -1214,7 +1291,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final bool isDescEmpty = _isHtmlMode
         ? _htmlDescriptionController.text.trim().isEmpty
         : (_descriptionController.document.toPlainText().trim().isEmpty ||
-            _descriptionController.document.toPlainText().trim() == '\n');
+              _descriptionController.document.toPlainText().trim() == '\n');
 
     if (isDescEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1239,32 +1316,32 @@ class _CreateProductPageState extends State<CreateProductPage> {
           final deltaJson = _descriptionController.document.toDelta().toJson();
           final List<Map<String, dynamic>> normalizedDeltaJson =
               List<Map<String, dynamic>>.from(deltaJson).map((op) {
-            if (op.containsKey('attributes')) {
-              final attrs = Map<String, dynamic>.from(op['attributes'] as Map);
-              bool modified = false;
-              if (attrs.containsKey('color') && attrs['color'] is String) {
-                final color = attrs['color'] as String;
-                if (color.startsWith('#') && color.length == 9) {
-                  attrs['color'] = '#' + color.substring(3);
-                  modified = true;
+                if (op.containsKey('attributes')) {
+                  final attrs = Map<String, dynamic>.from(
+                    op['attributes'] as Map,
+                  );
+                  bool modified = false;
+                  if (attrs.containsKey('color') && attrs['color'] is String) {
+                    final color = attrs['color'] as String;
+                    if (color.startsWith('#') && color.length == 9) {
+                      attrs['color'] = '#' + color.substring(3);
+                      modified = true;
+                    }
+                  }
+                  if (attrs.containsKey('background') &&
+                      attrs['background'] is String) {
+                    final bg = attrs['background'] as String;
+                    if (bg.startsWith('#') && bg.length == 9) {
+                      attrs['background'] = '#' + bg.substring(3);
+                      modified = true;
+                    }
+                  }
+                  if (modified) {
+                    return {...op, 'attributes': attrs};
+                  }
                 }
-              }
-              if (attrs.containsKey('background') && attrs['background'] is String) {
-                final bg = attrs['background'] as String;
-                if (bg.startsWith('#') && bg.length == 9) {
-                  attrs['background'] = '#' + bg.substring(3);
-                  modified = true;
-                }
-              }
-              if (modified) {
-                return {
-                  ...op,
-                  'attributes': attrs,
-                };
-              }
-            }
-            return op;
-          }).toList();
+                return op;
+              }).toList();
 
           final converter = QuillDeltaToHtmlConverter(
             normalizedDeltaJson,
@@ -1285,7 +1362,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final ratesJson = <String, String>{};
         final computedJson = <String, String>{};
 
-        final suffix = _getRateSuffix(v['packSizeUnit']);
+        final suffix = _getRateSuffix(
+          v['basePackingUnit'] ?? v['packSizeUnit'],
+        );
 
         ratesMap.forEach((key, ctrl) {
           final val = ctrl.text.trim();
@@ -1354,12 +1433,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
             final List subs = matchingCat['subCategories'] ?? [];
             final matchingSub = subs.firstWhere(
               (s) =>
-                  s['name'].toString().toLowerCase() == subCatName.toLowerCase(),
+                  s['name'].toString().toLowerCase() ==
+                  subCatName.toLowerCase(),
               orElse: () => null,
             );
             if (matchingSub != null) {
               final id =
-                  matchingSub['id']?.toString() ?? matchingSub['_id']?.toString();
+                  matchingSub['id']?.toString() ??
+                  matchingSub['_id']?.toString();
               if (id != null && !subCategoryIds.contains(id)) {
                 subCategoryIds.add(id);
               }
@@ -1388,8 +1469,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'size': v['packSize'],
           'price': priceVal,
           'compareAtPrice': compareVal,
+          // packVolume: legacy numeric field = total base-packing in canonical unit
+          // e.g. 10lit → 10.0, 5000ml → 5.0, 2kg → 2.0, 500gm → 0.5, 10pcs → 10.0
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),
           'basePacking': v['basePacking'],
+          // Explicit unit so backend/mobile can display ₹/pcs, ₹/lit, ₹/kg correctly
+          'basePackingUnit': _getBasePackingUnitFromString(v['basePacking'] ?? ''),
           'weight': 0.0,
           'rates': v['rates'],
           'computedPrices': v['computedPrices'],
@@ -1500,6 +1585,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
   }
 
+  /// Returns the numeric packVolume normalized to the canonical unit:
+  /// ml → litres (÷1000), gm/gram/g → kg (÷1000), all others (lit/kg/pcs) → raw value.
   double _getPackVolume(String sizeStr) {
     final clean = sizeStr.toLowerCase().replaceAll(RegExp(r'\s+'), '');
     final match = RegExp(
@@ -1510,10 +1597,28 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final value = double.tryParse(match.group(1) ?? '') ?? 1.0;
     final unit = match.group(2) ?? '';
 
-    if (unit == 'ml' || unit == 'gm' || unit == 'gram' || unit == 'g') {
-      return value / 1000.0;
-    }
+    // Sub-units: convert to the canonical larger unit
+    if (unit == 'ml') return value / 1000.0; // ml → litres
+    if (unit == 'gm' || unit == 'gram' || unit == 'g') return value / 1000.0; // gm → kg
+    // Canonical units: lit, kg, pcs — return value as-is
     return value;
+  }
+
+  /// Extracts the base packing unit string from a basePacking string like "10lit", "5kg", "20pcs".
+  /// Returns the unit portion normalized to a standard token.
+  String _getBasePackingUnitFromString(String sizeStr) {
+    final clean = sizeStr.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    final match = RegExp(
+      r'^[\d.]+(ml|lit|litre|l|gm|gram|g|kg|kilogram|k|pcs|piece|pieces)$',
+    ).firstMatch(clean);
+    if (match == null) return 'lit';
+    final raw = match.group(1) ?? 'lit';
+    if (raw == 'ml') return 'lit'; // ml stored as lit (volume)
+    if (raw == 'gm' || raw == 'gram' || raw == 'g') return 'kg'; // gm stored as kg (mass)
+    if (raw == 'litre' || raw == 'l') return 'lit';
+    if (raw == 'kilogram' || raw == 'k') return 'kg';
+    if (raw == 'piece' || raw == 'pieces') return 'pcs';
+    return raw; // lit, kg, pcs
   }
 
   @override
@@ -1645,12 +1750,16 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 TextButton.icon(
                                   onPressed: _toggleEditorMode,
                                   icon: Icon(
-                                    _isHtmlMode ? Icons.remove_red_eye_rounded : Icons.code_rounded,
+                                    _isHtmlMode
+                                        ? Icons.remove_red_eye_rounded
+                                        : Icons.code_rounded,
                                     size: 16,
                                     color: AppTheme.primaryColor,
                                   ),
                                   label: Text(
-                                    _isHtmlMode ? 'Visual Editor' : 'HTML Editor',
+                                    _isHtmlMode
+                                        ? 'Visual Editor'
+                                        : 'HTML Editor',
                                     style: GoogleFonts.outfit(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -1686,32 +1795,31 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                     if (!_isHtmlMode) ...[
                                       quill.QuillSimpleToolbar(
                                         controller: _descriptionController,
-                                        config:
-                                            quill.QuillSimpleToolbarConfig(
-                                              showFontFamily: false,
-                                              showFontSize: false,
-                                              showInlineCode: false,
-                                              showSubscript: false,
-                                              showSuperscript: false,
-                                              showCodeBlock: false,
-                                              showSearchButton: false,
-                                              showUndo: true,
-                                              showRedo: true,
-                                              showBoldButton: true,
-                                              showItalicButton: true,
-                                              showUnderLineButton: true,
-                                              showStrikeThrough: true,
-                                              showColorButton: false,
-                                              showBackgroundColorButton: false,
-                                              showListNumbers: true,
-                                              showListBullets: true,
-                                              showListCheck: false,
-                                              showIndent: true,
-                                              showAlignmentButtons: true,
-                                              showLink: true,
-                                              showQuote: true,
-                                              showClearFormat: true,
-                                            ),
+                                        config: quill.QuillSimpleToolbarConfig(
+                                          showFontFamily: false,
+                                          showFontSize: false,
+                                          showInlineCode: false,
+                                          showSubscript: false,
+                                          showSuperscript: false,
+                                          showCodeBlock: false,
+                                          showSearchButton: false,
+                                          showUndo: true,
+                                          showRedo: true,
+                                          showBoldButton: true,
+                                          showItalicButton: true,
+                                          showUnderLineButton: true,
+                                          showStrikeThrough: true,
+                                          showColorButton: false,
+                                          showBackgroundColorButton: false,
+                                          showListNumbers: true,
+                                          showListBullets: true,
+                                          showListCheck: false,
+                                          showIndent: true,
+                                          showAlignmentButtons: true,
+                                          showLink: true,
+                                          showQuote: true,
+                                          showClearFormat: true,
+                                        ),
                                       ),
                                       const Divider(
                                         height: 1,
@@ -1723,17 +1831,20 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                       padding: const EdgeInsets.all(16),
                                       child: _isHtmlMode
                                           ? TextField(
-                                              controller: _htmlDescriptionController,
+                                              controller:
+                                                  _htmlDescriptionController,
                                               maxLines: null,
                                               minLines: 15,
-                                              keyboardType: TextInputType.multiline,
+                                              keyboardType:
+                                                  TextInputType.multiline,
                                               style: GoogleFonts.robotoMono(
                                                 fontSize: 13,
                                                 color: Colors.blueGrey.shade900,
                                               ),
                                               decoration: const InputDecoration(
                                                 border: InputBorder.none,
-                                                hintText: 'Write raw HTML here (e.g. <p>Hello <b>World</b></p>)...',
+                                                hintText:
+                                                    'Write raw HTML here (e.g. <p>Hello <b>World</b></p>)...',
                                                 hintStyle: TextStyle(
                                                   color: AppTheme.textSecondary,
                                                   fontSize: 13,
@@ -1741,7 +1852,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                               ),
                                             )
                                           : quill.QuillEditor.basic(
-                                              controller: _descriptionController,
+                                              controller:
+                                                  _descriptionController,
                                               config: const quill.QuillEditorConfig(
                                                 placeholder:
                                                     'Provide a detailed description of the product features, benefits, and specifications...',
@@ -2574,15 +2686,20 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         setState(() {
                           _formCategories.remove(cat);
                           // Also remove subcategories that belong only to this removed category
-                          final remainingCategories = _formCategories.where((c) => c != cat).toList();
+                          final remainingCategories = _formCategories
+                              .where((c) => c != cat)
+                              .toList();
                           final List<String> retainedSubs = [];
                           for (var rCat in remainingCategories) {
                             final matchingCat = _backendCategories.firstWhere(
-                              (c) => c['name'].toString().toLowerCase() == rCat.toLowerCase(),
+                              (c) =>
+                                  c['name'].toString().toLowerCase() ==
+                                  rCat.toLowerCase(),
                               orElse: () => null,
                             );
                             if (matchingCat != null) {
-                              final List subs = matchingCat['subCategories'] ?? [];
+                              final List subs =
+                                  matchingCat['subCategories'] ?? [];
                               for (var sub in subs) {
                                 final name = sub['name']?.toString() ?? '';
                                 if (name.isNotEmpty) {
@@ -2594,7 +2711,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
                           final List<String> subsToRemove = [];
                           final matchingCat = _backendCategories.firstWhere(
-                            (c) => c['name'].toString().toLowerCase() == cat.toLowerCase(),
+                            (c) =>
+                                c['name'].toString().toLowerCase() ==
+                                cat.toLowerCase(),
                             orElse: () => null,
                           );
                           if (matchingCat != null) {
@@ -2602,13 +2721,16 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 matchingCat['subCategories'] ?? [];
                             for (var sub in subs) {
                               final name = sub['name']?.toString() ?? '';
-                              if (name.isNotEmpty && !retainedSubs.contains(name.toLowerCase())) {
+                              if (name.isNotEmpty &&
+                                  !retainedSubs.contains(name.toLowerCase())) {
                                 subsToRemove.add(name);
                               }
                             }
                           }
                           _formSubCategories.removeWhere(
-                            (sub) => subsToRemove.any((s) => s.toLowerCase() == sub.toLowerCase()),
+                            (sub) => subsToRemove.any(
+                              (s) => s.toLowerCase() == sub.toLowerCase(),
+                            ),
                           );
                         });
                       },
@@ -3307,22 +3429,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
     Map<String, dynamic> variant, {
     required bool isMobile,
   }) {
-    final bool isLiquid = ['ml', 'lit'].contains(variant['packSizeUnit']);
-    final bool isSolid = ['gm', 'kg'].contains(variant['packSizeUnit']);
+    // All units are available for base packing regardless of pack size unit
+    const List<String> basePackingUnits = ['lit', 'ml', 'kg', 'gm', 'pcs'];
 
-    // Get compatible units for base packing
-    List<String> basePackingUnits = [];
-    if (isLiquid) {
-      basePackingUnits = ['lit', 'ml'];
-    } else if (isSolid) {
-      basePackingUnits = ['kg', 'gm'];
-    } else {
-      basePackingUnits = ['pcs'];
-    }
-
-    // Ensure basePackingUnit is in the valid list, otherwise reset to default
+    // Ensure basePackingUnit is set to a valid value
     if (!basePackingUnits.contains(variant['basePackingUnit'])) {
-      variant['basePackingUnit'] = basePackingUnits.first;
+      variant['basePackingUnit'] = 'lit';
     }
 
     final String packSizeHint = switch (variant['packSizeUnit']) {
@@ -3390,14 +3502,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 if (val != null) {
                   setState(() {
                     variant['packSizeUnit'] = val;
-                    // Auto-resolve base packing unit category mismatch
-                    if (['ml', 'lit'].contains(val)) {
-                      variant['basePackingUnit'] = 'lit';
-                    } else if (['gm', 'kg'].contains(val)) {
-                      variant['basePackingUnit'] = 'kg';
-                    } else {
-                      variant['basePackingUnit'] = 'pcs';
-                    }
+                    // Base unit is independent — user can freely change it separately
                   });
                   variant['recalculate']();
                 }
@@ -3483,6 +3588,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   setState(() {
                     variant['basePackingUnit'] = val;
                   });
+                  // Recalculate prices with new factor (base unit changed)
+                  variant['recalculate']();
                 }
               },
               dropdownColor: Colors.white,
@@ -3538,11 +3645,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ],
           );
 
+    // Get live suffix label for display
+    final String liveSuffix = _getRateSuffix(variant['basePackingUnit'] as String? ?? 'lit');
+
     // MRP rate is always first
     final List<Widget> rateRowChildren = [
       Expanded(
         child: _buildFormTextField(
-          label: 'MRP Rate (Per Unit)',
+          label: 'MRP Rate (₹$liveSuffix)',
           hint: 'e.g. 2400',
           controller: variant['compareRate'],
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -3587,7 +3697,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final isPrimary = id == '1';
         dynamicTierFields.add(
           _buildFormTextField(
-            label: '${tier['name']} Rate',
+            label: '${tier['name']} (₹$liveSuffix)',
             hint: isPrimary ? 'e.g. 950' : 'Optional',
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -4238,7 +4348,9 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
 
     // Simulated phone background and text colors
     final phoneBg = _isDarkMode ? const Color(0xFF121212) : Colors.white;
-    final phoneAppBarBg = _isDarkMode ? const Color(0xFF1F1F1F) : const Color(0xFF00A651);
+    final phoneAppBarBg = _isDarkMode
+        ? const Color(0xFF1F1F1F)
+        : const Color(0xFF00A651);
     final phoneAppBarText = Colors.white;
 
     return Container(
@@ -4261,19 +4373,17 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                 topLeft: Radius.circular(24),
                 topRight: Radius.circular(24),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.phone_android_rounded, color: AppTheme.primaryColor),
+                    const Icon(
+                      Icons.phone_android_rounded,
+                      color: AppTheme.primaryColor,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'KrishiKranti Mobile Simulator',
@@ -4290,7 +4400,9 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                     // Theme Toggle
                     IconButton(
                       icon: Icon(
-                        _isDarkMode ? Icons.wb_sunny_rounded : Icons.nights_stay_rounded,
+                        _isDarkMode
+                            ? Icons.wb_sunny_rounded
+                            : Icons.nights_stay_rounded,
                         color: AppTheme.primaryColor,
                       ),
                       tooltip: 'Toggle Light/Dark Preview',
@@ -4302,7 +4414,10 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: AppTheme.textSecondary,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -4310,7 +4425,7 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
               ],
             ),
           ),
-          
+
           // Content Area containing the simulated phone frame
           Expanded(
             child: SingleChildScrollView(
@@ -4322,7 +4437,10 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                   decoration: BoxDecoration(
                     color: phoneBg,
                     borderRadius: BorderRadius.circular(36),
-                    border: Border.all(color: const Color(0xFF1E293B), width: 12), // Phone Bezel
+                    border: Border.all(
+                      color: const Color(0xFF1E293B),
+                      width: 12,
+                    ), // Phone Bezel
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.15),
@@ -4353,17 +4471,29 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                             ),
                             Row(
                               children: [
-                                Icon(Icons.signal_cellular_4_bar, size: 11, color: phoneAppBarText),
+                                Icon(
+                                  Icons.signal_cellular_4_bar,
+                                  size: 11,
+                                  color: phoneAppBarText,
+                                ),
                                 const SizedBox(width: 4),
-                                Icon(Icons.wifi, size: 11, color: phoneAppBarText),
+                                Icon(
+                                  Icons.wifi,
+                                  size: 11,
+                                  color: phoneAppBarText,
+                                ),
                                 const SizedBox(width: 4),
-                                Icon(Icons.battery_std_rounded, size: 11, color: phoneAppBarText),
+                                Icon(
+                                  Icons.battery_std_rounded,
+                                  size: 11,
+                                  color: phoneAppBarText,
+                                ),
                               ],
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // Simulated App Bar
                       Container(
                         height: 48,
@@ -4371,7 +4501,11 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Row(
                           children: [
-                            Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: phoneAppBarText),
+                            Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 18,
+                              color: phoneAppBarText,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -4383,14 +4517,22 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                                 ),
                               ),
                             ),
-                            Icon(Icons.share_rounded, size: 18, color: phoneAppBarText),
+                            Icon(
+                              Icons.share_rounded,
+                              size: 18,
+                              color: phoneAppBarText,
+                            ),
                             const SizedBox(width: 12),
-                            Icon(Icons.shopping_cart_rounded, size: 18, color: phoneAppBarText),
+                            Icon(
+                              Icons.shopping_cart_rounded,
+                              size: 18,
+                              color: phoneAppBarText,
+                            ),
                             const SizedBox(width: 8),
                           ],
                         ),
                       ),
-                      
+
                       // Simulated Mobile Screen Body (Scrollable description details)
                       Expanded(
                         child: Container(
@@ -4405,14 +4547,18 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                                   height: 180,
                                   width: double.infinity,
                                   decoration: BoxDecoration(
-                                    color: _isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                    color: _isDarkMode
+                                        ? const Color(0xFF1E293B)
+                                        : const Color(0xFFF1F5F9),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Center(
                                     child: Icon(
                                       Icons.image,
                                       size: 48,
-                                      color: _isDarkMode ? Colors.white30 : Colors.black26,
+                                      color: _isDarkMode
+                                          ? Colors.white30
+                                          : Colors.black26,
                                     ),
                                   ),
                                 ),
@@ -4421,7 +4567,9 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                                   width: 120,
                                   height: 16,
                                   decoration: BoxDecoration(
-                                    color: _isDarkMode ? Colors.white12 : Colors.black12,
+                                    color: _isDarkMode
+                                        ? Colors.white12
+                                        : Colors.black12,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ),
@@ -4430,17 +4578,22 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                                   width: 220,
                                   height: 24,
                                   decoration: BoxDecoration(
-                                    color: _isDarkMode ? Colors.white24 : Colors.black26,
+                                    color: _isDarkMode
+                                        ? Colors.white24
+                                        : Colors.black26,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                
+
                                 // Tab selection simulated
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
                                       decoration: const BoxDecoration(
                                         border: Border(
                                           bottom: BorderSide(
@@ -4463,26 +4616,39 @@ class _MobilePreviewDialogState extends State<_MobilePreviewDialog> {
                                       'Specifications',
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: _isDarkMode ? Colors.white54 : Colors.black54,
+                                        color: _isDarkMode
+                                            ? Colors.white54
+                                            : Colors.black54,
                                       ),
                                     ),
                                   ],
                                 ),
-                                Divider(height: 1, color: _isDarkMode ? Colors.white12 : Colors.black12),
+                                Divider(
+                                  height: 1,
+                                  color: _isDarkMode
+                                      ? Colors.white12
+                                      : Colors.black12,
+                                ),
                                 const SizedBox(height: 16),
-                                
+
                                 // Actual Rich HTML Description Rendered
                                 Builder(
                                   builder: (context) {
-                                    final parsedBlocks = previewParseHtml(widget.html);
+                                    final parsedBlocks = previewParseHtml(
+                                      widget.html,
+                                    );
                                     if (parsedBlocks.isEmpty) {
                                       return Center(
                                         child: Padding(
-                                          padding: const EdgeInsets.only(top: 32.0),
+                                          padding: const EdgeInsets.only(
+                                            top: 32.0,
+                                          ),
                                           child: Text(
                                             'No description provided.',
                                             style: TextStyle(
-                                              color: _isDarkMode ? Colors.white54 : Colors.black54,
+                                              color: _isDarkMode
+                                                  ? Colors.white54
+                                                  : Colors.black54,
                                               fontStyle: FontStyle.italic,
                                               fontSize: 13,
                                             ),
@@ -4528,9 +4694,7 @@ class _PreviewFaqExpansionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cleanQuestion = question
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .trim();
+    final cleanQuestion = question.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -4612,10 +4776,7 @@ class _PreviewFaqTableWidget extends StatelessWidget {
           }
 
           final cellBlocks = previewParseHtml(cellInnerHtml);
-          Widget child = previewBuildHtmlContent(
-            context,
-            cellBlocks,
-          );
+          Widget child = previewBuildHtmlContent(context, cellBlocks);
 
           if (enforceBold) {
             child = DefaultTextStyle.merge(
@@ -4629,10 +4790,7 @@ class _PreviewFaqTableWidget extends StatelessWidget {
         rowCells.add(
           Container(
             color: Colors.transparent,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             alignment: Alignment.centerLeft,
             child: cellContent,
           ),
@@ -4784,14 +4942,36 @@ Color? _previewParseColor(String colorStr) {
 String _topLevelStripHtmlCssAndClasses(String html) {
   return html
       .replaceAll('\r', '')
-      .replaceAll(RegExp(r'''\s*style\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
-      .replaceAll(RegExp(r'''\s*class\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
-      .replaceAll(RegExp(r'''\s*id\s*=\s*["'][^"']*["']''', caseSensitive: false), '')
-      .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false), '')
-      .replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true, caseSensitive: false), '');
+      .replaceAll(
+        RegExp(r'''\s*style\s*=\s*["'][^"']*["']''', caseSensitive: false),
+        '',
+      )
+      .replaceAll(
+        RegExp(r'''\s*class\s*=\s*["'][^"']*["']''', caseSensitive: false),
+        '',
+      )
+      .replaceAll(
+        RegExp(r'''\s*id\s*=\s*["'][^"']*["']''', caseSensitive: false),
+        '',
+      )
+      .replaceAll(
+        RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false),
+        '',
+      )
+      .replaceAll(
+        RegExp(
+          r'<script[^>]*>.*?</script>',
+          dotAll: true,
+          caseSensitive: false,
+        ),
+        '',
+      );
 }
 
-List<PreviewHtmlBlock> previewParseHtml(String html, {Map<String, Widget>? widgetMap}) {
+List<PreviewHtmlBlock> previewParseHtml(
+  String html, {
+  Map<String, Widget>? widgetMap,
+}) {
   final List<PreviewHtmlBlock> blocks = [];
   final Map<String, Widget> wMap = widgetMap ?? {};
 
@@ -4886,7 +5066,9 @@ List<PreviewHtmlBlock> previewParseHtml(String html, {Map<String, Widget>? widge
       commitBlock();
       final widget = wMap[token];
       if (widget != null) {
-        blocks.add(PreviewHtmlBlock(spans: [], blockType: 'widget', widget: widget));
+        blocks.add(
+          PreviewHtmlBlock(spans: [], blockType: 'widget', widget: widget),
+        );
       }
       continue;
     }
@@ -5098,7 +5280,9 @@ Widget previewBuildHtmlContent(
   Color? defaultTextColor,
   bool isDarkMode = false,
 }) {
-  final Color kBodyColor = defaultTextColor ?? (isDarkMode ? Colors.white70 : const Color(0xFF111111));
+  final Color kBodyColor =
+      defaultTextColor ??
+      (isDarkMode ? Colors.white70 : const Color(0xFF111111));
   const Color kGreen = Color(0xFF00A651);
   const double kBodyFontSize = 13.0;
   const double kLineHeight = 1.9;

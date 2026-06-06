@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 
 // --- MODELS ALIGNED WITH BACKEND SCHEMA (Order.js) ---
 
@@ -82,6 +82,7 @@ class OrderModel {
   DateTime? deliveredAt;
   DateTime? cancelledAt;
   DateTime? rtoAt;
+  final String? assignedAgent;
 
   OrderModel({
     required this.id,
@@ -112,6 +113,7 @@ class OrderModel {
     this.deliveredAt,
     this.cancelledAt,
     this.rtoAt,
+    this.assignedAgent,
   });
 }
 
@@ -203,6 +205,7 @@ class _OrdersPageState extends State<OrdersPage> {
         orderStatus: 'Processing',
         placedAt: now.subtract(const Duration(hours: 2)),
         processingAt: now.subtract(const Duration(hours: 1)),
+        assignedAgent: 'Amit',
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678902',
@@ -241,6 +244,7 @@ class _OrdersPageState extends State<OrdersPage> {
         trackingUrl:
             'https://track.delhivery.com/api/v1/packages/json/?waybill=456711289',
         courierStatus: 'Delivered successfully to consignee',
+        assignedAgent: 'Anita',
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678903',
@@ -277,6 +281,7 @@ class _OrdersPageState extends State<OrdersPage> {
         trackingUrl:
             'https://track.delhivery.com/api/v1/packages/json/?waybill=456711390',
         courierStatus: 'In Transit: Arrived at Jaipur Hub',
+        assignedAgent: 'Rajesh',
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678904',
@@ -314,6 +319,7 @@ class _OrdersPageState extends State<OrdersPage> {
         awbNumber: 'SR9982190',
         trackingUrl: 'https://shiprocket.co/track/SR9982190',
         courierStatus: 'Out for delivery with courier agent',
+        assignedAgent: 'Sahil',
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678905',
@@ -351,6 +357,7 @@ class _OrdersPageState extends State<OrdersPage> {
         paymentStatus: 'Pending',
         orderStatus: 'Pending',
         placedAt: now.subtract(const Duration(hours: 12)),
+        assignedAgent: 'Amit',
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678906',
@@ -380,6 +387,7 @@ class _OrdersPageState extends State<OrdersPage> {
         orderStatus: 'Cancelled',
         placedAt: now.subtract(const Duration(days: 5)),
         cancelledAt: now.subtract(const Duration(days: 5, hours: 23)),
+        assignedAgent: null,
       ),
       OrderModel(
         id: '652f10b7e4b0c28345678907',
@@ -420,6 +428,7 @@ class _OrdersPageState extends State<OrdersPage> {
         trackingUrl:
             'https://track.delhivery.com/api/v1/packages/json/?waybill=456711999',
         courierStatus: 'Returned to origin - Consignee refused delivery',
+        assignedAgent: 'Rajesh',
       ),
     ];
   }
@@ -689,105 +698,173 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildStatsGrid() {
     final bool isDesktop = Responsive.isDesktop(context);
-    final double spacing = AppTheme.spacingMedium;
 
-    if (isDesktop) {
-      return Row(
-        children: [
-          Expanded(
-            child: StatCardWidget(
+    // Dynamic counts from all orders
+    final int totalOrders = _orders.length;
+    final int processingOrders = _orders
+        .where((o) => o.orderStatus == 'Processing')
+        .length;
+    final int shippedOrders = _orders
+        .where((o) => o.orderStatus == 'Shipped')
+        .length;
+    final int deliveredOrders = _orders
+        .where((o) => o.orderStatus == 'Delivered')
+        .length;
+
+    // Today's orders
+    final now = DateTime.now();
+    final placedToday = _orders
+        .where(
+          (o) =>
+              o.placedAt.year == now.year &&
+              o.placedAt.month == now.month &&
+              o.placedAt.day == now.day,
+        )
+        .length;
+
+    // Pending approval orders
+    final pendingOrders = _orders
+        .where((o) => o.orderStatus == 'Pending')
+        .length;
+
+    // Shipped / Out for delivery in transit
+    final outForDeliveryOrders = _orders
+        .where((o) => o.orderStatus == 'Out for Delivery')
+        .length;
+    final totalInTransit = shippedOrders + outForDeliveryOrders;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double spacing = isDesktop ? 16.0 : 12.0;
+        int columns = 4;
+        if (constraints.maxWidth < 600) {
+          columns = 1;
+        } else if (constraints.maxWidth < 950) {
+          columns = 2;
+        } else {
+          columns = 4;
+        }
+        final double width =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            // 1. Total Orders Card
+            AdvancedStatCardWidget(
+              width: width,
               title: 'Total Orders',
-              value: '${_orders.length}',
-              icon: Icons.shopping_bag_outlined,
+              value: '$totalOrders',
               color: AppTheme.primaryColor,
-              isCompact: true,
+              trendLabel: '+$placedToday placed today',
+              trendIcon: Icons.trending_up,
+              onTap: () {
+                setState(() {
+                  _selectedOrderStatus = 'All Statuses';
+                });
+              },
+              visualWidget: SizedBox(
+                width: 50,
+                height: 24,
+                child: CustomPaint(
+                  painter: SparklinePainter([
+                    3,
+                    5,
+                    2,
+                    8,
+                    4,
+                    7,
+                    totalOrders.toDouble(),
+                  ], AppTheme.primaryColor),
+                ),
+              ),
             ),
-          ),
-          SizedBox(width: spacing),
-          Expanded(
-            child: StatCardWidget(
-              title: 'Realized Revenue',
-              value: '₹${_totalRevenue.toStringAsFixed(0)}',
-              icon: Icons.currency_rupee_rounded,
-              color: AppTheme.accentColor,
-              isCompact: true,
-            ),
-          ),
-          SizedBox(width: spacing),
-          Expanded(
-            child: StatCardWidget(
-              title: 'Fulfillments Pending',
-              value: '$_pendingFulfillments',
-              icon: Icons.local_shipping_outlined,
-              color: AppTheme.info,
-              isCompact: true,
-            ),
-          ),
-          SizedBox(width: spacing),
-          Expanded(
-            child: StatCardWidget(
-              title: 'Pending Payments',
-              value: '$_pendingPayments',
-              icon: Icons.hourglass_bottom_rounded,
-              color: AppTheme.warning,
-              isCompact: true,
-            ),
-          ),
-        ],
-      );
-    }
 
-    // For Mobile & Tablet: 2x2 grid using Column and Row
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: StatCardWidget(
-                title: 'Total Orders',
-                value: '${_orders.length}',
-                icon: Icons.shopping_bag_outlined,
-                color: AppTheme.primaryColor,
-                isCompact: true,
+            // 2. Total Processing Card
+            AdvancedStatCardWidget(
+              width: width,
+              title: 'Total Processing',
+              value: '$processingOrders',
+              color: AppTheme.warning,
+              trendLabel: '$pendingOrders pending approval',
+              trendIcon: Icons.hourglass_empty_rounded,
+              onTap: () {
+                setState(() {
+                  _selectedOrderStatus = 'Processing';
+                });
+              },
+              visualWidget: SizedBox(
+                width: 28,
+                height: 28,
+                child: CustomPaint(
+                  painter: FulfillmentProgressPainter(
+                    totalOrders > 0
+                        ? (processingOrders + pendingOrders) / totalOrders
+                        : 0.0,
+                    AppTheme.warning,
+                  ),
+                ),
               ),
             ),
-            SizedBox(width: spacing),
-            Expanded(
-              child: StatCardWidget(
-                title: 'Realized Revenue',
-                value: '₹${_totalRevenue.toStringAsFixed(0)}',
-                icon: Icons.currency_rupee_rounded,
-                color: AppTheme.accentColor,
-                isCompact: true,
+
+            // 3. Order Shipped Card
+            AdvancedStatCardWidget(
+              width: width,
+              title: 'Order Shipped',
+              value: '$shippedOrders',
+              color: AppTheme.info,
+              trendLabel: '$outForDeliveryOrders out for delivery',
+              trendIcon: Icons.local_shipping_outlined,
+              onTap: () {
+                setState(() {
+                  _selectedOrderStatus = 'Shipped';
+                });
+              },
+              visualWidget: SizedBox(
+                width: 50,
+                height: 24,
+                child: CustomPaint(
+                  painter: SparklinePainter([
+                    2,
+                    4,
+                    3,
+                    6,
+                    5,
+                    7,
+                    totalInTransit.toDouble(),
+                  ], AppTheme.info),
+                ),
+              ),
+            ),
+
+            // 4. Orders Delivered Card
+            AdvancedStatCardWidget(
+              width: width,
+              title: 'Orders Delivered',
+              value: '$deliveredOrders',
+              color: AppTheme.success,
+              trendLabel: 'Successful deliveries',
+              trendIcon: Icons.check_circle_outline,
+              onTap: () {
+                setState(() {
+                  _selectedOrderStatus = 'Delivered';
+                });
+              },
+              visualWidget: SizedBox(
+                width: 28,
+                height: 28,
+                child: CustomPaint(
+                  painter: FulfillmentProgressPainter(
+                    totalOrders > 0 ? deliveredOrders / totalOrders : 0.0,
+                    AppTheme.success,
+                  ),
+                ),
               ),
             ),
           ],
-        ),
-        SizedBox(height: spacing),
-        Row(
-          children: [
-            Expanded(
-              child: StatCardWidget(
-                title: 'Fulfillments Pending',
-                value: '$_pendingFulfillments',
-                icon: Icons.local_shipping_outlined,
-                color: AppTheme.info,
-                isCompact: true,
-              ),
-            ),
-            SizedBox(width: spacing),
-            Expanded(
-              child: StatCardWidget(
-                title: 'Pending Payments',
-                value: '$_pendingPayments',
-                icon: Icons.hourglass_bottom_rounded,
-                color: AppTheme.warning,
-                isCompact: true,
-              ),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -944,17 +1021,18 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildOrdersTable(List<OrderModel> orders, bool isMobile) {
     final header = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       color: const Color(0xFFF9FAFB),
       child: Row(
         children: const [
           Expanded(flex: 2, child: _TableHeaderText('ORDER ID')),
           Expanded(flex: 3, child: _TableHeaderText('DATE & TIME')),
-          Expanded(flex: 4, child: _TableHeaderText('CUSTOMER')),
-          Expanded(flex: 3, child: _TableHeaderText('PAYMENT STATUS')),
+          Expanded(flex: 3, child: _TableHeaderText('CUSTOMER')),
+          Expanded(flex: 2, child: _TableHeaderText('ASSIGNED AGENT')),
+          Expanded(flex: 2, child: _TableHeaderText('PAYMENT STATUS')),
           Expanded(flex: 3, child: _TableHeaderText('FULFILLMENT')),
-          Expanded(flex: 2, child: _TableHeaderText('ITEMS')),
-          Expanded(flex: 3, child: _TableHeaderText('TOTAL AMOUNT')),
+          Expanded(flex: 1, child: _TableHeaderText('ITEMS')),
+          Expanded(flex: 2, child: _TableHeaderText('ORDER VALUE')),
         ],
       ),
     );
@@ -962,13 +1040,13 @@ class _OrdersPageState extends State<OrdersPage> {
     Widget tableBody;
     if (orders.isEmpty) {
       tableBody = Container(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.all(30),
         child: Center(
           child: Text(
             'No orders match your filters',
             style: GoogleFonts.outfit(
               color: AppTheme.textSecondary,
-              fontSize: 13,
+              fontSize: 12,
             ),
           ),
         ),
@@ -992,7 +1070,7 @@ class _OrdersPageState extends State<OrdersPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 14,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
                   color: _hoveredOrderId == order.id
@@ -1016,7 +1094,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       child: Text(
                         order.orderId,
                         style: GoogleFonts.outfit(
-                          fontSize: 13,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.primaryColor,
                         ),
@@ -1032,16 +1110,16 @@ class _OrdersPageState extends State<OrdersPage> {
                           Text(
                             _formatDate(order.placedAt),
                             style: GoogleFonts.outfit(
-                              fontSize: 12.5,
+                              fontSize: 12,
                               color: AppTheme.textBody,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 1),
                           Text(
                             _formatTime(order.placedAt),
                             style: GoogleFonts.outfit(
-                              fontSize: 11.5,
+                              fontSize: 11,
                               color: AppTheme.textSecondary,
                               fontWeight: FontWeight.w500,
                             ),
@@ -1052,7 +1130,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // CUSTOMER
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1062,7 +1140,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 child: Text(
                                   order.customerName,
                                   style: GoogleFonts.outfit(
-                                    fontSize: 13,
+                                    fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
                                     color: AppTheme.textPrimary,
                                   ),
@@ -1071,11 +1149,11 @@ class _OrdersPageState extends State<OrdersPage> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 1),
                           Text(
                             order.customerPhone,
                             style: GoogleFonts.outfit(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               color: AppTheme.textSecondary,
                             ),
                           ),
@@ -1083,9 +1161,25 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
 
+                    // ASSIGNED AGENT
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        order.assignedAgent == null ||
+                                order.assignedAgent!.isEmpty
+                            ? '-'
+                            : order.assignedAgent!,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: AppTheme.textBody,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+
                     // PAYMENT
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: _buildPaymentBadge(order.paymentStatus),
@@ -1103,23 +1197,23 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // ITEMS COUNT
                     Expanded(
-                      flex: 2,
+                      flex: 1,
                       child: Text(
                         '${order.items.fold(0, (sum, i) => sum + i.quantity)} unit(s)',
                         style: GoogleFonts.outfit(
-                          fontSize: 12.5,
+                          fontSize: 12,
                           color: AppTheme.textBody,
                         ),
                       ),
                     ),
 
-                    // TOTAL AMOUNT
+                    // ORDER VALUE (TOTAL AMOUNT)
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: Text(
                         '₹${order.totalAmount.toStringAsFixed(2)}',
                         style: GoogleFonts.outfit(
-                          fontSize: 13.5,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textPrimary,
                         ),
@@ -1154,7 +1248,7 @@ class _OrdersPageState extends State<OrdersPage> {
       builder: (context, constraints) {
         final double availableWidth = constraints.maxWidth;
         // Keep enough width so right-most columns never get clipped on smaller laptops.
-        final double minTableWidth = isMobile ? 980 : 1180;
+        final double minTableWidth = isMobile ? 1000 : 1200;
         final bool needsHorizontalScroll = availableWidth < minTableWidth;
         final double tableWidth = needsHorizontalScroll
             ? minTableWidth
@@ -2154,6 +2248,24 @@ class _OrdersPageState extends State<OrdersPage> {
               const SizedBox(width: 8),
               Text(
                 _selectedOrder!.customerPhone,
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  color: AppTheme.textBody,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: AppTheme.lightBorderColor),
+          Row(
+            children: [
+              const Icon(
+                Icons.support_agent_rounded,
+                color: AppTheme.textSecondary,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Assigned Agent: ${_selectedOrder!.assignedAgent == null || _selectedOrder!.assignedAgent!.isEmpty ? '-' : _selectedOrder!.assignedAgent!}',
                 style: GoogleFonts.outfit(
                   fontSize: 12.5,
                   color: AppTheme.textBody,

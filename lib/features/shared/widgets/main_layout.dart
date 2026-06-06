@@ -32,6 +32,7 @@ class _MainLayoutState extends State<MainLayout> {
     const DealerManagementPage(),
     const OrdersPage(),
     const ProductsPage(),
+    // const SupportDashboardPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
