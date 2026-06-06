@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -11,6 +12,7 @@ class OrderItem {
   final String variantId;
   final String title;
   final String? vendor;
+  final String? technicalName;
   final String? image;
   final int quantity;
   final double price;
@@ -20,6 +22,7 @@ class OrderItem {
     required this.variantId,
     required this.title,
     this.vendor,
+    this.technicalName,
     this.image,
     required this.quantity,
     required this.price,
@@ -135,15 +138,7 @@ class _OrdersPageState extends State<OrdersPage> {
   String _selectedPaymentStatus = 'All Payments';
   String _selectedPaymentMethod = 'All Methods';
 
-  // Selected Order for side-panel detail drawer
-  OrderModel? _selectedOrder;
   String? _hoveredOrderId;
-  bool _isDrawerOpen = false;
-
-  // Controllers for updating tracking details inside the drawer
-  final TextEditingController _awbController = TextEditingController();
-  final TextEditingController _courierController = TextEditingController();
-  final TextEditingController _trackingUrlController = TextEditingController();
 
   // --- MOCK DATABASE (Aligend with Node.js seeds & schemas) ---
   late List<OrderModel> _orders;
@@ -169,6 +164,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v1',
             title: 'Drip Irrigation Kit (50m)',
             vendor: 'Jain Irrigation',
+            technicalName: 'Drip Piping 16mm',
             image: null,
             quantity: 2,
             price: 2400.0,
@@ -178,6 +174,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v3',
             title: 'Hybrid Seed Pack (250g)',
             vendor: 'Mahyco',
+            technicalName: 'Bt Cotton Hybrid',
             image: null,
             quantity: 3,
             price: 1200.0,
@@ -219,6 +216,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v4',
             title: 'Water Pump 5HP',
             vendor: 'Kirloskar',
+            technicalName: 'Submersible Monoblock',
             image: null,
             quantity: 1,
             price: 11500.0,
@@ -258,6 +256,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v5',
             title: 'Fertilizer Blend X (10kg)',
             vendor: 'IFFCO',
+            technicalName: 'NPK 19:19:19',
             image: null,
             quantity: 5,
             price: 980.0,
@@ -295,6 +294,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v2',
             title: 'Hybrid Seed Pack (100g)',
             vendor: 'Mahyco',
+            technicalName: 'Bt Cotton Hybrid',
             image: null,
             quantity: 10,
             price: 650.0,
@@ -333,6 +333,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v1',
             title: 'Drip Irrigation Kit (50m)',
             vendor: 'Jain Irrigation',
+            technicalName: 'Drip Piping 16mm',
             image: null,
             quantity: 1,
             price: 2400.0,
@@ -342,6 +343,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v6',
             title: 'Fertilizer Blend X (20kg)',
             vendor: 'IFFCO',
+            technicalName: 'NPK 19:19:19',
             image: null,
             quantity: 2,
             price: 1800.0,
@@ -371,6 +373,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v2',
             title: 'Hybrid Seed Pack (100g)',
             vendor: 'Mahyco',
+            technicalName: 'Bt Cotton Hybrid',
             image: null,
             quantity: 1,
             price: 650.0,
@@ -401,6 +404,7 @@ class _OrdersPageState extends State<OrdersPage> {
             variantId: 'v4',
             title: 'Water Pump 5HP',
             vendor: 'Kirloskar',
+            technicalName: 'Submersible Monoblock',
             image: null,
             quantity: 1,
             price: 11500.0,
@@ -437,9 +441,6 @@ class _OrdersPageState extends State<OrdersPage> {
   void dispose() {
     _scrollController.dispose();
     _tableHorizontalController.dispose();
-    _awbController.dispose();
-    _courierController.dispose();
-    _trackingUrlController.dispose();
     super.dispose();
   }
 
@@ -510,140 +511,50 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // --- SIDEBAR TABS INTEGRATION HELPER ---
-  void _openOrderDrawer(OrderModel order) {
-    setState(() {
-      _selectedOrder = order;
-      _awbController.text = order.awbNumber ?? '';
-      _courierController.text = order.courierName ?? '';
-      _trackingUrlController.text = order.trackingUrl ?? '';
-      _isDrawerOpen = true;
-    });
-  }
-
-  void _closeOrderDrawer() {
-    setState(() {
-      _isDrawerOpen = false;
-    });
-  }
-
-  void _updateSelectedOrderStatus(String newStatus) {
-    if (_selectedOrder == null) return;
-    setState(() {
-      _selectedOrder!.orderStatus = newStatus;
-      final now = DateTime.now();
-
-      // Automatically sync milestones
-      if (newStatus == 'Processing' && _selectedOrder!.processingAt == null) {
-        _selectedOrder!.processingAt = now;
-      } else if (newStatus == 'Shipped' && _selectedOrder!.shippedAt == null) {
-        if (_selectedOrder!.processingAt == null)
-          _selectedOrder!.processingAt = now;
-        _selectedOrder!.shippedAt = now;
-      } else if (newStatus == 'Out for Delivery' &&
-          _selectedOrder!.outForDeliveryAt == null) {
-        if (_selectedOrder!.processingAt == null)
-          _selectedOrder!.processingAt = now;
-        if (_selectedOrder!.shippedAt == null) _selectedOrder!.shippedAt = now;
-        _selectedOrder!.outForDeliveryAt = now;
-      } else if (newStatus == 'Delivered' &&
-          _selectedOrder!.deliveredAt == null) {
-        if (_selectedOrder!.processingAt == null)
-          _selectedOrder!.processingAt = now;
-        if (_selectedOrder!.shippedAt == null) _selectedOrder!.shippedAt = now;
-        if (_selectedOrder!.outForDeliveryAt == null)
-          _selectedOrder!.outForDeliveryAt = now;
-        _selectedOrder!.deliveredAt = now;
-        _selectedOrder!.paymentStatus =
-            'Paid'; // Automatically marked paid when delivered
-      } else if (newStatus == 'RTO' && _selectedOrder!.rtoAt == null) {
-        _selectedOrder!.rtoAt = now;
-      } else if (newStatus == 'Cancelled' &&
-          _selectedOrder!.cancelledAt == null) {
-        _selectedOrder!.cancelledAt = now;
-      }
-    });
-  }
-
-  void _saveTrackingDetails() {
-    if (_selectedOrder == null) return;
-    setState(() {
-      _selectedOrder!.awbNumber = _awbController.text.trim();
-      _selectedOrder!.courierName = _courierController.text.trim();
-      _selectedOrder!.trackingUrl = _trackingUrlController.text.trim();
-
-      if (_selectedOrder!.awbNumber!.isNotEmpty &&
-          _selectedOrder!.orderStatus == 'Pending') {
-        _selectedOrder!.orderStatus = 'Processing';
-        _selectedOrder!.processingAt = DateTime.now();
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Tracking details saved for Order #${_selectedOrder!.orderId}',
-        ),
-        backgroundColor: AppTheme.success,
-      ),
-    );
-  }
-
-  void _cancelOrder() {
-    if (_selectedOrder == null) return;
-    setState(() {
-      _selectedOrder!.orderStatus = 'Cancelled';
-      _selectedOrder!.cancelledAt = DateTime.now();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Order #${_selectedOrder!.orderId} cancelled successfully',
-        ),
-        backgroundColor: AppTheme.error,
-      ),
-    );
-  }
 
   // --- WIDGET BUILDER ---
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
     final filtered = _filteredOrders;
+    final EdgeInsets screenPadding = AppTheme.getResponsivePadding(context);
 
-    final Widget body = Stack(
-      children: [
-        // Main Screen Scrollable content (Non-positioned child with expand constraints!)
-        SizedBox.expand(
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(),
-            padding: AppTheme.getResponsivePadding(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                if (!widget.isStandalone) ...[
-                  _buildHeader(),
-                  const SizedBox(height: 24),
-                ],
+    final Widget body = SizedBox.expand(
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.symmetric(vertical: screenPadding.top),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            if (!widget.isStandalone) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+                child: _buildHeader(),
+              ),
+              const SizedBox(height: 24),
+            ],
 
-                // Statistics Grid
-                _buildStatsGrid(),
-                const SizedBox(height: 24),
-
-                // Search & Filter controls
-                _buildFilterControls(isMobile),
-                const SizedBox(height: 16),
-
-                // Orders Table
-                _buildOrdersTable(filtered, isMobile),
-              ],
+            // Statistics Grid
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+              child: _buildStatsGrid(),
             ),
-          ),
-        ),
+            const SizedBox(height: 24),
 
-        // Slide-over Shopify style Drawer Sheet
-        _buildSlideDrawer(context),
-      ],
+            // Search & Filter controls
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+              child: _buildFilterControls(isMobile),
+            ),
+            const SizedBox(height: 16),
+
+            // Orders Table
+            _buildOrdersTable(filtered, isMobile, screenPadding),
+          ],
+        ),
+      ),
     );
 
     if (widget.isStandalone) {
@@ -1019,20 +930,24 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildOrdersTable(List<OrderModel> orders, bool isMobile) {
+  Widget _buildOrdersTable(
+    List<OrderModel> orders,
+    bool isMobile,
+    EdgeInsets screenPadding,
+  ) {
     final header = Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       color: const Color(0xFFF9FAFB),
       child: Row(
         children: const [
-          Expanded(flex: 2, child: _TableHeaderText('ORDER ID')),
-          Expanded(flex: 3, child: _TableHeaderText('DATE & TIME')),
-          Expanded(flex: 3, child: _TableHeaderText('CUSTOMER')),
-          Expanded(flex: 2, child: _TableHeaderText('ASSIGNED AGENT')),
-          Expanded(flex: 2, child: _TableHeaderText('PAYMENT STATUS')),
-          Expanded(flex: 3, child: _TableHeaderText('FULFILLMENT')),
-          Expanded(flex: 1, child: _TableHeaderText('ITEMS')),
-          Expanded(flex: 2, child: _TableHeaderText('ORDER VALUE')),
+          Expanded(flex: 6, child: _TableHeaderText('ORDER ID')),
+          Expanded(flex: 6, child: _TableHeaderText('DATE & TIME')),
+          Expanded(flex: 12, child: _TableHeaderText('CUSTOMER')),
+          Expanded(flex: 6, child: _TableHeaderText('AGENT')),
+          Expanded(flex: 6, child: _TableHeaderText('ORDER VALUE')),
+          Expanded(flex: 8, child: _TableHeaderText('PAYMENT STATUS')),
+          Expanded(flex: 10, child: _TableHeaderText('FULFILLMENT')),
+          Expanded(flex: 3, child: _TableHeaderText('ITEMS')),
         ],
       ),
     );
@@ -1066,7 +981,15 @@ class _OrdersPageState extends State<OrdersPage> {
               }
             },
             child: GestureDetector(
-              onTap: () => _openOrderDrawer(order),
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/orders/details',
+                  arguments: order,
+                ).then((_) {
+                  setState(() {});
+                });
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
@@ -1074,13 +997,13 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
                 decoration: BoxDecoration(
                   color: _hoveredOrderId == order.id
-                      ? AppTheme.primaryColor.withValues(alpha: 0.04)
+                      ? AppTheme.primaryColor.withOpacity(0.04)
                       : (isEven ? Colors.white : const Color(0xFFF9FAFB)),
                   border: Border(
                     bottom: BorderSide(color: AppTheme.lightBorderColor),
                     left: BorderSide(
                       color: _hoveredOrderId == order.id
-                          ? AppTheme.primaryColor.withValues(alpha: 0.5)
+                          ? AppTheme.primaryColor.withOpacity(0.5)
                           : Colors.transparent,
                       width: 2,
                     ),
@@ -1090,7 +1013,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   children: [
                     // ORDER ID
                     Expanded(
-                      flex: 2,
+                      flex: 6,
                       child: Text(
                         order.orderId,
                         style: GoogleFonts.outfit(
@@ -1103,7 +1026,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // DATE
                     Expanded(
-                      flex: 3,
+                      flex: 6,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1130,7 +1053,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // CUSTOMER
                     Expanded(
-                      flex: 3,
+                      flex: 12,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1163,7 +1086,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // ASSIGNED AGENT
                     Expanded(
-                      flex: 2,
+                      flex: 6,
                       child: Text(
                         order.assignedAgent == null ||
                                 order.assignedAgent!.isEmpty
@@ -1177,9 +1100,22 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
 
+                    // ORDER VALUE (TOTAL AMOUNT)
+                    Expanded(
+                      flex: 6,
+                      child: Text(
+                        '₹${order.totalAmount.toStringAsFixed(2)}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+
                     // PAYMENT
                     Expanded(
-                      flex: 2,
+                      flex: 8,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: _buildPaymentBadge(order.paymentStatus),
@@ -1188,7 +1124,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // FULFILLMENT
                     Expanded(
-                      flex: 3,
+                      flex: 10,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: _buildFulfillmentBadge(order.orderStatus),
@@ -1197,25 +1133,12 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     // ITEMS COUNT
                     Expanded(
-                      flex: 1,
+                      flex: 3,
                       child: Text(
                         '${order.items.fold(0, (sum, i) => sum + i.quantity)} unit(s)',
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: AppTheme.textBody,
-                        ),
-                      ),
-                    ),
-
-                    // ORDER VALUE (TOTAL AMOUNT)
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '₹${order.totalAmount.toStringAsFixed(2)}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
                         ),
                       ),
                     ),
@@ -1247,21 +1170,36 @@ class _OrdersPageState extends State<OrdersPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double availableWidth = constraints.maxWidth;
+        final double horizontalPadding =
+            screenPadding.left + screenPadding.right;
+        final double tableAvailableWidth = availableWidth - horizontalPadding;
         // Keep enough width so right-most columns never get clipped on smaller laptops.
-        final double minTableWidth = isMobile ? 1000 : 1200;
-        final bool needsHorizontalScroll = availableWidth < minTableWidth;
+        final double minTableWidth = isMobile ? 900 : 960;
+        final bool needsHorizontalScroll = tableAvailableWidth < minTableWidth;
         final double tableWidth = needsHorizontalScroll
             ? minTableWidth
-            : availableWidth;
+            : tableAvailableWidth;
 
         return Scrollbar(
           controller: _tableHorizontalController,
           thumbVisibility: needsHorizontalScroll,
           trackVisibility: needsHorizontalScroll,
-          child: SingleChildScrollView(
-            controller: _tableHorizontalController,
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(width: tableWidth, child: tableWidget),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                ui.PointerDeviceKind.touch,
+                ui.PointerDeviceKind.mouse,
+                ui.PointerDeviceKind.trackpad,
+              },
+            ),
+            child: SingleChildScrollView(
+              controller: _tableHorizontalController,
+              scrollDirection: Axis.horizontal,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+                child: SizedBox(width: tableWidth, child: tableWidget),
+              ),
+            ),
           ),
         );
       },
@@ -1361,968 +1299,6 @@ class _OrdersPageState extends State<OrdersPage> {
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- SHOPIFY-STYLE SLIDE SHEET OVERLAY ---
-  Widget _buildSlideDrawer(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = Responsive.isMobile(context);
-    final double drawerWidth = isMobile ? screenWidth : 580.0;
-
-    if (_selectedOrder == null) return const SizedBox.shrink();
-
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-      right: _isDrawerOpen ? 0.0 : -drawerWidth,
-      top: 0,
-      bottom: 0,
-      width: drawerWidth,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 30,
-              offset: const Offset(-8, 0),
-            ),
-          ],
-          border: const Border(left: BorderSide(color: AppTheme.borderColor)),
-        ),
-        child: Column(
-          children: [
-            // Drawer Header
-            _buildDrawerHeader(),
-
-            // Scrollable Content
-            Expanded(
-              child: SelectionArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  physics: const BouncingScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Admin Management Tool Action Block
-                      _buildAdminFulfillmentControls(),
-                      const SizedBox(height: 20),
-
-                      // Items Ordered Block
-                      _buildDrawerItemsBlock(),
-                      const SizedBox(height: 20),
-
-                      // Financial summary
-                      _buildDrawerFinancialSummary(),
-                      const SizedBox(height: 20),
-
-                      // Timeline
-                      _buildDrawerTimeline(),
-                      const SizedBox(height: 20),
-
-                      // Address and customer details
-                      _buildDrawerCustomerInfo(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFB),
-        border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    _selectedOrder!.orderId,
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildPaymentBadge(_selectedOrder!.paymentStatus),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Placed on ${_formatDateTime(_selectedOrder!.placedAt)}',
-                style: GoogleFonts.outfit(
-                  fontSize: 11.5,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          IconButton(
-            onPressed: _closeOrderDrawer,
-            icon: const Icon(Icons.close_rounded, size: 20),
-            hoverColor: Colors.black.withValues(alpha: 0.05),
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdminFulfillmentControls() {
-    final bool canCancel = ![
-      'Shipped',
-      'Out for Delivery',
-      'Delivered',
-      'Cancelled',
-      'RTO',
-    ].contains(_selectedOrder!.orderStatus);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.security_update_good_rounded,
-                color: AppTheme.primaryColor,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Fulfillment & Status Updates',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Order status dropdown
-          Text(
-            'Order Status',
-            style: GoogleFonts.outfit(
-              fontSize: 11.5,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            height: 38,
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderColor),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedOrder!.orderStatus,
-                onChanged: (val) => _updateSelectedOrderStatus(val!),
-                items:
-                    [
-                          'Pending',
-                          'Processing',
-                          'Shipped',
-                          'Out for Delivery',
-                          'Delivered',
-                          'Cancelled',
-                          'RTO',
-                        ]
-                        .map<DropdownMenuItem<String>>(
-                          (val) => DropdownMenuItem<String>(
-                            value: val,
-                            child: Text(
-                              val,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Carrier tracking inputs
-          Text(
-            'AWB/Tracking Number',
-            style: GoogleFonts.outfit(
-              fontSize: 11.5,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _buildTrackingField(
-            _awbController,
-            'Enter AWB number (e.g. 456711289)',
-          ),
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Courier Partner',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11.5,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    _buildTrackingField(_courierController, 'e.g. Delhivery'),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tracking URL',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11.5,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    _buildTrackingField(
-                      _trackingUrlController,
-                      'https://track.delhivery.com/...',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _saveTrackingDetails,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(
-                    'Save Tracking Details',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              if (canCancel) ...[
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: _cancelOrder,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.error),
-                    foregroundColor: AppTheme.error,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                  ),
-                  child: Text(
-                    'Cancel Order',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrackingField(TextEditingController controller, String hint) {
-    return Container(
-      height: 38,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 12,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
-          isDense: true,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItemsBlock() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Items Summary',
-            style: GoogleFonts.outfit(
-              fontSize: 13.5,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Items List
-          ..._selectedOrder!.items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  // Placeholder/Category thumbnail
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.borderColor),
-                    ),
-                    child: const Icon(
-                      Icons.eco_outlined,
-                      color: AppTheme.primaryColor,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Vendor: ${item.vendor ?? 'Unknown'}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '₹${item.price.toStringAsFixed(0)} × ${item.quantity}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: AppTheme.textBody,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '₹${(item.price * item.quantity).toStringAsFixed(2)}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12.5,
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
-
-          // Free items
-          if (_selectedOrder!.freeItems.isNotEmpty) ...[
-            const Divider(color: AppTheme.lightBorderColor),
-            const SizedBox(height: 4),
-            ..._selectedOrder!.freeItems.map((item) {
-              return Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentColor.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.borderColor),
-                    ),
-                    child: const Icon(
-                      Icons.card_giftcard_rounded,
-                      color: AppTheme.accentColor,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'FREE PROMOTIONAL GIFT',
-                            style: GoogleFonts.outfit(
-                              fontSize: 8,
-                              color: AppTheme.accentColor,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Qty: ${item.quantity}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12.5,
-                      color: AppTheme.accentColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerFinancialSummary() {
-    final double subtotal = _selectedOrder!.items.fold(
-      0.0,
-      (sum, i) => sum + (i.price * i.quantity),
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Financial Summary',
-            style: GoogleFonts.outfit(
-              fontSize: 13.5,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _buildSummaryRow('Subtotal', '₹${subtotal.toStringAsFixed(2)}'),
-          if (_selectedOrder!.discountAmount > 0) ...[
-            const SizedBox(height: 8),
-            _buildSummaryRow(
-              'Coupon Applied (${_selectedOrder!.couponCode})',
-              '-₹${_selectedOrder!.discountAmount.toStringAsFixed(2)}',
-              valueColor: AppTheme.error,
-            ),
-          ],
-          const SizedBox(height: 8),
-          _buildSummaryRow(
-            'Shipping / Delivery charges',
-            'FREE',
-            valueColor: AppTheme.success,
-          ),
-          const Divider(height: 24, color: AppTheme.lightBorderColor),
-
-          _buildSummaryRow(
-            'Total Amount',
-            '₹${_selectedOrder!.totalAmount.toStringAsFixed(2)}',
-            isBold: true,
-            fontSize: 14.5,
-          ),
-
-          if (_selectedOrder!.paymentMethod == 'Partial') ...[
-            const SizedBox(height: 8),
-            _buildSummaryRow(
-              'Advance Received (EMI Downpayment)',
-              '₹${_selectedOrder!.advanceAmount.toStringAsFixed(2)}',
-              valueColor: AppTheme.success,
-            ),
-            const SizedBox(height: 8),
-            _buildSummaryRow(
-              'Remaining Balance (COD)',
-              '₹${_selectedOrder!.remainingAmount.toStringAsFixed(2)}',
-              valueColor: AppTheme.warning,
-              isBold: true,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow(
-    String label,
-    String value, {
-    bool isBold = false,
-    double fontSize = 12.5,
-    Color? valueColor,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: fontSize,
-            color: isBold ? AppTheme.textPrimary : AppTheme.textSecondary,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.outfit(
-            fontSize: fontSize,
-            color: valueColor ?? AppTheme.textPrimary,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDrawerTimeline() {
-    final statusSteps = [
-      {
-        'title': 'Order Placed',
-        'date': _selectedOrder!.placedAt,
-        'isDone': true,
-      },
-      {
-        'title': 'Processed',
-        'date': _selectedOrder!.processingAt,
-        'isDone': _selectedOrder!.processingAt != null,
-      },
-      {
-        'title': 'Dispatched / Shipped',
-        'date': _selectedOrder!.shippedAt,
-        'isDone': _selectedOrder!.shippedAt != null,
-      },
-      {
-        'title': 'Out for Delivery',
-        'date': _selectedOrder!.outForDeliveryAt,
-        'isDone': _selectedOrder!.outForDeliveryAt != null,
-      },
-      {
-        'title': 'Delivered',
-        'date': _selectedOrder!.deliveredAt,
-        'isDone': _selectedOrder!.deliveredAt != null,
-      },
-    ];
-
-    // Handle exceptions like Cancelled / RTO
-    if (_selectedOrder!.orderStatus == 'Cancelled') {
-      statusSteps.insert(
-        statusSteps
-            .indexWhere((step) => step['isDone'] != true)
-            .clamp(0, statusSteps.length),
-        {
-          'title': 'Order Cancelled ❌',
-          'date': _selectedOrder!.cancelledAt ?? DateTime.now(),
-          'isDone': true,
-        },
-      );
-    } else if (_selectedOrder!.orderStatus == 'RTO') {
-      statusSteps.insert(
-        statusSteps
-            .indexWhere((step) => step['isDone'] != true)
-            .clamp(0, statusSteps.length),
-        {
-          'title': 'Returned to Origin 📦',
-          'date': _selectedOrder!.rtoAt ?? DateTime.now(),
-          'isDone': true,
-        },
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Order Timeline & Courier Logs',
-            style: GoogleFonts.outfit(
-              fontSize: 13.5,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: statusSteps.length,
-            itemBuilder: (context, index) {
-              final step = statusSteps[index];
-              final bool isDone = step['isDone'] as bool;
-              final DateTime? date = step['date'] as DateTime?;
-              final bool isLast = index == statusSteps.length - 1;
-
-              final Color bulletColor = isDone
-                  ? (step['title'].toString().contains('Cancelled') ||
-                            step['title'].toString().contains('Returned')
-                        ? AppTheme.error
-                        : AppTheme.success)
-                  : AppTheme.borderColor;
-
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: isDone ? bulletColor : Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isDone
-                                  ? Colors.transparent
-                                  : AppTheme.borderColor,
-                              width: 2,
-                            ),
-                          ),
-                          child: isDone
-                              ? const Center(
-                                  child: Icon(
-                                    Icons.check,
-                                    size: 8,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        if (!isLast)
-                          Expanded(
-                            child: Container(
-                              width: 2,
-                              color: isDone
-                                  ? AppTheme.success.withValues(alpha: 0.4)
-                                  : AppTheme.borderColor,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              step['title'] as String,
-                              style: GoogleFonts.outfit(
-                                fontSize: 12.5,
-                                fontWeight: isDone
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                color: isDone
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.textSecondary,
-                              ),
-                            ),
-                            if (date != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatDateTime(date),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10.5,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-          if (_selectedOrder!.courierStatus != null &&
-              _selectedOrder!.courierStatus!.isNotEmpty) ...[
-            const Divider(color: AppTheme.lightBorderColor),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(
-                  Icons.sync_alt_rounded,
-                  color: AppTheme.primaryColor,
-                  size: 14,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Latest Courier Logs (Synced):',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _selectedOrder!.courierStatus!,
-              style: GoogleFonts.outfit(
-                fontSize: 11.5,
-                color: AppTheme.textBody,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerCustomerInfo() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Customer & Shipping Details',
-            style: GoogleFonts.outfit(
-              fontSize: 13.5,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              const Icon(
-                Icons.person_outline_rounded,
-                color: AppTheme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _selectedOrder!.customerName,
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(
-                Icons.phone_iphone_rounded,
-                color: AppTheme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _selectedOrder!.customerPhone,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  color: AppTheme.textBody,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 20, color: AppTheme.lightBorderColor),
-          Row(
-            children: [
-              const Icon(
-                Icons.support_agent_rounded,
-                color: AppTheme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Assigned Agent: ${_selectedOrder!.assignedAgent == null || _selectedOrder!.assignedAgent!.isEmpty ? '-' : _selectedOrder!.assignedAgent!}',
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  color: AppTheme.textBody,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 20, color: AppTheme.lightBorderColor),
-
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.location_on_outlined,
-                color: AppTheme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Shipping Address',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _selectedOrder!.shippingAddress.villageArea,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12.5,
-                        color: AppTheme.textBody,
-                      ),
-                    ),
-                    Text(
-                      _selectedOrder!.shippingAddress.cityTehsil,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12.5,
-                        color: AppTheme.textBody,
-                      ),
-                    ),
-                    Text(
-                      'PIN Code: ${_selectedOrder!.shippingAddress.pincode}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12.5,
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ],
       ),

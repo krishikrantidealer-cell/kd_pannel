@@ -30,8 +30,8 @@ class _MainLayoutState extends State<MainLayout> {
   final List<Widget> _adminPages = [
     // const DashboardPage(),
     // const DealerManagementPage(),
-    // const OrdersPage(),
     const ProductsPage(),
+    const OrdersPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -56,12 +56,16 @@ class _MainLayoutState extends State<MainLayout> {
     if (routeName != null && routeName != _lastProcessedRoute) {
       _lastProcessedRoute = routeName;
       if (role == UserRole.admin) {
-        _currentIdx = 0;
+        if (routeName.startsWith('/orders')) {
+          _currentIdx = 1;
+        } else {
+          _currentIdx = 0;
+        }
       } else {
         if (routeName == '/sales/dashboard') _currentIdx = 0;
-        if (routeName == '/leads') _currentIdx = 1;
-        if (routeName == '/dealers') _currentIdx = 2;
-        if (routeName == '/orders') _currentIdx = 3;
+        if (routeName == '/leads' || routeName.startsWith('/leads/')) _currentIdx = 1;
+        if (routeName == '/dealers' || routeName.startsWith('/dealers/')) _currentIdx = 2;
+        if (routeName.startsWith('/orders')) _currentIdx = 3;
       }
     }
   }
@@ -78,6 +82,7 @@ class _MainLayoutState extends State<MainLayout> {
       String route = '/dashboard';
       if (role == UserRole.admin) {
         if (index == 0) route = '/dashboard';
+        if (index == 1) route = '/orders';
       } else {
         if (index == 1) route = '/leads';
         if (index == 2) route = '/dealers';
@@ -103,6 +108,10 @@ class _MainLayoutState extends State<MainLayout> {
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
     final role = AuthService().currentUserRole ?? UserRole.admin;
+    final pages = role == UserRole.admin ? _adminPages : _salesPages;
+    final int safeIdx = (_currentIdx >= 0 && _currentIdx < pages.length)
+        ? _currentIdx
+        : 0;
 
     final Widget content = Column(
       children: [
@@ -115,12 +124,7 @@ class _MainLayoutState extends State<MainLayout> {
 
         // Screen Content
         Expanded(
-          child:
-              widget.child ??
-              IndexedStack(
-                index: _currentIdx,
-                children: role == UserRole.admin ? _adminPages : _salesPages,
-              ),
+          child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
         ),
       ],
     );
@@ -131,7 +135,7 @@ class _MainLayoutState extends State<MainLayout> {
           ? Drawer(
               width: 260,
               child: SidebarWidget(
-                currentIdx: _currentIdx,
+                currentIdx: safeIdx,
                 onTabSelected: _handleTabSelected,
                 onLogout: _handleLogout,
                 forceExpanded: true,
@@ -143,7 +147,7 @@ class _MainLayoutState extends State<MainLayout> {
           ? Row(
               children: [
                 SidebarWidget(
-                  currentIdx: _currentIdx,
+                  currentIdx: safeIdx,
                   onTabSelected: _handleTabSelected,
                   onLogout: _handleLogout,
                   isPinned: _isSidebarPinned,

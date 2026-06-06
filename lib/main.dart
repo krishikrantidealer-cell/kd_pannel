@@ -4,6 +4,7 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/features/auth/presentation/pages/login_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,9 +108,9 @@ class MyApp extends StatelessWidget {
         '/dealers': (context) => const MainLayout(),
         '/dealers/profile': (context) =>
             const MainLayout(child: DealerProfilePage()),
-        '/orders': (context) => const MainLayout(
-          child: Scaffold(body: Center(child: Text('Orders'))),
-        ),
+        '/orders': (context) => const MainLayout(),
+        '/orders/details': (context) =>
+            const MainLayout(child: OrderDetailsPage()),
         '/products': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Marketing'))),

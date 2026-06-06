@@ -34,12 +34,16 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
     // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
     // {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 1},
-    // {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 2},
     // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'index': 5},
     {
       'icon': Icons.production_quantity_limits_rounded,
       'title': 'Products',
       'index': 0,
+    },
+    {
+      'icon': Icons.shopping_bag_rounded,
+      'title': 'Orders',
+      'index': 1,
     },
   ];
 
