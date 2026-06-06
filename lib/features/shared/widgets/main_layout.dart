@@ -28,11 +28,10 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = [
-    const DashboardPage(),
-    const DealerManagementPage(),
-    const OrdersPage(),
+    // const DashboardPage(),
+    // const DealerManagementPage(),
+    // const OrdersPage(),
     const ProductsPage(),
-    // const SupportDashboardPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -57,11 +56,7 @@ class _MainLayoutState extends State<MainLayout> {
     if (routeName != null && routeName != _lastProcessedRoute) {
       _lastProcessedRoute = routeName;
       if (role == UserRole.admin) {
-        if (routeName == '/dashboard') _currentIdx = 0;
-        if (routeName == '/leads') _currentIdx = 1;
-        if (routeName == '/dealers') _currentIdx = 2;
-        if (routeName == '/orders') _currentIdx = 3;
-        if (routeName == '/support') _currentIdx = 4;
+        _currentIdx = 0;
       } else {
         if (routeName == '/sales/dashboard') _currentIdx = 0;
         if (routeName == '/leads') _currentIdx = 1;
@@ -82,10 +77,7 @@ class _MainLayoutState extends State<MainLayout> {
       final role = AuthService().currentUserRole ?? UserRole.admin;
       String route = '/dashboard';
       if (role == UserRole.admin) {
-        if (index == 1) route = '/leads';
-        if (index == 2) route = '/dealers';
-        if (index == 3) route = '/orders';
-        if (index == 4) route = '/support';
+        if (index == 0) route = '/dashboard';
       } else {
         if (index == 1) route = '/leads';
         if (index == 2) route = '/dealers';
