@@ -10,8 +10,10 @@ class AuthService {
   AuthService._internal();
 
   UserRole? _currentUserRole;
+  String? _lastError;
 
   UserRole? get currentUserRole => _currentUserRole;
+  String? get lastError => _lastError;
 
   Future<void> init() async {
     try {
@@ -31,6 +33,7 @@ class AuthService {
     required UserRole role,
     bool rememberMe = true,
   }) async {
+    _lastError = null;
     try {
       final response = await ApiClient().post('/auth/admin/login', {
         'email': email,
@@ -57,21 +60,38 @@ class AuthService {
             _currentUserRole = UserRole.sales;
           } else {
             _currentUserRole = null;
+            _lastError = 'Access denied: invalid user role "$userRoleStr"';
+            print('[AuthService] Login failed: $_lastError');
             return false;
           }
           return true;
         }
       }
+      
+      try {
+        final err = jsonDecode(response.body);
+        _lastError = err['message'] ?? 'Authorization failed';
+      } catch (_) {
+        _lastError = 'Server returned status ${response.statusCode}';
+      }
+      print('[AuthService] Login request failed. Status: ${response.statusCode}, Body: ${response.body}');
       return false;
     } catch (e) {
+      _lastError = 'Connection error: $e';
       print('Login error: $e');
       return false;
     }
   }
 
   Future<void> logout() async {
+    clearLocalSessionState();
+  }
+
+  void clearLocalSessionState() {
     _currentUserRole = null;
-    await ApiClient().clearTokens();
+    _lastError = null;
+    ApiClient().clearCache();
+    ApiClient().clearTokens();
   }
 
   bool get isAdmin => _currentUserRole == UserRole.admin;

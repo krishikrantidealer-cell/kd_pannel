@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
 
@@ -13,7 +14,8 @@ class ApiClient {
 
   // The local Node.js server runs on port 5000 by default.
   // Using localhost is correct for Web.
-  final String baseUrl = 'https://krishi-backend-123180953109.asia-south1.run.app/api';
+  final String baseUrl =
+      'https://krishi-backend-123180953109.asia-south1.run.app/api';
 
   String? _accessToken;
   String? _refreshToken;
@@ -47,7 +49,11 @@ class ApiClient {
     }
   }
 
-  Future<void> setTokens(String access, String refresh, {bool persistent = true}) async {
+  Future<void> setTokens(
+    String access,
+    String refresh, {
+    bool persistent = true,
+  }) async {
     _accessToken = access;
     _refreshToken = refresh;
     if (persistent) {
@@ -98,28 +104,33 @@ class ApiClient {
         if (_refreshToken == null || _refreshToken!.isEmpty) return false;
 
         final uri = Uri.parse('$baseUrl/auth/refresh');
-        final response = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'refreshToken': _refreshToken}),
-        ).timeout(const Duration(seconds: 15));
+        final response = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'refreshToken': _refreshToken}),
+            )
+            .timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           if (data['success'] == true) {
             final newAccess = data['accessToken'] ?? data['token'];
             if (newAccess != null) {
-               // Update but keep old refresh token if a new one isn't provided
-               final newRefresh = data['refreshToken'] ?? _refreshToken;
-               await setTokens(newAccess, newRefresh!, persistent: true); 
-               return true;
+              // Update but keep old refresh token if a new one isn't provided
+              final newRefresh = data['refreshToken'] ?? _refreshToken;
+              await setTokens(newAccess, newRefresh!, persistent: true);
+              return true;
             }
           }
         }
-        
+
         // If refresh failed with authorization error, clear tokens
-        if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 400) {
-           await clearTokens();
+        if (response.statusCode == 401 ||
+            response.statusCode == 403 ||
+            response.statusCode == 400) {
+          await clearTokens();
+          NavigationService.navigateToLogin();
         }
         return false;
       } catch (e) {
@@ -145,8 +156,8 @@ class ApiClient {
     while (true) {
       attempt++;
       // Give more timeout budget on subsequent attempts as server boots up
-      final currentTimeout = attempt == 1 
-          ? const Duration(seconds: 15) 
+      final currentTimeout = attempt == 1
+          ? const Duration(seconds: 15)
           : const Duration(seconds: 25);
 
       try {
@@ -165,15 +176,17 @@ class ApiClient {
         }
 
         // Server cold start might return 502 / 503 / 504 gateway errors while booting
-        if ((response.statusCode == 502 || 
-             response.statusCode == 503 || 
-             response.statusCode == 504) && 
+        if ((response.statusCode == 502 ||
+                response.statusCode == 503 ||
+                response.statusCode == 504) &&
             attempt < maxRetries) {
           if (!isBackendWakingUp.value) {
             isBackendWakingUp.value = true;
           }
           final delay = initialDelay * (1 << (attempt - 1));
-          debugPrint('[ApiClient] Server returned ${response.statusCode} (attempt $attempt). Retrying in ${delay.inSeconds}s...');
+          debugPrint(
+            '[ApiClient] Server returned ${response.statusCode} (attempt $attempt). Retrying in ${delay.inSeconds}s...',
+          );
           await Future.delayed(delay);
           continue;
         }
@@ -182,17 +195,19 @@ class ApiClient {
         if (isBackendWakingUp.value) {
           isBackendWakingUp.value = false;
         }
+        _handleTerminalAuthFailure(response);
         return response;
       } catch (e) {
         final isTimeout = e is TimeoutException;
         final errStr = e.toString().toLowerCase();
-        final isConnectionError = errStr.contains('socketexception') ||
-                                  errStr.contains('clientexception') ||
-                                  errStr.contains('connection refused') ||
-                                  errStr.contains('failed to connect') ||
-                                  errStr.contains('xmlhttprequest') ||
-                                  errStr.contains('networkerror') ||
-                                  errStr.contains('handshake');
+        final isConnectionError =
+            errStr.contains('socketexception') ||
+            errStr.contains('clientexception') ||
+            errStr.contains('connection refused') ||
+            errStr.contains('failed to connect') ||
+            errStr.contains('xmlhttprequest') ||
+            errStr.contains('networkerror') ||
+            errStr.contains('handshake');
 
         final isNetworkError = isTimeout || isConnectionError;
 
@@ -201,7 +216,9 @@ class ApiClient {
             isBackendWakingUp.value = true;
           }
           final delay = initialDelay * (1 << (attempt - 1));
-          debugPrint('[ApiClient] Network error ($e) on attempt $attempt. Retrying in ${delay.inSeconds}s...');
+          debugPrint(
+            '[ApiClient] Network error ($e) on attempt $attempt. Retrying in ${delay.inSeconds}s...',
+          );
           await Future.delayed(delay);
           continue;
         }
@@ -335,14 +352,15 @@ class ApiClient {
       onDone: streamedReq.sink.close,
     );
 
-    final streamedResponse =
-        await http.Client().send(streamedReq).timeout(const Duration(minutes: 5));
+    final streamedResponse = await http.Client()
+        .send(streamedReq)
+        .timeout(const Duration(minutes: 5));
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 401 && !isRetryAfterRefresh) {
       final refreshed = await _refreshAccessToken();
       if (refreshed) {
-        return await multipartRequestWithProgress(
+        final retryRes = await multipartRequestWithProgress(
           method: method,
           endpoint: endpoint,
           fields: fields,
@@ -350,9 +368,12 @@ class ApiClient {
           onProgress: onProgress,
           isRetryAfterRefresh: true,
         );
+        _handleTerminalAuthFailure(retryRes);
+        return retryRes;
       }
     }
 
+    _handleTerminalAuthFailure(response);
     return response;
   }
 
@@ -389,28 +410,27 @@ class ApiClient {
     // 2. Upload chunks sequentially
     for (int i = 0; i < totalChunks; i++) {
       final int start = i * chunkSize;
-      final int end = (start + chunkSize < fileBytes.length) ? start + chunkSize : fileBytes.length;
+      final int end = (start + chunkSize < fileBytes.length)
+          ? start + chunkSize
+          : fileBytes.length;
       final Uint8List chunkBytes = fileBytes.sublist(start, end);
 
       final ext = fileName.split('.').last.toLowerCase();
-      final contentType = ext == 'pdf' 
-          ? MediaType('application', 'pdf') 
+      final contentType = ext == 'pdf'
+          ? MediaType('application', 'pdf')
           : MediaType('application', 'octet-stream');
 
       final chunkResponse = await multipartRequest(
         method: 'POST',
         endpoint: '/products/categories/upload/chunk',
-        fields: {
-          'uploadId': uploadId,
-          'chunkIndex': i.toString(),
-        },
+        fields: {'uploadId': uploadId, 'chunkIndex': i.toString()},
         filesBuilder: () => [
           http.MultipartFile.fromBytes(
             'file',
             chunkBytes,
             filename: '${fileName}_chunk_$i',
             contentType: contentType,
-          )
+          ),
         ],
       );
 
@@ -423,9 +443,10 @@ class ApiClient {
     }
 
     // 3. Complete chunked upload
-    final completeResponse = await post('/products/categories/upload/complete', {
-      'uploadId': uploadId,
-    });
+    final completeResponse = await post(
+      '/products/categories/upload/complete',
+      {'uploadId': uploadId},
+    );
 
     if (completeResponse.statusCode != 200) {
       final err = jsonDecode(completeResponse.body);
@@ -438,5 +459,15 @@ class ApiClient {
     }
 
     return completeData['fileUrl'];
+  }
+
+  void _handleTerminalAuthFailure(http.Response response) {
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      final path = response.request?.url.path ?? '';
+      if (!path.endsWith('/auth/admin/login')) {
+        debugPrint('[ApiClient] Terminal auth failure (${response.statusCode}) at path: $path. Redirecting to login.');
+        NavigationService.navigateToLogin();
+      }
+    }
   }
 }

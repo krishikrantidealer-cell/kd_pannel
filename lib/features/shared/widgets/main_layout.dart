@@ -24,7 +24,7 @@ class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
   String? _lastProcessedRoute;
-  bool _isSidebarPinned = true;
+  static bool _isSidebarPinned = true;
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = [
@@ -39,7 +39,6 @@ class _MainLayoutState extends State<MainLayout> {
     const SalesDashboardPage(),
     const LeadsPage(),
     const DealerManagementPage(),
-    const ProductsPage(),
     const OrdersPage(),
   ];
 
@@ -76,27 +75,22 @@ class _MainLayoutState extends State<MainLayout> {
       _scaffoldKey.currentState?.closeDrawer();
     }
 
-    // 2. Handle cross-page navigation vs. internal stack switching
-    if (widget.child != null) {
-      final role = AuthService().currentUserRole ?? UserRole.admin;
-      String route = '/dashboard';
-      if (role == UserRole.admin) {
-        if (index == 0) route = '/dashboard';
-        if (index == 1) route = '/orders';
-      } else {
-        if (index == 1) route = '/leads';
-        if (index == 2) route = '/dealers';
-        if (index == 3) route = '/orders';
-      }
-
-      // Navigate to the target main route
-      Navigator.pushNamed(context, route);
-      return;
+    final role = AuthService().currentUserRole ?? UserRole.admin;
+    String route = '/dashboard';
+    if (role == UserRole.admin) {
+      if (index == 0) route = '/dashboard';
+      if (index == 1) route = '/orders';
+    } else {
+      if (index == 0) route = '/sales/dashboard';
+      if (index == 1) route = '/leads';
+      if (index == 2) route = '/dealers';
+      if (index == 3) route = '/orders';
     }
 
-    setState(() {
-      _currentIdx = index;
-    });
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    if (currentRoute != route || widget.child != null) {
+      Navigator.pushReplacementNamed(context, route);
+    }
   }
 
   void _handleLogout() {

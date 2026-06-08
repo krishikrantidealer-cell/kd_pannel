@@ -216,9 +216,9 @@ class _LoginPageState extends State<LoginPage> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Authorization failed. Please verify your credentials.',
+              AuthService().lastError ?? 'Authorization failed. Please verify your credentials.',
             ),
             backgroundColor: Colors.redAccent,
           ),

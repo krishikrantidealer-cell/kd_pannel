@@ -374,7 +374,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Dynamic getters for administrative operational stats
   int get pendingOrdersCount =>
-      _ordersData.where((order) => order['status'] == 'Pending').length;
+      _ordersData.where((order) => order['status'] == 'Processing').length;
   int get verifiedDealersCount =>
       _dealersData.where((dealer) => dealer['gst'] == 'Verified').length;
 
@@ -1948,7 +1948,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'product': 'Hybrid Seed Pack',
       'amount': '₹650',
       'date': '18 May 2025',
-      'status': 'Pending',
+      'status': 'Processing',
       'agent': 'Rajesh K.',
     },
     {
@@ -1964,7 +1964,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'product': 'Fertilizer Blend X',
       'amount': '₹980',
       'date': '17 May 2025',
-      'status': 'Pending',
+      'status': 'Processing',
       'agent': 'Nirmal R.',
     },
     {
@@ -2517,9 +2517,9 @@ class _DashboardPageState extends State<DashboardPage> {
               'color': AppTheme.success,
             },
             {
-              'label': 'Pending',
+              'label': 'Processing',
               'value':
-                  '${_ordersData.where((r) => r['status'] == 'Pending').length}',
+                  '${_ordersData.where((r) => r['status'] == 'Processing').length}',
               'icon': Icons.hourglass_empty_outlined,
               'color': AppTheme.warning,
             },

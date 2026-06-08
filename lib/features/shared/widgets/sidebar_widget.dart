@@ -49,10 +49,10 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
     //latest
-    // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
-    // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
-    // {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 2},
-    // {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 3},
+    {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
+    {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
+    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 2},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 3},
   ];
 
   @override

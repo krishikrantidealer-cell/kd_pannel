@@ -7,6 +7,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.da
 import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:ui' as ui;
@@ -67,6 +68,7 @@ void main() async {
       GoogleFonts.outfit(fontWeight: FontWeight.w700),
       GoogleFonts.outfit(fontWeight: FontWeight.w800),
       GoogleFonts.outfit(fontWeight: FontWeight.w900),
+      GoogleFonts.outfit(fontWeight: FontWeight.w900),
     ]);
   } catch (e) {
     debugPrint('Google Fonts preloading bypassed: $e');
@@ -86,6 +88,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: NavigationService.navigatorKey,
+      scaffoldMessengerKey: NavigationService.messengerKey,
       title: 'KrishiDealer Admin Panel',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

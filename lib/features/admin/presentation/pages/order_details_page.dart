@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -231,9 +233,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       return const Scaffold(
         backgroundColor: AppTheme.backgroundColor,
         body: Center(
-          child: CircularProgressIndicator(
-            color: AppTheme.primaryColor,
-          ),
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
         ),
       );
     }
@@ -341,69 +341,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ),
             ],
           ),
-          // Action Buttons
-          // MouseRegion(
-          //   cursor: SystemMouseCursors.click,
-          //   onEnter: (_) => setState(() => _isPrintHovered = true),
-          //   onExit: (_) => setState(() => _isPrintHovered = false),
-          //   child: GestureDetector(
-          //     onTap: () {
-          //       ScaffoldMessenger.of(context).showSnackBar(
-          //         const SnackBar(
-          //           content: Text('Generating Invoice PDF...'),
-          //           backgroundColor: AppTheme.primaryColor,
-          //         ),
-          //       );
-          //     },
-          //     child: AnimatedContainer(
-          //       duration: const Duration(milliseconds: 200),
-          //       padding: const EdgeInsets.symmetric(
-          //         horizontal: 12,
-          //         vertical: 6,
-          //       ),
-          //       decoration: BoxDecoration(
-          //         color: _isPrintHovered ? AppTheme.primaryColor : Colors.white,
-          //         borderRadius: BorderRadius.circular(10),
-          //         border: Border.all(
-          //           color: _isPrintHovered
-          //               ? AppTheme.primaryColor
-          //               : AppTheme.borderColor,
-          //         ),
-          //         boxShadow: _isPrintHovered
-          //             ? [
-          //                 BoxShadow(
-          //                   color: AppTheme.primaryColor.withOpacity(0.2),
-          //                   blurRadius: 10,
-          //                   offset: const Offset(0, 4),
-          //                 ),
-          //               ]
-          //             : null,
-          //       ),
-          //       child: Row(
-          //         children: [
-          //           Icon(
-          //             Icons.download_rounded,
-          //             size: 14,
-          //             color: _isPrintHovered
-          //                 ? Colors.white
-          //                 : AppTheme.textPrimary,
-          //           ),
-          //           const SizedBox(width: 6),
-          //           Text(
-          //             'Invoice',
-          //             style: GoogleFonts.outfit(
-          //               fontSize: 12,
-          //               fontWeight: FontWeight.w700,
-          //               color: _isPrintHovered
-          //                   ? Colors.white
-          //                   : AppTheme.textPrimary,
-          //             ),
-          //           ),
-          //         ],
-          //       ),
-          //     ),
-          //   ),
-          // ),
         ],
       ),
     );
@@ -505,11 +442,18 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               const SizedBox(width: 24),
               _buildHeroMetaInfo(
                 title: 'CHANNEL',
-                value: _order.customerRole == 'Dealer'
-                    ? 'DEALER CHANNEL'
-                    : 'LEAD CONVERSION',
+                value: 'ADMIN',
                 icon: Icons.hub_outlined,
               ),
+              if (_order.razorpayPaymentId != null &&
+                  _order.razorpayPaymentId!.isNotEmpty) ...[
+                const SizedBox(width: 24),
+                _buildHeroMetaInfo(
+                  title: 'PAYMENT ID',
+                  value: _order.razorpayPaymentId!,
+                  icon: Icons.receipt_long_rounded,
+                ),
+              ],
             ],
           ),
         ],
@@ -547,12 +491,20 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              value,
-              style: GoogleFonts.outfit(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+            Theme(
+              data: Theme.of(context).copyWith(
+                textSelectionTheme: TextSelectionThemeData(
+                  selectionColor: Colors.white.withOpacity(0.3),
+                  selectionHandleColor: Colors.white,
+                ),
+              ),
+              child: SelectableText(
+                value,
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -665,7 +617,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     final item = _order.items[idx];
                     final parsed = _parseProductTitle(item.title);
                     final productName = parsed['name'] ?? item.title;
-                    final packing = parsed['packing'] ?? 'Standard';
+                    final packing =
+                        (item.variantSize != null &&
+                            item.variantSize!.isNotEmpty)
+                        ? item.variantSize!
+                        : (parsed['packing'] ?? 'Standard');
 
                     return _ItemTableRow(
                       productName: productName,
@@ -821,29 +777,18 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _order.customerRole == 'Dealer'
-                          ? AppTheme.primaryColor.withOpacity(0.08)
-                          : AppTheme.accentColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _order.customerRole.toUpperCase(),
+                  if (_order.shopName != null &&
+                      _order.shopName!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _order.shopName!,
                       style: GoogleFonts.outfit(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.bold,
-                        color: _order.customerRole == 'Dealer'
-                            ? AppTheme.primaryColor
-                            : AppTheme.accentColor,
+                        fontSize: 11.5,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -874,9 +819,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         _buildMetaRowWithIcon(
           icon: Icons.support_agent_rounded,
           label: 'SALES AGENT',
-          value: _order.assignedAgent == null || _order.assignedAgent!.isEmpty
-              ? 'No Agent Assigned'
-              : _order.assignedAgent!,
+          value: 'Admin',
         ),
       ],
     );
@@ -933,7 +876,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     ),
                   ),
                   Text(
-                    _order.shippingAddress.cityTehsil,
+                    _order.shippingAddress.state != null &&
+                            _order.shippingAddress.state!.isNotEmpty
+                        ? '${_order.shippingAddress.cityTehsil}, ${_order.shippingAddress.state}'
+                        : _order.shippingAddress.cityTehsil,
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       color: AppTheme.textBody,
@@ -1119,7 +1065,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Financial Cost Ledger',
+            'Payment Summary',
             style: GoogleFonts.outfit(
               fontSize: 14,
               fontWeight: FontWeight.bold,

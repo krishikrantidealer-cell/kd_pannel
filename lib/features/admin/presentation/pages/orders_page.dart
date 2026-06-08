@@ -1,9 +1,12 @@
 import 'dart:ui' as ui;
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 
 // --- MODELS ALIGNED WITH BACKEND SCHEMA (Order.js) ---
 
@@ -16,6 +19,7 @@ class OrderItem {
   final String? image;
   final int quantity;
   final double price;
+  final String? variantSize;
 
   OrderItem({
     required this.productId,
@@ -26,7 +30,35 @@ class OrderItem {
     this.image,
     required this.quantity,
     required this.price,
+    this.variantSize,
   });
+
+  factory OrderItem.fromJson(Map<String, dynamic> json) {
+    final productMap = json['product'] as Map<String, dynamic>?;
+    String? sizeVal;
+    if (productMap != null && productMap['variants'] is List) {
+      final variantsList = productMap['variants'] as List;
+      final matchingVariant = variantsList.firstWhere(
+        (v) => v is Map && v['_id']?.toString() == json['variantId']?.toString(),
+        orElse: () => null,
+      );
+      if (matchingVariant != null && matchingVariant is Map) {
+        sizeVal = matchingVariant['size']?.toString();
+      }
+    }
+
+    return OrderItem(
+      productId: json['product'] is Map ? (json['product']['_id'] ?? '') : (json['product'] ?? ''),
+      variantId: json['variantId'] ?? '',
+      title: json['title'] ?? '',
+      vendor: json['vendor'],
+      technicalName: json['technicalName'],
+      image: json['image'],
+      quantity: json['quantity'] ?? 0,
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      variantSize: sizeVal,
+    );
+  }
 }
 
 class FreeItem {
@@ -41,24 +73,51 @@ class FreeItem {
     required this.quantity,
     this.isFree = true,
   });
+
+  factory FreeItem.fromJson(Map<String, dynamic> json) {
+    return FreeItem(
+      name: json['name'] ?? '',
+      imageUrl: json['imageUrl'],
+      quantity: json['quantity'] ?? 1,
+      isFree: json['isFree'] ?? true,
+    );
+  }
 }
 
 class ShippingAddress {
+  final String? name;
+  final String? phoneNumber;
   final String villageArea;
   final String cityTehsil;
+  final String? state;
   final String pincode;
 
   ShippingAddress({
+    this.name,
+    this.phoneNumber,
     required this.villageArea,
     required this.cityTehsil,
+    this.state,
     required this.pincode,
   });
+
+  factory ShippingAddress.fromJson(Map<String, dynamic> json) {
+    return ShippingAddress(
+      name: json['name'],
+      phoneNumber: json['phoneNumber'],
+      villageArea: json['villageArea'] ?? '',
+      cityTehsil: json['cityTehsil'] ?? '',
+      state: json['state'],
+      pincode: json['pincode'] ?? '',
+    );
+  }
 }
 
 class OrderModel {
   final String id;
   final String orderId;
   final String customerName;
+  final String? shopName;
   final String customerPhone;
   final String customerRole; // 'Dealer' or 'Lead'
   final List<OrderItem> items;
@@ -72,8 +131,7 @@ class OrderModel {
   final String? razorpayPaymentId;
   final double advanceAmount;
   final double remainingAmount;
-  String
-  orderStatus; // 'Pending', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'RTO'
+  String orderStatus; // 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'RTO'
   String? courierStatus;
   String? awbNumber;
   String? courierName;
@@ -91,6 +149,7 @@ class OrderModel {
     required this.id,
     required this.orderId,
     required this.customerName,
+    this.shopName,
     required this.customerPhone,
     required this.customerRole,
     required this.items,
@@ -118,6 +177,72 @@ class OrderModel {
     this.rtoAt,
     this.assignedAgent,
   });
+
+  factory OrderModel.fromJson(Map<String, dynamic> json) {
+    final userJson = json['user'] as Map<String, dynamic>?;
+    String customerName = 'Unknown Customer';
+    String? shopName;
+    String customerPhone = '';
+    String customerRole = 'Lead';
+    if (userJson != null) {
+      final firstName = userJson['firstName'] ?? '';
+      final lastName = userJson['lastName'] ?? '';
+      shopName = userJson['shopName']?.toString();
+      final fullName = '$firstName $lastName'.trim();
+      if (fullName.isNotEmpty) {
+        customerName = fullName;
+      } else if (shopName != null && shopName.isNotEmpty) {
+        customerName = shopName;
+      }
+      customerPhone = userJson['phoneNumber'] ?? '';
+      final isKycVerified = userJson['kycStatus'] == 'verified' || (userJson['isKycComplete'] == true);
+      customerRole = isKycVerified ? 'Dealer' : 'Lead';
+    }
+
+    final itemsList = (json['items'] as List?)
+            ?.map((i) => OrderItem.fromJson(i))
+            .toList() ??
+        [];
+    final freeItemsList = (json['freeItems'] as List?)
+            ?.map((f) => FreeItem.fromJson(f))
+            .toList() ??
+        [];
+
+    final placedAtRaw = json['placedAt'] ?? json['createdAt'];
+
+    return OrderModel(
+      id: json['_id'] ?? '',
+      orderId: json['orderId'] ?? '',
+      customerName: customerName,
+      shopName: shopName,
+      customerPhone: customerPhone,
+      customerRole: customerRole,
+      items: itemsList,
+      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
+      discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
+      couponCode: json['couponCode'],
+      freeItems: freeItemsList,
+      shippingAddress: ShippingAddress.fromJson(json['shippingAddress'] ?? {}),
+      paymentMethod: json['paymentMethod'] ?? 'Online',
+      paymentStatus: json['paymentStatus'] ?? 'Pending',
+      razorpayPaymentId: json['razorpayPaymentId'],
+      advanceAmount: (json['advanceAmount'] as num?)?.toDouble() ?? 0.0,
+      remainingAmount: (json['remainingAmount'] as num?)?.toDouble() ?? 0.0,
+      orderStatus: json['orderStatus'] ?? 'Processing',
+      courierStatus: json['courierStatus'],
+      awbNumber: json['awbNumber'],
+      courierName: json['courierName'],
+      trackingUrl: json['trackingUrl'],
+      placedAt: placedAtRaw != null ? DateTime.parse(placedAtRaw) : DateTime.now(),
+      processingAt: json['processingAt'] != null ? DateTime.parse(json['processingAt']) : null,
+      shippedAt: json['shippedAt'] != null ? DateTime.parse(json['shippedAt']) : null,
+      outForDeliveryAt: json['outForDeliveryAt'] != null ? DateTime.parse(json['outForDeliveryAt']) : null,
+      deliveredAt: json['deliveredAt'] != null ? DateTime.parse(json['deliveredAt']) : null,
+      cancelledAt: json['cancelledAt'] != null ? DateTime.parse(json['cancelledAt']) : null,
+      rtoAt: json['rtoAt'] != null ? DateTime.parse(json['rtoAt']) : null,
+      assignedAgent: json['assignedAgent'],
+    );
+  }
 }
 
 // --- ORDERS PAGE ---
@@ -140,302 +265,56 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String? _hoveredOrderId;
 
-  // --- MOCK DATABASE (Aligend with Node.js seeds & schemas) ---
-  late List<OrderModel> _orders;
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<OrderModel> _orders = [];
 
   @override
   void initState() {
     super.initState();
-    _initMockData();
+    _fetchOrders();
   }
 
-  void _initMockData() {
-    final now = DateTime.now();
-    _orders = [
-      OrderModel(
-        id: '652f10b7e4b0c28345678901',
-        orderId: 'ORD-901456',
-        customerName: 'Vijay Singh',
-        customerPhone: '98765 43210',
-        customerRole: 'Dealer',
-        items: [
-          OrderItem(
-            productId: 'p1',
-            variantId: 'v1',
-            title: 'Drip Irrigation Kit (50m)',
-            vendor: 'Jain Irrigation',
-            technicalName: 'Drip Piping 16mm',
-            image: null,
-            quantity: 2,
-            price: 2400.0,
-          ),
-          OrderItem(
-            productId: 'p2',
-            variantId: 'v3',
-            title: 'Hybrid Seed Pack (250g)',
-            vendor: 'Mahyco',
-            technicalName: 'Bt Cotton Hybrid',
-            image: null,
-            quantity: 3,
-            price: 1200.0,
-          ),
-        ],
-        totalAmount: 7900.0, // (2*2400) + (3*1200) = 8400 - 500 discount
-        discountAmount: 500.0,
-        couponCode: 'KRAK500',
-        freeItems: [
-          FreeItem(
-            name: 'Organic Fertilizer Blend 1kg',
-            imageUrl: null,
-            quantity: 1,
-          ),
-        ],
-        shippingAddress: ShippingAddress(
-          villageArea: 'Near Water Tank, Ward No. 4',
-          cityTehsil: 'Chomu, Jaipur',
-          pincode: '303702',
-        ),
-        paymentMethod: 'Partial',
-        paymentStatus: 'Partially Paid',
-        advanceAmount: 2000.0,
-        remainingAmount: 5900.0,
-        orderStatus: 'Processing',
-        placedAt: now.subtract(const Duration(hours: 2)),
-        processingAt: now.subtract(const Duration(hours: 1)),
-        assignedAgent: 'Amit',
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678902',
-        orderId: 'ORD-891230',
-        customerName: 'Mahipal Agro Agency',
-        customerPhone: '99223 34455',
-        customerRole: 'Dealer',
-        items: [
-          OrderItem(
-            productId: 'p3',
-            variantId: 'v4',
-            title: 'Water Pump 5HP',
-            vendor: 'Kirloskar',
-            technicalName: 'Submersible Monoblock',
-            image: null,
-            quantity: 1,
-            price: 11500.0,
-          ),
-        ],
-        totalAmount: 11500.0,
-        shippingAddress: ShippingAddress(
-          villageArea: 'Krishi Mandi, Shop No. 12',
-          cityTehsil: 'Merta City, Nagaur',
-          pincode: '341510',
-        ),
-        paymentMethod: 'Online',
-        paymentStatus: 'Paid',
-        razorpayPaymentId: 'pay_Nsh928sJskw182',
-        orderStatus: 'Delivered',
-        placedAt: now.subtract(const Duration(days: 2)),
-        processingAt: now.subtract(const Duration(days: 2, hours: 22)),
-        shippedAt: now.subtract(const Duration(days: 1, hours: 18)),
-        outForDeliveryAt: now.subtract(const Duration(days: 1, hours: 4)),
-        deliveredAt: now.subtract(const Duration(hours: 20)),
-        courierName: 'Delhivery',
-        awbNumber: '456711289',
-        trackingUrl:
-            'https://track.delhivery.com/api/v1/packages/json/?waybill=456711289',
-        courierStatus: 'Delivered successfully to consignee',
-        assignedAgent: 'Anita',
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678903',
-        orderId: 'ORD-881224',
-        customerName: 'Ramesh Kumar',
-        customerPhone: '94140 12345',
-        customerRole: 'Lead',
-        items: [
-          OrderItem(
-            productId: 'p4',
-            variantId: 'v5',
-            title: 'Fertilizer Blend X (10kg)',
-            vendor: 'IFFCO',
-            technicalName: 'NPK 19:19:19',
-            image: null,
-            quantity: 5,
-            price: 980.0,
-          ),
-        ],
-        totalAmount: 4900.0,
-        shippingAddress: ShippingAddress(
-          villageArea: 'Main Market Road',
-          cityTehsil: 'Bhinmal, Jalore',
-          pincode: '343030',
-        ),
-        paymentMethod: 'Online',
-        paymentStatus: 'Paid',
-        razorpayPaymentId: 'pay_Nsh934hTshq891',
-        orderStatus: 'Shipped',
-        placedAt: now.subtract(const Duration(days: 3)),
-        processingAt: now.subtract(const Duration(days: 2, hours: 20)),
-        shippedAt: now.subtract(const Duration(days: 1, hours: 10)),
-        courierName: 'Delhivery',
-        awbNumber: '456711390',
-        trackingUrl:
-            'https://track.delhivery.com/api/v1/packages/json/?waybill=456711390',
-        courierStatus: 'In Transit: Arrived at Jaipur Hub',
-        assignedAgent: 'Rajesh',
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678904',
-        orderId: 'ORD-871109',
-        customerName: 'Rajesh Seeds Store',
-        customerPhone: '88990 01122',
-        customerRole: 'Dealer',
-        items: [
-          OrderItem(
-            productId: 'p2',
-            variantId: 'v2',
-            title: 'Hybrid Seed Pack (100g)',
-            vendor: 'Mahyco',
-            technicalName: 'Bt Cotton Hybrid',
-            image: null,
-            quantity: 10,
-            price: 650.0,
-          ),
-        ],
-        totalAmount: 6500.0,
-        shippingAddress: ShippingAddress(
-          villageArea: 'Opposite Government School',
-          cityTehsil: 'Kotputli, Jaipur',
-          pincode: '303108',
-        ),
-        paymentMethod: 'Partial',
-        paymentStatus: 'Partially Paid',
-        advanceAmount: 1500.0,
-        remainingAmount: 5000.0,
-        orderStatus: 'Out for Delivery',
-        placedAt: now.subtract(const Duration(days: 4)),
-        processingAt: now.subtract(const Duration(days: 3, hours: 21)),
-        shippedAt: now.subtract(const Duration(days: 2, hours: 12)),
-        outForDeliveryAt: now.subtract(const Duration(hours: 3)),
-        courierName: 'Shiprocket',
-        awbNumber: 'SR9982190',
-        trackingUrl: 'https://shiprocket.co/track/SR9982190',
-        courierStatus: 'Out for delivery with courier agent',
-        assignedAgent: 'Sahil',
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678905',
-        orderId: 'ORD-861002',
-        customerName: 'Jai Kisan Fertilizers',
-        customerPhone: '96778 89900',
-        customerRole: 'Dealer',
-        items: [
-          OrderItem(
-            productId: 'p1',
-            variantId: 'v1',
-            title: 'Drip Irrigation Kit (50m)',
-            vendor: 'Jain Irrigation',
-            technicalName: 'Drip Piping 16mm',
-            image: null,
-            quantity: 1,
-            price: 2400.0,
-          ),
-          OrderItem(
-            productId: 'p4',
-            variantId: 'v6',
-            title: 'Fertilizer Blend X (20kg)',
-            vendor: 'IFFCO',
-            technicalName: 'NPK 19:19:19',
-            image: null,
-            quantity: 2,
-            price: 1800.0,
-          ),
-        ],
-        totalAmount: 6000.0,
-        shippingAddress: ShippingAddress(
-          villageArea: 'Agro Industrial Area',
-          cityTehsil: 'Hanumangarh',
-          pincode: '335513',
-        ),
-        paymentMethod: 'Online',
-        paymentStatus: 'Pending',
-        orderStatus: 'Pending',
-        placedAt: now.subtract(const Duration(hours: 12)),
-        assignedAgent: 'Amit',
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678906',
-        orderId: 'ORD-850987',
-        customerName: 'Sompal Patel',
-        customerPhone: '98290 55667',
-        customerRole: 'Lead',
-        items: [
-          OrderItem(
-            productId: 'p2',
-            variantId: 'v2',
-            title: 'Hybrid Seed Pack (100g)',
-            vendor: 'Mahyco',
-            technicalName: 'Bt Cotton Hybrid',
-            image: null,
-            quantity: 1,
-            price: 650.0,
-          ),
-        ],
-        totalAmount: 650.0,
-        shippingAddress: ShippingAddress(
-          villageArea: 'Kalyanpura Village',
-          cityTehsil: 'Sanganer, Jaipur',
-          pincode: '302029',
-        ),
-        paymentMethod: 'Online',
-        paymentStatus: 'Failed',
-        orderStatus: 'Cancelled',
-        placedAt: now.subtract(const Duration(days: 5)),
-        cancelledAt: now.subtract(const Duration(days: 5, hours: 23)),
-        assignedAgent: null,
-      ),
-      OrderModel(
-        id: '652f10b7e4b0c28345678907',
-        orderId: 'ORD-840976',
-        customerName: 'Harish Agro Tech',
-        customerPhone: '98877 66554',
-        customerRole: 'Dealer',
-        items: [
-          OrderItem(
-            productId: 'p3',
-            variantId: 'v4',
-            title: 'Water Pump 5HP',
-            vendor: 'Kirloskar',
-            technicalName: 'Submersible Monoblock',
-            image: null,
-            quantity: 1,
-            price: 11500.0,
-          ),
-        ],
-        totalAmount: 10500.0, // 1000 coupon discount
-        discountAmount: 1000.0,
-        couponCode: 'AGRO1000',
-        shippingAddress: ShippingAddress(
-          villageArea: 'Tehsil Road, Shop 5',
-          cityTehsil: 'Osian, Jodhpur',
-          pincode: '342303',
-        ),
-        paymentMethod: 'Partial',
-        paymentStatus: 'Partially Paid',
-        advanceAmount: 3000.0,
-        remainingAmount: 7500.0,
-        orderStatus: 'RTO',
-        placedAt: now.subtract(const Duration(days: 6)),
-        processingAt: now.subtract(const Duration(days: 5, hours: 22)),
-        shippedAt: now.subtract(const Duration(days: 4, hours: 14)),
-        rtoAt: now.subtract(const Duration(days: 2)),
-        courierName: 'Delhivery',
-        awbNumber: '456711999',
-        trackingUrl:
-            'https://track.delhivery.com/api/v1/packages/json/?waybill=456711999',
-        courierStatus: 'Returned to origin - Consignee refused delivery',
-        assignedAgent: 'Rajesh',
-      ),
-    ];
+  Future<void> _fetchOrders({bool isSilent = false}) async {
+    if (!mounted) return;
+    if (!isSilent) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+    try {
+      final response = await ApiClient().get('/orders/admin/all');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final List rawOrders = data['orders'] ?? [];
+          if (mounted) {
+            setState(() {
+              _orders = rawOrders.map((o) => OrderModel.fromJson(o)).toList();
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+      }
+      if (!isSilent && mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load orders. Please check your credentials.';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!isSilent && mounted) {
+        setState(() {
+          _errorMessage = 'Connection error: $e';
+          _isLoading = false;
+        });
+      }
+    }
   }
+
+
 
   @override
   void dispose() {
@@ -491,7 +370,6 @@ class _OrdersPageState extends State<OrdersPage> {
     return _orders
         .where(
           (o) => [
-            'Pending',
             'Processing',
             'Shipped',
             'Out for Delivery',
@@ -519,43 +397,101 @@ class _OrdersPageState extends State<OrdersPage> {
     final filtered = _filteredOrders;
     final EdgeInsets screenPadding = AppTheme.getResponsivePadding(context);
 
-    final Widget body = SizedBox.expand(
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.symmetric(vertical: screenPadding.top),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            if (!widget.isStandalone) ...[
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-                child: _buildHeader(),
+    final Widget body = _isLoading
+        ? const SizedBox.expand(
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppTheme.primaryColor,
               ),
-              const SizedBox(height: 24),
-            ],
-
-            // Statistics Grid
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-              child: _buildStatsGrid(),
             ),
-            const SizedBox(height: 24),
+          )
+        : (_errorMessage != null
+            ? SizedBox.expand(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: AppTheme.error,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: _fetchOrders,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Retry Connection',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : SizedBox.expand(
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(vertical: screenPadding.top),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      if (!widget.isStandalone) ...[
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+                          child: _buildHeader(),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
-            // Search & Filter controls
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-              child: _buildFilterControls(isMobile),
-            ),
-            const SizedBox(height: 16),
+                      // Statistics Grid
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+                        child: _buildStatsGrid(),
+                      ),
+                      const SizedBox(height: 24),
 
-            // Orders Table
-            _buildOrdersTable(filtered, isMobile, screenPadding),
-          ],
-        ),
-      ),
-    );
+                      // Search & Filter controls
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
+                        child: _buildFilterControls(isMobile),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Orders Table
+                      _buildOrdersTable(filtered, isMobile, screenPadding),
+                    ],
+                  ),
+                ),
+              ));
 
     if (widget.isStandalone) {
       return Scaffold(
@@ -633,10 +569,6 @@ class _OrdersPageState extends State<OrdersPage> {
         )
         .length;
 
-    // Pending approval orders
-    final pendingOrders = _orders
-        .where((o) => o.orderStatus == 'Pending')
-        .length;
 
     // Shipped / Out for delivery in transit
     final outForDeliveryOrders = _orders
@@ -698,7 +630,7 @@ class _OrdersPageState extends State<OrdersPage> {
               title: 'Total Processing',
               value: '$processingOrders',
               color: AppTheme.warning,
-              trendLabel: '$pendingOrders pending approval',
+              trendLabel: '$processingOrders awaiting dispatch',
               trendIcon: Icons.hourglass_empty_rounded,
               onTap: () {
                 setState(() {
@@ -711,7 +643,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 child: CustomPaint(
                   painter: FulfillmentProgressPainter(
                     totalOrders > 0
-                        ? (processingOrders + pendingOrders) / totalOrders
+                        ? processingOrders / totalOrders
                         : 0.0,
                     AppTheme.warning,
                   ),
@@ -808,7 +740,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
     final orderStatusOptions = [
       'All Statuses',
-      'Pending',
       'Processing',
       'Shipped',
       'Out for Delivery',
@@ -987,7 +918,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   '/orders/details',
                   arguments: order,
                 ).then((_) {
-                  setState(() {});
+                  _fetchOrders(isSilent: true);
                 });
               },
               child: Container(
@@ -1088,10 +1019,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     Expanded(
                       flex: 6,
                       child: Text(
-                        order.assignedAgent == null ||
-                                order.assignedAgent!.isEmpty
-                            ? '-'
-                            : order.assignedAgent!,
+                        'Admin',
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: AppTheme.textBody,
