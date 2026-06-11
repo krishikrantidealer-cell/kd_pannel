@@ -124,6 +124,40 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     return {'name': title, 'packing': 'Standard'};
   }
 
+  String _calculateTotalVolume(String basePacking, int quantity) {
+    if (basePacking == '-' || basePacking.trim().isEmpty) {
+      return '-';
+    }
+    final match = RegExp(
+      r'^(\d+\.?\d*)\s*([a-zA-Z]+)$',
+    ).firstMatch(basePacking.trim());
+    if (match != null) {
+      final valStr = match.group(1);
+      final unit = match.group(2) ?? '';
+      final val = double.tryParse(valStr ?? '0');
+      if (val != null) {
+        final totalVal = val * quantity;
+        final formattedVal = totalVal % 1 == 0
+            ? totalVal.toInt().toString()
+            : totalVal.toStringAsFixed(1);
+        return '$formattedVal $unit';
+      }
+    }
+
+    final valOnly = basePacking.replaceAll(RegExp(r'[^0-9.]'), '');
+    final unitOnly = basePacking.replaceAll(RegExp(r'[0-9.]'), '').trim();
+    final val = double.tryParse(valOnly);
+    if (val != null) {
+      final totalVal = val * quantity;
+      final formattedVal = totalVal % 1 == 0
+          ? totalVal.toInt().toString()
+          : totalVal.toStringAsFixed(1);
+      return '$formattedVal $unitOnly';
+    }
+
+    return basePacking;
+  }
+
   // --- STAT BADGES ---
   Widget _buildPaymentBadge(String status) {
     Color color;
@@ -313,7 +347,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 children: [
                   Row(
                     children: [
-                      Text(
+                      SelectableText(
                         _order.orderId,
                         style: GoogleFonts.outfit(
                           fontSize: 18,
@@ -596,6 +630,23 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       Expanded(
                         flex: 2,
                         child: Text(
+                          'Base Packing',
+                          style: AppTheme.tableHeader,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      //total volume
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'Total Volume',
+                          style: AppTheme.tableHeader,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
                           'AMOUNT',
                           style: AppTheme.tableHeader,
                           textAlign: TextAlign.right,
@@ -622,12 +673,23 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                             item.variantSize!.isNotEmpty)
                         ? item.variantSize!
                         : (parsed['packing'] ?? 'Standard');
+                    final basePacking =
+                        (item.basePacking != null &&
+                            item.basePacking!.isNotEmpty)
+                        ? item.basePacking!
+                        : (parsed['basePacking'] ?? '-');
+                    final volume = _calculateTotalVolume(
+                      basePacking,
+                      item.quantity,
+                    );
 
                     return _ItemTableRow(
                       productName: productName,
                       technicalName: item.technicalName,
                       packing: packing,
                       quantity: item.quantity,
+                      basePacking: basePacking,
+                      volume: volume,
                       amount: item.price * item.quantity,
                     );
                   },
@@ -1113,7 +1175,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               valueColor: AppTheme.primaryColor,
             ),
           ),
-
           // Advanced Partial Payment Visualizer
           if (hasPartial) ...[
             const SizedBox(height: 14),
@@ -1301,6 +1362,8 @@ class _ItemTableRow extends StatefulWidget {
   final String? technicalName;
   final String packing;
   final int quantity;
+  final String basePacking;
+  final String volume;
   final double amount;
 
   const _ItemTableRow({
@@ -1308,6 +1371,8 @@ class _ItemTableRow extends StatefulWidget {
     this.technicalName,
     required this.packing,
     required this.quantity,
+    required this.basePacking,
+    required this.volume,
     required this.amount,
   });
 
@@ -1392,6 +1457,31 @@ class _ItemTableRowState extends State<_ItemTableRow> {
               flex: 2,
               child: Text(
                 'x${widget.quantity}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                widget.basePacking,
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            //volume
+            Expanded(
+              flex: 2,
+              child: Text(
+                widget.volume,
                 style: GoogleFonts.outfit(
                   fontSize: 12.5,
                   fontWeight: FontWeight.bold,

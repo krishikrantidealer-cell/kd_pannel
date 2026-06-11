@@ -20,6 +20,7 @@ class OrderItem {
   final int quantity;
   final double price;
   final String? variantSize;
+  final String? basePacking;
 
   OrderItem({
     required this.productId,
@@ -31,11 +32,13 @@ class OrderItem {
     required this.quantity,
     required this.price,
     this.variantSize,
+    this.basePacking,
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final productMap = json['product'] as Map<String, dynamic>?;
     String? sizeVal;
+    String? basePackingVal;
     if (productMap != null && productMap['variants'] is List) {
       final variantsList = productMap['variants'] as List;
       final matchingVariant = variantsList.firstWhere(
@@ -44,6 +47,7 @@ class OrderItem {
       );
       if (matchingVariant != null && matchingVariant is Map) {
         sizeVal = matchingVariant['size']?.toString();
+        basePackingVal = matchingVariant['basePacking']?.toString();
       }
     }
 
@@ -57,6 +61,7 @@ class OrderItem {
       quantity: json['quantity'] ?? 0,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       variantSize: sizeVal,
+      basePacking: basePackingVal,
     );
   }
 }
