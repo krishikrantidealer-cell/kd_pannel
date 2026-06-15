@@ -841,6 +841,8 @@ class _OrdersPageState extends State<OrdersPage> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: currentValue,
+          isExpanded: true,
+          padding: EdgeInsets.zero,
           onChanged: onChanged,
           icon: const Icon(
             Icons.keyboard_arrow_down,
@@ -853,6 +855,8 @@ class _OrdersPageState extends State<OrdersPage> {
                   value: val,
                   child: Text(
                     val,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppTheme.textBody,

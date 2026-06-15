@@ -1095,6 +1095,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   value: value,
                   child: Text(
                     value,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: GoogleFonts.outfit(
                       fontSize: isMobile ? 11 : 12,
                       color: isDarkBackground

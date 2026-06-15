@@ -1,56 +1,344 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-class LeadProfilePage extends StatelessWidget {
+class LeadProfilePage extends StatefulWidget {
   const LeadProfilePage({super.key});
 
   @override
+  State<LeadProfilePage> createState() => _LeadProfilePageState();
+}
+
+class _LeadProfilePageState extends State<LeadProfilePage>
+    with SingleTickerProviderStateMixin {
+  Map<String, dynamic>? _lead;
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _salesAgents = [];
+  late TabController _tabController;
+  int _selectedTabIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (_selectedTabIndex != _tabController.index) {
+        setState(() => _selectedTabIndex = _tabController.index);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lead == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map<String, dynamic>) {
+        _lead = Map<String, dynamic>.from(args);
+      }
+      _fetchSalesAgents();
+    }
+  }
+
+  Future<void> _fetchSalesAgents() async {
+    try {
+      final res = await ApiClient().get('/users?role=sales');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && mounted) {
+          setState(() {
+            _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading sales agents: $e');
+    }
+  }
+
+  Future<void> _convertDealer() async {
+    if (_lead == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final userId = _lead!['id'];
+      final res = await ApiClient().put('/users/$userId/kyc', {
+        'status': 'verified',
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('KYC Approved! User is now a Dealer.'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          if (mounted) {
+            Navigator.pop(context); // Go back
+          }
+        }
+      } else {
+        throw Exception('Failed to verify KYC: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _rejectKyc(String reason) async {
+    if (_lead == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final userId = _lead!['id'];
+      final res = await ApiClient().put('/users/$userId/kyc', {
+        'status': 'rejected',
+        'reason': reason,
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('KYC Rejected.'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+          if (mounted) {
+            Navigator.pop(context); // Go back
+          }
+        }
+      } else {
+        throw Exception('Failed to reject KYC: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showRejectDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject KYC Verification'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Reason for rejection',
+            hintText: 'e.g., Shop licence image is blurry or expired',
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final reason = controller.text.trim();
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Rejection reason is required')),
+                );
+                return;
+              }
+              Navigator.pop(context);
+              _rejectKyc(reason);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Reject', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _assignAgent(String? agentId) async {
+    if (_lead == null) return;
+    try {
+      final userId = _lead!['id'];
+      final res = await ApiClient().put('/users/$userId/assign-agent', {
+        'agentId': agentId,
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Agent assigned successfully'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          if (mounted) {
+            setState(() {
+              final newAgent = data['user']?['assignedAgent'];
+              _lead!['agentId'] = newAgent?['_id'];
+              _lead!['agent'] = newAgent != null
+                  ? '${newAgent['firstName'] ?? ''} ${newAgent['lastName'] ?? ''}'
+                        .trim()
+                  : '-';
+            });
+          }
+        }
+      } else {
+        throw Exception('Failed to assign agent: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    }
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open link: $urlString'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_lead == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
     final isMobile = Responsive.isMobile(context);
     final isTablet = Responsive.isTablet(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-          vertical: isMobile ? 20 : 32,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. BREADCRUMB HEADER
-            _buildBreadcrumbs(context, isMobile),
-            SizedBox(height: isMobile ? 20 : 28),
-
-            // 2. HERO PROFILE SECTION
-            const _HeroProfileSection(),
-            SizedBox(height: isMobile ? 24 : 32),
-
-            // 3. INFORMATION & TIMELINE ROW
-            if (!isMobile)
-              Row(
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
+                vertical: isMobile ? 20 : 32,
+              ),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(flex: 1, child: _LeadInformationCard()),
-                  const SizedBox(width: 32),
-                  const Expanded(flex: 1, child: _ActivityTimelineCard()),
-                ],
-              )
-            else ...[
-              const _LeadInformationCard(),
-              const SizedBox(height: 24),
-              const _ActivityTimelineCard(),
-            ],
-            SizedBox(height: isMobile ? 24 : 32),
+                  _buildBreadcrumbs(context, isMobile),
+                  SizedBox(height: isMobile ? 20 : 28),
+                  _HeroProfileSection(
+                    lead: _lead!,
+                    onConvertDealer: _convertDealer,
+                    onRejectKyc: _showRejectDialog,
+                  ),
+                  SizedBox(height: isMobile ? 24 : 32),
 
-            // 4. KYC DOCUMENTS (Full Width)
-            const _DealerKycDocumentsCard(),
-            SizedBox(height: isMobile ? 24 : 40),
-          ],
-        ),
-      ),
+                  // Pill-style tab bar
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderColor),
+                      boxShadow: AppTheme.softShadow,
+                    ),
+                    padding: const EdgeInsets.all(3),
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: AppTheme.textSecondary,
+                      indicator: BoxDecoration(
+                        color: AppTheme.primaryColor,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      splashBorderRadius: BorderRadius.circular(9),
+                      labelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                      tabs: const [
+                        Tab(text: 'Lead Information'),
+                        Tab(text: 'KYC Documents'),
+                        Tab(text: 'Activity Timeline'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Animated tab content
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.04),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: KeyedSubtree(
+                      key: ValueKey(_selectedTabIndex),
+                      child: _buildTabContent(isMobile, isTablet),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
     );
+  }
+
+  Widget _buildTabContent(bool isMobile, bool isTablet) {
+    switch (_selectedTabIndex) {
+      case 0:
+        return _LeadInformationCard(
+          lead: _lead!,
+          salesAgents: _salesAgents,
+          onAssignAgent: _assignAgent,
+        );
+      case 1:
+        return _DealerKycDocumentsCard(
+          lead: _lead!,
+          onViewDocument: _launchUrl,
+        );
+      case 2:
+        return const _ActivityTimelineCard();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildBreadcrumbs(BuildContext context, bool isMobile) {
@@ -129,7 +417,15 @@ class _BreadcrumbItemState extends State<_BreadcrumbItem> {
 }
 
 class _HeroProfileSection extends StatelessWidget {
-  const _HeroProfileSection();
+  final Map<String, dynamic> lead;
+  final VoidCallback onConvertDealer;
+  final VoidCallback onRejectKyc;
+
+  const _HeroProfileSection({
+    required this.lead,
+    required this.onConvertDealer,
+    required this.onRejectKyc,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -216,22 +512,7 @@ class _HeroProfileSection extends StatelessWidget {
               horizontal: isMobile ? 20 : (isTablet ? 32 : 48),
               vertical: isMobile ? 32 : 32,
             ),
-            child: isMobile
-                ? Column(
-                    children: [
-                      _buildProfileImage(isMobile, isTablet),
-                      const SizedBox(height: 24),
-                      _buildProfileInfo(context, isMobile, isTablet),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: _buildProfileInfo(context, isMobile, isTablet),
-                      ),
-                      _buildProfileImage(isMobile, isTablet),
-                    ],
-                  ),
+            child: _buildProfileInfo(context, isMobile, isTablet),
           ),
         ],
       ),
@@ -239,6 +520,11 @@ class _HeroProfileSection extends StatelessWidget {
   }
 
   Widget _buildProfileInfo(BuildContext context, bool isMobile, bool isTablet) {
+    final stateText = lead['state'].toString().isNotEmpty
+        ? ', ${lead['state']}'
+        : '';
+    final locationText = '${lead['city']}$stateText';
+
     return Column(
       crossAxisAlignment: isMobile
           ? CrossAxisAlignment.center
@@ -246,7 +532,7 @@ class _HeroProfileSection extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Kumar Agro Mart',
+          lead['name'],
           textAlign: isMobile ? TextAlign.center : TextAlign.start,
           style: TextStyle(
             fontSize: isMobile ? 26 : (isTablet ? 32 : 38),
@@ -259,14 +545,17 @@ class _HeroProfileSection extends StatelessWidget {
         if (isMobile)
           Column(
             children: [
-              _buildHeroContactItem(Icons.phone_outlined, '99765 43210'),
+              _buildHeroContactItem(Icons.phone_outlined, lead['phone']),
               const SizedBox(height: 8),
               _buildHeroContactItem(
                 Icons.location_on_outlined,
-                'Nagpur, Maharashtra',
+                locationText.isNotEmpty ? locationText : '-',
               ),
               const SizedBox(height: 8),
-              _buildHeroContactItem(Icons.hub_outlined, 'Source: CTWA'),
+              _buildHeroContactItem(
+                Icons.hub_outlined,
+                'Source: ${lead['source']}',
+              ),
             ],
           )
         else
@@ -275,14 +564,17 @@ class _HeroProfileSection extends StatelessWidget {
             spacing: 12,
             runSpacing: 8,
             children: [
-              _buildHeroContactItem(Icons.phone_outlined, '99765 43210'),
+              _buildHeroContactItem(Icons.phone_outlined, lead['phone']),
               _buildDivider(),
               _buildHeroContactItem(
                 Icons.location_on_outlined,
-                'Nagpur, Maharashtra',
+                locationText.isNotEmpty ? locationText : '-',
               ),
               _buildDivider(),
-              _buildHeroContactItem(Icons.hub_outlined, 'Source: CTWA'),
+              _buildHeroContactItem(
+                Icons.hub_outlined,
+                'Source: ${lead['source']}',
+              ),
             ],
           ),
         SizedBox(height: isMobile ? 32 : 36),
@@ -292,36 +584,32 @@ class _HeroProfileSection extends StatelessWidget {
           runSpacing: isMobile ? 12 : 16,
           children: [
             _ActionButton(
-              icon: Icons.call,
-              label: 'Call',
-              color: const Color(0xFF2E7D32),
-              isSolid: true,
-              width: isMobile
-                  ? (MediaQuery.of(context).size.width - 84) / 2
-                  : null,
-            ),
-            _ActionButton(
               icon: Icons.chat_bubble_outline,
               label: 'WhatsApp',
               color: const Color(0xFF128C7E),
+              isSolid: true,
               width: isMobile
-                  ? (MediaQuery.of(context).size.width - 84) / 2
+                  ? (MediaQuery.of(context).size.width - 60) / 2
                   : null,
             ),
             _ActionButton(
               icon: Icons.person_add_outlined,
               label: 'Convert Dealer',
               color: const Color(0xFF1976D2),
+              isSolid: true,
+              onTap: onConvertDealer,
               width: isMobile
-                  ? (MediaQuery.of(context).size.width - 84) / 2
+                  ? (MediaQuery.of(context).size.width - 60) / 3
                   : null,
             ),
             _ActionButton(
-              icon: Icons.add_shopping_cart,
-              label: 'Create Order',
-              color: const Color(0xFFF57C00),
+              icon: Icons.block_outlined,
+              label: 'Reject KYC',
+              color: const Color(0xFFD32F2F),
+              isSolid: true,
+              onTap: onRejectKyc,
               width: isMobile
-                  ? (MediaQuery.of(context).size.width - 84) / 2
+                  ? (MediaQuery.of(context).size.width - 60) / 3
                   : null,
             ),
           ],
@@ -330,67 +618,7 @@ class _HeroProfileSection extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileImage(bool isMobile, bool isTablet) {
-    final size = isMobile ? 110.0 : (isTablet ? 140.0 : 160.0);
-    final innerSize = isMobile ? 94.0 : (isTablet ? 120.0 : 140.0);
 
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        if (!isMobile) ...[
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF2E7D32).withOpacity(0.05),
-                width: 1,
-              ),
-            ),
-          ),
-          Container(
-            width: size - 8,
-            height: size - 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFF2E7D32).withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-          ),
-        ],
-        Container(
-          width: innerSize,
-          height: innerSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white,
-            border: Border.all(color: Colors.white, width: isMobile ? 4 : 6),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xFF1B5E20,
-                ).withOpacity(isMobile ? 0.15 : 0.12),
-                blurRadius: isMobile ? 20 : 24,
-                offset: Offset(0, isMobile ? 8 : 12),
-              ),
-              if (isMobile)
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.8),
-                  blurRadius: 0,
-                  spreadRadius: 2,
-                ),
-            ],
-          ),
-          child: const CircleAvatar(
-            backgroundImage: AssetImage('assets/images/admin.png'),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildHeroContactItem(IconData icon, String text) {
     return Row(
@@ -431,6 +659,7 @@ class _ActionButton extends StatefulWidget {
   final Color color;
   final bool isSolid;
   final double? width;
+  final VoidCallback? onTap;
 
   const _ActionButton({
     required this.icon,
@@ -438,6 +667,7 @@ class _ActionButton extends StatefulWidget {
     required this.color,
     this.isSolid = false,
     this.width,
+    this.onTap,
   });
 
   @override
@@ -454,54 +684,57 @@ class _ActionButtonState extends State<_ActionButton> {
     return MouseRegion(
       onEnter: (_) => setState(() => isHovered = true),
       onExit: (_) => setState(() => isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: isMobile ? 48 : 44,
-        width: widget.width,
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 22),
-        decoration: BoxDecoration(
-          color: widget.isSolid
-              ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
-              : (isHovered ? widget.color.withOpacity(0.08) : Colors.white),
-          borderRadius: BorderRadius.circular(12),
-          border: widget.isSolid
-              ? null
-              : Border.all(
-                  color: widget.color.withOpacity(isHovered ? 0.8 : 0.4),
-                  width: 1.5,
-                ),
-          boxShadow: isHovered
-              ? [
-                  BoxShadow(
-                    color: widget.color.withOpacity(0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: isMobile ? 48 : 44,
+          width: widget.width,
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 22),
+          decoration: BoxDecoration(
+            color: widget.isSolid
+                ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
+                : (isHovered ? widget.color.withOpacity(0.08) : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: widget.isSolid
+                ? null
+                : Border.all(
+                    color: widget.color.withOpacity(isHovered ? 0.8 : 0.4),
+                    width: 1.5,
                   ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              widget.icon,
-              size: isMobile ? 18 : 19,
-              color: widget.isSolid ? Colors.white : widget.color,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                widget.label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: isMobile ? 13 : 14,
-                  fontWeight: FontWeight.w700,
-                  color: widget.isSolid ? Colors.white : widget.color,
+            boxShadow: isHovered
+                ? [
+                    BoxShadow(
+                      color: widget.color.withOpacity(0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: isMobile ? 18 : 19,
+                color: widget.isSolid ? Colors.white : widget.color,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  widget.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isMobile ? 13 : 14,
+                    fontWeight: FontWeight.w700,
+                    color: widget.isSolid ? Colors.white : widget.color,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -509,7 +742,15 @@ class _ActionButtonState extends State<_ActionButton> {
 }
 
 class _LeadInformationCard extends StatelessWidget {
-  const _LeadInformationCard();
+  final Map<String, dynamic> lead;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String? agentId) onAssignAgent;
+
+  const _LeadInformationCard({
+    required this.lead,
+    required this.salesAgents,
+    required this.onAssignAgent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -545,56 +786,136 @@ class _LeadInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.person_outline,
             'Lead Name',
-            'Kumar Agro Mart',
+            lead['name'],
             Colors.green,
           ),
           _buildDividerRow(),
           _buildInfoRow(
             Icons.phone_android_outlined,
             'Phone Number',
-            '+91 99765 43210',
+            lead['phone'],
             Colors.blue,
           ),
           _buildDividerRow(),
           _buildInfoRow(
             Icons.location_city_outlined,
             'City',
-            'Nagpur',
+            lead['city'].toString().isNotEmpty ? lead['city'] : '-',
             Colors.orange,
           ),
           _buildDividerRow(),
           _buildInfoRow(
             Icons.map_outlined,
             'State',
-            'Maharashtra',
+            lead['state'].toString().isNotEmpty ? lead['state'] : '-',
             Colors.purple,
           ),
           _buildDividerRow(),
           _buildInfoRow(
             Icons.campaign_outlined,
             'Lead Source',
-            'CTWA (WhatsApp)',
+            lead['source'],
             Colors.teal,
           ),
           _buildDividerRow(),
-          _buildInfoRow(
-            Icons.badge_outlined,
-            'Assigned Sales',
-            'Rajesh Sharma',
-            Colors.indigo,
-          ),
-          _buildDividerRow(),
-          _buildInfoRow(
-            Icons.calendar_today_outlined,
-            'Created Date',
-            '24 Oct 2023',
-            Colors.amber,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.badge_outlined,
+                    size: 16,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Assigned Sales',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF6B7280),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value:
+                            salesAgents.any(
+                              (agent) => agent['_id'] == lead['agentId'],
+                            )
+                            ? lead['agentId']
+                            : null,
+                        isExpanded: false,
+                        alignment: Alignment.centerRight,
+                        icon: const Icon(Icons.arrow_drop_down, size: 16),
+                        hint: Text(
+                          '-',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: const Color(0xFF111827),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        onChanged: (String? newAgentId) {
+                          onAssignAgent(newAgentId);
+                        },
+                        items: [
+                          DropdownMenuItem<String>(
+                            value: null,
+                            child: Text(
+                              '-',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                color: const Color(0xFF111827),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          ...salesAgents.map((agent) {
+                            final agentName =
+                                '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                    .trim();
+                            return DropdownMenuItem<String>(
+                              value: agent['_id'],
+                              child: Text(
+                                agentName.isNotEmpty
+                                    ? agentName
+                                    : (agent['phoneNumber'] ?? ''),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  color: const Color(0xFF111827),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           _buildDividerRow(),
           _buildInfoRow(
             Icons.history_outlined,
             'Last Activity',
-            '2 minute ago',
+            lead['activity'],
             Colors.red,
           ),
         ],
@@ -897,11 +1218,23 @@ class _TimelineItem extends StatelessWidget {
 }
 
 class _DealerKycDocumentsCard extends StatelessWidget {
-  const _DealerKycDocumentsCard();
+  final Map<String, dynamic> lead;
+  final Function(String url) onViewDocument;
+
+  const _DealerKycDocumentsCard({
+    required this.lead,
+    required this.onViewDocument,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
+    final hasLicence =
+        lead['licenceImage'] != null &&
+        lead['licenceImage'].toString().isNotEmpty;
+    final hasShopImage =
+        lead['shopImage'] != null &&
+        lead['shopImage'].toString().isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -934,22 +1267,24 @@ class _DealerKycDocumentsCard extends StatelessWidget {
             Column(
               children: [
                 _KycDocumentCard(
-                  title: 'GST Certificate',
-                  status: 'Verified',
-                  subtext: '27ABCDE1234F1Z5',
+                  title: 'GST Certificate / Licence',
+                  status: lead['kycStatus'],
+                  subtext: lead['gstNumber'].toString().isNotEmpty
+                      ? lead['gstNumber']
+                      : 'No GST Number',
                   icon: Icons.description_outlined,
+                  onTap: hasLicence
+                      ? () => onViewDocument(lead['licenceImage'])
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 _KycDocumentCard(
-                  title: 'PAN Card',
-                  status: 'Verified',
-                  icon: Icons.badge_outlined,
-                ),
-                const SizedBox(height: 16),
-                _KycDocumentCard(
-                  title: 'Dealer Photo',
-                  status: 'Verified',
-                  icon: Icons.person_outline,
+                  title: 'Shop Image',
+                  status: lead['kycStatus'],
+                  icon: Icons.storefront_outlined,
+                  onTap: hasShopImage
+                      ? () => onViewDocument(lead['shopImage'])
+                      : null,
                 ),
               ],
             )
@@ -958,22 +1293,24 @@ class _DealerKycDocumentsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _KycDocumentCard(
-                  title: 'GST Certificate',
-                  status: 'Verified',
-                  subtext: '27ABCDE1234F1Z5',
+                  title: 'GST Certificate / Licence',
+                  status: lead['kycStatus'],
+                  subtext: lead['gstNumber'].toString().isNotEmpty
+                      ? lead['gstNumber']
+                      : 'No GST Number',
                   icon: Icons.description_outlined,
+                  onTap: hasLicence
+                      ? () => onViewDocument(lead['licenceImage'])
+                      : null,
                 ),
                 const SizedBox(width: 24),
                 _KycDocumentCard(
-                  title: 'PAN Card',
-                  status: 'Verified',
-                  icon: Icons.badge_outlined,
-                ),
-                const SizedBox(width: 24),
-                _KycDocumentCard(
-                  title: 'Dealer Photo',
-                  status: 'Verified',
-                  icon: Icons.person_outline,
+                  title: 'Shop Image',
+                  status: lead['kycStatus'],
+                  icon: Icons.storefront_outlined,
+                  onTap: hasShopImage
+                      ? () => onViewDocument(lead['shopImage'])
+                      : null,
                 ),
               ],
             ),
@@ -988,12 +1325,14 @@ class _KycDocumentCard extends StatefulWidget {
   final String status;
   final String? subtext;
   final IconData icon;
+  final VoidCallback? onTap;
 
   const _KycDocumentCard({
     required this.title,
     required this.status,
     this.subtext,
     required this.icon,
+    this.onTap,
   });
 
   @override
@@ -1006,103 +1345,116 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
+    final String displayStatus = widget.status.toUpperCase();
+    final bool isVerified = widget.status.toLowerCase() == 'verified';
+    final bool isRejected = widget.status.toLowerCase() == 'rejected';
+    final Color badgeColor = isVerified
+        ? const Color(0xFF10B981)
+        : isRejected
+        ? const Color(0xFFEF4444)
+        : const Color(0xFFF59E0B);
 
     final card = MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => isHovered = true),
       onExit: (_) => setState(() => isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isHovered
-                ? const Color(0xFF2E7D32).withOpacity(0.5)
-                : const Color(0xFFE5E7EB),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isHovered
-                  ? const Color(0xFF2E7D32).withOpacity(0.08)
-                  : Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isHovered && widget.onTap != null
+                  ? const Color(0xFF2E7D32).withOpacity(0.5)
+                  : const Color(0xFFE5E7EB),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F8E9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    widget.icon,
-                    size: 20,
-                    color: const Color(0xFF2E7D32),
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.check_circle,
-                        size: 12,
-                        color: Color(0xFF10B981),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.status,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              widget.title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1F2937),
+            boxShadow: [
+              BoxShadow(
+                color: isHovered && widget.onTap != null
+                    ? const Color(0xFF2E7D32).withOpacity(0.08)
+                    : Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-            const SizedBox(height: 6),
-            if (widget.subtext != null)
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F8E9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      size: 20,
+                      color: const Color(0xFF2E7D32),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isVerified ? Icons.check_circle : Icons.info_outline,
+                          size: 12,
+                          color: badgeColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          displayStatus,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
               Text(
-                widget.subtext!,
+                widget.title,
                 style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.5,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1F2937),
                 ),
-              )
-            else
-              const SizedBox(height: 14),
-          ],
+              ),
+              const SizedBox(height: 6),
+              if (widget.subtext != null)
+                Text(
+                  widget.subtext!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                )
+              else
+                const SizedBox(height: 14),
+            ],
+          ),
         ),
       ),
     );

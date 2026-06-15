@@ -303,6 +303,8 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: safeValue,
+          isExpanded: true,
+          padding: EdgeInsets.zero,
           onChanged: onChanged,
           icon: const Icon(
             Icons.keyboard_arrow_down,
@@ -315,6 +317,8 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                   value: val,
                   child: Text(
                     val,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppTheme.textBody,

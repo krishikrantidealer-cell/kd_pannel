@@ -10,6 +10,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_pa
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:kd_pannel/app_theme.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget? child;
@@ -28,10 +30,10 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = [
-    // const DashboardPage(),
-    // const DealerManagementPage(),
     const ProductsPage(),
     const OrdersPage(),
+    const LeadsPage(),
+    const DealerManagementPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -57,6 +59,10 @@ class _MainLayoutState extends State<MainLayout> {
       if (role == UserRole.admin) {
         if (routeName.startsWith('/orders')) {
           _currentIdx = 1;
+        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
+          _currentIdx = 2;
+        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
+          _currentIdx = 3;
         } else {
           _currentIdx = 0;
         }
@@ -78,8 +84,10 @@ class _MainLayoutState extends State<MainLayout> {
     final role = AuthService().currentUserRole ?? UserRole.admin;
     String route = '/dashboard';
     if (role == UserRole.admin) {
-      if (index == 0) route = '/dashboard';
+      if (index == 0) route = '/products';
       if (index == 1) route = '/orders';
+      if (index == 2) route = '/leads';
+      if (index == 3) route = '/dealers';
     } else {
       if (index == 0) route = '/sales/dashboard';
       if (index == 1) route = '/leads';
@@ -94,8 +102,64 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   void _handleLogout() {
-    AuthService().logout();
-    Navigator.pushReplacementNamed(context, '/login');
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            'Confirm Logout',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to log out?',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.outfit(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+                AuthService().logout();
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                'Logout',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

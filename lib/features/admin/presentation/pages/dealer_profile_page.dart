@@ -226,17 +226,9 @@ class _DealerHeroCard extends StatelessWidget {
               vertical: isMobile ? 32 : 48,
             ),
             child: isMobile
-                ? Column(
-                    children: [
-                      _buildProfileAvatar(isMobile, isTablet),
-                      const SizedBox(height: 24),
-                      _buildProfileInfo(context, isMobile, isTablet),
-                    ],
-                  )
+                ? _buildProfileInfo(context, isMobile, isTablet)
                 : Row(
                     children: [
-                      _buildProfileAvatar(isMobile, isTablet),
-                      const SizedBox(width: 40),
                       Expanded(
                         child: _buildProfileInfo(context, isMobile, isTablet),
                       ),
@@ -352,29 +344,6 @@ class _DealerHeroCard extends StatelessWidget {
           width: isMobile ? (MediaQuery.of(context).size.width - 44) : null,
         ),
       ],
-    );
-  }
-
-  Widget _buildProfileAvatar(bool isMobile, bool isTablet) {
-    final size = isMobile ? 110.0 : (isTablet ? 120.0 : 140.0);
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-        border: Border.all(color: Colors.white, width: isMobile ? 4 : 6),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1B5E20).withOpacity(isMobile ? 0.15 : 0.12),
-            blurRadius: isMobile ? 20 : 24,
-            offset: Offset(0, isMobile ? 8 : 12),
-          ),
-        ],
-      ),
-      child: const CircleAvatar(
-        backgroundImage: AssetImage('assets/images/admin.png'),
-      ),
     );
   }
 
@@ -1386,45 +1355,19 @@ class _DealerKycDocumentsCard extends StatelessWidget {
                   subtext: '27ABCDE1234F1Z5',
                   icon: Icons.description_outlined,
                 ),
-                const SizedBox(height: 16),
-                _KycDocumentCard(
-                  title: 'PAN Card',
-                  status: 'Verified',
-                  icon: Icons.badge_outlined,
-                ),
-                const SizedBox(height: 16),
-                _KycDocumentCard(
-                  title: 'Dealer Photo',
-                  status: 'Verified',
-                  icon: Icons.person_outline,
-                ),
               ],
             )
           else
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _KycDocumentCard(
-                    title: 'GST Certificate',
-                    status: 'Verified',
-                    subtext: '27ABCDE1234F1Z5',
-                    icon: Icons.description_outlined,
-                  ),
-                  const SizedBox(width: 24),
-                  _KycDocumentCard(
-                    title: 'PAN Card',
-                    status: 'Verified',
-                    icon: Icons.badge_outlined,
-                  ),
-                  const SizedBox(width: 24),
-                  _KycDocumentCard(
-                    title: 'Dealer Photo',
-                    status: 'Verified',
-                    icon: Icons.person_outline,
-                  ),
-                ],
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _KycDocumentCard(
+                  title: 'GST Certificate',
+                  status: 'Verified',
+                  subtext: '27ABCDE1234F1Z5',
+                  icon: Icons.description_outlined,
+                ),
+              ],
             ),
         ],
       ),

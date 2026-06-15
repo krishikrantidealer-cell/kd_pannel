@@ -1,10 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
-import 'package:kd_pannel/util/leads.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 class LeadsPage extends StatefulWidget {
@@ -16,6 +17,11 @@ class LeadsPage extends StatefulWidget {
 }
 
 class _LeadsPageState extends State<LeadsPage> {
+  List<Map<String, dynamic>> _allRawUsers = [];
+  List<Map<String, dynamic>> _salesAgents = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
   String selectedDropdown = 'This Month';
   PickerDateRange? _selectedRange;
   String selectedFilterChip = 'All';
@@ -23,9 +29,122 @@ class _LeadsPageState extends State<LeadsPage> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final usersRes = await ApiClient().get('/users');
+      if (usersRes.statusCode == 200) {
+        final data = jsonDecode(usersRes.body);
+        if (data['success'] == true) {
+          _allRawUsers = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        }
+      } else {
+        throw Exception('Failed to load users: ${usersRes.statusCode}');
+      }
+
+      final salesRes = await ApiClient().get('/users?role=sales');
+      if (salesRes.statusCode == 200) {
+        final data = jsonDecode(salesRes.body);
+        if (data['success'] == true) {
+          _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        }
+      } else {
+        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _assignAgent(String userId, String? agentId) async {
+    try {
+      final res = await ApiClient().put('/users/$userId/assign-agent', {
+        'agentId': agentId,
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Agent assigned successfully'), backgroundColor: AppTheme.success),
+          );
+          _fetchData();
+        }
+      } else {
+        throw Exception('Failed to assign agent: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    }
+  }
+
+  String _formatTimeAgo(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+      if (diff.inHours < 24) return '${diff.inHours} hours ago';
+      if (diff.inDays == 1) return 'Yesterday';
+      return '${diff.inDays} days ago';
+    } catch (e) {
+      return '-';
+    }
+  }
+
+  List<Map<String, dynamic>> get allLeads {
+    return _allRawUsers.where((u) {
+      final role = u['role'] ?? 'user';
+      final kycStatus = u['kycStatus'] ?? 'pending';
+      return role == 'user' && kycStatus != 'verified';
+    }).map((u) {
+      return {
+        'id': u['_id'],
+        'name': (u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
+            ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
+            : (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
+                ? u['shopName']
+                : (u['phoneNumber'] ?? 'Unnamed Lead'),
+        'phone': u['phoneNumber'] ?? '',
+        'city': u['address']?['cityTehsil'] ?? '',
+        'state': u['address']?['state'] ?? '',
+        'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
+        'agent': u['assignedAgent'] != null
+            ? '${u['assignedAgent']['firstName']} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
+            : '-',
+        'agentId': u['assignedAgent']?['_id'],
+        'source': u['source'] ?? 'App',
+        'status': u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
+            ? 'KYC Pending'
+            : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
+        'kycStatus': u['kycStatus'] ?? 'pending',
+        'gstNumber': u['gstNumber'] ?? '',
+        'userType': u['userType'] ?? '',
+        'licenceImage': u['licenceImage'] ?? '',
+        'shopImage': u['shopImage'] ?? '',
+      };
+    }).toList();
   }
 
   final List<String> dropdownOptions = [
@@ -58,11 +177,18 @@ class _LeadsPageState extends State<LeadsPage> {
   };
 
   List<Map<String, dynamic>> get filteredLeads {
-    List<Map<String, dynamic>> leads = List.from(allLeads);
+    List<Map<String, dynamic>> leads = allLeads;
 
     if (selectedFilterChip != 'All') {
-      final targetStatus = statusMapping[selectedFilterChip];
-      leads = leads.where((l) => l['status'] == targetStatus).toList();
+      if (selectedFilterChip == 'Unassigned') {
+        leads = leads.where((l) => l['agentId'] == null).toList();
+      } else if (selectedFilterChip == 'Assigned') {
+        leads = leads.where((l) => l['agentId'] != null).toList();
+      } else if (selectedFilterChip == 'KYC Pending') {
+        leads = leads.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').toList();
+      } else if (selectedFilterChip == 'KYC Confirm') {
+        leads = []; // Verified users are dealers, so they don't show up here
+      }
     }
 
     final query = _searchController.text.toLowerCase();
@@ -76,21 +202,7 @@ class _LeadsPageState extends State<LeadsPage> {
       }).toList();
     }
 
-    if (selectedFilterChip == 'All' && query.isEmpty) {
-      final List<Map<String, dynamic>> mixed = [];
-      final categories = statusMapping.values.toList();
-      for (int i = 0; i < 10; i++) {
-        final targetStatus = categories[i % categories.length];
-        final leadInStatus = allLeads.firstWhere(
-          (l) => l['status'] == targetStatus,
-          orElse: () => allLeads[i % allLeads.length],
-        );
-        mixed.add(leadInStatus);
-      }
-      return mixed;
-    }
-
-    return leads.take(10).toList();
+    return leads;
   }
 
   String get _rangeDisplay {
@@ -156,55 +268,259 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  void _showCreateSalesAgentDialog() {
+    final formKey = GlobalKey<FormState>();
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Create Sales Agent',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: firstNameController,
+                    decoration: _buildInputDecoration('First Name', Icons.person_outline),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lastNameController,
+                    decoration: _buildInputDecoration('Last Name', Icons.person_outline),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: _buildInputDecoration('Email Address', Icons.email_outlined),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (val) => val == null || !val.contains('@') ? 'Invalid email' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: _buildInputDecoration('Phone Number', Icons.phone_outlined),
+                    keyboardType: TextInputType.phone,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: _buildInputDecoration('Password', Icons.lock_outline),
+                    obscureText: true,
+                    validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 characters' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        try {
+                          final res = await ApiClient().post('/users/sales', {
+                            'firstName': firstNameController.text.trim(),
+                            'lastName': lastNameController.text.trim(),
+                            'email': emailController.text.trim(),
+                            'phoneNumber': phoneController.text.trim(),
+                            'password': passwordController.text,
+                          });
+                          if (res.statusCode == 201) {
+                            final data = jsonDecode(res.body);
+                            if (data['success'] == true) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Sales agent created successfully'), backgroundColor: AppTheme.success),
+                                );
+                                Navigator.pop(context);
+                                _fetchData();
+                              }
+                            }
+                          } else {
+                            final data = jsonDecode(res.body);
+                            throw Exception(data['message'] ?? 'Failed to create sales agent');
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                            );
+                          }
+                        } finally {
+                          if (context.mounted) {
+                            setDialogState(() => isSubmitting = false);
+                          }
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+      prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryColor),
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.borderColor, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
+    final verifiedDealersCount = _allRawUsers.where((u) => u['role'] == 'user' && u['kycStatus'] == 'verified').length;
 
-    final Widget body = ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: isDesktop ? 28 : 16,
-            vertical: isDesktop ? 20 : 12,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (!widget.isStandalone)
-                    Text(
-                      isMobile ? 'Leads' : 'Leads Management',
-                      style: AppTheme.headingXL.copyWith(
-                        letterSpacing: -0.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                  _buildTimeframeRow(isMobile),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const _LeadsStatsGrid(),
-              const SizedBox(height: 24),
-              _buildFilterChips(isMobile),
-              const SizedBox(height: 16),
-              _LeadsTableCard(
-                leads: filteredLeads,
-                totalEntries: filteredLeads.length,
-                isMobile: isMobile,
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
+    final Widget body = _isLoading
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(80.0),
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+            ),
+          )
+        : _errorMessage != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40.0),
+                  child: Text('Error: $_errorMessage', style: const TextStyle(color: Colors.red)),
+                ),
+              )
+            : ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 28 : 16,
+                      vertical: isDesktop ? 20 : 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (!widget.isStandalone)
+                              Text(
+                                isMobile ? 'Leads' : 'Leads Management',
+                                style: AppTheme.headingXL.copyWith(
+                                  letterSpacing: -0.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            else
+                              const SizedBox.shrink(),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: _showCreateSalesAgentDialog,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: Text(
+                                    isMobile ? 'Sales Agent' : 'Create Sales Agent',
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isMobile ? 12 : 16,
+                                      vertical: isMobile ? 10 : 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                _buildTimeframeRow(isMobile),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _LeadsStatsGrid(
+                          leads: allLeads,
+                          verifiedDealersCount: verifiedDealersCount,
+                        ),
+                        const SizedBox(height: 24),
+                        _buildFilterChips(isMobile),
+                        const SizedBox(height: 16),
+                        _LeadsTableCard(
+                          leads: filteredLeads,
+                          totalEntries: filteredLeads.length,
+                          isMobile: isMobile,
+                          salesAgents: _salesAgents,
+                          onAssignAgent: _assignAgent,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              );
 
     if (widget.isStandalone) {
       return Scaffold(
@@ -608,11 +924,15 @@ class _LeadsTableCard extends StatefulWidget {
   final List<Map<String, dynamic>> leads;
   final int totalEntries;
   final bool isMobile;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String userId, String? agentId) onAssignAgent;
 
   const _LeadsTableCard({
     required this.leads,
     required this.totalEntries,
     required this.isMobile,
+    required this.salesAgents,
+    required this.onAssignAgent,
   });
 
   @override
@@ -690,6 +1010,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     final bool isDesktop = Responsive.isDesktop(context);
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
@@ -739,7 +1060,12 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                     ],
                   ),
           ),
-          _LeadsTable(leads: widget.leads, isMobile: widget.isMobile),
+          _LeadsTable(
+            leads: widget.leads,
+            isMobile: widget.isMobile,
+            salesAgents: widget.salesAgents,
+            onAssignAgent: widget.onAssignAgent,
+          ),
           _buildTableFooter(widget.isMobile),
         ],
       ),
@@ -846,6 +1172,8 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                       value: value,
                       child: Text(
                         value,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -903,6 +1231,8 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                   value: e,
                   child: Text(
                     e,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: GoogleFonts.outfit(
                       fontSize: widget.isMobile ? 11 : 12,
                       color: AppTheme.textPrimary,
@@ -996,8 +1326,15 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
 class _LeadsTable extends StatefulWidget {
   final List<Map<String, dynamic>> leads;
   final bool isMobile;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String userId, String? agentId) onAssignAgent;
 
-  const _LeadsTable({required this.leads, required this.isMobile});
+  const _LeadsTable({
+    required this.leads,
+    required this.isMobile,
+    required this.salesAgents,
+    required this.onAssignAgent,
+  });
 
   @override
   State<_LeadsTable> createState() => _LeadsTableState();
@@ -1148,9 +1485,11 @@ class _LeadsTableState extends State<_LeadsTable> {
                         isAllSelected: isAllSelected,
                         onToggleSelection: () => _toggleSelection(phone),
                         onTap: () =>
-                            Navigator.pushNamed(context, '/leads/profile'),
+                            Navigator.pushNamed(context, '/leads/profile', arguments: lead),
                         onHover: () => setState(() => hoveredRowIndex = index),
                         onExit: () => setState(() => hoveredRowIndex = null),
+                        salesAgents: widget.salesAgents,
+                        onAssignAgent: widget.onAssignAgent,
                       );
                     }),
                   ],
@@ -1175,6 +1514,8 @@ class _LeadRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onHover;
   final VoidCallback onExit;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String userId, String? agentId) onAssignAgent;
 
   const _LeadRow({
     required this.lead,
@@ -1187,6 +1528,8 @@ class _LeadRow extends StatelessWidget {
     required this.onTap,
     required this.onHover,
     required this.onExit,
+    required this.salesAgents,
+    required this.onAssignAgent,
   });
 
   @override
@@ -1257,7 +1600,65 @@ class _LeadRow extends StatelessWidget {
                 _cell(lead['phone'], flex: 1.4, isSecondary: true),
                 _cell(lead['city'], flex: 1.0, isSecondary: true),
                 _cell(lead['activity'], flex: 1.1, isSecondary: true),
-                _cell(lead['agent'], flex: 1.2, isBold: true),
+                Expanded(
+                  flex: 12,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: salesAgents.any((agent) => agent['_id'] == lead['agentId']) ? lead['agentId'] : null,
+                          isExpanded: true,
+                          isDense: true,
+                          icon: const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
+                          hint: Text(
+                            '-',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          onChanged: (String? newAgentId) {
+                            onAssignAgent(lead['id'], newAgentId);
+                          },
+                          items: [
+                            DropdownMenuItem<String>(
+                              value: null,
+                              child: Text(
+                                '-',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ),
+                            ...salesAgents.map((agent) {
+                              final agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                              return DropdownMenuItem<String>(
+                                value: agent['_id'],
+                                child: Text(
+                                  agentName.isNotEmpty ? agentName : (agent['phoneNumber'] ?? ''),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.5,
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 _cell(lead['source'], flex: 1.0, isSecondary: true),
                 Expanded(
                   flex: 12,
@@ -1269,7 +1670,6 @@ class _LeadRow extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       child: _ConnectedActionButtons(
-                        onCall: () {},
                         onView: onTap,
                       ),
                     ),
@@ -1313,10 +1713,9 @@ class _LeadRow extends StatelessWidget {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
-  final VoidCallback onCall;
   final VoidCallback onView;
 
-  const _ConnectedActionButtons({required this.onCall, required this.onView});
+  const _ConnectedActionButtons({required this.onView});
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -1324,185 +1723,63 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
-  bool isCallHovered = false;
   bool isViewHovered = false;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 170, // Mandatory width
-      height: 36, // Refined height matching status badges
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. CALL BUTTON (STRICT FULL LEFT HALF)
-          Expanded(
-            child: MouseRegion(
-              onEnter: (_) => setState(() => isCallHovered = true),
-              onExit: (_) => setState(() => isCallHovered = false),
-              child: GestureDetector(
-                onTap: widget.onCall,
-                child: AnimatedContainer(
-                  duration: const Duration(
-                    milliseconds: 140,
-                  ), // Snappy fast hover
-                  curve: Curves.easeOutCubic,
-                  width: double.infinity,
-                  height: double.infinity,
-                  transform: Matrix4.translationValues(
-                    0,
-                    isCallHovered ? -2.0 : 0.0,
-                    0,
+      width: 100, // Reduced width for single button
+      height: 32, // Refined height
+      child: MouseRegion(
+        onEnter: (_) => setState(() => isViewHovered = true),
+        onExit: (_) => setState(() => isViewHovered = false),
+        child: GestureDetector(
+          onTap: widget.onView,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            transform: Matrix4.translationValues(0, isViewHovered ? -1.5 : 0.0, 0),
+            decoration: BoxDecoration(
+              color: isViewHovered ? AppTheme.primaryColor : Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isViewHovered
+                    ? AppTheme.primaryColor
+                    : AppTheme.borderColor.withValues(alpha: 0.6),
+              ),
+              boxShadow: isViewHovered
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.visibility_outlined,
+                    size: 14,
+                    color: isViewHovered ? Colors.white : AppTheme.primaryColor,
                   ),
-                  decoration: BoxDecoration(
-                    color: isCallHovered ? AppTheme.primaryColor : Colors.white,
-                    borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(6),
-                    ),
-                    border: Border.all(
-                      color: isCallHovered
-                          ? AppTheme.primaryColor
-                          : AppTheme.borderColor.withValues(alpha: 0.4),
-                    ),
-                    boxShadow: isCallHovered
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.primaryColor.withValues(
-                                alpha: 0.15,
-                              ),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedScale(
-                          duration: const Duration(milliseconds: 140),
-                          scale: isCallHovered ? 1.05 : 1.0,
-                          child: Icon(
-                            Icons.phone_rounded,
-                            size: 16,
-                            color: isCallHovered
-                                ? Colors.white
-                                : AppTheme.primaryColor,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Call',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isCallHovered
-                                ? Colors.white
-                                : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(width: 5),
+                  Text(
+                    'View',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isViewHovered ? Colors.white : AppTheme.textPrimary,
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
-          // 2. VIEW BUTTON (STRICT FULL RIGHT HALF)
-          Expanded(
-            child: MouseRegion(
-              onEnter: (_) => setState(() => isViewHovered = true),
-              onExit: (_) => setState(() => isViewHovered = false),
-              child: GestureDetector(
-                onTap: widget.onView,
-                child: AnimatedContainer(
-                  duration: const Duration(
-                    milliseconds: 140,
-                  ), // Snappy fast hover
-                  curve: Curves.easeOutCubic,
-                  width: double.infinity,
-                  height: double.infinity,
-                  transform: Matrix4.translationValues(
-                    0,
-                    isViewHovered ? -2.0 : 0.0,
-                    0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isViewHovered
-                        ? const Color(0xFFF1F9F3)
-                        : Colors.white,
-                    borderRadius: const BorderRadius.horizontal(
-                      right: Radius.circular(6),
-                    ),
-                    border: Border(
-                      top: BorderSide(
-                        color: isViewHovered
-                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                            : AppTheme.borderColor.withValues(alpha: 0.4),
-                      ),
-                      bottom: BorderSide(
-                        color: isViewHovered
-                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                            : AppTheme.borderColor.withValues(alpha: 0.4),
-                      ),
-                      right: BorderSide(
-                        color: isViewHovered
-                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                            : AppTheme.borderColor.withValues(alpha: 0.4),
-                      ),
-                      // No left border for seamless visual connection
-                    ),
-                    boxShadow: isViewHovered
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 140),
-                          curve: Curves.easeOutCubic,
-                          transform: Matrix4.translationValues(
-                            isViewHovered ? 2.0 : 0.0,
-                            0.0,
-                            0.0,
-                          ),
-                          child: Icon(
-                            Icons
-                                .visibility_outlined, // Replaced with premium view icon
-                            size: 16,
-                            color: isViewHovered
-                                ? AppTheme.primaryColor
-                                : AppTheme.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'View',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isViewHovered
-                                ? AppTheme.primaryColor
-                                : AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1580,11 +1857,19 @@ class _HeaderText extends StatelessWidget {
 }
 
 class _LeadsStatsGrid extends StatelessWidget {
-  const _LeadsStatsGrid();
+  final List<Map<String, dynamic>> leads;
+  final int verifiedDealersCount;
+
+  const _LeadsStatsGrid({
+    required this.leads,
+    required this.verifiedDealersCount,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final service = DashboardService();
+    final unassignedCount = leads.where((l) => l['agentId'] == null).length;
+    final assignedCount = leads.where((l) => l['agentId'] != null).length;
+    final kycPendingCount = leads.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1605,101 +1890,53 @@ class _LeadsStatsGrid extends StatelessWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            FutureBuilder<String>(
-              future: service.getLeadsUnassigned(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Unassigned Lead',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/New leads.png',
-                  color: AppTheme.warning,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Unassigned Lead',
+              value: '$unassignedCount',
+              imagePath: 'assets/images/New leads.png',
+              color: AppTheme.warning,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getLeadsAssigned(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Assigned Lead',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/Active dealer .png',
-                  color: AppTheme.info,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Assigned Lead',
+              value: '$assignedCount',
+              imagePath: 'assets/images/Active dealer .png',
+              color: AppTheme.info,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getLeadsKycPending(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'KYC Pending',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/order pending.png',
-                  color: AppTheme.error,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'KYC Pending',
+              value: '$kycPendingCount',
+              imagePath: 'assets/images/order pending.png',
+              color: AppTheme.error,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getLeadsKycConfirm(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'KYC Confirm',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/dealer onbord.png',
-                  color: AppTheme.success,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'KYC Confirm',
+              value: '$verifiedDealersCount',
+              imagePath: 'assets/images/dealer onbord.png',
+              color: AppTheme.success,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getLeadsOrderPending(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Order Pending',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/order status.png',
-                  color: AppTheme.warning,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Order Pending',
+              value: '0',
+              imagePath: 'assets/images/order status.png',
+              color: AppTheme.warning,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getLeadsOrderConfirm(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Order Confirm',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/order today.png',
-                  color: AppTheme.lightGreen,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Order Confirm',
+              value: '0',
+              imagePath: 'assets/images/order today.png',
+              color: AppTheme.lightGreen,
+              isCompact: true,
             ),
           ],
         );

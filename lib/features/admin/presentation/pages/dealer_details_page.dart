@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/dealers.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DealerDetailsPage extends StatefulWidget {
   final Dealer dealer;
@@ -20,12 +23,17 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
   bool _isStarred = false;
   int _selectedTabIndex = 0;
 
+  String? _agentId;
+  String? _agentName;
+  List<Map<String, dynamic>> _salesAgents = [];
+  bool _isAssigning = false;
+
   // Derived display fields from the dealer model
   String get _dealerName => widget.dealer.name;
   String get _phone => widget.dealer.phone;
   String get _city => widget.dealer.city;
   String get _state => widget.dealer.state;
-  String get _agent => widget.dealer.agent;
+  String get _agent => _agentName ?? widget.dealer.agent;
   String get _gstStatus => widget.dealer.gstStatus;
   int get _totalOrders => widget.dealer.totalOrders;
   String get _purchaseValue => widget.dealer.purchaseValue;
@@ -36,8 +44,10 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
   String get _location => '${widget.dealer.city}, ${widget.dealer.state}';
   String get _level => widget.dealer.isHighValue ? 'Tier 1' : 'Tier 2';
   String get _email =>
+      widget.dealer.email ??
       '${widget.dealer.name.toLowerCase().replaceAll(' ', '.')}@krishi.in';
   String get _gst =>
+      widget.dealer.gstNumber ??
       '${widget.dealer.state == 'Maharashtra'
           ? '27'
           : widget.dealer.state == 'Gujarat'
@@ -53,6 +63,60 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
         setState(() => _selectedTabIndex = _tabController.index);
       }
     });
+    _agentId = widget.dealer.agentId;
+    _agentName = widget.dealer.agent;
+    _fetchSalesAgents();
+  }
+
+  Future<void> _fetchSalesAgents() async {
+    try {
+      final res = await ApiClient().get('/users?role=sales');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && mounted) {
+          setState(() {
+            _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading sales agents: $e');
+    }
+  }
+
+  Future<void> _assignAgent(String? newAgentId) async {
+    if (widget.dealer.id == null) return;
+    setState(() => _isAssigning = true);
+    try {
+      final res = await ApiClient().put('/users/${widget.dealer.id}/assign-agent', {
+        'agentId': newAgentId,
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Agent assigned successfully'), backgroundColor: AppTheme.success),
+          );
+          if (mounted) {
+            setState(() {
+              final newAgent = data['user']?['assignedAgent'];
+              _agentId = newAgent?['_id'];
+              _agentName = newAgent != null
+                  ? '${newAgent['firstName'] ?? ''} ${newAgent['lastName'] ?? ''}'.trim()
+                  : '-';
+            });
+          }
+        }
+      } else {
+        throw Exception('Failed to assign agent: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    } finally {
+      if (mounted) setState(() => _isAssigning = false);
+    }
   }
 
   @override
@@ -325,9 +389,9 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
                         fontSize: 13,
                       ),
                       tabs: const [
-                        Tab(text: 'General Info'),
-                        Tab(text: 'Active Orders'),
-                        Tab(text: 'Live Logs'),
+                        Tab(text: 'Dealer Information'),
+                        Tab(text: 'KYC Documents'),
+                        Tab(text: 'Order History'),
                       ],
                     ),
                   ),
@@ -368,9 +432,9 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
       case 0:
         return _buildGeneralInfo(isDesktop);
       case 1:
-        return _buildActiveOrdersList();
+        return _buildKycDocuments(isDesktop);
       case 2:
-        return _buildUserTelemetryLogs();
+        return _buildActiveOrdersList();
       default:
         return const SizedBox.shrink();
     }
@@ -586,6 +650,13 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
   }
 
   Widget _buildGeneralInfo(bool isDesktop) {
+    final addrMap = widget.dealer.address;
+    final String fullAddress = addrMap != null
+        ? '${addrMap['villageArea'] ?? ''}, ${addrMap['cityTehsil'] ?? ''}, ${addrMap['state'] ?? ''} - ${addrMap['pincode'] ?? ''}'
+            .replaceAll(RegExp(r'^,\s*|,\s*$'), '')
+            .trim()
+        : '';
+
     final List<Map<String, dynamic>> fields = [
       {
         'label': 'Registered Email',
@@ -595,6 +666,12 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
       {'label': 'Contact Phone', 'value': _phone, 'icon': Icons.phone_outlined},
       {'label': 'City', 'value': _city, 'icon': Icons.location_city_outlined},
       {'label': 'State', 'value': _state, 'icon': Icons.map_outlined},
+      if (fullAddress.isNotEmpty)
+        {
+          'label': 'Detailed Address',
+          'value': fullAddress,
+          'icon': Icons.home_outlined,
+        },
       {'label': 'GSTIN', 'value': _gst, 'icon': Icons.receipt_long_outlined},
       {
         'label': 'GST Status',
@@ -731,6 +808,61 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
                                 ),
                               ),
                             )
+                          else if (f['label'] == 'Assigned Agent' && widget.dealer.id != null)
+                            _isAssigning
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  )
+                                : DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _salesAgents.any((agent) => agent['_id'] == _agentId) ? _agentId : null,
+                                      isExpanded: false,
+                                      icon: const Icon(Icons.arrow_drop_down, size: 16),
+                                      hint: Text(
+                                        '-',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: AppTheme.textPrimary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      onChanged: (String? newAgentId) {
+                                        _assignAgent(newAgentId);
+                                      },
+                                      items: [
+                                        DropdownMenuItem<String>(
+                                          value: null,
+                                          child: Text(
+                                            '-',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 13,
+                                              color: AppTheme.textPrimary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        ..._salesAgents.map((agent) {
+                                          final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                                          return DropdownMenuItem<String>(
+                                            value: agent['_id'],
+                                            child: Text(
+                                              name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13,
+                                                color: AppTheme.textPrimary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  )
                           else
                             Text(
                               f['value'] as String,
@@ -750,6 +882,210 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
                     ),
                   );
                 }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open link: $urlString'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  Widget _buildKycDocuments(bool isDesktop) {
+    final hasLicence = widget.dealer.licenceImage != null && widget.dealer.licenceImage!.isNotEmpty;
+    final hasShopImage = widget.dealer.shopImage != null && widget.dealer.shopImage!.isNotEmpty;
+    final gstNum = widget.dealer.gstNumber ?? 'Not Provided';
+
+    final documents = [
+      {
+        'title': 'GST Certificate / Licence',
+        'subtext': gstNum,
+        'icon': Icons.description_outlined,
+        'status': 'Verified',
+        'color': AppTheme.success,
+        'action': hasLicence ? 'View Document' : 'No Attachment',
+        'onTap': hasLicence ? () => _launchUrl(widget.dealer.licenceImage!) : null,
+      },
+      {
+        'title': 'Shop Image',
+        'subtext': 'Exterior photo of dealer shop',
+        'icon': Icons.storefront_outlined,
+        'status': 'Verified',
+        'color': AppTheme.success,
+        'action': hasShopImage ? 'View Photo' : 'No Attachment',
+        'onTap': hasShopImage ? () => _launchUrl(widget.dealer.shopImage!) : null,
+      },
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.7)),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.folder_shared_rounded,
+                  size: 16,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Dealer KYC Certificates',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: documents.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final doc = documents[index];
+              final statusColor = doc['color'] as Color;
+              final bool isClickable = doc['onTap'] != null;
+
+              return Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.borderColor.withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        doc['icon'] as IconData,
+                        size: 20,
+                        color: statusColor,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            doc['title'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            doc['subtext'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: statusColor.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Text(
+                            doc['status'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: doc['onTap'] as void Function()?,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isClickable
+                                  ? AppTheme.primaryColor.withOpacity(0.08)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: isClickable
+                                    ? AppTheme.primaryColor.withOpacity(0.25)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            child: Text(
+                              doc['action'] as String,
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isClickable
+                                    ? AppTheme.primaryColor
+                                    : AppTheme.textSecondary.withOpacity(0.7),
+                                decoration: isClickable
+                                    ? TextDecoration.underline
+                                    : TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               );
             },
           ),

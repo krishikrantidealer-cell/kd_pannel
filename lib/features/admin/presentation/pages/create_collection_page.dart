@@ -88,7 +88,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
       print('initialData: ${widget.initialData}');
       print('image value: ${data['image']}');
       print('image type: ${data['image']?.runtimeType}');
-      
+
       if (data['image'] != null) {
         if (data['image'] is String) {
           _existingImageUrl = data['image'];
@@ -218,11 +218,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
             : '/collections/$_selectedParentId/sub';
 
         final method = isEdit ? 'PUT' : 'POST';
-        
-        final fields = {
-          'name': name,
-          'isActive': isActive.toString(),
-        };
+
+        final fields = {'name': name, 'isActive': isActive.toString()};
 
         final capturedCollectionImage = _collectionImage!;
         response = await ApiClient().multipartRequest(
@@ -235,7 +232,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
               capturedCollectionImage,
               filename: 'collection_image.jpg',
               contentType: MediaType('image', 'jpeg'),
-            )
+            ),
           ],
         );
       } else {
@@ -322,7 +319,9 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                 currentAssigned.add(colId);
                 needsUpdate = true;
               }
-              if (oldName.isNotEmpty && oldName != colName && currentAssigned.contains(oldName)) {
+              if (oldName.isNotEmpty &&
+                  oldName != colName &&
+                  currentAssigned.contains(oldName)) {
                 currentAssigned.remove(oldName);
                 needsUpdate = true;
               }
@@ -395,7 +394,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.initialData != null 
+          widget.initialData != null
               ? 'Edit ${_isParentCollection ? 'Collection' : 'Sub-collection'}'
               : 'Create ${_isParentCollection ? 'Collection' : 'Sub-collection'}',
           style: GoogleFonts.outfit(
@@ -594,11 +593,14 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                                 fontSize: 14,
                               ),
                             ),
+                            padding: EdgeInsets.zero,
                             items: _parentCollections.map((col) {
                               return DropdownMenuItem<String>(
                                 value: col['_id'] ?? col['id'],
                                 child: Text(
                                   col['name'] ?? '',
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                   style: GoogleFonts.outfit(fontSize: 14),
                                 ),
                               );
@@ -656,7 +658,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                   ),
                 ),
                 validator: (val) {
-                  if ((val == null || val.trim().isEmpty) && _collectionImage == null) {
+                  if ((val == null || val.trim().isEmpty) &&
+                      _collectionImage == null) {
                     return 'Please enter a name or upload an image';
                   }
                   return null;
@@ -684,23 +687,31 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: AppTheme.borderColor),
                     ),
-                    child: (_collectionImage != null || _existingImageUrl != null)
+                    child:
+                        (_collectionImage != null || _existingImageUrl != null)
                         ? Stack(
                             fit: StackFit.expand,
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: _collectionImage != null 
-                                  ? Image.memory(_collectionImage!, fit: BoxFit.cover)
-                                  : Image.network(
-                                      _existingImageUrl!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Center(
-                                          child: Icon(Icons.broken_image, color: Colors.grey),
-                                        );
-                                      },
-                                    ),
+                                child: _collectionImage != null
+                                    ? Image.memory(
+                                        _collectionImage!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Image.network(
+                                        _existingImageUrl!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                              return const Center(
+                                                child: Icon(
+                                                  Icons.broken_image,
+                                                  color: Colors.grey,
+                                                ),
+                                              );
+                                            },
+                                      ),
                               ),
                               Positioned(
                                 top: 8,
@@ -716,7 +727,11 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                                       color: Colors.black54,
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -725,7 +740,11 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.cloud_upload_outlined, color: AppTheme.textSecondary, size: 32),
+                              const Icon(
+                                Icons.cloud_upload_outlined,
+                                color: AppTheme.textSecondary,
+                                size: 32,
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 'Click to upload image',
@@ -740,7 +759,6 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                 ),
                 const SizedBox(height: 16),
               ],
-
 
               // Description (only if parent collection)
               if (_isParentCollection) ...[
@@ -997,7 +1015,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final product = filtered[index];
-                      final prodId = (product['id'] ?? product['_id'] ?? '').toString();
+                      final prodId = (product['id'] ?? product['_id'] ?? '')
+                          .toString();
                       final isSelected = _selectedProductIds.contains(prodId);
 
                       return CheckboxListTile(
@@ -1022,7 +1041,12 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          (product['brandName'] ?? 'No Brand').toString(),
+                          ((product['vendor'] == null ||
+                                      product['vendor'] == 'N/A' ||
+                                      product['vendor'].toString().isEmpty)
+                                  ? 'No Brand'
+                                  : product['vendor'])
+                              .toString(),
                           style: GoogleFonts.outfit(
                             fontSize: 11,
                             color: AppTheme.textSecondary,

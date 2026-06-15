@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_details_page.dart';
@@ -18,19 +20,18 @@ class DealerManagementPage extends StatefulWidget {
 }
 
 class _DealerManagementPageState extends State<DealerManagementPage> {
+  List<Map<String, dynamic>> _allRawUsers = [];
+  List<Map<String, dynamic>> _allRawOrders = [];
+  List<Map<String, dynamic>> _salesAgents = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
   String selectedTimeframe = 'This Week';
   PickerDateRange? _selectedRange;
   int currentPage = 1;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _tableHorizontalController = ScrollController();
   String? _hoveredDealerKey;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _tableHorizontalController.dispose();
-    super.dispose();
-  }
 
   // Filter states
   String selectedAgent = 'All Sales Agents';
@@ -48,23 +49,169 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     'Custom Range',
   ];
 
-  final List<String> agentOptions = [
-    'All Sales Agents',
-    'Rajesh Kumar',
-    'Suresh Patil',
-    'Amit Shah',
-    'Vijay Deshmukh',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
 
-  final List<String> stateOptions = [
-    'All States',
-    'Maharashtra',
-    'Gujarat',
-    'Madhya Pradesh',
-  ];
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _tableHorizontalController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final usersRes = await ApiClient().get('/users');
+      if (usersRes.statusCode == 200) {
+        final data = jsonDecode(usersRes.body);
+        if (data['success'] == true) {
+          _allRawUsers = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        }
+      } else {
+        throw Exception('Failed to load users: ${usersRes.statusCode}');
+      }
+
+      final salesRes = await ApiClient().get('/users?role=sales');
+      if (salesRes.statusCode == 200) {
+        final data = jsonDecode(salesRes.body);
+        if (data['success'] == true) {
+          _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        }
+      } else {
+        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
+      }
+
+      final ordersRes = await ApiClient().get('/orders/admin/all');
+      if (ordersRes.statusCode == 200) {
+        final data = jsonDecode(ordersRes.body);
+        if (data['success'] == true) {
+          _allRawOrders = List<Map<String, dynamic>>.from(data['orders'] ?? []);
+        }
+      } else {
+        throw Exception('Failed to load orders: ${ordersRes.statusCode}');
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatCurrency(double amount) {
+    final int val = amount.round();
+    if (val == 0) return '₹0';
+    final str = val.toString();
+    if (str.length <= 3) return '₹$str';
+    
+    var lastThree = str.substring(str.length - 3);
+    var otherParts = str.substring(0, str.length - 3);
+    if (otherParts.isNotEmpty) {
+      otherParts = otherParts.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d\d)+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+    }
+    return '₹$otherParts,$lastThree';
+  }
+
+  List<Dealer> get allCalculatedDealers {
+    final verifiedUsers = _allRawUsers.where((u) {
+      final role = u['role'] ?? 'user';
+      final kycStatus = u['kycStatus'] ?? 'pending';
+      return role == 'user' && kycStatus == 'verified';
+    }).toList();
+
+    return verifiedUsers.map((u) {
+      final userId = u['_id'];
+      
+      final dealerOrders = _allRawOrders.where((o) => o['user']?['_id'] == userId && o['orderStatus'] != 'Cancelled').toList();
+      final totalOrdersCount = dealerOrders.length;
+      
+      double purchaseSum = 0.0;
+      for (final order in dealerOrders) {
+        final amount = order['totalAmount'];
+        if (amount != null) {
+          if (amount is num) {
+            purchaseSum += amount.toDouble();
+          } else {
+            purchaseSum += double.tryParse(amount.toString()) ?? 0.0;
+          }
+        }
+      }
+
+      final agentName = u['assignedAgent'] != null
+          ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
+          : '-';
+
+      final String name = (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
+          ? u['shopName']
+          : ((u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
+              ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
+              : (u['phoneNumber'] ?? 'Unnamed Dealer'));
+
+      final isHighVal = purchaseSum >= 500000;
+      final isInactiveDealer = totalOrdersCount == 0;
+
+      return Dealer(
+        name: name,
+        phone: u['phoneNumber'] ?? '',
+        city: u['address']?['cityTehsil'] ?? '',
+        state: u['address']?['state'] ?? '',
+        agent: agentName.isNotEmpty ? agentName : '-',
+        gstStatus: 'Verified',
+        totalOrders: totalOrdersCount,
+        purchaseValue: _formatCurrency(purchaseSum),
+        isHighValue: isHighVal,
+        isInactive: isInactiveDealer,
+        id: u['_id'],
+        agentId: u['assignedAgent']?['_id'],
+        licenceImage: u['licenceImage'],
+        shopImage: u['shopImage'],
+        gstNumber: u['gstNumber'],
+        email: u['email'],
+        userType: u['userType'],
+        kycStatus: u['kycStatus'],
+        address: u['address'] != null ? Map<String, dynamic>.from(u['address']) : null,
+      );
+    }).toList();
+  }
+
+  List<String> get agentOptions {
+    final list = ['All Sales Agents'];
+    for (final agent in _salesAgents) {
+      final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+      if (name.isNotEmpty && !list.contains(name)) {
+        list.add(name);
+      }
+    }
+    return list;
+  }
+
+  List<String> get stateOptions {
+    final list = ['All States'];
+    for (final dealer in allCalculatedDealers) {
+      final state = dealer.state;
+      if (state.isNotEmpty && !list.contains(state)) {
+        list.add(state);
+      }
+    }
+    return list;
+  }
 
   List<Dealer> get filteredDealers {
-    return allDealers.where((dealer) {
+    return allCalculatedDealers.where((dealer) {
       final query = _searchController.text.toLowerCase();
       bool matchesSearch =
           dealer.name.toLowerCase().contains(query) ||
@@ -83,6 +230,164 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           matchesHighValue &&
           matchesInactive;
     }).toList();
+  }
+
+  void _showCreateSalesAgentDialog() {
+    final formKey = GlobalKey<FormState>();
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Create Sales Agent',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: firstNameController,
+                    decoration: _buildInputDecoration('First Name', Icons.person_outline),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lastNameController,
+                    decoration: _buildInputDecoration('Last Name', Icons.person_outline),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: _buildInputDecoration('Email Address', Icons.email_outlined),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (val) => val == null || !val.contains('@') ? 'Invalid email' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: _buildInputDecoration('Phone Number', Icons.phone_outlined),
+                    keyboardType: TextInputType.phone,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: _buildInputDecoration('Password', Icons.lock_outline),
+                    obscureText: true,
+                    validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 characters' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        try {
+                          final res = await ApiClient().post('/users/sales', {
+                            'firstName': firstNameController.text.trim(),
+                            'lastName': lastNameController.text.trim(),
+                            'email': emailController.text.trim(),
+                            'phoneNumber': phoneController.text.trim(),
+                            'password': passwordController.text,
+                          });
+                          if (res.statusCode == 201) {
+                            final data = jsonDecode(res.body);
+                            if (data['success'] == true) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Sales agent created successfully'), backgroundColor: AppTheme.success),
+                                );
+                                Navigator.pop(context);
+                                _fetchData();
+                              }
+                            }
+                          } else {
+                            final data = jsonDecode(res.body);
+                            throw Exception(data['message'] ?? 'Failed to create sales agent');
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                            );
+                          }
+                        } finally {
+                          if (context.mounted) {
+                            setDialogState(() => isSubmitting = false);
+                          }
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+      prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryColor),
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.borderColor, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+      ),
+    );
   }
 
   void _showDatePicker() {
@@ -128,30 +433,47 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     final isDesktop = Responsive.isDesktop(context);
     final isMobile = Responsive.isMobile(context);
 
-    final Widget body = ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: isDesktop ? 28 : 16,
-            vertical: isDesktop ? 20 : 12,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(isMobile),
-              const SizedBox(height: 16),
-              _buildStatsCards(context),
-              const SizedBox(height: 24),
-              _buildFiltersRow(isMobile, isDesktop),
-              const SizedBox(height: 16),
-              _buildDealerTable(isMobile),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
+    final Widget body = _isLoading
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(80.0),
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+            ),
+          )
+        : _errorMessage != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40.0),
+                  child: Text(
+                    'Error: $_errorMessage',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              )
+            : ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 28 : 16,
+                      vertical: isDesktop ? 20 : 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(isMobile),
+                        const SizedBox(height: 16),
+                        _buildStatsCards(context),
+                        const SizedBox(height: 24),
+                        _buildFiltersRow(isMobile, isDesktop),
+                        const SizedBox(height: 16),
+                        _buildDealerTable(isMobile),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              );
 
     if (widget.isStandalone) {
       return Scaffold(
@@ -193,7 +515,33 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           )
         else
           const SizedBox.shrink(),
-        _buildTimeframeFilter(isMobile),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _showCreateSalesAgentDialog,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(
+                isMobile ? 'Sales Agent' : 'Create Sales Agent',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 10 : 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildTimeframeFilter(isMobile),
+          ],
+        ),
       ],
     );
   }
@@ -289,7 +637,10 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   Widget _buildStatsCards(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
-    final service = DashboardService();
+    final totalDealers = allCalculatedDealers.length;
+    final activeDealers = allCalculatedDealers.where((d) => !d.isInactive).length;
+    final highValueDealers = allCalculatedDealers.where((d) => d.isHighValue).length;
+    final inactiveDealers = allCalculatedDealers.where((d) => d.isInactive).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -303,69 +654,37 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            FutureBuilder<String>(
-              future: service.getDealerTotalDealers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Total Dealers',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/Total dealer.png',
-                  color: AppTheme.primaryColor,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Total Dealers',
+              value: '$totalDealers',
+              imagePath: 'assets/images/Total dealer.png',
+              color: AppTheme.primaryColor,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getDealerActiveDealers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Active Dealers',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/Active dealer .png',
-                  color: AppTheme.success,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Active Dealers',
+              value: '$activeDealers',
+              imagePath: 'assets/images/Active dealer .png',
+              color: AppTheme.success,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getDealerHighValueDealers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'High Value Dealers',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/sales perfrom.png',
-                  color: AppTheme.warning,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'High Value Dealers',
+              value: '$highValueDealers',
+              imagePath: 'assets/images/sales perfrom.png',
+              color: AppTheme.warning,
+              isCompact: true,
             ),
-            FutureBuilder<String>(
-              future: service.getDealerInactiveDealers(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return StatCardWidget(
-                  width: width,
-                  title: 'Inactive Dealers',
-                  value: snapshot.data ?? '0',
-                  imagePath: 'assets/images/New leads.png',
-                  color: AppTheme.error,
-                  isCompact: true,
-                );
-              },
+            StatCardWidget(
+              width: width,
+              title: 'Inactive Dealers',
+              value: '$inactiveDealers',
+              imagePath: 'assets/images/New leads.png',
+              color: AppTheme.error,
+              isCompact: true,
             ),
           ],
         );
@@ -513,6 +832,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: options.contains(currentValue) ? currentValue : null,
+          isExpanded: true,
+          padding: EdgeInsets.zero,
           hint: Text(
             hint,
             style: GoogleFonts.outfit(
@@ -533,6 +854,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                   value: value,
                   child: Text(
                     value,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -707,6 +1030,10 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
         : const EdgeInsets.symmetric(horizontal: 12, vertical: 12);
 
+    final dealersToShow = filteredDealers;
+    final int totalCount = dealersToShow.length;
+    final int startCount = totalCount == 0 ? 0 : 1;
+
     return Container(
       padding: footerPadding,
       decoration: const BoxDecoration(
@@ -719,7 +1046,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           ? Column(
               children: [
                 Text(
-                  'Showing 1 to 10 of 1245 entries',
+                  'Showing $startCount to $totalCount of $totalCount entries',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
@@ -727,47 +1054,35 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildPaginationRow(isMobile),
+                _buildPaginationRow(isMobile, totalCount),
               ],
             )
           : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Showing 1 to 10 of 1245 entries',
+                  'Showing $startCount to $totalCount of $totalCount entries',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                _buildPaginationRow(isMobile),
+                _buildPaginationRow(isMobile, totalCount),
               ],
             ),
     );
   }
 
-  Widget _buildPaginationRow(bool isMobile) {
+  Widget _buildPaginationRow(bool isMobile, int totalCount) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildPaginationButton(Icons.chevron_left, false),
         const SizedBox(width: 8),
         _buildPaginationPage(1, true),
-        _buildPaginationPage(2, false),
-        _buildPaginationPage(3, false),
-        if (!isMobile) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              '...',
-              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-            ),
-          ),
-          _buildPaginationPage(125, false),
-        ],
         const SizedBox(width: 8),
-        _buildPaginationButton(Icons.chevron_right, true),
+        _buildPaginationButton(Icons.chevron_right, false),
       ],
     );
   }

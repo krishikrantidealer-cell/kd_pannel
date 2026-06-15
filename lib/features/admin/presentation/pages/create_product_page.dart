@@ -878,14 +878,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
     // Rate is per BASE unit; pack size is measured in PACK unit.
     // factor = how many base units one pack-unit equals.
 
-
     // Temporary variant map ref for the closure to read live values from.
     // We use a late-bound reference via a list so the closure captures the list,
     // not a String variable that was set at add-time.
     final variantRef = <Map<String, dynamic>>[];
 
     final double? initBasePackingVal = double.tryParse(basePackingValCtrl.text);
-    final double initialCanonicalVolume = initBasePackingVal != null && initBasePackingVal > 0
+    final double initialCanonicalVolume =
+        initBasePackingVal != null && initBasePackingVal > 0
         ? _getPackVolume('${basePackingValCtrl.text}$basePackUnit')
         : 1.0;
 
@@ -1474,7 +1474,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),
           'basePacking': v['basePacking'],
           // Explicit unit so backend/mobile can display ₹/pcs, ₹/lit, ₹/kg correctly
-          'basePackingUnit': _getBasePackingUnitFromString(v['basePacking'] ?? ''),
+          'basePackingUnit': _getBasePackingUnitFromString(
+            v['basePacking'] ?? '',
+          ),
           'weight': 0.0,
           'rates': v['rates'],
           'computedPrices': v['computedPrices'],
@@ -1599,7 +1601,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     // Sub-units: convert to the canonical larger unit
     if (unit == 'ml') return value / 1000.0; // ml → litres
-    if (unit == 'gm' || unit == 'gram' || unit == 'g') return value / 1000.0; // gm → kg
+    if (unit == 'gm' || unit == 'gram' || unit == 'g')
+      return value / 1000.0; // gm → kg
     // Canonical units: lit, kg, pcs — return value as-is
     return value;
   }
@@ -1614,7 +1617,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (match == null) return 'lit';
     final raw = match.group(1) ?? 'lit';
     if (raw == 'ml') return 'lit'; // ml stored as lit (volume)
-    if (raw == 'gm' || raw == 'gram' || raw == 'g') return 'kg'; // gm stored as kg (mass)
+    if (raw == 'gm' || raw == 'gram' || raw == 'g')
+      return 'kg'; // gm stored as kg (mass)
     if (raw == 'litre' || raw == 'l') return 'lit';
     if (raw == 'kilogram' || raw == 'k') return 'kg';
     if (raw == 'piece' || raw == 'pieces') return 'pcs';
@@ -2785,11 +2789,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           color: Color(0xFF94A3B8),
                         ),
                       ),
+                      padding: EdgeInsets.zero,
                       items: categoryOptions.map((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
                           child: Text(
                             value,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               color: AppTheme.textPrimary,
@@ -2927,6 +2934,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           color: const Color(0xFFCBD5E1),
                         ),
                       ),
+                      padding: EdgeInsets.zero,
                       icon: const Padding(
                         padding: EdgeInsets.only(right: 8),
                         child: Icon(
@@ -2942,6 +2950,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 value: value,
                                 child: Text(
                                   value,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                   style: GoogleFonts.outfit(
                                     fontSize: 14,
                                     color: AppTheme.textPrimary,
@@ -3207,6 +3217,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           isExpanded: true,
+                          padding: EdgeInsets.zero,
                           value: targetCategoryName,
                           items: _formCategories
                               .map(
@@ -3214,6 +3225,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                   value: c,
                                   child: Text(
                                     c,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                     style: GoogleFonts.outfit(fontSize: 14),
                                   ),
                                 ),
@@ -3394,6 +3407,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               isExpanded: true,
+              padding: EdgeInsets.zero,
               value: value,
               onChanged: onChanged,
               dropdownColor: Colors.white,
@@ -3409,6 +3423,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       value: val,
                       child: Text(
                         val,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                         style: GoogleFonts.outfit(
                           fontSize: 14,
                           color: AppTheme.textPrimary,
@@ -3646,7 +3662,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
           );
 
     // Get live suffix label for display
-    final String liveSuffix = _getRateSuffix(variant['basePackingUnit'] as String? ?? 'lit');
+    final String liveSuffix = _getRateSuffix(
+      variant['basePackingUnit'] as String? ?? 'lit',
+    );
 
     // MRP rate is always first
     final List<Widget> rateRowChildren = [
@@ -4182,6 +4200,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
+                        padding: EdgeInsets.zero,
                         hint: Text(
                           'Select Collection',
                           style: GoogleFonts.outfit(
@@ -4203,6 +4222,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             value: value,
                             child: Text(
                               value,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                               style: GoogleFonts.outfit(
                                 fontSize: 14,
                                 color: AppTheme.textPrimary,
@@ -4233,6 +4254,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           isExpanded: true,
+                          padding: EdgeInsets.zero,
                           value: _formSelectedSubCollection,
                           icon: const Padding(
                             padding: EdgeInsets.only(right: 8),
@@ -4249,6 +4271,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                               value: value,
                               child: Text(
                                 value,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                                 style: GoogleFonts.outfit(
                                   fontSize: 14,
                                   color: AppTheme.textPrimary,

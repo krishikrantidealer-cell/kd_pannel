@@ -30,11 +30,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   bool _tempDisableHover = false;
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
-    // {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
-    // {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
-    // {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
-    // {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 1},
-    // {'icon': Icons.support_agent_rounded, 'title': 'Support', 'index': 5},
     {
       'icon': Icons.production_quantity_limits_rounded,
       'title': 'Products',
@@ -44,6 +39,16 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       'icon': Icons.shopping_bag_rounded,
       'title': 'Orders',
       'index': 1,
+    },
+    {
+      'icon': Icons.campaign_rounded,
+      'title': 'Leads',
+      'index': 2,
+    },
+    {
+      'icon': Icons.storefront_rounded,
+      'title': 'Dealers',
+      'index': 3,
     },
   ];
 
@@ -297,73 +302,75 @@ class _SidebarHeader extends StatelessWidget {
               ),
 
               // Sliding Typographic Branding & Role Badge
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                width: isExpanded ? 132 : 0,
-                clipBehavior: Clip.hardEdge,
-                decoration: const BoxDecoration(),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 180),
-                  opacity: isExpanded ? 1.0 : 0.0,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(width: 8),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'KRISHI',
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.2,
-                                height: 1.1,
+              Flexible(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  width: isExpanded ? 132 : 0,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    opacity: isExpanded ? 1.0 : 0.0,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 8),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'KRISHI',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.2,
+                                  height: 1.1,
+                                ),
+                              ),
+                              Text(
+                                'DEALER',
+                                style: GoogleFonts.outfit(
+                                  color: AppTheme.accentColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                width: 0.5,
                               ),
                             ),
-                            Text(
-                              'DEALER',
+                            child: Text(
+                              role == UserRole.admin ? 'ADMIN' : 'SALES',
                               style: GoogleFonts.outfit(
-                                color: AppTheme.accentColor,
-                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 8,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: 1.2,
-                                height: 1.1,
+                                letterSpacing: 0.3,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            role == UserRole.admin ? 'ADMIN' : 'SALES',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -530,33 +537,35 @@ class _SidebarItemState extends State<_SidebarItem> {
                       ),
                     ),
 
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      width: widget.isExpanded ? 160 : 0,
-                      clipBehavior: Clip.hardEdge,
-                      decoration: const BoxDecoration(),
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 180),
-                        opacity: widget.isExpanded ? 1 : 0,
-                        child: Container(
-                          width: 160,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            widget.title,
-                            style: AppTheme.bodyLG.copyWith(
-                              color: Colors.white.withValues(
-                                alpha: showActive || _isHovered ? 1.0 : 0.75,
+                    Flexible(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        width: widget.isExpanded ? 160 : 0,
+                        clipBehavior: Clip.hardEdge,
+                        decoration: const BoxDecoration(),
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 180),
+                          opacity: widget.isExpanded ? 1 : 0,
+                          child: Container(
+                            width: 160,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              widget.title,
+                              style: AppTheme.bodyLG.copyWith(
+                                color: Colors.white.withValues(
+                                  alpha: showActive || _isHovered ? 1.0 : 0.75,
+                                ),
+                                fontWeight: showActive
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                fontSize: 13.5,
+                                letterSpacing: -0.2,
                               ),
-                              fontWeight: showActive
-                                  ? FontWeight.w800
-                                  : FontWeight.w600,
-                              fontSize: 13.5,
-                              letterSpacing: -0.2,
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              softWrap: false,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.clip,
-                            softWrap: false,
                           ),
                         ),
                       ),

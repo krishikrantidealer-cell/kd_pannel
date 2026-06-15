@@ -1623,7 +1623,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      padding: const EdgeInsets.all(10),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 40),
+                      fixedSize: const Size(40, 40),
                     ),
                     tooltip: 'Add Category',
                   )
@@ -1637,8 +1639,8 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                       elevation: 0,
                       padding: EdgeInsets.symmetric(
                         horizontal: isMobile ? 12 : 16,
-                        vertical: 12,
                       ),
+                      fixedSize: const Size.fromHeight(40),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

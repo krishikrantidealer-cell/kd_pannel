@@ -9,6 +9,15 @@ class Dealer {
   final String purchaseValue;
   final bool isHighValue;
   final bool isInactive;
+  final String? id;
+  final String? agentId;
+  final String? licenceImage;
+  final String? shopImage;
+  final String? gstNumber;
+  final String? email;
+  final String? userType;
+  final String? kycStatus;
+  final Map<String, dynamic>? address;
 
   Dealer({
     required this.name,
@@ -21,6 +30,15 @@ class Dealer {
     required this.purchaseValue,
     required this.isHighValue,
     required this.isInactive,
+    this.id,
+    this.agentId,
+    this.licenceImage,
+    this.shopImage,
+    this.gstNumber,
+    this.email,
+    this.userType,
+    this.kycStatus,
+    this.address,
   });
 }
 
