@@ -1721,8 +1721,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
                           },
                         ),
                         const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
                             Text(
                               'Description',
@@ -1733,6 +1736,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                               ),
                             ),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 TextButton.icon(
                                   onPressed: _showMobilePreview,

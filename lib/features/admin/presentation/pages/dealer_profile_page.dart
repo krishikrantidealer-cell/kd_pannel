@@ -1,66 +1,386 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
+import 'package:kd_pannel/util/dealers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-class DealerProfilePage extends StatelessWidget {
+class DealerProfilePage extends StatefulWidget {
   const DealerProfilePage({super.key});
 
   @override
+  State<DealerProfilePage> createState() => _DealerProfilePageState();
+}
+
+class _DealerProfilePageState extends State<DealerProfilePage> {
+  Dealer? _dealer;
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _salesAgents = [];
+  List<Map<String, dynamic>> _orders = [];
+  bool _isLoadingOrders = false;
+  String? _agentId;
+  String? _agentName;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_dealer == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Dealer) {
+        _dealer = args;
+        _agentId = args.agentId;
+        _agentName = args.agent;
+        _saveDealerToCache(_dealer!);
+        _refreshDealerDetails();
+      } else {
+        _loadDealerFromCache();
+      }
+      _fetchSalesAgents();
+      _fetchOrders();
+    }
+  }
+
+  Future<void> _saveDealerToCache(Dealer dealer) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('kd_current_dealer', jsonEncode(dealer.toMap()));
+    } catch (e) {
+      debugPrint('Error saving dealer to cache: $e');
+    }
+  }
+
+  Future<void> _loadDealerFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dealerStr = prefs.getString('kd_current_dealer');
+      if (dealerStr != null) {
+        if (mounted) {
+          setState(() {
+            _dealer = Dealer.fromMap(jsonDecode(dealerStr));
+            _agentId = _dealer?.agentId;
+            _agentName = _dealer?.agent;
+          });
+        }
+        _refreshDealerDetails();
+        _fetchOrders();
+      }
+    } catch (e) {
+      debugPrint('Error loading dealer from cache: $e');
+    }
+  }
+
+  Future<void> _refreshDealerDetails() async {
+    if (_dealer == null) return;
+    try {
+      final userId = _dealer!.id;
+      if (userId == null) return;
+      final res = await ApiClient().get('/users');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final users = List<Map<String, dynamic>>.from(data['users'] ?? []);
+          final freshUser = users.firstWhere(
+            (u) => u['_id'] == userId || u['id'] == userId,
+            orElse: () => <String, dynamic>{},
+          );
+          if (freshUser.isNotEmpty) {
+            final String agentName = freshUser['assignedAgent'] != null
+                ? '${freshUser['assignedAgent']['firstName'] ?? ''} ${freshUser['assignedAgent']['lastName'] ?? ''}'
+                      .trim()
+                : '-';
+
+            final String name =
+                (freshUser['shopName'] != null &&
+                    freshUser['shopName'].toString().trim().isNotEmpty)
+                ? freshUser['shopName']
+                : ((freshUser['firstName'] != null &&
+                          freshUser['firstName'].toString().trim().isNotEmpty)
+                      ? '${freshUser['firstName']} ${freshUser['lastName'] ?? ''}'
+                            .trim()
+                      : (freshUser['phoneNumber'] ?? 'Unnamed Dealer'));
+
+            final freshDealer = Dealer(
+              name: name,
+              phone: freshUser['phoneNumber'] ?? '',
+              city: freshUser['address']?['cityTehsil'] ?? '',
+              state: freshUser['address']?['state'] ?? '',
+              agent: agentName.isNotEmpty ? agentName : '-',
+              gstStatus: 'Verified',
+              totalOrders: _orders.length,
+              purchaseValue: _dealer!.purchaseValue,
+              isHighValue: _dealer!.isHighValue,
+              isInactive: _orders.isEmpty,
+              id: freshUser['_id'],
+              agentId: freshUser['assignedAgent']?['_id'],
+              licenceImage: freshUser['licenceImage'],
+              shopImage: freshUser['shopImage'],
+              gstNumber: freshUser['gstNumber'],
+              email: freshUser['email'],
+              userType: freshUser['userType'],
+              kycStatus: freshUser['kycStatus'],
+              address: freshUser['address'] != null
+                  ? Map<String, dynamic>.from(freshUser['address'])
+                  : null,
+            );
+
+            if (mounted) {
+              setState(() {
+                _dealer = freshDealer;
+                _agentId = freshDealer.agentId;
+                _agentName = freshDealer.agent;
+              });
+            }
+            _saveDealerToCache(freshDealer);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error refreshing dealer details: $e');
+    }
+  }
+
+  Future<void> _fetchSalesAgents() async {
+    try {
+      final res = await ApiClient().get('/users?role=sales');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && mounted) {
+          setState(() {
+            _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading sales agents: $e');
+    }
+  }
+
+  Future<void> _fetchOrders() async {
+    if (_dealer?.id == null) return;
+    setState(() => _isLoadingOrders = true);
+    try {
+      final res = await ApiClient().get('/orders/admin/all');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final List rawOrders = data['orders'] ?? [];
+          final String userId = _dealer!.id!;
+
+          final List<Map<String, dynamic>> filtered = [];
+          for (final o in rawOrders) {
+            if (o is Map && o['user']?['_id'] == userId) {
+              filtered.add(Map<String, dynamic>.from(o));
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              _orders = filtered;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading orders: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingOrders = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _assignAgent(String? newAgentId) async {
+    if (_dealer?.id == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient().put('/users/${_dealer!.id}/assign-agent', {
+        'agentId': newAgentId,
+      });
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Agent assigned successfully'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          if (mounted) {
+            setState(() {
+              final newAgent = data['user']?['assignedAgent'];
+              _agentId = newAgent?['_id'];
+              _agentName = newAgent != null
+                  ? '${newAgent['firstName'] ?? ''} ${newAgent['lastName'] ?? ''}'
+                        .trim()
+                  : '-';
+            });
+            final updatedDealer = Dealer(
+              name: _dealer!.name,
+              phone: _dealer!.phone,
+              city: _dealer!.city,
+              state: _dealer!.state,
+              agent: _agentName ?? _dealer!.agent,
+              gstStatus: _dealer!.gstStatus,
+              totalOrders: _dealer!.totalOrders,
+              purchaseValue: _dealer!.purchaseValue,
+              isHighValue: _dealer!.isHighValue,
+              isInactive: _dealer!.isInactive,
+              id: _dealer!.id,
+              agentId: _agentId ?? _dealer!.agentId,
+              licenceImage: _dealer!.licenceImage,
+              shopImage: _dealer!.shopImage,
+              gstNumber: _dealer!.gstNumber,
+              email: _dealer!.email,
+              userType: _dealer!.userType,
+              kycStatus: _dealer!.kycStatus,
+              address: _dealer!.address,
+            );
+            _saveDealerToCache(updatedDealer);
+          }
+        }
+      } else {
+        throw Exception('Failed to assign agent: ${res.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open link: $urlString'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_dealer == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
     final isMobile = Responsive.isMobile(context);
     final isTablet = Responsive.isTablet(context);
 
+    // Dynamic dealer updated by agent selection
+    final currentDealer = Dealer(
+      name: _dealer!.name,
+      phone: _dealer!.phone,
+      city: _dealer!.city,
+      state: _dealer!.state,
+      agent: _agentName ?? _dealer!.agent,
+      gstStatus: _dealer!.gstStatus,
+      totalOrders: _orders.length,
+      purchaseValue: _dealer!.purchaseValue,
+      isHighValue: _dealer!.isHighValue,
+      isInactive: _orders.isEmpty,
+      id: _dealer!.id,
+      agentId: _agentId ?? _dealer!.agentId,
+      licenceImage: _dealer!.licenceImage,
+      shopImage: _dealer!.shopImage,
+      gstNumber: _dealer!.gstNumber,
+      email: _dealer!.email,
+      userType: _dealer!.userType,
+      kycStatus: _dealer!.kycStatus,
+      address: _dealer!.address,
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-          vertical: isMobile ? 20 : 32,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. BREADCRUMB HEADER
-            _buildBreadcrumbs(context, isMobile),
-            SizedBox(height: isMobile ? 20 : 28),
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
+                vertical: isMobile ? 20 : 32,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. BACK HEADER
+                  _buildBreadcrumbs(context, isMobile),
+                  const SizedBox(height: 16),
 
-            // 2. PREMIUM HERO SECTION
-            const _DealerHeroCard(),
-            SizedBox(height: isMobile ? 24 : 32),
+                  // 2. HEADER SECTION
+                  _DealerHeroCard(dealer: currentDealer),
+                  const SizedBox(height: 24),
 
-            // 3. STATS CARDS ROW
-            const _StatsCardsSection(),
-            SizedBox(height: isMobile ? 24 : 32),
+                  // 3. STATS CARDS ROW
+                  _StatsCardsSection(dealer: currentDealer, orders: _orders),
+                  const SizedBox(height: 24),
 
-            // 4. INFORMATION & TIMELINE ROW
-            if (!isMobile)
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Expanded(flex: 1, child: _DealerInformationCard()),
-                    const SizedBox(width: 32),
-                    const Expanded(flex: 1, child: _ActivityTimelineCard()),
+                  // 4. INFORMATION & DOCUMENTS ROW
+                  if (!isMobile)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: _DealerInformationCard(
+                              dealer: currentDealer,
+                              salesAgents: _salesAgents,
+                              currentAgentId: _agentId,
+                              onAssignAgent: _assignAgent,
+                            ),
+                          ),
+                          const SizedBox(width: 32),
+                          Expanded(
+                            flex: 1,
+                            child: _DealerKycDocumentsCard(
+                              dealer: currentDealer,
+                              onViewDocument: _launchUrl,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    _DealerInformationCard(
+                      dealer: currentDealer,
+                      salesAgents: _salesAgents,
+                      currentAgentId: _agentId,
+                      onAssignAgent: _assignAgent,
+                    ),
+                    const SizedBox(height: 24),
+                    _DealerKycDocumentsCard(
+                      dealer: currentDealer,
+                      onViewDocument: _launchUrl,
+                    ),
                   ],
-                ),
-              )
-            else ...[
-              const _DealerInformationCard(),
-              const SizedBox(height: 24),
-              const _ActivityTimelineCard(),
-            ],
-            SizedBox(height: isMobile ? 24 : 32),
+                  const SizedBox(height: 24),
 
-            // 5. ORDER HISTORY SECTION
-            const _OrderHistoryCard(),
-            SizedBox(height: isMobile ? 24 : 32),
-
-            // 6. DOCUMENTS / KYC SECTION
-            const _DealerKycDocumentsCard(),
-            SizedBox(height: isMobile ? 24 : 40),
-          ],
-        ),
-      ),
+                  // 5. ORDER HISTORY SECTION
+                  _OrderHistoryCard(
+                    dealer: currentDealer,
+                    orders: _orders,
+                    isLoading: _isLoadingOrders,
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -69,30 +389,28 @@ class DealerProfilePage extends StatelessWidget {
       children: [
         IconButton(
           onPressed: () => Navigator.pop(context),
-          icon: Icon(
+          icon: const Icon(
             Icons.arrow_back,
-            size: isMobile ? 18 : 20,
-            color: const Color(0xFF6B7280),
+            size: 20,
+            color: Color(0xFF6B7280),
           ),
-          padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
+          padding: EdgeInsets.zero,
           splashRadius: 20,
         ),
-        const SizedBox(width: 12),
-        _BreadcrumbItem(label: 'Dealers', onTap: () => Navigator.pop(context)),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            '/',
-            style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 15),
-          ),
-        ),
-        const Text(
-          'Dealer Profile',
-          style: TextStyle(
-            color: Color(0xFF111827),
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Text(
+              'Back to Dealers',
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF6B7280),
+              ),
+            ),
           ),
         ),
       ],
@@ -100,214 +418,165 @@ class DealerProfilePage extends StatelessWidget {
   }
 }
 
-class _BreadcrumbItem extends StatefulWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _BreadcrumbItem({required this.label, required this.onTap});
-
-  @override
-  State<_BreadcrumbItem> createState() => _BreadcrumbItemState();
-}
-
-class _BreadcrumbItemState extends State<_BreadcrumbItem> {
-  bool isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => isHovered = true),
-      onExit: (_) => setState(() => isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Text(
-          widget.label,
-          style: TextStyle(
-            color: const Color(0xFF6B7280),
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            decoration: isHovered
-                ? TextDecoration.underline
-                : TextDecoration.none,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _DealerHeroCard extends StatelessWidget {
-  const _DealerHeroCard();
+  final Dealer dealer;
+  const _DealerHeroCard({required this.dealer});
 
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
     final isTablet = Responsive.isTablet(context);
 
+    final String initial = dealer.name.isNotEmpty
+        ? dealer.name.substring(0, 1).toUpperCase()
+        : 'J';
+
+    final Widget avatar = Container(
+      width: 48,
+      height: 48,
+      decoration: const BoxDecoration(
+        color: Color(0xFFE8F5E9),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: GoogleFonts.outfit(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF298E4D),
+          ),
+        ),
+      ),
+    );
+
     return Container(
       width: double.infinity,
-      constraints: BoxConstraints(minHeight: isMobile ? 0 : 240),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(isMobile ? 20 : 28),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFF3FAEE), Color(0xFFFFFDF0)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned(
-            right: isMobile ? -100 : -40,
-            bottom: isMobile ? -100 : -60,
-            child: Opacity(
-              opacity: 0.12,
-              child: Container(
-                width: isMobile ? 260 : 340,
-                height: isMobile ? 260 : 340,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2E7D32),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: isMobile ? 40 : 140,
-            top: isMobile ? -100 : -70,
-            child: Opacity(
-              opacity: 0.08,
-              child: Container(
-                width: isMobile ? 200 : 240,
-                height: isMobile ? 200 : 240,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4CAF50),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ),
-          if (!isMobile)
-            Positioned(
-              left: 48,
-              top: 48,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2E7D32).withOpacity(0.15),
-                      blurRadius: 50,
-                      spreadRadius: 20,
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dealer.name,
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1F2937),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          _buildStatusBadge(
+                            dealer.gstStatus,
+                            const Color(0xFF10B981),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.1)),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 20 : (isTablet ? 32 : 48),
-              vertical: isMobile ? 32 : 48,
-            ),
-            child: isMobile
-                ? _buildProfileInfo(context, isMobile, isTablet)
-                : Row(
+                const SizedBox(height: 16),
+                _buildContactRow(isMobile),
+                const SizedBox(height: 16),
+                _buildActionButtons(context, isMobile, isTablet),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                avatar,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _buildProfileInfo(context, isMobile, isTablet),
+                      Row(
+                        children: [
+                          Text(
+                            dealer.name,
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1F2937),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          _buildStatusBadge(
+                            dealer.gstStatus,
+                            const Color(0xFF10B981),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 48),
-                      _buildActionButtons(context, isMobile, isTablet),
+                      const SizedBox(height: 6),
+                      _buildContactRow(isMobile),
                     ],
                   ),
-          ),
-        ],
+                ),
+                const SizedBox(width: 24),
+                _buildActionButtons(context, isMobile, isTablet),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildContactRow(bool isMobile) {
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _buildContactItem(Icons.phone_outlined, dealer.phone),
+        _buildContactDivider(),
+        _buildContactItem(
+          Icons.location_on_outlined,
+          dealer.city.isNotEmpty
+              ? '${dealer.city}, ${dealer.state}'
+              : dealer.state,
+        ),
+        _buildContactDivider(),
+        _buildContactItem(Icons.person_outline, 'Agent: ${dealer.agent}'),
+      ],
+    );
+  }
+
+  Widget _buildContactDivider() {
+    return Container(
+      width: 4,
+      height: 4,
+      decoration: const BoxDecoration(
+        color: Color(0xFFD1D5DB),
+        shape: BoxShape.circle,
       ),
     );
   }
 
-  Widget _buildProfileInfo(BuildContext context, bool isMobile, bool isTablet) {
-    return Column(
-      crossAxisAlignment: isMobile
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildContactItem(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisAlignment: isMobile
-              ? MainAxisAlignment.center
-              : MainAxisAlignment.start,
-          children: [
-            Flexible(
-              child: Text(
-                'Jai Kisan Fertilizers',
-                textAlign: isMobile ? TextAlign.center : TextAlign.start,
-                style: TextStyle(
-                  fontSize: isMobile ? 26 : (isTablet ? 32 : 36),
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1B5E20),
-                  letterSpacing: isMobile ? -0.5 : -1.0,
-                ),
-              ),
-            ),
-            if (!isMobile) const SizedBox(width: 16),
-            if (!isMobile)
-              _buildStatusBadge('Verified', const Color(0xFF10B981)),
-          ],
-        ),
-        if (isMobile) const SizedBox(height: 8),
-        if (isMobile) _buildStatusBadge('Verified', const Color(0xFF10B981)),
-        const SizedBox(height: 20),
-        if (isMobile)
-          Column(
-            children: [
-              _buildHeroContactItem(Icons.phone_outlined, '98765 43210'),
-              const SizedBox(height: 8),
-              _buildHeroContactItem(
-                Icons.location_on_outlined,
-                'Pune, Maharashtra',
-              ),
-              const SizedBox(height: 8),
-              _buildHeroContactItem(
-                Icons.person_outline,
-                'Agent: Rajesh Kumar',
-              ),
-            ],
-          )
-        else
-          Wrap(
-            spacing: 28,
-            runSpacing: 12,
-            children: [
-              _buildHeroContactItem(Icons.phone_outlined, '98765 43210'),
-              _buildHeroContactItem(
-                Icons.location_on_outlined,
-                'Pune, Maharashtra',
-              ),
-              _buildHeroContactItem(
-                Icons.person_outline,
-                'Agent: Rajesh Kumar',
-              ),
-            ],
+        Icon(icon, size: 16, color: const Color(0xFF2E7D32)),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: const Color(0xFF4B5563),
+            fontWeight: FontWeight.w500,
           ),
-        if (isMobile) const SizedBox(height: 32),
-        if (isMobile) _buildActionButtons(context, isMobile, isTablet),
+        ),
       ],
     );
   }
@@ -317,31 +586,36 @@ class _DealerHeroCard extends StatelessWidget {
     bool isMobile,
     bool isTablet,
   ) {
-    final wrapAlignment = isMobile ? WrapAlignment.center : WrapAlignment.start;
-
     return Wrap(
-      alignment: wrapAlignment,
-      spacing: 12,
-      runSpacing: 12,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         _ActionButton(
           icon: Icons.call,
           label: 'Call',
           color: const Color(0xFF2E7D32),
           isSolid: true,
-          width: isMobile ? (MediaQuery.of(context).size.width - 84) / 2 : null,
+          onTap: () async {
+            final url = 'tel:${dealer.phone}';
+            final Uri uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            }
+          },
         ),
         _ActionButton(
-          icon: Icons.chat_bubble_outline,
+          icon: FontAwesomeIcons.whatsapp,
           label: 'WhatsApp',
-          color: const Color(0xFF128C7E),
-          width: isMobile ? (MediaQuery.of(context).size.width - 84) / 2 : null,
-        ),
-        _ActionButton(
-          icon: Icons.add_shopping_cart,
-          label: 'Create Order',
-          color: const Color(0xFFF57C00),
-          width: isMobile ? (MediaQuery.of(context).size.width - 44) : null,
+          color: const Color(0xFF25D366),
+          isSolid: true,
+          onTap: () async {
+            final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
+            final url = 'https://wa.me/$cleanPhone';
+            final Uri uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
         ),
       ],
     );
@@ -349,7 +623,7 @@ class _DealerHeroCard extends StatelessWidget {
 
   Widget _buildStatusBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
@@ -357,30 +631,12 @@ class _DealerHeroCard extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 11,
+        style: GoogleFonts.outfit(
+          fontSize: 10,
           fontWeight: FontWeight.w700,
           color: color,
         ),
       ),
-    );
-  }
-
-  Widget _buildHeroContactItem(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: const Color(0xFF2E7D32)),
-        const SizedBox(width: 10),
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 15,
-            color: Color(0xFF4B5563),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -391,6 +647,7 @@ class _ActionButton extends StatefulWidget {
   final Color color;
   final bool isSolid;
   final double? width;
+  final VoidCallback? onTap;
 
   const _ActionButton({
     required this.icon,
@@ -398,6 +655,7 @@ class _ActionButton extends StatefulWidget {
     required this.color,
     this.isSolid = false,
     this.width,
+    this.onTap,
   });
 
   @override
@@ -414,54 +672,48 @@ class _ActionButtonState extends State<_ActionButton> {
     return MouseRegion(
       onEnter: (_) => setState(() => isHovered = true),
       onExit: (_) => setState(() => isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: isMobile ? 48 : 44,
-        width: widget.width,
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 22),
-        decoration: BoxDecoration(
-          color: widget.isSolid
-              ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
-              : (isHovered ? widget.color.withOpacity(0.08) : Colors.white),
-          borderRadius: BorderRadius.circular(12),
-          border: widget.isSolid
-              ? null
-              : Border.all(
-                  color: widget.color.withOpacity(isHovered ? 0.8 : 0.4),
-                  width: 1.5,
-                ),
-          boxShadow: isHovered
-              ? [
-                  BoxShadow(
-                    color: widget.color.withOpacity(0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: isMobile ? 48 : 44,
+          width: widget.width,
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 22),
+          decoration: BoxDecoration(
+            color: widget.isSolid
+                ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
+                : (isHovered ? widget.color.withOpacity(0.08) : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: widget.isSolid
+                ? null
+                : Border.all(
+                    color: widget.color.withOpacity(isHovered ? 0.8 : 0.4),
+                    width: 1.5,
                   ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              widget.icon,
-              size: isMobile ? 18 : 19,
-              color: widget.isSolid ? Colors.white : widget.color,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                widget.label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: isMobile ? 13 : 14,
-                  fontWeight: FontWeight.w700,
-                  color: widget.isSolid ? Colors.white : widget.color,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: isMobile ? 18 : 19,
+                color: widget.isSolid ? Colors.white : widget.color,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  widget.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isMobile ? 13 : 14,
+                    fontWeight: FontWeight.w700,
+                    color: widget.isSolid ? Colors.white : widget.color,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -469,12 +721,64 @@ class _ActionButtonState extends State<_ActionButton> {
 }
 
 class _StatsCardsSection extends StatelessWidget {
-  const _StatsCardsSection();
+  final Dealer dealer;
+  final List<Map<String, dynamic>> orders;
+  const _StatsCardsSection({required this.dealer, required this.orders});
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
     final isMobile = Responsive.isMobile(context);
+
+    // Calculate dynamic values based on orders
+    String lastOrderDate = 'No Orders';
+    if (orders.isNotEmpty) {
+      dynamic latestDate =
+          orders.first['placedAt'] ?? orders.first['createdAt'];
+      if (latestDate != null) {
+        try {
+          final dt = DateTime.parse(latestDate.toString());
+          final months = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ];
+          lastOrderDate =
+              '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+        } catch (_) {}
+      }
+    }
+
+    String activeSince = 'New Account';
+    if (orders.isNotEmpty) {
+      dynamic oldestDateRaw =
+          orders.last['placedAt'] ?? orders.last['createdAt'];
+      if (oldestDateRaw != null) {
+        try {
+          final oldestDate = DateTime.parse(oldestDateRaw.toString());
+          final difference = DateTime.now().difference(oldestDate);
+          final years = difference.inDays ~/ 365;
+          final months = (difference.inDays % 365) ~/ 30;
+          if (years > 0) {
+            activeSince = '$years Year${years > 1 ? "s" : ""}';
+          } else if (months > 0) {
+            activeSince = '$months Month${months > 1 ? "s" : ""}';
+          } else {
+            activeSince =
+                '${difference.inDays} Day${difference.inDays > 1 ? "s" : ""}';
+          }
+        } catch (_) {}
+      }
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -482,26 +786,26 @@ class _StatsCardsSection extends StatelessWidget {
         final items = [
           {
             'title': 'Total Orders',
-            'value': '156',
-            'image': 'assets/images/order today.png',
+            'value': dealer.totalOrders.toString(),
+            'icon': Icons.shopping_bag_outlined,
             'color': Colors.blue,
           },
           {
             'title': 'Total Purchase Value',
-            'value': '₹ 12.5L',
-            'image': 'assets/images/Revenue.png',
+            'value': dealer.purchaseValue,
+            'icon': Icons.currency_rupee_outlined,
             'color': Colors.green,
           },
           {
             'title': 'Last Order Date',
-            'value': '24 Oct 2023',
-            'image': 'assets/images/Total dealer.png',
+            'value': lastOrderDate,
+            'icon': Icons.calendar_today_outlined,
             'color': Colors.purple,
           },
           {
             'title': 'Dealer Active Since',
-            'value': '2 Years',
-            'image': 'assets/images/New leads.png',
+            'value': activeSince,
+            'icon': Icons.timer_outlined,
             'color': Colors.orange,
           },
         ];
@@ -518,7 +822,7 @@ class _StatsCardsSection extends StatelessWidget {
                       child: _StatCard(
                         title: item['title'] as String,
                         value: item['value'] as String,
-                        image: item['image'] as String,
+                        icon: item['icon'] as IconData,
                         color: item['color'] as Color,
                       ),
                     ),
@@ -540,7 +844,7 @@ class _StatsCardsSection extends StatelessWidget {
                   width: width,
                   title: item['title'] as String,
                   value: item['value'] as String,
-                  image: item['image'] as String,
+                  icon: item['icon'] as IconData,
                   color: item['color'] as Color,
                 ),
               )
@@ -555,14 +859,14 @@ class _StatCard extends StatelessWidget {
   final double? width;
   final String title;
   final String value;
-  final String image;
+  final IconData icon;
   final Color color;
 
   const _StatCard({
     this.width,
     required this.title,
     required this.value,
-    required this.image,
+    required this.icon,
     required this.color,
   });
 
@@ -572,70 +876,54 @@ class _StatCard extends StatelessWidget {
 
     return Container(
       width: width,
-      height: isMobile ? 140 : 170,
+      height: isMobile ? 110 : 120,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Stack(
-        alignment: Alignment.topCenter,
+        alignment: Alignment.center,
         children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          Positioned(
+            left: 16,
             child: Container(
-              height: isMobile ? 65 : 80,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [color.withOpacity(0.15), color.withOpacity(0.01)],
-                ),
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.elliptical(
-                    isMobile ? 100 : 120,
-                    isMobile ? 25 : 35,
-                  ),
-                ),
+                color: color.withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, color: color, size: 20),
             ),
           ),
           Positioned(
-            top: isMobile ? 16 : 20,
-            child: SizedBox(
-              width: isMobile ? 36 : 42,
-              height: isMobile ? 36 : 42,
-              child: Image.asset(image, color: color, fit: BoxFit.contain),
-            ),
-          ),
-          Positioned(
-            bottom: isMobile ? 12 : 16,
+            left: 76,
+            right: 16,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: isMobile ? 10 : 12,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
                     color: const Color(0xFF6B7280),
                     fontWeight: FontWeight.w500,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: TextStyle(
-                    fontSize: isMobile ? 18 : 22,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1F2937),
+                  style: GoogleFonts.outfit(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF111827),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -647,57 +935,48 @@ class _StatCard extends StatelessWidget {
 }
 
 class _DealerInformationCard extends StatelessWidget {
-  const _DealerInformationCard();
+  final Dealer dealer;
+  final List<Map<String, dynamic>> salesAgents;
+  final String? currentAgentId;
+  final Function(String? agentId) onAssignAgent;
+
+  const _DealerInformationCard({
+    required this.dealer,
+    required this.salesAgents,
+    this.currentAgentId,
+    required this.onAssignAgent,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
+    final tier = dealer.isHighValue
+        ? 'Platinum Distributor'
+        : 'Authorized Dealer';
 
     return Container(
-      padding: EdgeInsets.all(isMobile ? 20 : 32),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Dealer Information',
-                style: TextStyle(
-                  fontSize: isMobile ? 18 : 20,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF111827),
-                ),
-              ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  size: 20,
-                  color: Color(0xFF6B7280),
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
+          Text(
+            'Dealer Information',
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF111827),
+            ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           _buildInfoRow(
             Icons.business_outlined,
             'Dealer Name',
-            'Jai Kisan Fertilizers',
+            dealer.name,
             Colors.green,
             isMobile,
           ),
@@ -705,7 +984,7 @@ class _DealerInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.phone_android_outlined,
             'Phone Number',
-            '+91 98765 43210',
+            dealer.phone,
             Colors.blue,
             isMobile,
           ),
@@ -713,7 +992,7 @@ class _DealerInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.map_outlined,
             'State',
-            'Maharashtra',
+            dealer.state.isNotEmpty ? dealer.state : '-',
             Colors.purple,
             isMobile,
           ),
@@ -721,7 +1000,7 @@ class _DealerInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.location_city_outlined,
             'City',
-            'Pune',
+            dealer.city.isNotEmpty ? dealer.city : '-',
             Colors.orange,
             isMobile,
           ),
@@ -729,7 +1008,7 @@ class _DealerInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.receipt_outlined,
             'GST Number',
-            '27ABCDE1234F1Z5',
+            dealer.gstNumber ?? 'Not Provided',
             Colors.red,
             isMobile,
           ),
@@ -737,17 +1016,116 @@ class _DealerInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.category_outlined,
             'Dealer Type',
-            'Platinum Retailer',
+            tier,
             Colors.teal,
             isMobile,
           ),
           _buildDivider(),
-          _buildInfoRow(
-            Icons.badge_outlined,
-            'Assigned Agent',
-            'Rajesh Kumar',
-            Colors.indigo,
-            isMobile,
+          // Custom row for Assigned Agent dropdown
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.badge_outlined,
+                    size: 14,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Assigned Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: const Color(0xFF6B7280),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value:
+                              salesAgents.any(
+                                (agent) => agent['_id'] == currentAgentId,
+                              )
+                              ? currentAgentId
+                              : null,
+                          isExpanded: false,
+                          isDense: true,
+                          alignment: Alignment.centerRight,
+                          icon: const Icon(Icons.arrow_drop_down, size: 16),
+                          hint: Text(
+                            '-',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: const Color(0xFF111827),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onChanged: (String? newAgentId) {
+                            onAssignAgent(newAgentId);
+                          },
+                          items: [
+                            DropdownMenuItem<String>(
+                              value: null,
+                              child: Text(
+                                '-',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: const Color(0xFF111827),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            ...salesAgents.map((agent) {
+                              final agentName =
+                                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                      .trim();
+                              return DropdownMenuItem<String>(
+                                value: agent['_id'],
+                                child: Text(
+                                  agentName.isNotEmpty
+                                      ? agentName
+                                      : (agent['phoneNumber'] ?? ''),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: const Color(0xFF111827),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -762,25 +1140,25 @@ class _DealerInformationCard extends StatelessWidget {
     bool isMobile,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 16, color: color),
+            child: Icon(icon, size: 14, color: color),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(
+              style: GoogleFonts.outfit(
                 fontSize: 13,
-                color: Color(0xFF6B7280),
+                color: const Color(0xFF6B7280),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -790,9 +1168,9 @@ class _DealerInformationCard extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF111827),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: const Color(0xFF111827),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -805,285 +1183,187 @@ class _DealerInformationCard extends StatelessWidget {
   Widget _buildDivider() => const Divider(height: 1, color: Color(0xFFF3F4F6));
 }
 
-class _ActivityTimelineCard extends StatelessWidget {
-  const _ActivityTimelineCard();
+class _OrderHistoryCard extends StatefulWidget {
+  final Dealer dealer;
+  final List<Map<String, dynamic>> orders;
+  final bool isLoading;
 
-  @override
-  Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 20 : 32),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Activity Timeline',
-            style: TextStyle(
-              fontSize: isMobile ? 18 : 20,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF111827),
-            ),
-          ),
-          const SizedBox(height: 32),
-          Column(
-            children: [
-              _buildTimelineItem(
-                icon: Icons.person_add_alt_1_outlined,
-                iconColor: Colors.blue,
-                title: 'Dealer Registered',
-                time: '12 Jan 2022, 10:30 AM',
-                isMobile: isMobile,
-              ),
-              _buildTimelineItem(
-                icon: Icons.verified_outlined,
-                iconColor: Colors.teal,
-                title: 'GST Verified',
-                time: '14 Jan 2022, 02:15 PM',
-                isMobile: isMobile,
-              ),
-              _buildTimelineItem(
-                icon: Icons.support_agent_outlined,
-                iconColor: Colors.purple,
-                title: 'Sales Agent Assigned',
-                time: '15 Jan 2022, 11:00 AM',
-                isMobile: isMobile,
-              ),
-              _buildTimelineItem(
-                icon: Icons.shopping_bag_outlined,
-                iconColor: const Color(0xFFF57C00),
-                title: 'First Order Created',
-                time: '20 Jan 2022, 04:30 PM',
-                isMobile: isMobile,
-              ),
-              _buildTimelineItem(
-                icon: Icons.check_circle_outline,
-                iconColor: const Color(0xFF2E7D32),
-                title: 'Purchase Completed',
-                time: '24 Oct 2023, 05:20 PM',
-                isLast: true,
-                isMobile: isMobile,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFE5E7EB)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-              ),
-              child: const Text(
-                'See More',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimelineItem({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String time,
-    bool isLast = false,
-    required bool isMobile,
-  }) {
-    final item = _TimelineItem(
-      icon: icon,
-      iconColor: iconColor,
-      title: title,
-      time: time,
-      isLast: isLast,
-    );
-
-    if (isMobile) {
-      return Padding(padding: const EdgeInsets.only(bottom: 24), child: item);
-    }
-
-    return Expanded(child: item);
-  }
-}
-
-class _TimelineItem extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String time;
-  final bool isLast;
-
-  const _TimelineItem({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.time,
-    this.isLast = false,
+  const _OrderHistoryCard({
+    required this.dealer,
+    required this.orders,
+    required this.isLoading,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.12),
-                shape: BoxShape.circle,
-                border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
-              ),
-              child: Icon(icon, size: 18, color: iconColor),
-            ),
-            if (!isLast)
-              Expanded(
-                child: Container(
-                  width: 2.5,
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        iconColor.withOpacity(0.4),
-                        const Color(0xFFE5E7EB),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: isMobile
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        time,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF9CA3AF),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1F2937),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        time,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF9CA3AF),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
+  State<_OrderHistoryCard> createState() => _OrderHistoryCardState();
 }
 
-class _OrderHistoryCard extends StatelessWidget {
-  const _OrderHistoryCard();
+class _OrderHistoryCardState extends State<_OrderHistoryCard> {
+  int currentPage = 1;
+  static const int pageSize = 5;
+
+  String _formatAmt(double val) {
+    final s = val.toInt().toString();
+    if (s.length <= 3) return s;
+    final lastThree = s.substring(s.length - 3);
+    var otherParts = s.substring(0, s.length - 3);
+    if (otherParts.isNotEmpty) {
+      otherParts = otherParts.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d\d)+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+      return '$otherParts,$lastThree';
+    }
+    return lastThree;
+  }
+
+  String _getProductsSummary(Map<String, dynamic> order) {
+    final items = order['items'] as List?;
+    if (items == null || items.isEmpty) return 'No Products';
+    return items
+        .map((i) => i['title'] ?? '')
+        .where((t) => t.toString().isNotEmpty)
+        .join(', ');
+  }
+
+  String _formatDate(dynamic dateString) {
+    if (dateString == null) return '-';
+    try {
+      final dt = DateTime.parse(dateString.toString());
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return dateString.toString();
+    }
+  }
+
+  String _formatAmount(dynamic amt) {
+    if (amt == null) return '₹ 0';
+    double val = 0.0;
+    if (amt is num) {
+      val = amt.toDouble();
+    } else {
+      val = double.tryParse(amt.toString()) ?? 0.0;
+    }
+    return '₹ ${_formatAmt(val)}';
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+      case 'delivered':
+        return const Color(0xFF10B981);
+      case 'pending':
+      case 'processing':
+      case 'shipped':
+      case 'out for delivery':
+        return const Color(0xFFF59E0B);
+      case 'cancelled':
+      case 'failed':
+      default:
+        return const Color(0xFFEF4444);
+    }
+  }
+
+  void _openOrder(Map<String, dynamic> rawOrder) {
+    final orderModel = OrderModel.fromJson(rawOrder);
+    Navigator.pushNamed(context, '/orders/details', arguments: orderModel);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
+    final totalOrders = widget.orders.length;
+
+    final int totalPages = (totalOrders / pageSize).ceil().clamp(1, 9999);
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+
+    final startIndex = (currentPage - 1) * pageSize;
+    final endIndex = startIndex + pageSize;
+    final currentPageOrders = widget.orders.sublist(
+      startIndex,
+      endIndex > totalOrders ? totalOrders : endIndex,
+    );
 
     return Container(
-      padding: EdgeInsets.all(isMobile ? 20 : 32),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Order History',
-            style: TextStyle(
-              fontSize: isMobile ? 18 : 20,
+            style: GoogleFonts.outfit(
+              fontSize: 15,
               fontWeight: FontWeight.w800,
               color: const Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 24),
-          _buildOrderTable(context, isMobile),
-          const SizedBox(height: 24),
-          _buildPagination(isMobile),
+          const SizedBox(height: 16),
+          if (widget.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: CircularProgressIndicator(color: AppTheme.primaryColor),
+              ),
+            )
+          else ...[
+            _buildOrderTable(context, isMobile, currentPageOrders),
+            const SizedBox(height: 16),
+            _buildPagination(
+              isMobile,
+              totalOrders,
+              startIndex,
+              endIndex,
+              totalPages,
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildOrderTable(BuildContext context, bool isMobile) {
-    final table = Table(
+  Widget _buildOrderTable(
+    BuildContext context,
+    bool isMobile,
+    List<Map<String, dynamic>> orders,
+  ) {
+    if (orders.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            'No orders found.',
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: const Color(0xFF6B7280),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final tableWidget = Table(
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       columnWidths: const {
         0: FlexColumnWidth(1.2),
@@ -1095,8 +1375,9 @@ class _OrderHistoryCard extends StatelessWidget {
       children: [
         TableRow(
           decoration: const BoxDecoration(
+            color: Color(0xFFF9FAFB),
             border: Border(
-              bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1.5),
+              bottom: BorderSide(color: AppTheme.borderColor, width: 1.5),
             ),
           ),
           children: [
@@ -1107,71 +1388,54 @@ class _OrderHistoryCard extends StatelessWidget {
             _headerCell('Status', isCenter: true),
           ],
         ),
-        _orderRow(
-          '#ORD-1024',
-          'NPK 19:19:19, Urea',
-          '24 Oct 2023',
-          '₹ 24,500',
-          'Completed',
-          const Color(0xFF10B981),
-        ),
-        _orderRow(
-          '#ORD-1021',
-          'Hybrid Seeds, Potash',
-          '20 Oct 2023',
-          '₹ 12,200',
-          'Pending',
-          const Color(0xFFF59E0B),
-        ),
-        _orderRow(
-          '#ORD-1018',
-          'Drip Pipes, Filters',
-          '15 Oct 2023',
-          '₹ 45,000',
-          'Completed',
-          const Color(0xFF10B981),
-        ),
-        _orderRow(
-          '#ORD-1015',
-          'Water Soluble Fert.',
-          '10 Oct 2023',
-          '₹ 8,400',
-          'Cancelled',
-          const Color(0xFFEF4444),
-        ),
-        _orderRow(
-          '#ORD-1012',
-          'Pesticides, Spray',
-          '05 Oct 2023',
-          '₹ 15,600',
-          'Completed',
-          const Color(0xFF10B981),
-        ),
+        ...orders.map((o) {
+          final String id = o['orderId'] ?? o['_id'] ?? '';
+          final String products = _getProductsSummary(o);
+          final String date = _formatDate(o['placedAt'] ?? o['createdAt']);
+          final String amount = _formatAmount(o['totalAmount']);
+          final String status = o['orderStatus'] ?? 'Processing';
+          final Color color = _getStatusColor(status);
+
+          return _orderRow(id, products, date, amount, status, color, o);
+        }),
       ],
     );
 
-    if (!isMobile) return table;
+    final borderedTable = Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppTheme.borderColor),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: tableWidget,
+    );
+
+    if (!isMobile) return borderedTable;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: SizedBox(width: 600, child: table),
+      child: SizedBox(width: 600, child: borderedTable),
     );
   }
 
   Widget _headerCell(String text, {bool isCenter = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 8, right: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       child: isCenter
-          ? Center(child: Text(text, style: _headerStyle))
-          : Text(text, style: _headerStyle),
+          ? Center(
+              child: Text(
+                text.toUpperCase(),
+                style: AppTheme.tableHeader.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          : Text(
+              text.toUpperCase(),
+              style: AppTheme.tableHeader.copyWith(fontWeight: FontWeight.w800),
+            ),
     );
   }
-
-  static const _headerStyle = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.bold,
-    color: Color(0xFF9CA3AF),
-  );
 
   TableRow _orderRow(
     String id,
@@ -1180,195 +1444,307 @@ class _OrderHistoryCard extends StatelessWidget {
     String amt,
     String status,
     Color statusColor,
+    Map<String, dynamic> rawOrder,
   ) {
     return TableRow(
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFF9FAFB))),
+        border: Border(bottom: BorderSide(color: AppTheme.lightBorderColor)),
       ),
       children: [
-        _cell(id, isBold: true),
-        _cell(prod),
-        _cell(date),
-        _cell(amt, isBold: true),
-        Center(child: _statusBadge(status, statusColor)),
+        _cell(id, isLink: true, onTap: () => _openOrder(rawOrder)),
+        _cell(prod, onTap: () => _openOrder(rawOrder)),
+        _cell(date, onTap: () => _openOrder(rawOrder)),
+        _cell(amt, isBold: true, onTap: () => _openOrder(rawOrder)),
+        Center(
+          child: _statusBadge(
+            status,
+            statusColor,
+            onTap: () => _openOrder(rawOrder),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _cell(String text, {bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          color: isBold ? const Color(0xFF111827) : const Color(0xFF4B5563),
-          fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+  Widget _cell(
+    String text, {
+    bool isBold = false,
+    bool isLink = false,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: onTap != null
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Text(
+            text,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              color: isLink
+                  ? AppTheme.primaryColor
+                  : (isBold
+                        ? const Color(0xFF111827)
+                        : const Color(0xFF4B5563)),
+              fontWeight: (isBold || isLink)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              decoration: isLink
+                  ? TextDecoration.underline
+                  : TextDecoration.none,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _statusBadge(String status, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status,
-        style: const TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-          letterSpacing: 0.1,
+  Widget _statusBadge(String status, Color color, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: onTap != null
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            status,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPagination(bool isMobile) {
+  Widget _buildPagination(
+    bool isMobile,
+    int totalOrders,
+    int startIndex,
+    int endIndex,
+    int totalPages,
+  ) {
+    final showStart = totalOrders == 0 ? 0 : startIndex + 1;
+    final showEnd = endIndex > totalOrders ? totalOrders : endIndex;
+
     return isMobile
         ? Column(
             children: [
-              const Text(
-                'Showing 1 to 5 of 156 entries',
-                style: TextStyle(
+              Text(
+                'Showing $showStart to $showEnd of $totalOrders entries',
+                style: GoogleFonts.outfit(
                   fontSize: 12,
-                  color: Color(0xFF6B7280),
+                  color: const Color(0xFF6B7280),
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 12),
-              _buildPaginationControls(),
+              _buildPaginationControls(totalPages),
             ],
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Showing 1 to 5 of 156 entries',
-                style: TextStyle(
+              Text(
+                'Showing $showStart to $showEnd of $totalOrders entries',
+                style: GoogleFonts.outfit(
                   fontSize: 13,
-                  color: Color(0xFF6B7280),
+                  color: const Color(0xFF6B7280),
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              _buildPaginationControls(),
+              _buildPaginationControls(totalPages),
             ],
           );
   }
 
-  Widget _buildPaginationControls() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _pbtn(Icons.chevron_left, false),
-        const SizedBox(width: 8),
-        _pnum(1, true),
-        _pnum(2, false),
-        _pnum(3, false),
-        const SizedBox(width: 8),
-        _pbtn(Icons.chevron_right, true),
-      ],
+  Widget _buildPaginationControls(int totalPages) {
+    final List<Widget> children = [];
+
+    // Left arrow
+    children.add(
+      _pbtn(Icons.chevron_left, currentPage > 1, () {
+        if (currentPage > 1) {
+          setState(() => currentPage--);
+        }
+      }),
     );
+    children.add(const SizedBox(width: 8));
+
+    // Page numbers
+    for (int i = 1; i <= totalPages; i++) {
+      if (i == 1 ||
+          i == totalPages ||
+          (i >= currentPage - 1 && i <= currentPage + 1)) {
+        children.add(
+          _pnum(i, i == currentPage, () {
+            setState(() => currentPage = i);
+          }),
+        );
+      } else if (i == 2 && currentPage > 3) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '...',
+              style: GoogleFonts.outfit(color: const Color(0xFF9CA3AF)),
+            ),
+          ),
+        );
+      } else if (i == totalPages - 1 && currentPage < totalPages - 2) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '...',
+              style: GoogleFonts.outfit(color: const Color(0xFF9CA3AF)),
+            ),
+          ),
+        );
+      }
+    }
+
+    children.add(const SizedBox(width: 8));
+    // Right arrow
+    children.add(
+      _pbtn(Icons.chevron_right, currentPage < totalPages, () {
+        if (currentPage < totalPages) {
+          setState(() => currentPage++);
+        }
+      }),
+    );
+
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 
-  Widget _pbtn(IconData icon, bool enabled) => Container(
-    width: 32,
-    height: 32,
-    decoration: BoxDecoration(
-      border: Border.all(color: const Color(0xFFE5E7EB)),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Icon(
-      icon,
-      size: 18,
-      color: enabled ? const Color(0xFF6B7280) : const Color(0xFFD1D5DB),
-    ),
-  );
+  Widget _pbtn(IconData icon, bool enabled, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+              borderRadius: BorderRadius.circular(6),
+              color: enabled ? Colors.white : const Color(0xFFF3F4F6),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: enabled
+                  ? const Color(0xFF6B7280)
+                  : const Color(0xFFD1D5DB),
+            ),
+          ),
+        ),
+      );
 
-  Widget _pnum(int n, bool active) => Container(
-    width: 32,
-    height: 32,
-    margin: const EdgeInsets.symmetric(horizontal: 4),
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: active ? AppTheme.primaryColor : Colors.white,
-      border: Border.all(
-        color: active ? AppTheme.primaryColor : const Color(0xFFE5E7EB),
-      ),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      '$n',
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: active ? Colors.white : const Color(0xFF4B5563),
+  Widget _pnum(int n, bool active, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primaryColor : Colors.white,
+          border: Border.all(
+            color: active ? AppTheme.primaryColor : const Color(0xFFE5E7EB),
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '$n',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : const Color(0xFF4B5563),
+          ),
+        ),
       ),
     ),
   );
 }
 
 class _DealerKycDocumentsCard extends StatelessWidget {
-  const _DealerKycDocumentsCard();
+  final Dealer dealer;
+  final Function(String url) onViewDocument;
+
+  const _DealerKycDocumentsCard({
+    required this.dealer,
+    required this.onViewDocument,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
+    final hasLicence =
+        dealer.licenceImage != null && dealer.licenceImage!.isNotEmpty;
+    final hasShopImage =
+        dealer.shopImage != null && dealer.shopImage!.isNotEmpty;
 
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(isMobile ? 20 : 32),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Dealer KYC Documents',
-            style: TextStyle(
-              fontSize: isMobile ? 18 : 20,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
               fontWeight: FontWeight.w800,
               color: const Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 32),
-          if (isMobile)
-            Column(
-              children: [
-                _KycDocumentCard(
-                  title: 'GST Certificate',
-                  status: 'Verified',
-                  subtext: '27ABCDE1234F1Z5',
-                  icon: Icons.description_outlined,
-                ),
-              ],
-            )
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _KycDocumentCard(
-                  title: 'GST Certificate',
-                  status: 'Verified',
-                  subtext: '27ABCDE1234F1Z5',
-                  icon: Icons.description_outlined,
-                ),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Column(
+            children: [
+              _KycDocumentCard(
+                title: 'GST Certificate / Licence',
+                status: dealer.kycStatus ?? 'Verified',
+                subtext:
+                    dealer.gstNumber != null && dealer.gstNumber!.isNotEmpty
+                    ? dealer.gstNumber
+                    : 'No GST Number',
+                icon: Icons.description_outlined,
+                onTap: hasLicence
+                    ? () => onViewDocument(dealer.licenceImage!)
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              _KycDocumentCard(
+                title: 'Shop Image',
+                status: dealer.kycStatus ?? 'Verified',
+                subtext: 'Exterior photo of dealer shop',
+                icon: Icons.storefront_outlined,
+                onTap: hasShopImage
+                    ? () => onViewDocument(dealer.shopImage!)
+                    : null,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1380,12 +1756,14 @@ class _KycDocumentCard extends StatefulWidget {
   final String status;
   final String? subtext;
   final IconData icon;
+  final VoidCallback? onTap;
 
   const _KycDocumentCard({
     required this.title,
     required this.status,
     this.subtext,
     required this.icon,
+    this.onTap,
   });
 
   @override
@@ -1397,107 +1775,90 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isMobile = Responsive.isMobile(context);
+    final String displayStatus = widget.status.toUpperCase();
+    const Color badgeColor = Color(0xFF10B981);
 
-    return Expanded(
-      flex: isMobile ? 0 : 1,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => isHovered = true),
-        onExit: (_) => setState(() => isHovered = false),
+    return MouseRegion(
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isHovered
-                  ? const Color(0xFF2E7D32).withOpacity(0.5)
-                  : const Color(0xFFE5E7EB),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isHovered
-                    ? const Color(0xFF2E7D32).withOpacity(0.08)
-                    : Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: isHovered && widget.onTap != null
+                ? const Color(0xFFF3F4F6)
+                : const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F8E9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      widget.icon,
-                      size: 20,
-                      color: const Color(0xFF2E7D32),
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          size: 12,
-                          color: Color(0xFF10B981),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.status,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF10B981),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1F2937),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE8F5E9),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 16,
+                  color: const Color(0xFF2E7D32),
                 ),
               ),
-              const SizedBox(height: 6),
-              if (widget.subtext != null)
-                Text(
-                  widget.subtext!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6B7280),
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
-                )
-              else
-                const SizedBox(height: 14),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    if (widget.subtext != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtext!,
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: const Color(0xFF6B7280),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildStatusBadge(displayStatus, badgeColor),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

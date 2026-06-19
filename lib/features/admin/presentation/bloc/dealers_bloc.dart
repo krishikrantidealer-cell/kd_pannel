@@ -1,0 +1,182 @@
+import 'dart:convert';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dealers_event.dart';
+import 'dealers_state.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
+
+class DealersBloc extends Bloc<DealersEvent, DealersState> {
+  DealersBloc() : super(const DealersState()) {
+    on<FetchDealersDataEvent>(_onFetchDealersData);
+    on<AssignAgentToDealerEvent>(_onAssignAgentToDealer);
+    on<CreateSalesAgentEvent>(_onCreateSalesAgent);
+    on<UpdateDealersFilterEvent>(_onUpdateDealersFilter);
+    on<ClearDealersMessageEvent>(_onClearDealersMessage);
+  }
+
+  Future<void> _onFetchDealersData(
+    FetchDealersDataEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.loading));
+    try {
+      final client = ApiClient();
+      final results = await Future.wait([
+        client.get('/users'),
+        client.get('/users?role=sales'),
+        client.get('/orders/admin/all'),
+      ]);
+
+      final usersRes = results[0];
+      final salesRes = results[1];
+      final ordersRes = results[2];
+
+      List<Map<String, dynamic>> users = [];
+      List<Map<String, dynamic>> salesAgents = [];
+      List<Map<String, dynamic>> orders = [];
+
+      if (usersRes.statusCode == 200) {
+        final data = jsonDecode(usersRes.body);
+        if (data['success'] == true) {
+          users = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        } else {
+          throw Exception(data['message'] ?? 'Failed to parse users');
+        }
+      } else {
+        throw Exception('Failed to load users: ${usersRes.statusCode}');
+      }
+
+      if (salesRes.statusCode == 200) {
+        final data = jsonDecode(salesRes.body);
+        if (data['success'] == true) {
+          salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        } else {
+          throw Exception(data['message'] ?? 'Failed to parse sales agents');
+        }
+      } else {
+        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
+      }
+
+      if (ordersRes.statusCode == 200) {
+        final data = jsonDecode(ordersRes.body);
+        if (data['success'] == true) {
+          orders = List<Map<String, dynamic>>.from(data['orders'] ?? []);
+        } else {
+          throw Exception(data['message'] ?? 'Failed to parse orders');
+        }
+      } else {
+        throw Exception('Failed to load orders: ${ordersRes.statusCode}');
+      }
+
+      emit(state.copyWith(
+        status: DealersStatus.success,
+        allRawUsers: users,
+        salesAgents: salesAgents,
+        allRawOrders: orders,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        status: DealersStatus.failure,
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onAssignAgentToDealer(
+    AssignAgentToDealerEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final res = await ApiClient().put('/users/${event.userId}/assign-agent', {
+        'agentId': event.agentId,
+      });
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWithMessages(
+            status: DealersStatus.success,
+            actionSuccessMessage: 'Agent assigned successfully',
+          ));
+          // Refresh list
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to assign agent');
+        }
+      } else {
+        throw Exception('Failed to assign agent: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWithMessages(
+        status: DealersStatus.success, // Keep success status to show existing tables
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onCreateSalesAgent(
+    CreateSalesAgentEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final res = await ApiClient().post('/users/sales', {
+        'firstName': event.firstName.trim(),
+        'lastName': event.lastName.trim(),
+        'email': event.email.trim(),
+        'phoneNumber': event.phoneNumber.trim(),
+        'password': event.password,
+      });
+
+      if (res.statusCode == 201) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWithMessages(
+            status: DealersStatus.success,
+            actionSuccessMessage: 'Sales agent created successfully',
+          ));
+          // Refresh list
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to create sales agent');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Failed to create sales agent');
+      }
+    } catch (e) {
+      emit(state.copyWithMessages(
+        status: DealersStatus.success, // Keep success status to show existing tables
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  void _onUpdateDealersFilter(
+    UpdateDealersFilterEvent event,
+    Emitter<DealersState> emit,
+  ) {
+    emit(state.copyWith(
+      searchQuery: event.searchQuery,
+      selectedAgent: event.selectedAgent,
+      selectedState: event.selectedState,
+      selectedTimeframe: event.selectedTimeframe,
+      customStartDate: event.customStartDate,
+      customEndDate: event.customEndDate,
+      showHighValueOnly: event.showHighValueOnly,
+      showInactiveOnly: event.showInactiveOnly,
+      currentPage: event.currentPage,
+      pageSize: event.pageSize,
+    ));
+  }
+
+  void _onClearDealersMessage(
+    ClearDealersMessageEvent event,
+    Emitter<DealersState> emit,
+  ) {
+    emit(state.copyWith(
+      errorMessage: null,
+      actionSuccessMessage: null,
+    ));
+  }
+}

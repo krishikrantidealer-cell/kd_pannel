@@ -43,4 +43,4 @@ app.*.map.json
 .fvm/
 
 # Flutter build directory
-build/
+# build/

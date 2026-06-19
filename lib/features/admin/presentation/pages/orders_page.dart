@@ -1,254 +1,16 @@
 import 'dart:ui' as ui;
-import 'dart:convert';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/features/admin/data/models/order_model.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 
-// --- MODELS ALIGNED WITH BACKEND SCHEMA (Order.js) ---
-
-class OrderItem {
-  final String productId;
-  final String variantId;
-  final String title;
-  final String? vendor;
-  final String? technicalName;
-  final String? image;
-  final int quantity;
-  final double price;
-  final String? variantSize;
-  final String? basePacking;
-
-  OrderItem({
-    required this.productId,
-    required this.variantId,
-    required this.title,
-    this.vendor,
-    this.technicalName,
-    this.image,
-    required this.quantity,
-    required this.price,
-    this.variantSize,
-    this.basePacking,
-  });
-
-  factory OrderItem.fromJson(Map<String, dynamic> json) {
-    final productMap = json['product'] as Map<String, dynamic>?;
-    String? sizeVal;
-    String? basePackingVal;
-    if (productMap != null && productMap['variants'] is List) {
-      final variantsList = productMap['variants'] as List;
-      final matchingVariant = variantsList.firstWhere(
-        (v) => v is Map && v['_id']?.toString() == json['variantId']?.toString(),
-        orElse: () => null,
-      );
-      if (matchingVariant != null && matchingVariant is Map) {
-        sizeVal = matchingVariant['size']?.toString();
-        basePackingVal = matchingVariant['basePacking']?.toString();
-      }
-    }
-
-    return OrderItem(
-      productId: json['product'] is Map ? (json['product']['_id'] ?? '') : (json['product'] ?? ''),
-      variantId: json['variantId'] ?? '',
-      title: json['title'] ?? '',
-      vendor: json['vendor'],
-      technicalName: json['technicalName'],
-      image: json['image'],
-      quantity: json['quantity'] ?? 0,
-      price: (json['price'] as num?)?.toDouble() ?? 0.0,
-      variantSize: sizeVal,
-      basePacking: basePackingVal,
-    );
-  }
-}
-
-class FreeItem {
-  final String name;
-  final String? imageUrl;
-  final int quantity;
-  final bool isFree;
-
-  FreeItem({
-    required this.name,
-    this.imageUrl,
-    required this.quantity,
-    this.isFree = true,
-  });
-
-  factory FreeItem.fromJson(Map<String, dynamic> json) {
-    return FreeItem(
-      name: json['name'] ?? '',
-      imageUrl: json['imageUrl'],
-      quantity: json['quantity'] ?? 1,
-      isFree: json['isFree'] ?? true,
-    );
-  }
-}
-
-class ShippingAddress {
-  final String? name;
-  final String? phoneNumber;
-  final String villageArea;
-  final String cityTehsil;
-  final String? state;
-  final String pincode;
-
-  ShippingAddress({
-    this.name,
-    this.phoneNumber,
-    required this.villageArea,
-    required this.cityTehsil,
-    this.state,
-    required this.pincode,
-  });
-
-  factory ShippingAddress.fromJson(Map<String, dynamic> json) {
-    return ShippingAddress(
-      name: json['name'],
-      phoneNumber: json['phoneNumber'],
-      villageArea: json['villageArea'] ?? '',
-      cityTehsil: json['cityTehsil'] ?? '',
-      state: json['state'],
-      pincode: json['pincode'] ?? '',
-    );
-  }
-}
-
-class OrderModel {
-  final String id;
-  final String orderId;
-  final String customerName;
-  final String? shopName;
-  final String customerPhone;
-  final String customerRole; // 'Dealer' or 'Lead'
-  final List<OrderItem> items;
-  final double totalAmount;
-  final double discountAmount;
-  final String? couponCode;
-  final List<FreeItem> freeItems;
-  final ShippingAddress shippingAddress;
-  final String paymentMethod; // 'Online', 'Partial'
-  String paymentStatus; // 'Pending', 'Paid', 'Failed', 'Partially Paid'
-  final String? razorpayPaymentId;
-  final double advanceAmount;
-  final double remainingAmount;
-  String orderStatus; // 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled', 'RTO'
-  String? courierStatus;
-  String? awbNumber;
-  String? courierName;
-  String? trackingUrl;
-  final DateTime placedAt;
-  DateTime? processingAt;
-  DateTime? shippedAt;
-  DateTime? outForDeliveryAt;
-  DateTime? deliveredAt;
-  DateTime? cancelledAt;
-  DateTime? rtoAt;
-  final String? assignedAgent;
-
-  OrderModel({
-    required this.id,
-    required this.orderId,
-    required this.customerName,
-    this.shopName,
-    required this.customerPhone,
-    required this.customerRole,
-    required this.items,
-    required this.totalAmount,
-    this.discountAmount = 0.0,
-    this.couponCode,
-    this.freeItems = const [],
-    required this.shippingAddress,
-    required this.paymentMethod,
-    required this.paymentStatus,
-    this.razorpayPaymentId,
-    this.advanceAmount = 0.0,
-    this.remainingAmount = 0.0,
-    required this.orderStatus,
-    this.courierStatus,
-    this.awbNumber,
-    this.courierName,
-    this.trackingUrl,
-    required this.placedAt,
-    this.processingAt,
-    this.shippedAt,
-    this.outForDeliveryAt,
-    this.deliveredAt,
-    this.cancelledAt,
-    this.rtoAt,
-    this.assignedAgent,
-  });
-
-  factory OrderModel.fromJson(Map<String, dynamic> json) {
-    final userJson = json['user'] as Map<String, dynamic>?;
-    String customerName = 'Unknown Customer';
-    String? shopName;
-    String customerPhone = '';
-    String customerRole = 'Lead';
-    if (userJson != null) {
-      final firstName = userJson['firstName'] ?? '';
-      final lastName = userJson['lastName'] ?? '';
-      shopName = userJson['shopName']?.toString();
-      final fullName = '$firstName $lastName'.trim();
-      if (fullName.isNotEmpty) {
-        customerName = fullName;
-      } else if (shopName != null && shopName.isNotEmpty) {
-        customerName = shopName;
-      }
-      customerPhone = userJson['phoneNumber'] ?? '';
-      final isKycVerified = userJson['kycStatus'] == 'verified' || (userJson['isKycComplete'] == true);
-      customerRole = isKycVerified ? 'Dealer' : 'Lead';
-    }
-
-    final itemsList = (json['items'] as List?)
-            ?.map((i) => OrderItem.fromJson(i))
-            .toList() ??
-        [];
-    final freeItemsList = (json['freeItems'] as List?)
-            ?.map((f) => FreeItem.fromJson(f))
-            .toList() ??
-        [];
-
-    final placedAtRaw = json['placedAt'] ?? json['createdAt'];
-
-    return OrderModel(
-      id: json['_id'] ?? '',
-      orderId: json['orderId'] ?? '',
-      customerName: customerName,
-      shopName: shopName,
-      customerPhone: customerPhone,
-      customerRole: customerRole,
-      items: itemsList,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
-      discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
-      couponCode: json['couponCode'],
-      freeItems: freeItemsList,
-      shippingAddress: ShippingAddress.fromJson(json['shippingAddress'] ?? {}),
-      paymentMethod: json['paymentMethod'] ?? 'Online',
-      paymentStatus: json['paymentStatus'] ?? 'Pending',
-      razorpayPaymentId: json['razorpayPaymentId'],
-      advanceAmount: (json['advanceAmount'] as num?)?.toDouble() ?? 0.0,
-      remainingAmount: (json['remainingAmount'] as num?)?.toDouble() ?? 0.0,
-      orderStatus: json['orderStatus'] ?? 'Processing',
-      courierStatus: json['courierStatus'],
-      awbNumber: json['awbNumber'],
-      courierName: json['courierName'],
-      trackingUrl: json['trackingUrl'],
-      placedAt: placedAtRaw != null ? DateTime.parse(placedAtRaw) : DateTime.now(),
-      processingAt: json['processingAt'] != null ? DateTime.parse(json['processingAt']) : null,
-      shippedAt: json['shippedAt'] != null ? DateTime.parse(json['shippedAt']) : null,
-      outForDeliveryAt: json['outForDeliveryAt'] != null ? DateTime.parse(json['outForDeliveryAt']) : null,
-      deliveredAt: json['deliveredAt'] != null ? DateTime.parse(json['deliveredAt']) : null,
-      cancelledAt: json['cancelledAt'] != null ? DateTime.parse(json['cancelledAt']) : null,
-      rtoAt: json['rtoAt'] != null ? DateTime.parse(json['rtoAt']) : null,
-      assignedAgent: json['assignedAgent'],
-    );
-  }
-}
+export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
 // --- ORDERS PAGE ---
 
@@ -263,75 +25,32 @@ class OrdersPage extends StatefulWidget {
 class _OrdersPageState extends State<OrdersPage> {
   final ScrollController _scrollController = ScrollController();
   final ScrollController _tableHorizontalController = ScrollController();
-  String _searchQuery = '';
-  String _selectedOrderStatus = 'All Statuses';
-  String _selectedPaymentStatus = 'All Payments';
-  String _selectedPaymentMethod = 'All Methods';
+  final TextEditingController _searchController = TextEditingController();
 
   String? _hoveredOrderId;
-
-  bool _isLoading = true;
-  String? _errorMessage;
-  List<OrderModel> _orders = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchOrders();
-  }
-
-  Future<void> _fetchOrders({bool isSilent = false}) async {
-    if (!mounted) return;
-    if (!isSilent) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    }
-    try {
-      final response = await ApiClient().get('/orders/admin/all');
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final List rawOrders = data['orders'] ?? [];
-          if (mounted) {
-            setState(() {
-              _orders = rawOrders.map((o) => OrderModel.fromJson(o)).toList();
-              _isLoading = false;
-            });
-          }
-          return;
-        }
-      }
-      if (!isSilent && mounted) {
-        setState(() {
-          _errorMessage = 'Failed to load orders. Please check your credentials.';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (!isSilent && mounted) {
-        setState(() {
-          _errorMessage = 'Connection error: $e';
-          _isLoading = false;
-        });
-      }
+    final bloc = context.read<OrdersBloc>();
+    _searchController.text = bloc.state.searchQuery;
+    if (bloc.state.status == OrdersStatus.initial) {
+      bloc.add(const FetchOrdersEvent());
     }
   }
-
-
 
   @override
   void dispose() {
     _scrollController.dispose();
     _tableHorizontalController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   // --- QUERY FILTERING MECHANICS ---
-  List<OrderModel> get _filteredOrders {
-    return _orders.where((order) {
-      final query = _searchQuery.toLowerCase();
+  List<OrderModel> _getFilteredOrders(List<OrderModel> orders, OrdersState state) {
+    return orders.where((order) {
+      final query = state.searchQuery.toLowerCase();
       final matchesSearch =
           order.orderId.toLowerCase().contains(query) ||
           order.customerName.toLowerCase().contains(query) ||
@@ -339,16 +58,16 @@ class _OrdersPageState extends State<OrdersPage> {
           (order.awbNumber ?? '').toLowerCase().contains(query);
 
       final matchesOrderStatus =
-          _selectedOrderStatus == 'All Statuses' ||
-          order.orderStatus == _selectedOrderStatus;
+          state.selectedOrderStatus == 'All Statuses' ||
+          order.orderStatus == state.selectedOrderStatus;
 
       final matchesPaymentStatus =
-          _selectedPaymentStatus == 'All Payments' ||
-          order.paymentStatus == _selectedPaymentStatus;
+          state.selectedPaymentStatus == 'All Payments' ||
+          order.paymentStatus == state.selectedPaymentStatus;
 
       final matchesPaymentMethod =
-          _selectedPaymentMethod == 'All Methods' ||
-          order.paymentMethod == _selectedPaymentMethod;
+          state.selectedPaymentMethod == 'All Methods' ||
+          order.paymentMethod == state.selectedPaymentMethod;
 
       return matchesSearch &&
           matchesOrderStatus &&
@@ -357,171 +76,184 @@ class _OrdersPageState extends State<OrdersPage> {
     }).toList();
   }
 
-  // --- ANALYTICS CALCULATIONS ---
-  double get _totalRevenue {
-    return _orders
-        .where(
-          (o) =>
-              o.paymentStatus == 'Paid' || o.paymentStatus == 'Partially Paid',
-        )
-        .fold(0.0, (sum, o) {
-          // If paid online, we got the full amount. If partially paid, we received the advanceAmount so far.
-          return sum +
-              (o.paymentStatus == 'Paid' ? o.totalAmount : o.advanceAmount);
-        });
-  }
-
-  int get _pendingFulfillments {
-    return _orders
-        .where(
-          (o) => [
-            'Processing',
-            'Shipped',
-            'Out for Delivery',
-          ].contains(o.orderStatus),
-        )
-        .length;
-  }
-
-  int get _pendingPayments {
-    return _orders
-        .where(
-          (o) =>
-              o.paymentStatus == 'Pending' ||
-              o.paymentStatus == 'Partially Paid',
-        )
-        .length;
-  }
-
-  // --- SIDEBAR TABS INTEGRATION HELPER ---
 
   // --- WIDGET BUILDER ---
   @override
   Widget build(BuildContext context) {
-    final bool isMobile = Responsive.isMobile(context);
-    final filtered = _filteredOrders;
-    final EdgeInsets screenPadding = AppTheme.getResponsivePadding(context);
-
-    final Widget body = _isLoading
-        ? const SizedBox.expand(
-            child: Center(
-              child: CircularProgressIndicator(
-                color: AppTheme.primaryColor,
-              ),
+    return BlocConsumer<OrdersBloc, OrdersState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppTheme.error,
             ),
-          )
-        : (_errorMessage != null
-            ? SizedBox.expand(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        color: AppTheme.error,
-                        size: 48,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
+          );
+          context.read<OrdersBloc>().add(const ClearOrdersMessageEvent());
+        }
+      },
+      builder: (context, state) {
+        final bool isMobile = Responsive.isMobile(context);
+        final filtered = _getFilteredOrders(state.orders, state);
+        final EdgeInsets screenPadding = AppTheme.getResponsivePadding(context);
+
+        final int total = filtered.length;
+        final int totalPages = (total / state.pageSize).ceil();
+        final int currentPage = state.currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
+        
+        final int startIndex = (currentPage - 1) * state.pageSize;
+        final int endIndex = (startIndex + state.pageSize) > total
+            ? total
+            : (startIndex + state.pageSize);
+        final paginatedOrders = total == 0
+            ? <OrderModel>[]
+            : filtered.sublist(startIndex, endIndex);
+
+        if (state.status == OrdersStatus.loading && state.orders.isEmpty) {
+          return const SizedBox.expand(
+            child: Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+            ),
+          );
+        }
+
+        if (state.status == OrdersStatus.failure && state.orders.isEmpty) {
+          return SizedBox.expand(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppTheme.error,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.errorMessage ?? 'Failed to load orders.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: _fetchOrders,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              'Retry Connection',
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Retry Connection',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              )
-            : SizedBox.expand(
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.symmetric(vertical: screenPadding.top),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      if (!widget.isStandalone) ...[
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-                          child: _buildHeader(),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
+                ],
+              ),
+            ),
+          );
+        }
 
-                      // Statistics Grid
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-                        child: _buildStatsGrid(),
+        final Widget bodyContent = SizedBox.expand(
+          child: RefreshIndicator(
+            color: AppTheme.primaryColor,
+            onRefresh: () async {
+              context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+            },
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(vertical: screenPadding.top),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  if (!widget.isStandalone) ...[
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: screenPadding.left,
                       ),
-                      const SizedBox(height: 24),
+                      child: _buildHeader(),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
-                      // Search & Filter controls
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: screenPadding.left),
-                        child: _buildFilterControls(isMobile),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Orders Table
-                      _buildOrdersTable(filtered, isMobile, screenPadding),
-                    ],
+                  // Statistics Grid
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: screenPadding.left,
+                    ),
+                    child: _buildStatsGrid(state),
                   ),
-                ),
-              ));
+                  const SizedBox(height: 24),
 
-    if (widget.isStandalone) {
-      return Scaffold(
-        backgroundColor: AppTheme.backgroundColor,
-        appBar: AppBar(
-          title: Text(
-            'Order Management',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
+                  // Search & Filter controls
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: screenPadding.left,
+                    ),
+                    child: _buildFilterControls(isMobile, state),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Orders Table
+                  _buildOrdersTable(
+                    paginatedOrders,
+                    filtered.length,
+                    isMobile,
+                    screenPadding,
+                    state,
+                    currentPage,
+                  ),
+                ],
+              ),
             ),
           ),
-          backgroundColor: Colors.white,
-          foregroundColor: AppTheme.textPrimary,
-          elevation: 0,
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: AppTheme.lightBorderColor),
-          ),
-        ),
-        body: body,
-      );
-    }
+        );
 
-    return body;
+        if (widget.isStandalone) {
+          return Scaffold(
+            backgroundColor: AppTheme.backgroundColor,
+            appBar: AppBar(
+              title: Text(
+                'Order Management',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              backgroundColor: Colors.white,
+              foregroundColor: AppTheme.textPrimary,
+              elevation: 0,
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(1),
+                child: Divider(height: 1, color: AppTheme.lightBorderColor),
+              ),
+            ),
+            body: bodyContent,
+          );
+        }
+
+        return bodyContent;
+      },
+    );
   }
 
   Widget _buildHeader() {
@@ -548,24 +280,24 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildStatsGrid() {
+  Widget _buildStatsGrid(OrdersState state) {
     final bool isDesktop = Responsive.isDesktop(context);
 
     // Dynamic counts from all orders
-    final int totalOrders = _orders.length;
-    final int processingOrders = _orders
+    final int totalOrders = state.orders.length;
+    final int processingOrders = state.orders
         .where((o) => o.orderStatus == 'Processing')
         .length;
-    final int shippedOrders = _orders
+    final int shippedOrders = state.orders
         .where((o) => o.orderStatus == 'Shipped')
         .length;
-    final int deliveredOrders = _orders
+    final int deliveredOrders = state.orders
         .where((o) => o.orderStatus == 'Delivered')
         .length;
 
     // Today's orders
     final now = DateTime.now();
-    final placedToday = _orders
+    final placedToday = state.orders
         .where(
           (o) =>
               o.placedAt.year == now.year &&
@@ -574,9 +306,8 @@ class _OrdersPageState extends State<OrdersPage> {
         )
         .length;
 
-
     // Shipped / Out for delivery in transit
-    final outForDeliveryOrders = _orders
+    final outForDeliveryOrders = state.orders
         .where((o) => o.orderStatus == 'Out for Delivery')
         .length;
     final totalInTransit = shippedOrders + outForDeliveryOrders;
@@ -608,9 +339,10 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '+$placedToday placed today',
               trendIcon: Icons.trending_up,
               onTap: () {
-                setState(() {
-                  _selectedOrderStatus = 'All Statuses';
-                });
+                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
+                  selectedOrderStatus: 'All Statuses',
+                  currentPage: 1,
+                ));
               },
               visualWidget: SizedBox(
                 width: 50,
@@ -638,18 +370,17 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '$processingOrders awaiting dispatch',
               trendIcon: Icons.hourglass_empty_rounded,
               onTap: () {
-                setState(() {
-                  _selectedOrderStatus = 'Processing';
-                });
+                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
+                  selectedOrderStatus: 'Processing',
+                  currentPage: 1,
+                ));
               },
               visualWidget: SizedBox(
                 width: 28,
                 height: 28,
                 child: CustomPaint(
                   painter: FulfillmentProgressPainter(
-                    totalOrders > 0
-                        ? processingOrders / totalOrders
-                        : 0.0,
+                    totalOrders > 0 ? processingOrders / totalOrders : 0.0,
                     AppTheme.warning,
                   ),
                 ),
@@ -665,9 +396,10 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '$outForDeliveryOrders out for delivery',
               trendIcon: Icons.local_shipping_outlined,
               onTap: () {
-                setState(() {
-                  _selectedOrderStatus = 'Shipped';
-                });
+                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
+                  selectedOrderStatus: 'Shipped',
+                  currentPage: 1,
+                ));
               },
               visualWidget: SizedBox(
                 width: 50,
@@ -695,9 +427,10 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: 'Successful deliveries',
               trendIcon: Icons.check_circle_outline,
               onTap: () {
-                setState(() {
-                  _selectedOrderStatus = 'Delivered';
-                });
+                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
+                  selectedOrderStatus: 'Delivered',
+                  currentPage: 1,
+                ));
               },
               visualWidget: SizedBox(
                 width: 28,
@@ -716,7 +449,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildFilterControls(bool isMobile) {
+  Widget _buildFilterControls(bool isMobile, OrdersState state) {
     final Widget searchField = Container(
       height: 38,
       decoration: BoxDecoration(
@@ -725,44 +458,52 @@ class _OrdersPageState extends State<OrdersPage> {
         border: Border.all(color: AppTheme.borderColor),
       ),
       child: TextField(
-        onChanged: (val) => setState(() => _searchQuery = val),
+        controller: _searchController,
+        onChanged: (val) {
+          context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+            searchQuery: val,
+            currentPage: 1,
+          ));
+        },
         textAlignVertical: TextAlignVertical.center,
         style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
         decoration: const InputDecoration(
           hintText: 'Search order ID, client name, phone...',
           hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           prefixIcon: Icon(
-            Icons.search,
-            size: 18,
+            Icons.search_rounded,
             color: AppTheme.textSecondary,
+            size: 18,
           ),
           border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12),
         ),
       ),
     );
 
-    final orderStatusOptions = [
+    final List<String> orderStatusOptions = [
       'All Statuses',
+      'Pending',
       'Processing',
       'Shipped',
       'Out for Delivery',
       'Delivered',
       'Cancelled',
-      'RTO',
     ];
-    final paymentStatusOptions = [
+
+    final List<String> paymentStatusOptions = [
       'All Payments',
       'Pending',
       'Paid',
-      'Failed',
       'Partially Paid',
+      'Failed',
     ];
-    final paymentMethodOptions = ['All Methods', 'Online', 'Partial'];
+
+    final List<String> paymentMethodOptions = ['All Methods', 'Online', 'COD'];
 
     if (isMobile) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           searchField,
           const SizedBox(height: 10),
@@ -771,16 +512,26 @@ class _OrdersPageState extends State<OrdersPage> {
               Expanded(
                 child: _buildDropdown(
                   orderStatusOptions,
-                  _selectedOrderStatus,
-                  (val) => setState(() => _selectedOrderStatus = val!),
+                  state.selectedOrderStatus,
+                  (val) {
+                    context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                      selectedOrderStatus: val,
+                      currentPage: 1,
+                    ));
+                  },
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _buildDropdown(
                   paymentStatusOptions,
-                  _selectedPaymentStatus,
-                  (val) => setState(() => _selectedPaymentStatus = val!),
+                  state.selectedPaymentStatus,
+                  (val) {
+                    context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                      selectedPaymentStatus: val,
+                      currentPage: 1,
+                    ));
+                  },
                 ),
               ),
             ],
@@ -788,8 +539,13 @@ class _OrdersPageState extends State<OrdersPage> {
           const SizedBox(height: 10),
           _buildDropdown(
             paymentMethodOptions,
-            _selectedPaymentMethod,
-            (val) => setState(() => _selectedPaymentMethod = val!),
+            state.selectedPaymentMethod,
+            (val) {
+              context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                selectedPaymentMethod: val,
+                currentPage: 1,
+              ));
+            },
           ),
         ],
       );
@@ -801,22 +557,37 @@ class _OrdersPageState extends State<OrdersPage> {
         const SizedBox(width: 12),
         _buildDropdown(
           orderStatusOptions,
-          _selectedOrderStatus,
-          (val) => setState(() => _selectedOrderStatus = val!),
+          state.selectedOrderStatus,
+          (val) {
+            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+              selectedOrderStatus: val,
+              currentPage: 1,
+            ));
+          },
           width: 150,
         ),
         const SizedBox(width: 12),
         _buildDropdown(
           paymentStatusOptions,
-          _selectedPaymentStatus,
-          (val) => setState(() => _selectedPaymentStatus = val!),
+          state.selectedPaymentStatus,
+          (val) {
+            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+              selectedPaymentStatus: val,
+              currentPage: 1,
+            ));
+          },
           width: 150,
         ),
         const SizedBox(width: 12),
         _buildDropdown(
           paymentMethodOptions,
-          _selectedPaymentMethod,
-          (val) => setState(() => _selectedPaymentMethod = val!),
+          state.selectedPaymentMethod,
+          (val) {
+            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+              selectedPaymentMethod: val,
+              currentPage: 1,
+            ));
+          },
           width: 130,
         ),
       ],
@@ -872,8 +643,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildOrdersTable(
     List<OrderModel> orders,
+    int totalFiltered,
     bool isMobile,
     EdgeInsets screenPadding,
+    OrdersState state,
+    int currentPage,
   ) {
     final header = Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -927,7 +701,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   '/orders/details',
                   arguments: order,
                 ).then((_) {
-                  _fetchOrders(isSilent: true);
+                  context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
                 });
               },
               child: Container(
@@ -1100,6 +874,7 @@ class _OrdersPageState extends State<OrdersPage> {
           header,
           const Divider(height: 1, color: AppTheme.lightBorderColor),
           tableBody,
+          _buildTableFooter(totalFiltered, isMobile, state, currentPage),
         ],
       ),
     );
@@ -1242,10 +1017,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  // --- HELPERS ---
-  String _formatDateTime(DateTime dt) {
-    return '${_formatDate(dt)}, ${_formatTime(dt)}';
-  }
+
 
   String _formatDate(DateTime dt) {
     final months = [
@@ -1271,6 +1043,266 @@ class _OrdersPageState extends State<OrdersPage> {
     final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
     return '$hr:$min $ampm';
   }
+
+  Widget _buildPageSizeSelector(OrdersState state) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Show',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: state.pageSize,
+              icon: const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+              dropdownColor: Colors.white,
+              items: [10, 20, 30, 40, 50]
+                  .map<DropdownMenuItem<int>>(
+                    (int val) =>
+                        DropdownMenuItem<int>(value: val, child: Text('$val')),
+                  )
+                  .toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                    pageSize: newValue,
+                    currentPage: 1,
+                  ));
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'entries',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableFooter(int total, bool isMobile, OrdersState state, int currentPage) {
+    final start = total == 0 ? 0 : (currentPage - 1) * state.pageSize + 1;
+    final end = (currentPage * state.pageSize) > total
+        ? total
+        : (currentPage * state.pageSize);
+
+    final footerPadding = isMobile
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+        : const EdgeInsets.symmetric(horizontal: 12, vertical: 12);
+
+    return Container(
+      padding: footerPadding,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(AppTheme.borderRadiusLarge),
+        ),
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    _buildPageSizeSelector(state),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildPaginationControls(total, state, currentPage),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _buildPageSizeSelector(state),
+                  ],
+                ),
+                _buildPaginationControls(total, state, currentPage),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildPaginationControls(int total, OrdersState state, int currentPage) {
+    final int totalPages = (total / state.pageSize).ceil();
+    final int displayPages = totalPages > 0 ? totalPages : 1;
+
+    List<Widget> pageButtons = [];
+
+    if (displayPages <= 5) {
+      for (int i = 1; i <= displayPages; i++) {
+        pageButtons.add(
+          _PageNumberButton(
+            page: i,
+            isActive: currentPage == i,
+            onTap: () {
+              context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                currentPage: i,
+              ));
+            },
+          ),
+        );
+        if (i < displayPages) {
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+    } else {
+      pageButtons.add(
+        _PageNumberButton(
+          page: 1,
+          isActive: currentPage == 1,
+          onTap: () {
+            context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
+              currentPage: 1,
+            ));
+          },
+        ),
+      );
+      pageButtons.add(const SizedBox(width: 8));
+
+      if (currentPage > 3) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      final start = (currentPage - 1).clamp(2, displayPages - 1);
+      final end = (currentPage + 1).clamp(2, displayPages - 1);
+
+      for (int i = start; i <= end; i++) {
+        if (i > 1 && i < displayPages) {
+          pageButtons.add(
+            _PageNumberButton(
+              page: i,
+              isActive: currentPage == i,
+              onTap: () {
+                context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                  currentPage: i,
+                ));
+              },
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+
+      if (currentPage < displayPages - 2) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      pageButtons.add(
+        _PageNumberButton(
+          page: displayPages,
+          isActive: currentPage == displayPages,
+          onTap: () {
+            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+              currentPage: displayPages,
+            ));
+          },
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _PaginationButton(
+          onTap: currentPage > 1
+              ? () {
+                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                    currentPage: currentPage - 1,
+                  ));
+                }
+              : null,
+          icon: Icons.chevron_left,
+          isDisabled: currentPage <= 1,
+        ),
+        const SizedBox(width: 12),
+        ...pageButtons,
+        const SizedBox(width: 12),
+        _PaginationButton(
+          onTap: currentPage < displayPages
+              ? () {
+                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+                    currentPage: currentPage + 1,
+                  ));
+                }
+              : null,
+          icon: Icons.chevron_right,
+          isDisabled: currentPage >= displayPages,
+        ),
+      ],
+    );
+  }
 }
 
 // --- SUB-WIDGET FOR TABLE HEADER ---
@@ -1281,5 +1313,115 @@ class _TableHeaderText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(text, style: AppTheme.tableHeader);
+  }
+}
+
+class _PageNumberButton extends StatefulWidget {
+  final int page;
+  final bool isActive;
+  final VoidCallback? onTap;
+
+  const _PageNumberButton({
+    required this.page,
+    required this.isActive,
+    this.onTap,
+  });
+
+  @override
+  State<_PageNumberButton> createState() => _PageNumberButtonState();
+}
+
+class _PageNumberButtonState extends State<_PageNumberButton> {
+  bool isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? AppTheme.primaryColor
+                : (isHovered ? const Color(0xFFF3F4F6) : Colors.white),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: widget.isActive
+                  ? AppTheme.primaryColor
+                  : AppTheme.borderColor,
+            ),
+          ),
+          child: Text(
+            '${widget.page}',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: widget.isActive ? Colors.white : AppTheme.textBody,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaginationButton extends StatefulWidget {
+  final VoidCallback? onTap;
+  final IconData icon;
+  final bool isDisabled;
+
+  const _PaginationButton({
+    required this.onTap,
+    required this.icon,
+    this.isDisabled = false,
+  });
+
+  @override
+  State<_PaginationButton> createState() => _PaginationButtonState();
+}
+
+class _PaginationButtonState extends State<_PaginationButton> {
+  bool isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.isDisabled
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.isDisabled ? null : widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: widget.isDisabled
+                ? Colors.white
+                : (isHovered ? const Color(0xFFF3F4F6) : Colors.white),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: Icon(
+            widget.icon,
+            size: 18,
+            color: widget.isDisabled
+                ? const Color(0xFFD1D5DB)
+                : AppTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 }

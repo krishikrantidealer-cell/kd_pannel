@@ -9,6 +9,12 @@ import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -77,7 +83,22 @@ void main() async {
   // Preload brand images synchronously into memory buffer before running the app
   await AppCache.preload();
 
-  runApp(MyApp(initialRoute: initialRoute));
+  runApp(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<DealersBloc>(
+          create: (context) => DealersBloc(),
+        ),
+        BlocProvider<OrdersBloc>(
+          create: (context) => OrdersBloc()..add(const FetchOrdersEvent()),
+        ),
+        BlocProvider<LeadsBloc>(
+          create: (context) => LeadsBloc()..add(const FetchLeadsDataEvent()),
+        ),
+      ],
+      child: MyApp(initialRoute: initialRoute),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

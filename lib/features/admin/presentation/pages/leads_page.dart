@@ -1,12 +1,14 @@
-import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/core/services/dashboard_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 
 class LeadsPage extends StatefulWidget {
   final bool isStandalone;
@@ -17,21 +19,16 @@ class LeadsPage extends StatefulWidget {
 }
 
 class _LeadsPageState extends State<LeadsPage> {
-  List<Map<String, dynamic>> _allRawUsers = [];
-  List<Map<String, dynamic>> _salesAgents = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  String selectedDropdown = 'This Month';
-  PickerDateRange? _selectedRange;
-  String selectedFilterChip = 'All';
-  int currentPage = 1;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    final bloc = context.read<LeadsBloc>();
+    _searchController.text = bloc.state.searchQuery;
+    if (bloc.state.status == LeadsStatus.initial) {
+      bloc.add(const FetchLeadsDataEvent());
+    }
   }
 
   @override
@@ -40,63 +37,14 @@ class _LeadsPageState extends State<LeadsPage> {
     super.dispose();
   }
 
-  Future<void> _fetchData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      final usersRes = await ApiClient().get('/users');
-      if (usersRes.statusCode == 200) {
-        final data = jsonDecode(usersRes.body);
-        if (data['success'] == true) {
-          _allRawUsers = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        }
-      } else {
-        throw Exception('Failed to load users: ${usersRes.statusCode}');
-      }
-
-      final salesRes = await ApiClient().get('/users?role=sales');
-      if (salesRes.statusCode == 200) {
-        final data = jsonDecode(salesRes.body);
-        if (data['success'] == true) {
-          _salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        }
-      } else {
-        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
-      }
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+  void _assignAgent(String userId, String? agentId) {
+    context.read<LeadsBloc>().add(AssignAgentToLeadEvent(userId, agentId));
   }
 
-  Future<void> _assignAgent(String userId, String? agentId) async {
-    try {
-      final res = await ApiClient().put('/users/$userId/assign-agent', {
-        'agentId': agentId,
-      });
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Agent assigned successfully'), backgroundColor: AppTheme.success),
-          );
-          _fetchData();
-        }
-      } else {
-        throw Exception('Failed to assign agent: ${res.statusCode}');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
-      );
-    }
+  void _bulkAssignAgent(List<String> userIds, String? agentId) {
+    context.read<LeadsBloc>().add(
+      BulkAssignAgentToLeadsEvent(userIds, agentId),
+    );
   }
 
   String _formatTimeAgo(String dateStr) {
@@ -114,37 +62,52 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   List<Map<String, dynamic>> get allLeads {
-    return _allRawUsers.where((u) {
-      final role = u['role'] ?? 'user';
-      final kycStatus = u['kycStatus'] ?? 'pending';
-      return role == 'user' && kycStatus != 'verified';
-    }).map((u) {
-      return {
-        'id': u['_id'],
-        'name': (u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
-            ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
-            : (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
+    final state = context.read<LeadsBloc>().state;
+    return _getAllLeads(state.allRawUsers);
+  }
+
+  List<Map<String, dynamic>> _getAllLeads(List<Map<String, dynamic>> rawUsers) {
+    return rawUsers
+        .where((u) {
+          final role = u['role'] ?? 'user';
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          return role == 'user' && kycStatus != 'verified';
+        })
+        .map((u) {
+          return {
+            'id': u['_id'],
+            'name':
+                (u['firstName'] != null &&
+                    u['firstName'].toString().trim().isNotEmpty)
+                ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
+                : (u['shopName'] != null &&
+                      u['shopName'].toString().trim().isNotEmpty)
                 ? u['shopName']
                 : (u['phoneNumber'] ?? 'Unnamed Lead'),
-        'phone': u['phoneNumber'] ?? '',
-        'city': u['address']?['cityTehsil'] ?? '',
-        'state': u['address']?['state'] ?? '',
-        'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
-        'agent': u['assignedAgent'] != null
-            ? '${u['assignedAgent']['firstName']} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
-            : '-',
-        'agentId': u['assignedAgent']?['_id'],
-        'source': u['source'] ?? 'App',
-        'status': u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
-            ? 'KYC Pending'
-            : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
-        'kycStatus': u['kycStatus'] ?? 'pending',
-        'gstNumber': u['gstNumber'] ?? '',
-        'userType': u['userType'] ?? '',
-        'licenceImage': u['licenceImage'] ?? '',
-        'shopImage': u['shopImage'] ?? '',
-      };
-    }).toList();
+            'phone': u['phoneNumber'] ?? '',
+            'city': u['address']?['cityTehsil'] ?? '',
+            'state': u['address']?['state'] ?? '',
+            'activity': u['updatedAt'] != null
+                ? _formatTimeAgo(u['updatedAt'])
+                : '-',
+            'agent': u['assignedAgent'] != null
+                ? '${u['assignedAgent']['firstName']} ${u['assignedAgent']['lastName'] ?? ''}'
+                      .trim()
+                : '-',
+            'agentId': u['assignedAgent']?['_id'],
+            'source': u['source'] ?? 'App',
+            'status':
+                u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
+                ? 'KYC Pending'
+                : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
+            'kycStatus': u['kycStatus'] ?? 'pending',
+            'gstNumber': u['gstNumber'] ?? '',
+            'userType': u['userType'] ?? '',
+            'licenceImage': u['licenceImage'] ?? '',
+            'shopImage': u['shopImage'] ?? '',
+          };
+        })
+        .toList();
   }
 
   final List<String> dropdownOptions = [
@@ -159,8 +122,6 @@ class _LeadsPageState extends State<LeadsPage> {
 
   final List<String> filterChips = [
     'All',
-    'Order Pending',
-    'Order Confirm',
     'Assigned',
     'Unassigned',
     'KYC Confirm',
@@ -168,8 +129,6 @@ class _LeadsPageState extends State<LeadsPage> {
   ];
 
   final Map<String, String> statusMapping = {
-    'Order Pending': 'Order Pending',
-    'Order Confirm': 'Order Confirm',
     'Assigned': 'Assigned',
     'Unassigned': 'Unassigned',
     'KYC Confirm': 'KYC Confirm',
@@ -177,23 +136,41 @@ class _LeadsPageState extends State<LeadsPage> {
   };
 
   List<Map<String, dynamic>> get filteredLeads {
-    List<Map<String, dynamic>> leads = allLeads;
+    final state = context.read<LeadsBloc>().state;
+    return _getFilteredLeads(
+      allLeads,
+      state.selectedFilterChip,
+      state.searchQuery,
+    );
+  }
+
+  List<Map<String, dynamic>> _getFilteredLeads(
+    List<Map<String, dynamic>> leads,
+    String selectedFilterChip,
+    String searchQuery,
+  ) {
+    List<Map<String, dynamic>> result = leads;
 
     if (selectedFilterChip != 'All') {
       if (selectedFilterChip == 'Unassigned') {
-        leads = leads.where((l) => l['agentId'] == null).toList();
+        result = result.where((l) => l['agentId'] == null).toList();
       } else if (selectedFilterChip == 'Assigned') {
-        leads = leads.where((l) => l['agentId'] != null).toList();
+        result = result.where((l) => l['agentId'] != null).toList();
       } else if (selectedFilterChip == 'KYC Pending') {
-        leads = leads.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').toList();
+        result = result
+            .where(
+              (l) =>
+                  l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
+            )
+            .toList();
       } else if (selectedFilterChip == 'KYC Confirm') {
-        leads = []; // Verified users are dealers, so they don't show up here
+        result = []; // Verified users are dealers, so they don't show up here
       }
     }
 
-    final query = _searchController.text.toLowerCase();
+    final query = searchQuery.toLowerCase();
     if (query.isNotEmpty) {
-      leads = leads.where((l) {
+      result = result.where((l) {
         return l['name'].toString().toLowerCase().contains(query) ||
             l['phone'].toString().toLowerCase().contains(query) ||
             l['city'].toString().toLowerCase().contains(query) ||
@@ -202,15 +179,18 @@ class _LeadsPageState extends State<LeadsPage> {
       }).toList();
     }
 
-    return leads;
+    return result;
   }
 
-  String get _rangeDisplay {
-    if (_selectedRange != null &&
-        _selectedRange!.startDate != null &&
-        _selectedRange!.endDate != null) {
-      final start = _selectedRange!.startDate!;
-      final end = _selectedRange!.endDate!;
+  String _getRangeDisplay(
+    PickerDateRange? selectedRange,
+    String selectedTimeframe,
+  ) {
+    if (selectedRange != null &&
+        selectedRange.startDate != null &&
+        selectedRange.endDate != null) {
+      final start = selectedRange.startDate!;
+      final end = selectedRange.endDate!;
       final months = [
         'Jan',
         'Feb',
@@ -227,10 +207,10 @@ class _LeadsPageState extends State<LeadsPage> {
       ];
       return '${start.day.toString().padLeft(2, '0')} ${months[start.month - 1]} - ${end.day.toString().padLeft(2, '0')} ${months[end.month - 1]}';
     }
-    return selectedDropdown;
+    return selectedTimeframe;
   }
 
-  void _showSyncfusionDatePicker() {
+  void _showSyncfusionDatePicker(PickerDateRange? initialRange) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -249,15 +229,17 @@ class _LeadsPageState extends State<LeadsPage> {
             rangeSelectionColor: AppTheme.primaryColor.withValues(alpha: 0.12),
             startRangeSelectionColor: AppTheme.primaryColor,
             endRangeSelectionColor: AppTheme.primaryColor,
-            initialSelectedRange: _selectedRange,
+            initialSelectedRange: initialRange,
             onSubmit: (Object? val) {
               if (val is PickerDateRange &&
                   val.startDate != null &&
                   val.endDate != null) {
-                setState(() {
-                  _selectedRange = val;
-                  selectedDropdown = '';
-                });
+                context.read<LeadsBloc>().add(
+                  UpdateLeadsFilterEvent(
+                    selectedRange: val,
+                    selectedTimeframe: '',
+                  ),
+                );
                 Navigator.pop(context);
               }
             },
@@ -275,126 +257,120 @@ class _LeadsPageState extends State<LeadsPage> {
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
     final passwordController = TextEditingController();
-    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Create Sales Agent',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Create Sales Agent',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
           ),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: firstNameController,
-                    decoration: _buildInputDecoration('First Name', Icons.person_outline),
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: lastNameController,
-                    decoration: _buildInputDecoration('Last Name', Icons.person_outline),
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: emailController,
-                    decoration: _buildInputDecoration('Email Address', Icons.email_outlined),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (val) => val == null || !val.contains('@') ? 'Invalid email' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: phoneController,
-                    decoration: _buildInputDecoration('Phone Number', Icons.phone_outlined),
-                    keyboardType: TextInputType.phone,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: passwordController,
-                    decoration: _buildInputDecoration('Password', Icons.lock_outline),
-                    obscureText: true,
-                    validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 characters' : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSubmitting ? null : () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      if (formKey.currentState!.validate()) {
-                        setDialogState(() => isSubmitting = true);
-                        try {
-                          final res = await ApiClient().post('/users/sales', {
-                            'firstName': firstNameController.text.trim(),
-                            'lastName': lastNameController.text.trim(),
-                            'email': emailController.text.trim(),
-                            'phoneNumber': phoneController.text.trim(),
-                            'password': passwordController.text,
-                          });
-                          if (res.statusCode == 201) {
-                            final data = jsonDecode(res.body);
-                            if (data['success'] == true) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Sales agent created successfully'), backgroundColor: AppTheme.success),
-                                );
-                                Navigator.pop(context);
-                                _fetchData();
-                              }
-                            }
-                          } else {
-                            final data = jsonDecode(res.body);
-                            throw Exception(data['message'] ?? 'Failed to create sales agent');
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
-                            );
-                          }
-                        } finally {
-                          if (context.mounted) {
-                            setDialogState(() => isSubmitting = false);
-                          }
-                        }
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                    )
-                  : const Text('Create'),
-            ),
-          ],
         ),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: firstNameController,
+                  decoration: _buildInputDecoration(
+                    'First Name',
+                    Icons.person_outline,
+                  ),
+                  validator: (val) =>
+                      val == null || val.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: lastNameController,
+                  decoration: _buildInputDecoration(
+                    'Last Name',
+                    Icons.person_outline,
+                  ),
+                  validator: (val) =>
+                      val == null || val.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: emailController,
+                  decoration: _buildInputDecoration(
+                    'Email Address',
+                    Icons.email_outlined,
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (val) => val == null || !val.contains('@')
+                      ? 'Invalid email'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: phoneController,
+                  decoration: _buildInputDecoration(
+                    'Phone Number',
+                    Icons.phone_outlined,
+                  ),
+                  keyboardType: TextInputType.phone,
+                  validator: (val) =>
+                      val == null || val.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: passwordController,
+                  decoration: _buildInputDecoration(
+                    'Password',
+                    Icons.lock_outline,
+                  ),
+                  obscureText: true,
+                  validator: (val) => val == null || val.length < 6
+                      ? 'Password must be at least 6 characters'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                context.read<LeadsBloc>().add(
+                  CreateSalesAgentFromLeadsEvent(
+                    firstName: firstNameController.text.trim(),
+                    lastName: lastNameController.text.trim(),
+                    email: emailController.text.trim(),
+                    phoneNumber: phoneController.text.trim(),
+                    password: passwordController.text,
+                  ),
+                );
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Create'),
+          ),
+        ],
       ),
     );
   }
@@ -402,7 +378,11 @@ class _LeadsPageState extends State<LeadsPage> {
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+      labelStyle: GoogleFonts.outfit(
+        color: AppTheme.textSecondary,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
       prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryColor),
       filled: true,
       fillColor: const Color(0xFFF9FAFB),
@@ -430,24 +410,47 @@ class _LeadsPageState extends State<LeadsPage> {
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
-    final verifiedDealersCount = _allRawUsers.where((u) => u['role'] == 'user' && u['kycStatus'] == 'verified').length;
 
-    final Widget body = _isLoading
-        ? const Center(
-            child: Padding(
-              padding: EdgeInsets.all(80.0),
-              child: CircularProgressIndicator(color: AppTheme.primaryColor),
+    return BlocConsumer<LeadsBloc, LeadsState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppTheme.error,
             ),
-          )
-        : _errorMessage != null
-            ? Center(
+          );
+          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+        }
+        if (state.actionSuccessMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+        }
+      },
+      builder: (context, state) {
+        final verifiedDealersCount = state.allRawUsers
+            .where((u) => u['role'] == 'user' && u['kycStatus'] == 'verified')
+            .length;
+
+        final Widget body =
+            (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+            ? const Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(40.0),
-                  child: Text('Error: $_errorMessage', style: const TextStyle(color: Colors.red)),
+                  padding: EdgeInsets.all(80.0),
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryColor,
+                  ),
                 ),
               )
             : ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
                 child: SingleChildScrollView(
                   child: Padding(
                     padding: EdgeInsets.symmetric(
@@ -458,62 +461,117 @@ class _LeadsPageState extends State<LeadsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            if (!widget.isStandalone)
-                              Text(
-                                isMobile ? 'Leads' : 'Leads Management',
-                                style: AppTheme.headingXL.copyWith(
-                                  letterSpacing: -0.5,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            else
-                              const SizedBox.shrink(),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: _showCreateSalesAgentDialog,
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: Text(
-                                    isMobile ? 'Sales Agent' : 'Create Sales Agent',
-                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primaryColor,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 12 : 16,
-                                      vertical: isMobile ? 10 : 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
-                                    ),
+                        if (isMobile)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!widget.isStandalone) ...[
+                                Text(
+                                  'Leads',
+                                  style: AppTheme.headingXL.copyWith(
+                                    letterSpacing: -0.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                _buildTimeframeRow(isMobile),
+                                const SizedBox(height: 12),
                               ],
-                            ),
-                          ],
-                        ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: _showCreateSalesAgentDialog,
+                                      icon: const Icon(Icons.add, size: 16),
+                                      label: Text(
+                                        'Sales Agent',
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primaryColor,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 10,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildTimeframeRow(isMobile, state),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if (!widget.isStandalone)
+                                Text(
+                                  'Leads Management',
+                                  style: AppTheme.headingXL.copyWith(
+                                    letterSpacing: -0.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              else
+                                const SizedBox.shrink(),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: _showCreateSalesAgentDialog,
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: Text(
+                                      'Create Sales Agent',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _buildTimeframeRow(isMobile, state),
+                                ],
+                              ),
+                            ],
+                          ),
                         const SizedBox(height: 16),
                         _LeadsStatsGrid(
                           leads: allLeads,
                           verifiedDealersCount: verifiedDealersCount,
                         ),
                         const SizedBox(height: 24),
-                        _buildFilterChips(isMobile),
+                        _buildFilterChips(isMobile, state),
                         const SizedBox(height: 16),
                         _LeadsTableCard(
                           leads: filteredLeads,
                           totalEntries: filteredLeads.length,
                           isMobile: isMobile,
-                          salesAgents: _salesAgents,
+                          salesAgents: state.salesAgents,
                           onAssignAgent: _assignAgent,
+                          onBulkAssignAgent: _bulkAssignAgent,
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -522,33 +580,35 @@ class _LeadsPageState extends State<LeadsPage> {
                 ),
               );
 
-    if (widget.isStandalone) {
-      return Scaffold(
-        backgroundColor: AppTheme.backgroundColor,
-        appBar: AppBar(
-          title: Text(
-            'Leads Management',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
+        if (widget.isStandalone) {
+          return Scaffold(
+            backgroundColor: AppTheme.backgroundColor,
+            appBar: AppBar(
+              title: Text(
+                'Leads Management',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              backgroundColor: Colors.white,
+              foregroundColor: AppTheme.textPrimary,
+              elevation: 0,
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(1),
+                child: Divider(height: 1, color: AppTheme.lightBorderColor),
+              ),
             ),
-          ),
-          backgroundColor: Colors.white,
-          foregroundColor: AppTheme.textPrimary,
-          elevation: 0,
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: AppTheme.lightBorderColor),
-          ),
-        ),
-        body: body,
-      );
-    }
+            body: body,
+          );
+        }
 
-    return body;
+        return body;
+      },
+    );
   }
 
-  Widget _buildTimeframeRow(bool isMobile) {
+  Widget _buildTimeframeRow(bool isMobile, LeadsState state) {
     return Container(
       height: isMobile ? 38 : 42,
       padding: const EdgeInsets.only(left: 12, right: 6),
@@ -559,10 +619,10 @@ class _LeadsPageState extends State<LeadsPage> {
         boxShadow: AppTheme.cardShadow,
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
         children: [
           GestureDetector(
-            onTap: _showSyncfusionDatePicker,
+            onTap: () => _showSyncfusionDatePicker(state.selectedRange),
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: Padding(
@@ -581,67 +641,134 @@ class _LeadsPageState extends State<LeadsPage> {
             margin: const EdgeInsets.symmetric(horizontal: 6),
             color: AppTheme.borderColor.withValues(alpha: 0.6),
           ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: null,
-              isExpanded: false,
-              isDense: true,
-              padding: EdgeInsets.zero,
-              hint: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Text(
-                      _rangeDisplay,
-                      style: GoogleFonts.outfit(
-                        fontSize: isMobile ? 12 : 13,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w600,
+          if (isMobile)
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: null,
+                  isExpanded: true,
+                  isDense: true,
+                  padding: EdgeInsets.zero,
+                  hint: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _getRangeDisplay(
+                            state.selectedRange,
+                            state.selectedTimeframe,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
+                      const Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ],
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 2, right: 2),
-                    child: Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
+                  icon: const SizedBox.shrink(),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      context.read<LeadsBloc>().add(
+                        UpdateLeadsFilterEvent(
+                          selectedTimeframe: newValue,
+                          resetRange: true,
+                        ),
+                      );
+                    }
+                  },
+                  items: dropdownOptions
+                      .map<DropdownMenuItem<String>>(
+                        (String value) => DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(
+                            value,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
-              icon: const SizedBox.shrink(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    selectedDropdown = newValue;
-                    _selectedRange = null;
-                  });
-                }
-              },
-              items: dropdownOptions
-                  .map<DropdownMenuItem<String>>(
-                    (String value) => DropdownMenuItem<String>(
-                      value: value,
+            )
+          else
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: null,
+                isExpanded: false,
+                isDense: true,
+                padding: EdgeInsets.zero,
+                hint: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
                       child: Text(
-                        value,
+                        _getRangeDisplay(
+                          state.selectedRange,
+                          state.selectedTimeframe,
+                        ),
                         style: GoogleFonts.outfit(
-                          fontSize: isMobile ? 12 : 13,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 2, right: 2),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                icon: const SizedBox.shrink(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    context.read<LeadsBloc>().add(
+                      UpdateLeadsFilterEvent(
+                        selectedTimeframe: newValue,
+                        resetRange: true,
+                      ),
+                    );
+                  }
+                },
+                items: dropdownOptions
+                    .map<DropdownMenuItem<String>>(
+                      (String value) => DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(
+                          value,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChips(bool isMobile) {
+  Widget _buildFilterChips(bool isMobile, LeadsState state) {
     if (!isMobile) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -663,13 +790,18 @@ class _LeadsPageState extends State<LeadsPage> {
                         child: _FilterChipItem(
                           label: chip,
                           icon: _getChipIcon(chip),
-                          isSelected: selectedFilterChip == chip,
-                          onTap: () => setState(() {
-                            selectedFilterChip = chip;
-                            currentPage = 1;
-                            _searchController
-                                .clear(); // Clear search on filter change
-                          }),
+                          isSelected: state.selectedFilterChip == chip,
+                          onTap: () {
+                            context.read<LeadsBloc>().add(
+                              UpdateLeadsFilterEvent(
+                                selectedFilterChip: chip,
+                                currentPage: 1,
+                                searchQuery:
+                                    '', // Clear search on filter change
+                              ),
+                            );
+                            _searchController.clear();
+                          },
                         ),
                       ),
                     )
@@ -696,11 +828,17 @@ class _LeadsPageState extends State<LeadsPage> {
                       child: _FilterChipItem(
                         label: chip,
                         icon: _getChipIcon(chip),
-                        isSelected: selectedFilterChip == chip,
-                        onTap: () => setState(() {
-                          selectedFilterChip = chip;
-                          currentPage = 1;
-                        }),
+                        isSelected: state.selectedFilterChip == chip,
+                        onTap: () {
+                          context.read<LeadsBloc>().add(
+                            UpdateLeadsFilterEvent(
+                              selectedFilterChip: chip,
+                              currentPage: 1,
+                              searchQuery: '', // Clear search on filter change
+                            ),
+                          );
+                          _searchController.clear();
+                        },
                       ),
                     ),
                   )
@@ -716,10 +854,6 @@ class _LeadsPageState extends State<LeadsPage> {
     switch (chip) {
       case 'All':
         return Icons.grid_view_rounded;
-      case 'Order Pending':
-        return Icons.schedule_rounded;
-      case 'Order Confirm':
-        return Icons.check_circle_outline_rounded;
       case 'Assigned':
         return Icons.person_pin_rounded;
       case 'Unassigned':
@@ -761,7 +895,11 @@ class _LeadsPageState extends State<LeadsPage> {
           Expanded(
             child: TextField(
               controller: _searchController,
-              onChanged: (val) => setState(() {}),
+              onChanged: (val) {
+                context.read<LeadsBloc>().add(
+                  UpdateLeadsFilterEvent(searchQuery: val, currentPage: 1),
+                );
+              },
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: AppTheme.textPrimary,
@@ -902,10 +1040,6 @@ class _FilterChipItemState extends State<_FilterChipItem> {
     switch (chip) {
       case 'All':
         return AppTheme.textSecondary;
-      case 'Order Pending':
-        return AppTheme.warning.withValues(alpha: 0.7);
-      case 'Order Confirm':
-        return AppTheme.success.withValues(alpha: 0.7);
       case 'Assigned':
         return AppTheme.info.withValues(alpha: 0.7);
       case 'Unassigned':
@@ -926,6 +1060,7 @@ class _LeadsTableCard extends StatefulWidget {
   final bool isMobile;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Function(List<String> userIds, String? agentId) onBulkAssignAgent;
 
   const _LeadsTableCard({
     required this.leads,
@@ -933,6 +1068,7 @@ class _LeadsTableCard extends StatefulWidget {
     required this.isMobile,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.onBulkAssignAgent,
   });
 
   @override
@@ -944,6 +1080,181 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   String selectedAssign = 'Assign';
   PickerDateRange? _selectedTableRange;
   String selectedTableDropdown = 'Today';
+  final Set<String> _selectedLeadIds = {};
+  int get _currentPage => context.read<LeadsBloc>().state.currentPage;
+  int get _pageSize => context.read<LeadsBloc>().state.pageSize;
+
+  Future<void> _handleBulkAssign(String? agentId) async {
+    final agentName = agentId == null
+        ? 'None'
+        : widget.salesAgents.firstWhere(
+                (a) => a['_id'] == agentId,
+                orElse: () => <String, dynamic>{},
+              )['firstName'] ??
+              'Agent';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Confirm Bulk Assignment',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to assign ${agentId == null ? "no agent" : "sales agent \"$agentName\""} to ${_selectedLeadIds.length} selected leads?',
+          style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              'Confirm',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final ids = _selectedLeadIds.toList();
+      setState(() {
+        _selectedLeadIds.clear();
+      });
+      await widget.onBulkAssignAgent(ids, agentId);
+    }
+  }
+
+  Widget _buildBulkActionsControls() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${_selectedLeadIds.length} selected',
+          style: GoogleFonts.outfit(
+            fontSize: widget.isMobile ? 12 : 13,
+            color: AppTheme.primaryColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          height: widget.isMobile ? 32 : 36,
+          padding: const EdgeInsets.only(left: 12, right: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppTheme.primaryColor.withValues(alpha: 0.5),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              padding: EdgeInsets.zero,
+              isExpanded: false,
+              isDense: true,
+              hint: Text(
+                'Bulk Action',
+                style: GoogleFonts.outfit(
+                  fontSize: widget.isMobile ? 11 : 12,
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              value: null,
+              icon: Padding(
+                padding: const EdgeInsets.only(left: 4, right: 4),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: widget.isMobile ? 14 : 16,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: 'unassign',
+                  child: Text(
+                    'Unassign Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: widget.isMobile ? 11 : 12,
+                      color: AppTheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ...widget.salesAgents.map((agent) {
+                  final name =
+                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                          .trim();
+                  return DropdownMenuItem<String>(
+                    value: agent['_id'],
+                    child: Text(
+                      name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
+                      style: GoogleFonts.outfit(
+                        fontSize: widget.isMobile ? 11 : 12,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }),
+              ],
+              onChanged: (val) {
+                if (val == 'unassign') {
+                  _handleBulkAssign(null);
+                } else if (val != null) {
+                  _handleBulkAssign(val);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _selectedLeadIds.clear();
+            });
+          },
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: Size(0, widget.isMobile ? 32 : 36),
+          ),
+          child: Text(
+            'Clear',
+            style: GoogleFonts.outfit(
+              fontSize: widget.isMobile ? 11 : 12,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   String get _tableRangeDisplay {
     if (_selectedTableRange != null &&
@@ -1006,8 +1317,28 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   }
 
   @override
+  void didUpdateWidget(_LeadsTableCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.leads.length != widget.leads.length) {
+      context.read<LeadsBloc>().add(
+        const UpdateLeadsFilterEvent(currentPage: 1),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
+    final total = widget.leads.length;
+    final totalPages = (total / _pageSize).ceil();
+    final currentPage = _currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
+    final startIndex = (currentPage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize) > total
+        ? total
+        : (startIndex + _pageSize);
+    final paginatedLeads = total == 0
+        ? <Map<String, dynamic>>[]
+        : widget.leads.sublist(startIndex, endIndex);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -1037,7 +1368,9 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      _buildCombinedControls(),
+                      _selectedLeadIds.isNotEmpty
+                          ? _buildBulkActionsControls()
+                          : _buildCombinedControls(),
                     ],
                   )
                 : Column(
@@ -1055,18 +1388,24 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                       const SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        child: _buildCombinedControls(),
+                        child: _selectedLeadIds.isNotEmpty
+                            ? _buildBulkActionsControls()
+                            : _buildCombinedControls(),
                       ),
                     ],
                   ),
           ),
           _LeadsTable(
-            leads: widget.leads,
+            leads: paginatedLeads,
             isMobile: widget.isMobile,
             salesAgents: widget.salesAgents,
             onAssignAgent: widget.onAssignAgent,
+            selectedLeadIds: _selectedLeadIds,
+            onSelectionChanged: () {
+              setState(() {});
+            },
           ),
-          _buildTableFooter(widget.isMobile),
+          _buildTableFooter(widget.isMobile, currentPage),
         ],
       ),
     );
@@ -1248,13 +1587,80 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     );
   }
 
-  Widget _buildTableFooter(bool isMobile) {
+  Widget _buildPageSizeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Show',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _pageSize,
+              icon: const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+              dropdownColor: Colors.white,
+              items: [10, 20, 30, 40, 50]
+                  .map<DropdownMenuItem<int>>(
+                    (int val) =>
+                        DropdownMenuItem<int>(value: val, child: Text('$val')),
+                  )
+                  .toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  context.read<LeadsBloc>().add(
+                    UpdateLeadsFilterEvent(pageSize: newValue, currentPage: 1),
+                  );
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'entries',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableFooter(bool isMobile, int currentPage) {
+    final total = widget.leads.length;
+    final start = total == 0 ? 0 : (currentPage - 1) * _pageSize + 1;
+    final end = (currentPage * _pageSize) > total
+        ? total
+        : (currentPage * _pageSize);
+
     final footerPadding = isMobile
         ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-        : const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 12,
-          ); // Aligned with card header grid
+        : const EdgeInsets.symmetric(horizontal: 12, vertical: 12);
 
     return Container(
       padding: footerPadding,
@@ -1268,55 +1674,174 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  'Showing 1 to ${widget.leads.length} of ${widget.totalEntries} entries',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    _buildPageSizeSelector(),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                _buildPaginationControls(),
+                _buildPaginationControls(currentPage),
               ],
             )
           : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Showing 1 to ${widget.leads.length} of ${widget.totalEntries} entries',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _buildPageSizeSelector(),
+                  ],
                 ),
-                _buildPaginationControls(),
+                _buildPaginationControls(currentPage),
               ],
             ),
     );
   }
 
-  Widget _buildPaginationControls() {
+  Widget _buildPaginationControls(int currentPage) {
+    final int totalPages = (widget.leads.length / _pageSize).ceil();
+    final int displayPages = totalPages > 0 ? totalPages : 1;
+
+    List<Widget> pageButtons = [];
+
+    if (displayPages <= 5) {
+      for (int i = 1; i <= displayPages; i++) {
+        pageButtons.add(
+          _PageNumberButton(
+            page: i,
+            isActive: currentPage == i,
+            onTap: () {
+              context.read<LeadsBloc>().add(
+                UpdateLeadsFilterEvent(currentPage: i),
+              );
+            },
+          ),
+        );
+        if (i < displayPages) {
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+    } else {
+      pageButtons.add(
+        _PageNumberButton(
+          page: 1,
+          isActive: currentPage == 1,
+          onTap: () {
+            context.read<LeadsBloc>().add(
+              const UpdateLeadsFilterEvent(currentPage: 1),
+            );
+          },
+        ),
+      );
+      pageButtons.add(const SizedBox(width: 8));
+
+      if (currentPage > 3) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      final start = (currentPage - 1).clamp(2, displayPages - 1);
+      final end = (currentPage + 1).clamp(2, displayPages - 1);
+
+      for (int i = start; i <= end; i++) {
+        if (i > 1 && i < displayPages) {
+          pageButtons.add(
+            _PageNumberButton(
+              page: i,
+              isActive: currentPage == i,
+              onTap: () {
+                context.read<LeadsBloc>().add(
+                  UpdateLeadsFilterEvent(currentPage: i),
+                );
+              },
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+
+      if (currentPage < displayPages - 2) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      pageButtons.add(
+        _PageNumberButton(
+          page: displayPages,
+          isActive: currentPage == displayPages,
+          onTap: () {
+            context.read<LeadsBloc>().add(
+              UpdateLeadsFilterEvent(currentPage: displayPages),
+            );
+          },
+        ),
+      );
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _PaginationButton(
-          onTap: () {},
+          onTap: currentPage > 1
+              ? () {
+                  context.read<LeadsBloc>().add(
+                    UpdateLeadsFilterEvent(currentPage: currentPage - 1),
+                  );
+                }
+              : null,
           icon: Icons.chevron_left,
-          isDisabled: true,
+          isDisabled: currentPage <= 1,
         ),
         const SizedBox(width: 12),
-        const _PageNumberButton(page: 1, isActive: true, onTap: null),
-        const SizedBox(width: 8), // Refined spacing
-        const _PageNumberButton(page: 2, isActive: false, onTap: null),
-        const SizedBox(width: 8), // Refined spacing
-        const _PageNumberButton(page: 3, isActive: false, onTap: null),
+        ...pageButtons,
         const SizedBox(width: 12),
         _PaginationButton(
-          onTap: () {},
+          onTap: currentPage < displayPages
+              ? () {
+                  context.read<LeadsBloc>().add(
+                    UpdateLeadsFilterEvent(currentPage: currentPage + 1),
+                  );
+                }
+              : null,
           icon: Icons.chevron_right,
-          isDisabled: false,
+          isDisabled: currentPage >= displayPages,
         ),
       ],
     );
@@ -1328,12 +1853,16 @@ class _LeadsTable extends StatefulWidget {
   final bool isMobile;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Set<String> selectedLeadIds;
+  final VoidCallback onSelectionChanged;
 
   const _LeadsTable({
     required this.leads,
     required this.isMobile,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.selectedLeadIds,
+    required this.onSelectionChanged,
   });
 
   @override
@@ -1342,34 +1871,37 @@ class _LeadsTable extends StatefulWidget {
 
 class _LeadsTableState extends State<_LeadsTable> {
   int? hoveredRowIndex;
-  final Set<String> selectedPhones = {};
 
   bool get isAllSelected =>
       widget.leads.isNotEmpty &&
-      widget.leads.every((l) => selectedPhones.contains(l['phone'] ?? ''));
+      widget.leads.every((l) => widget.selectedLeadIds.contains(l['id'] ?? ''));
 
   void _toggleAll() {
     setState(() {
       if (isAllSelected) {
         for (var l in widget.leads) {
-          selectedPhones.remove(l['phone'] ?? '');
+          widget.selectedLeadIds.remove(l['id'] ?? '');
         }
       } else {
         for (var l in widget.leads) {
-          selectedPhones.add(l['phone'] ?? '');
+          if (l['id'] != null) {
+            widget.selectedLeadIds.add(l['id']);
+          }
         }
       }
     });
+    widget.onSelectionChanged();
   }
 
-  void _toggleSelection(String phone) {
+  void _toggleSelection(String leadId) {
     setState(() {
-      if (selectedPhones.contains(phone)) {
-        selectedPhones.remove(phone);
+      if (widget.selectedLeadIds.contains(leadId)) {
+        widget.selectedLeadIds.remove(leadId);
       } else {
-        selectedPhones.add(phone);
+        widget.selectedLeadIds.add(leadId);
       }
     });
+    widget.onSelectionChanged();
   }
 
   @override
@@ -1378,7 +1910,7 @@ class _LeadsTableState extends State<_LeadsTable> {
       '', // Checkbox column
       'Lead Name',
       'Phone Number',
-      'City',
+      'Location',
       'Last Activity',
       'Assigned Agent',
       'Source',
@@ -1420,7 +1952,7 @@ class _LeadsTableState extends State<_LeadsTable> {
             ),
           ),
           Expanded(
-            flex: 10,
+            flex: 12,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _HeaderText(columns[3]),
@@ -1461,7 +1993,14 @@ class _LeadsTableState extends State<_LeadsTable> {
             : minTableWidth;
 
         return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+            dragDevices: {
+              ui.PointerDeviceKind.touch,
+              ui.PointerDeviceKind.mouse,
+              ui.PointerDeviceKind.trackpad,
+            },
+          ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -1475,17 +2014,20 @@ class _LeadsTableState extends State<_LeadsTable> {
                       final index = entry.key;
                       final lead = entry.value;
                       final bool isAlternate = index % 2 == 1;
-                      final String phone = lead['phone'] ?? '';
+                      final String leadId = lead['id'] ?? '';
                       return _LeadRow(
                         lead: lead,
                         isAlternate: isAlternate,
                         isMobile: widget.isMobile,
                         isHovered: hoveredRowIndex == index,
-                        isSelected: selectedPhones.contains(phone),
+                        isSelected: widget.selectedLeadIds.contains(leadId),
                         isAllSelected: isAllSelected,
-                        onToggleSelection: () => _toggleSelection(phone),
-                        onTap: () =>
-                            Navigator.pushNamed(context, '/leads/profile', arguments: lead),
+                        onToggleSelection: () => _toggleSelection(leadId),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/leads/profile',
+                          arguments: lead,
+                        ),
                         onHover: () => setState(() => hoveredRowIndex = index),
                         onExit: () => setState(() => hoveredRowIndex = null),
                         salesAgents: widget.salesAgents,
@@ -1598,14 +2140,31 @@ class _LeadRow extends StatelessWidget {
                 ),
                 _cell(lead['name'], flex: 1.8, isBold: true),
                 _cell(lead['phone'], flex: 1.4, isSecondary: true),
-                _cell(lead['city'], flex: 1.0, isSecondary: true),
+                _cell(
+                  (lead['city'] != null &&
+                          lead['city'].toString().trim().isNotEmpty &&
+                          lead['state'] != null &&
+                          lead['state'].toString().trim().isNotEmpty)
+                      ? '${lead['city']}, ${lead['state']}'
+                      : ((lead['city'] ?? '').toString().trim().isNotEmpty
+                            ? lead['city']
+                            : (lead['state'] ?? '')),
+                  flex: 1.2,
+                  isSecondary: true,
+                ),
                 _cell(lead['activity'], flex: 1.1, isSecondary: true),
                 Expanded(
                   flex: 12,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF9FAFB),
                         borderRadius: BorderRadius.circular(6),
@@ -1613,10 +2172,19 @@ class _LeadRow extends StatelessWidget {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: salesAgents.any((agent) => agent['_id'] == lead['agentId']) ? lead['agentId'] : null,
+                          value:
+                              salesAgents.any(
+                                (agent) => agent['_id'] == lead['agentId'],
+                              )
+                              ? lead['agentId']
+                              : null,
                           isExpanded: true,
                           isDense: true,
-                          icon: const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
                           hint: Text(
                             '-',
                             style: GoogleFonts.outfit(
@@ -1640,11 +2208,15 @@ class _LeadRow extends StatelessWidget {
                               ),
                             ),
                             ...salesAgents.map((agent) {
-                              final agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                              final agentName =
+                                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                      .trim();
                               return DropdownMenuItem<String>(
                                 value: agent['_id'],
                                 child: Text(
-                                  agentName.isNotEmpty ? agentName : (agent['phoneNumber'] ?? ''),
+                                  agentName.isNotEmpty
+                                      ? agentName
+                                      : (agent['phoneNumber'] ?? ''),
                                   style: GoogleFonts.outfit(
                                     fontSize: 12.5,
                                     color: AppTheme.textPrimary,
@@ -1669,9 +2241,7 @@ class _LeadRow extends StatelessWidget {
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: _ConnectedActionButtons(
-                        onView: onTap,
-                      ),
+                      child: _ConnectedActionButtons(onView: onTap),
                     ),
                   ),
                 ),
@@ -1738,7 +2308,11 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             curve: Curves.easeOutCubic,
-            transform: Matrix4.translationValues(0, isViewHovered ? -1.5 : 0.0, 0),
+            transform: Matrix4.translationValues(
+              0,
+              isViewHovered ? -1.5 : 0.0,
+              0,
+            ),
             decoration: BoxDecoration(
               color: isViewHovered ? AppTheme.primaryColor : Colors.white,
               borderRadius: BorderRadius.circular(6),
@@ -1772,7 +2346,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                     style: GoogleFonts.outfit(
                       fontSize: 12.5,
                       fontWeight: FontWeight.bold,
-                      color: isViewHovered ? Colors.white : AppTheme.textPrimary,
+                      color: isViewHovered
+                          ? Colors.white
+                          : AppTheme.textPrimary,
                     ),
                   ),
                 ],
@@ -1869,16 +2445,20 @@ class _LeadsStatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final unassignedCount = leads.where((l) => l['agentId'] == null).length;
     final assignedCount = leads.where((l) => l['agentId'] != null).length;
-    final kycPendingCount = leads.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').length;
+    final kycPendingCount = leads
+        .where(
+          (l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
+        )
+        .length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final double spacing = AppTheme.spacingSmall;
         final int columns;
         if (constraints.maxWidth >= 1200) {
-          columns = 6;
+          columns = 4;
         } else if (constraints.maxWidth >= 768) {
-          columns = 3;
+          columns = 2;
         } else {
           columns = 2; // Mobile
         }
@@ -1894,7 +2474,7 @@ class _LeadsStatsGrid extends StatelessWidget {
               width: width,
               title: 'Unassigned Lead',
               value: '$unassignedCount',
-              imagePath: 'assets/images/New leads.png',
+              icon: Icons.person_off_outlined,
               color: AppTheme.warning,
               isCompact: true,
             ),
@@ -1902,7 +2482,7 @@ class _LeadsStatsGrid extends StatelessWidget {
               width: width,
               title: 'Assigned Lead',
               value: '$assignedCount',
-              imagePath: 'assets/images/Active dealer .png',
+              icon: Icons.person_pin_outlined,
               color: AppTheme.info,
               isCompact: true,
             ),
@@ -1910,7 +2490,7 @@ class _LeadsStatsGrid extends StatelessWidget {
               width: width,
               title: 'KYC Pending',
               value: '$kycPendingCount',
-              imagePath: 'assets/images/order pending.png',
+              icon: Icons.pending_actions_outlined,
               color: AppTheme.error,
               isCompact: true,
             ),
@@ -1918,24 +2498,8 @@ class _LeadsStatsGrid extends StatelessWidget {
               width: width,
               title: 'KYC Confirm',
               value: '$verifiedDealersCount',
-              imagePath: 'assets/images/dealer onbord.png',
+              icon: Icons.verified_user_outlined,
               color: AppTheme.success,
-              isCompact: true,
-            ),
-            StatCardWidget(
-              width: width,
-              title: 'Order Pending',
-              value: '0',
-              imagePath: 'assets/images/order status.png',
-              color: AppTheme.warning,
-              isCompact: true,
-            ),
-            StatCardWidget(
-              width: width,
-              title: 'Order Confirm',
-              value: '0',
-              imagePath: 'assets/images/order today.png',
-              color: AppTheme.lightGreen,
               isCompact: true,
             ),
           ],
@@ -2058,13 +2622,8 @@ class _PaginationButtonState extends State<_PaginationButton> {
 class _CustomCheckbox extends StatefulWidget {
   final bool isSelected;
   final VoidCallback? onTap;
-  final bool isHeader;
 
-  const _CustomCheckbox({
-    required this.isSelected,
-    this.onTap,
-    this.isHeader = false,
-  });
+  const _CustomCheckbox({required this.isSelected, this.onTap});
 
   @override
   State<_CustomCheckbox> createState() => _CustomCheckboxState();

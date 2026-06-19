@@ -563,6 +563,69 @@ class _ProductsTabViewState extends State<ProductsTabView> {
     );
   }
 
+  Widget _buildPageSizeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Show',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _rowsPerPage,
+              icon: const Icon(Icons.arrow_drop_down, size: 18, color: AppTheme.textSecondary),
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+              dropdownColor: Colors.white,
+              items: [10, 20, 30, 40, 50]
+                  .map<DropdownMenuItem<int>>(
+                    (int val) => DropdownMenuItem<int>(
+                      value: val,
+                      child: Text('$val'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _rowsPerPage = newValue;
+                    _currentPage = 1;
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'entries',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildProductsTableFooter(int totalEntries) {
     final int startEntry = totalEntries == 0
         ? 0
@@ -582,13 +645,20 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Showing $startEntry to $endEntry of $totalEntries entries',
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.textSecondary,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Showing $startEntry to $endEntry of $totalEntries entries',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 20),
+              _buildPageSizeSelector(),
+            ],
           ),
           if (totalPages > 1)
             Row(

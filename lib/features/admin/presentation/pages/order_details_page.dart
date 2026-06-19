@@ -1,11 +1,16 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class OrderDetailsPage extends StatefulWidget {
@@ -28,6 +33,35 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is OrderModel) {
         _orderRaw = args;
+        _saveOrderToCache(args);
+        _refreshOrderDetails();
+      } else {
+        _loadOrderFromCache();
+      }
+      _isInitialized = true;
+    }
+  }
+
+  Future<void> _saveOrderToCache(OrderModel order) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('kd_current_order', jsonEncode(order.toJson()));
+    } catch (e) {
+      debugPrint('Error saving order to cache: $e');
+    }
+  }
+
+  Future<void> _loadOrderFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final orderStr = prefs.getString('kd_current_order');
+      if (orderStr != null) {
+        if (mounted) {
+          setState(() {
+            _orderRaw = OrderModel.fromJson(jsonDecode(orderStr));
+          });
+        }
+        _refreshOrderDetails();
       } else {
         // Automatically redirect to the Orders list page if no order data is present
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -36,7 +70,24 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
           }
         });
       }
-      _isInitialized = true;
+    } catch (e) {
+      debugPrint('Error loading order from cache: $e');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/orders');
+        }
+      });
+    }
+  }
+
+  Future<void> _refreshOrderDetails() async {
+    if (_orderRaw == null) return;
+    try {
+      context.read<OrdersBloc>().add(
+        const FetchOrdersEvent(forceRefresh: true),
+      );
+    } catch (e) {
+      debugPrint('Error refreshing order details: $e');
     }
   }
 
@@ -275,77 +326,127 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     final bool isMobile = Responsive.isMobile(context);
     final double gapHeight = isMobile ? 12.0 : 16.0;
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Premium Header Appbar
-            _buildAppBar(),
-            const Divider(height: 1, color: AppTheme.lightBorderColor),
+    return BlocConsumer<OrdersBloc, OrdersState>(
+      listener: (context, state) {
+        if (state.status == OrdersStatus.success) {
+          final freshOrder = state.orders.firstWhere(
+            (o) => o.id == _orderRaw?.id,
+            orElse: () => _orderRaw!,
+          );
+          if (freshOrder != _orderRaw) {
+            setState(() {
+              _orderRaw = freshOrder;
+            });
+            _saveOrderToCache(freshOrder);
+          }
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Premium Header Appbar
+                _buildAppBar(),
+                const Divider(height: 1, color: AppTheme.lightBorderColor),
 
-            // Scrollable Layout
-            Expanded(
-              child: SingleChildScrollView(
-                padding: AppTheme.getResponsivePadding(
-                  context,
-                ).copyWith(top: gapHeight, bottom: gapHeight),
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  children: [
-                    _buildOrderHeroCard(),
-                    SizedBox(height: gapHeight),
-                    _buildCustomerAndShippingCard(),
-                    SizedBox(height: gapHeight),
-                    _buildItemsOrderedCard(),
-                    SizedBox(height: gapHeight),
-                    _buildFinancialSummaryCard(),
-                  ],
+                // Scrollable Layout
+                Expanded(
+                  child: RefreshIndicator(
+                    color: AppTheme.primaryColor,
+                    onRefresh: () async {
+                      context.read<OrdersBloc>().add(
+                        const FetchOrdersEvent(forceRefresh: true),
+                      );
+                    },
+                    child: SingleChildScrollView(
+                      padding: AppTheme.getResponsivePadding(
+                        context,
+                      ).copyWith(top: gapHeight, bottom: gapHeight),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Column(
+                        children: [
+                          _buildOrderHeroCard(),
+                          SizedBox(height: gapHeight),
+                          _buildCustomerAndShippingCard(),
+                          SizedBox(height: gapHeight),
+                          _buildItemsOrderedCard(),
+                          SizedBox(height: gapHeight),
+                          _buildFinancialSummaryCard(),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildAppBar() {
+    final bool isMobile = Responsive.isMobile(context);
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              // Premium styled circular back button
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.lightBorderColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.borderColor.withOpacity(0.5),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: AppTheme.textPrimary,
-                      size: 16,
-                    ),
+          // Premium styled circular back button
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightBorderColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.borderColor.withOpacity(0.5),
                   ),
                 ),
+                child: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: AppTheme.textPrimary,
+                  size: 16,
+                ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isMobile) ...[
+                  SelectableText(
+                    _order.orderId,
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _buildPaymentBadge(_order.paymentStatus),
+                      _buildFulfillmentBadge(_order.orderStatus),
+                    ],
+                  ),
+                ] else ...[
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       SelectableText(
                         _order.orderId,
@@ -356,24 +457,22 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      const SizedBox(width: 10),
                       _buildPaymentBadge(_order.paymentStatus),
-                      const SizedBox(width: 6),
                       _buildFulfillmentBadge(_order.orderStatus),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Placed on ${_formatDateTime(_order.placedAt)}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  'Placed on ${_formatDateTime(_order.placedAt)}',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -466,28 +565,27 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: Colors.white24, height: 1),
           ),
-          Row(
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
             children: [
               _buildHeroMetaInfo(
                 title: 'PAYMENT METHOD',
                 value: _order.paymentMethod.toUpperCase(),
                 icon: Icons.payments_outlined,
               ),
-              const SizedBox(width: 24),
               _buildHeroMetaInfo(
                 title: 'CHANNEL',
                 value: 'ADMIN',
                 icon: Icons.hub_outlined,
               ),
               if (_order.razorpayPaymentId != null &&
-                  _order.razorpayPaymentId!.isNotEmpty) ...[
-                const SizedBox(width: 24),
+                  _order.razorpayPaymentId!.isNotEmpty)
                 _buildHeroMetaInfo(
                   title: 'PAYMENT ID',
                   value: _order.razorpayPaymentId!,
                   icon: Icons.receipt_long_rounded,
                 ),
-              ],
             ],
           ),
         ],
@@ -549,6 +647,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
   // --- ITEMS SUMMARY CARD ---
   Widget _buildItemsOrderedCard() {
+    final bool isMobile = Responsive.isMobile(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -591,111 +690,141 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
           const SizedBox(height: 12),
 
           // Items Table Structure
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppTheme.borderColor),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                // Table Header
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  color: AppTheme.lightBorderColor,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 5,
-                        child: Text(
-                          'PRODUCT NAME',
-                          style: AppTheme.tableHeader,
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text('PACKING', style: AppTheme.tableHeader),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'QUANTITY',
-                          style: AppTheme.tableHeader,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Base Packing',
-                          style: AppTheme.tableHeader,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      //total volume
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Total Volume',
-                          style: AppTheme.tableHeader,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'AMOUNT',
-                          style: AppTheme.tableHeader,
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Table Rows
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _order.items.length,
-                  separatorBuilder: (_, __) => const Divider(
-                    color: AppTheme.lightBorderColor,
-                    height: 1,
-                  ),
-                  itemBuilder: (context, idx) {
-                    final item = _order.items[idx];
-                    final parsed = _parseProductTitle(item.title);
-                    final productName = parsed['name'] ?? item.title;
-                    final packing =
-                        (item.variantSize != null &&
-                            item.variantSize!.isNotEmpty)
-                        ? item.variantSize!
-                        : (parsed['packing'] ?? 'Standard');
-                    final basePacking =
-                        (item.basePacking != null &&
-                            item.basePacking!.isNotEmpty)
-                        ? item.basePacking!
-                        : (parsed['basePacking'] ?? '-');
-                    final volume = _calculateTotalVolume(
-                      basePacking,
-                      item.quantity,
-                    );
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double minTableWidth = isMobile
+                  ? 650.0
+                  : constraints.maxWidth;
+              final double tableWidth = constraints.maxWidth > minTableWidth
+                  ? constraints.maxWidth
+                  : minTableWidth;
 
-                    return _ItemTableRow(
-                      productName: productName,
-                      technicalName: item.technicalName,
-                      packing: packing,
-                      quantity: item.quantity,
-                      basePacking: basePacking,
-                      volume: volume,
-                      amount: item.price * item.quantity,
-                    );
+              return ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    ui.PointerDeviceKind.touch,
+                    ui.PointerDeviceKind.mouse,
+                    ui.PointerDeviceKind.trackpad,
                   },
                 ),
-              ],
-            ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.borderColor),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          // Table Header
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            color: AppTheme.lightBorderColor,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: Text(
+                                    'PRODUCT NAME',
+                                    style: AppTheme.tableHeader,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'PACKING',
+                                    style: AppTheme.tableHeader,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'QUANTITY',
+                                    style: AppTheme.tableHeader,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'Base Packing',
+                                    style: AppTheme.tableHeader,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                //total volume
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'Total Volume',
+                                    style: AppTheme.tableHeader,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'AMOUNT',
+                                    style: AppTheme.tableHeader,
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Table Rows
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _order.items.length,
+                            separatorBuilder: (_, __) => const Divider(
+                              color: AppTheme.lightBorderColor,
+                              height: 1,
+                            ),
+                            itemBuilder: (context, idx) {
+                              final item = _order.items[idx];
+                              final parsed = _parseProductTitle(item.title);
+                              final productName = parsed['name'] ?? item.title;
+                              final packing =
+                                  (item.variantSize != null &&
+                                      item.variantSize!.isNotEmpty)
+                                  ? item.variantSize!
+                                  : (parsed['packing'] ?? 'Standard');
+                              final basePacking =
+                                  (item.basePacking != null &&
+                                      item.basePacking!.isNotEmpty)
+                                  ? item.basePacking!
+                                  : (parsed['basePacking'] ?? '-');
+                              final volume = _calculateTotalVolume(
+                                basePacking,
+                                item.quantity,
+                              );
+
+                              return _ItemTableRow(
+                                productName: productName,
+                                technicalName: item.technicalName,
+                                packing: packing,
+                                quantity: item.quantity,
+                                basePacking: basePacking,
+                                volume: volume,
+                                amount: item.price * item.quantity,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
 
           // Free promo items

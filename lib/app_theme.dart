@@ -201,6 +201,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: GoogleFonts.outfit().fontFamily,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: Colors.white,
       cardColor: cardColor,

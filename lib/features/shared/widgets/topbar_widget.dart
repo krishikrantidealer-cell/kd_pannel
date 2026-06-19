@@ -14,6 +14,9 @@ class TopbarWidget extends StatelessWidget {
     final bool isMobile = Responsive.isMobile(context);
 
     final double height = isMobile ? 60 : 72;
+    final String? currentRoute = ModalRoute.of(context)?.settings.name;
+    final bool isProfileRoute =
+        currentRoute == '/leads/profile' || currentRoute == '/dealers/profile';
 
     return ClipRect(
       child: BackdropFilter(
@@ -25,13 +28,23 @@ class TopbarWidget extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.88),
-                AppTheme.cardColor.withValues(alpha: 0.9),
-              ],
+              colors: isProfileRoute
+                  ? [
+                      const Color(0xFFF1F8E9).withValues(alpha: 0.9),
+                      const Color(0xFFE8F5E9).withValues(alpha: 0.95),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.88),
+                      AppTheme.cardColor.withValues(alpha: 0.9),
+                    ],
             ),
-            border: const Border(
-              bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+            border: Border(
+              bottom: BorderSide(
+                color: isProfileRoute
+                    ? const Color(0xFFC8E6C9)
+                    : const Color(0xFFE5E7EB),
+                width: 1,
+              ),
             ),
             boxShadow: [
               BoxShadow(

@@ -158,7 +158,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                           style: TextStyle(
                             fontSize: isMobile ? 10.5 : 11.5,
                             color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w800,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -173,7 +173,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                                 widget.value,
                                 TextStyle(
                                   fontSize: isMobile ? 16 : 18,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w900,
                                   color: AppTheme.textPrimary,
                                 ),
                               ),
@@ -186,7 +186,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                                   style: TextStyle(
                                     fontSize: isMobile ? 9 : 10,
                                     color: widget.color,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -307,7 +307,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                     style: TextStyle(
                       fontSize: isMobile ? 11 : 12,
                       color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w700,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -318,7 +318,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                     widget.value,
                     TextStyle(
                       fontSize: isMobile ? 18 : 22,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: AppTheme.textPrimary,
                     ),
                   ),
@@ -329,7 +329,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                       style: TextStyle(
                         fontSize: isMobile ? 9.5 : 11,
                         color: const Color(0xFF9CA3AF),
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w700,
                       ),
                       textAlign: TextAlign.center,
                       maxLines: 1,

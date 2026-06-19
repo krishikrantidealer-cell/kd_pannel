@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/dealer_details_page.dart';
 import 'package:kd_pannel/util/dealers.dart';
 
 class UserEventsPage extends StatefulWidget {
@@ -1076,9 +1075,10 @@ class _EventLogCardState extends State<_EventLogCard> {
             isHighValue: false,
             isInactive: false,
           );
-      Navigator.push(
+      Navigator.pushNamed(
         context,
-        MaterialPageRoute(builder: (_) => DealerDetailsPage(dealer: dealer)),
+        '/dealers/profile',
+        arguments: dealer,
       );
     }
   }

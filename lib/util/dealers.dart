@@ -40,6 +40,54 @@ class Dealer {
     this.kycStatus,
     this.address,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'phone': phone,
+      'city': city,
+      'state': state,
+      'agent': agent,
+      'gstStatus': gstStatus,
+      'totalOrders': totalOrders,
+      'purchaseValue': purchaseValue,
+      'isHighValue': isHighValue,
+      'isInactive': isInactive,
+      'id': id,
+      'agentId': agentId,
+      'licenceImage': licenceImage,
+      'shopImage': shopImage,
+      'gstNumber': gstNumber,
+      'email': email,
+      'userType': userType,
+      'kycStatus': kycStatus,
+      'address': address,
+    };
+  }
+
+  factory Dealer.fromMap(Map<String, dynamic> map) {
+    return Dealer(
+      name: map['name'] ?? '',
+      phone: map['phone'] ?? '',
+      city: map['city'] ?? '',
+      state: map['state'] ?? '',
+      agent: map['agent'] ?? '',
+      gstStatus: map['gstStatus'] ?? '',
+      totalOrders: map['totalOrders'] ?? 0,
+      purchaseValue: map['purchaseValue'] ?? '',
+      isHighValue: map['isHighValue'] ?? false,
+      isInactive: map['isInactive'] ?? false,
+      id: map['id'],
+      agentId: map['agentId'],
+      licenceImage: map['licenceImage'],
+      shopImage: map['shopImage'],
+      gstNumber: map['gstNumber'],
+      email: map['email'],
+      userType: map['userType'],
+      kycStatus: map['kycStatus'],
+      address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
+    );
+  }
 }
 
 final List<Dealer> allDealers = [
