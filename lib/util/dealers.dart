@@ -9,6 +9,8 @@ class Dealer {
   final String purchaseValue;
   final bool isHighValue;
   final bool isInactive;
+  final String source;
+  final String? deepLinkUrl;
   final String? id;
   final String? agentId;
   final String? licenceImage;
@@ -30,6 +32,8 @@ class Dealer {
     required this.purchaseValue,
     required this.isHighValue,
     required this.isInactive,
+    this.source = 'App',
+    this.deepLinkUrl,
     this.id,
     this.agentId,
     this.licenceImage,
@@ -53,6 +57,8 @@ class Dealer {
       'purchaseValue': purchaseValue,
       'isHighValue': isHighValue,
       'isInactive': isInactive,
+      'source': source,
+      'deepLinkUrl': deepLinkUrl,
       'id': id,
       'agentId': agentId,
       'licenceImage': licenceImage,
@@ -77,6 +83,8 @@ class Dealer {
       purchaseValue: map['purchaseValue'] ?? '',
       isHighValue: map['isHighValue'] ?? false,
       isInactive: map['isInactive'] ?? false,
+      source: map['source'] ?? 'App',
+      deepLinkUrl: map['deepLinkUrl'],
       id: map['id'],
       agentId: map['agentId'],
       licenceImage: map['licenceImage'],

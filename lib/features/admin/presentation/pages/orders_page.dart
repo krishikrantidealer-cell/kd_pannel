@@ -466,17 +466,18 @@ class _OrdersPageState extends State<OrdersPage> {
           ));
         },
         textAlignVertical: TextAlignVertical.center,
-        style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-        decoration: const InputDecoration(
+        style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+        decoration: InputDecoration(
           hintText: 'Search order ID, client name, phone...',
-          hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          prefixIcon: Icon(
+          hintStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13),
+          prefixIcon: const Icon(
             Icons.search_rounded,
             color: AppTheme.textSecondary,
             size: 18,
           ),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
         ),
       ),
     );

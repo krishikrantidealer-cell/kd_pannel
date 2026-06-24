@@ -9,6 +9,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/util/export_helper.dart';
 
 class LeadsPage extends StatefulWidget {
   final bool isStandalone;
@@ -20,6 +22,78 @@ class LeadsPage extends StatefulWidget {
 
 class _LeadsPageState extends State<LeadsPage> {
   final TextEditingController _searchController = TextEditingController();
+  bool _isExporting = false;
+
+  void _exportLeadsToCSV() async {
+    setState(() => _isExporting = true);
+
+    // Generate CSV content
+    final leads = filteredLeads;
+    final headers = [
+      'Name',
+      'Phone',
+      'City',
+      'State',
+      'Assigned Agent',
+      'Source',
+      'Status',
+      'KYC Status',
+      'GST Number',
+      'User Type',
+    ];
+
+    final buffer = StringBuffer();
+    buffer.writeln(
+      headers.map((h) => '"${h.replaceAll('"', '""')}"').join(','),
+    );
+
+    for (final lead in leads) {
+      final row = [
+        lead['name'] ?? '',
+        lead['phone'] ?? '',
+        lead['city'] ?? '',
+        lead['state'] ?? '',
+        lead['agent'] ?? '',
+        lead['source'] ?? '',
+        lead['status'] ?? '',
+        lead['kycStatus'] ?? '',
+        lead['gstNumber'] ?? '',
+        lead['userType'] ?? '',
+      ];
+      buffer.writeln(
+        row.map((val) => '"${val.toString().replaceAll('"', '""')}"').join(','),
+      );
+    }
+
+    // Simulate small delay for UI feedback
+    await Future.delayed(const Duration(milliseconds: 1000));
+
+    if (mounted) {
+      // Trigger download using the platform export helper
+      downloadCsv(buffer.toString(), 'leads_export.csv');
+
+      setState(() => _isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.info,
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              const Icon(Icons.download_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                'Leads data exported successfully to CSV!',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -120,19 +194,11 @@ class _LeadsPageState extends State<LeadsPage> {
     'This Month',
   ];
 
-  final List<String> filterChips = [
-    'All',
-    'Assigned',
-    'Unassigned',
-    'KYC Confirm',
-    'KYC Pending',
-  ];
+  final List<String> filterChips = ['All', 'Assigned', 'Unassigned'];
 
   final Map<String, String> statusMapping = {
     'Assigned': 'Assigned',
     'Unassigned': 'Unassigned',
-    'KYC Confirm': 'KYC Confirm',
-    'KYC Pending': 'KYC Pending',
   };
 
   List<Map<String, dynamic>> get filteredLeads {
@@ -156,15 +222,6 @@ class _LeadsPageState extends State<LeadsPage> {
         result = result.where((l) => l['agentId'] == null).toList();
       } else if (selectedFilterChip == 'Assigned') {
         result = result.where((l) => l['agentId'] != null).toList();
-      } else if (selectedFilterChip == 'KYC Pending') {
-        result = result
-            .where(
-              (l) =>
-                  l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
-            )
-            .toList();
-      } else if (selectedFilterChip == 'KYC Confirm') {
-        result = []; // Verified users are dealers, so they don't show up here
       }
     }
 
@@ -250,161 +307,7 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  void _showCreateSalesAgentDialog() {
-    final formKey = GlobalKey<FormState>();
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final emailController = TextEditingController();
-    final phoneController = TextEditingController();
-    final passwordController = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Create Sales Agent',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: firstNameController,
-                  decoration: _buildInputDecoration(
-                    'First Name',
-                    Icons.person_outline,
-                  ),
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: lastNameController,
-                  decoration: _buildInputDecoration(
-                    'Last Name',
-                    Icons.person_outline,
-                  ),
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: emailController,
-                  decoration: _buildInputDecoration(
-                    'Email Address',
-                    Icons.email_outlined,
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (val) => val == null || !val.contains('@')
-                      ? 'Invalid email'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneController,
-                  decoration: _buildInputDecoration(
-                    'Phone Number',
-                    Icons.phone_outlined,
-                  ),
-                  keyboardType: TextInputType.phone,
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: _buildInputDecoration(
-                    'Password',
-                    Icons.lock_outline,
-                  ),
-                  obscureText: true,
-                  validator: (val) => val == null || val.length < 6
-                      ? 'Password must be at least 6 characters'
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.outfit(
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                context.read<LeadsBloc>().add(
-                  CreateSalesAgentFromLeadsEvent(
-                    firstName: firstNameController.text.trim(),
-                    lastName: lastNameController.text.trim(),
-                    email: emailController.text.trim(),
-                    phoneNumber: phoneController.text.trim(),
-                    password: passwordController.text,
-                  ),
-                );
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.outfit(
-        color: AppTheme.textSecondary,
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
-      prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryColor),
-      filled: true,
-      fillColor: const Color(0xFFF9FAFB),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.borderColor, width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -478,35 +381,39 @@ class _LeadsPageState extends State<LeadsPage> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: _showCreateSalesAgentDialog,
-                                      icon: const Icon(Icons.add, size: 16),
-                                      label: Text(
-                                        'Sales Agent',
-                                        style: GoogleFonts.outfit(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppTheme.primaryColor,
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 10,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                    child: _buildTimeframeRow(isMobile, state),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _buildTimeframeRow(isMobile, state),
+                                  Container(
+                                    height: 38,
+                                    width: 38,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: AppTheme.borderColor,
+                                      ),
+                                    ),
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      onPressed: _isExporting
+                                          ? null
+                                          : _exportLeadsToCSV,
+                                      icon: _isExporting
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: AppTheme.primaryColor,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.download_rounded,
+                                              size: 18,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -529,19 +436,34 @@ class _LeadsPageState extends State<LeadsPage> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  ElevatedButton.icon(
-                                    onPressed: _showCreateSalesAgentDialog,
-                                    icon: const Icon(Icons.add, size: 16),
+                                  OutlinedButton.icon(
+                                    onPressed: _isExporting
+                                        ? null
+                                        : _exportLeadsToCSV,
+                                    icon: _isExporting
+                                        ? const SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          )
+                                        : const Icon(Icons.download, size: 16),
                                     label: Text(
-                                      'Create Sales Agent',
+                                      _isExporting
+                                          ? 'Exporting...'
+                                          : 'Export CSV',
                                       style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.bold,
+                                        color: AppTheme.primaryColor,
                                       ),
                                     ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.primaryColor,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: AppTheme.primaryColor,
+                                        width: 1.5,
+                                      ),
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 12,
@@ -858,10 +780,6 @@ class _LeadsPageState extends State<LeadsPage> {
         return Icons.person_pin_rounded;
       case 'Unassigned':
         return Icons.person_off_rounded;
-      case 'KYC Confirm':
-        return Icons.verified_user_rounded;
-      case 'KYC Pending':
-        return Icons.history_edu_rounded;
       default:
         return Icons.filter_list_rounded;
     }
@@ -1044,10 +962,6 @@ class _FilterChipItemState extends State<_FilterChipItem> {
         return AppTheme.info.withValues(alpha: 0.7);
       case 'Unassigned':
         return const Color(0xFF8B5CF6).withValues(alpha: 0.7);
-      case 'KYC Confirm':
-        return AppTheme.teal.withValues(alpha: 0.7);
-      case 'KYC Pending':
-        return AppTheme.error.withValues(alpha: 0.7);
       default:
         return AppTheme.textSecondary;
     }
@@ -1421,13 +1335,15 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
           ['All', 'Facebook', 'Google', 'Website', 'Direct'],
           (val) => setState(() => selectedSource = val!),
         ),
-        const SizedBox(width: 12),
-        _buildTableDropdown('Assign', selectedAssign, [
-          'All',
-          'Amit Patel',
-          'Priya Singh',
-          'Unassigned',
-        ], (val) => setState(() => selectedAssign = val!)),
+        if (AuthService().isAdmin) ...[
+          const SizedBox(width: 12),
+          _buildTableDropdown('Assign', selectedAssign, [
+            'All',
+            'Amit Patel',
+            'Priya Singh',
+            'Unassigned',
+          ], (val) => setState(() => selectedAssign = val!)),
+        ],
         const SizedBox(width: 12),
         _buildTableDateSection(),
       ],
@@ -1907,15 +1823,13 @@ class _LeadsTableState extends State<_LeadsTable> {
   @override
   Widget build(BuildContext context) {
     final columns = [
-      '', // Checkbox column
-      'Lead Name',
-      'Phone Number',
-      'Location',
-      'Last Activity',
-      'Assigned Agent',
-      'Source',
-      'Lead Status',
-      'Actions',
+      const _LeadColumnConfig('Lead Name', 18),
+      const _LeadColumnConfig('Phone Number', 14),
+      const _LeadColumnConfig('Location', 12),
+      const _LeadColumnConfig('Last Activity', 11),
+      if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 12),
+      const _LeadColumnConfig('Source', 10, isCenter: true),
+      const _LeadColumnConfig('Actions', 13, isCenter: true),
     ];
 
     Widget tableHeader = Container(
@@ -1937,57 +1851,25 @@ class _LeadsTableState extends State<_LeadsTable> {
               ),
             ),
           ),
-          Expanded(
-            flex: 18,
-            child: Padding(
+          ...columns.map((col) {
+            final Widget child = Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[1]),
-            ),
-          ),
-          Expanded(
-            flex: 14,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[2]),
-            ),
-          ),
-          Expanded(
-            flex: 12,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[3]),
-            ),
-          ),
-          Expanded(
-            flex: 11,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[4]),
-            ),
-          ),
-          Expanded(
-            flex: 12,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[5]),
-            ),
-          ),
-          Expanded(
-            flex: 10,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(columns[6]),
-            ),
-          ),
-          Expanded(flex: 12, child: Center(child: _HeaderText(columns[7]))),
-          Expanded(flex: 13, child: Center(child: _HeaderText(columns[8]))),
+              child: _HeaderText(col.title),
+            );
+            return Expanded(
+              flex: col.flex,
+              child: col.isCenter ? Center(child: child) : child,
+            );
+          }),
         ],
       ),
     );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double minTableWidth = widget.isMobile ? 1100.0 : 900.0;
+        final double minTableWidth = widget.isMobile
+            ? 1100.0
+            : (AuthService().isAdmin ? 900.0 : 800.0);
         final double tableWidth = constraints.maxWidth > minTableWidth
             ? constraints.maxWidth
             : minTableWidth;
@@ -2153,88 +2035,102 @@ class _LeadRow extends StatelessWidget {
                   isSecondary: true,
                 ),
                 _cell(lead['activity'], flex: 1.1, isSecondary: true),
-                Expanded(
-                  flex: 12,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Container(
+                if (AuthService().isAdmin)
+                  Expanded(
+                    flex: 12,
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
+                        horizontal: 12,
+                        vertical: 8,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value:
-                              salesAgents.any(
-                                (agent) => agent['_id'] == lead['agentId'],
-                              )
-                              ? lead['agentId']
-                              : null,
-                          isExpanded: true,
-                          isDense: true,
-                          icon: const Icon(
-                            Icons.arrow_drop_down,
-                            size: 16,
-                            color: AppTheme.textSecondary,
-                          ),
-                          hint: Text(
-                            '-',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12.5,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          onChanged: (String? newAgentId) {
-                            onAssignAgent(lead['id'], newAgentId);
-                          },
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '-',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12.5,
-                                  color: AppTheme.textSecondary,
+                      child: !AuthService().isAdmin
+                          ? Text(
+                              lead['agent'] ?? '-',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value:
+                                      salesAgents.any(
+                                        (agent) =>
+                                            agent['_id'] == lead['agentId'],
+                                      )
+                                      ? lead['agentId']
+                                      : null,
+                                  isExpanded: true,
+                                  isDense: true,
+                                  icon: const Icon(
+                                    Icons.arrow_drop_down,
+                                    size: 16,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  hint: Text(
+                                    '-',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12.5,
+                                      color: AppTheme.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  onChanged: (String? newAgentId) {
+                                    onAssignAgent(lead['id'], newAgentId);
+                                  },
+                                  items: [
+                                    DropdownMenuItem<String>(
+                                      value: null,
+                                      child: Text(
+                                        '-',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12.5,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    ...salesAgents.map((agent) {
+                                      final agentName =
+                                          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                              .trim();
+                                      return DropdownMenuItem<String>(
+                                        value: agent['_id'],
+                                        child: Text(
+                                          agentName.isNotEmpty
+                                              ? agentName
+                                              : (agent['phoneNumber'] ?? ''),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12.5,
+                                            color: AppTheme.textPrimary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ],
                                 ),
                               ),
                             ),
-                            ...salesAgents.map((agent) {
-                              final agentName =
-                                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                      .trim();
-                              return DropdownMenuItem<String>(
-                                value: agent['_id'],
-                                child: Text(
-                                  agentName.isNotEmpty
-                                      ? agentName
-                                      : (agent['phoneNumber'] ?? ''),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12.5,
-                                    color: AppTheme.textPrimary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
                     ),
                   ),
-                ),
-                _cell(lead['source'], flex: 1.0, isSecondary: true),
                 Expanded(
-                  flex: 12,
-                  child: Center(child: _StatusBadge(status: lead['status'])),
+                  flex: 10,
+                  child: Center(
+                    child: _SourceBadge(source: lead['source'] ?? 'App'),
+                  ),
                 ),
                 Expanded(
                   flex: 13,
@@ -2361,54 +2257,6 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    switch (status) {
-      case 'Order Pending':
-        color = AppTheme.warning;
-        break;
-      case 'Order Confirm':
-        color = AppTheme.success;
-        break;
-      case 'Assigned':
-        color = AppTheme.info;
-        break;
-      case 'Unassigned':
-        color = const Color(0xFF8B5CF6);
-        break;
-      case 'KYC Confirm':
-        color = AppTheme.teal;
-        break;
-      case 'KYC Pending':
-        color = AppTheme.error;
-        break;
-      default:
-        color = AppTheme.info;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-      ),
-      child: Text(
-        status,
-        style: GoogleFonts.outfit(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
 
 class _HeaderText extends StatelessWidget {
   final String text;
@@ -2667,6 +2515,83 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
               ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
               : null,
         ),
+      ),
+    );
+  }
+}
+
+class _LeadColumnConfig {
+  final String title;
+  final int flex;
+  final bool isCenter;
+
+  const _LeadColumnConfig(
+    this.title,
+    this.flex, {
+    this.isCenter = false,
+  });
+}
+
+class _SourceBadge extends StatelessWidget {
+  final String source;
+
+  const _SourceBadge({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    Color badgeColor;
+    Color textColor;
+    IconData icon;
+
+    final String sourceLower = source.toLowerCase();
+
+    if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
+      badgeColor = const Color(0xFFE8F8EF);
+      textColor = const Color(0xFF107C41);
+      icon = Icons.chat_bubble_outline_rounded;
+    } else if (sourceLower.contains('meta') || sourceLower.contains('facebook') || sourceLower.contains('instagram')) {
+      badgeColor = const Color(0xFFE8F3FF);
+      textColor = const Color(0xFF1877F2);
+      icon = Icons.campaign_outlined;
+    } else if (sourceLower.contains('google')) {
+      badgeColor = const Color(0xFFFEF3F2);
+      textColor = const Color(0xFFD92D20);
+      icon = Icons.search_rounded;
+    } else if (sourceLower.contains('firebase') || sourceLower.contains('notification')) {
+      badgeColor = const Color(0xFFFFF7ED);
+      textColor = const Color(0xFFEA580C);
+      icon = Icons.notifications_active_outlined;
+    } else if (sourceLower.contains('website') || sourceLower.contains('web')) {
+      badgeColor = const Color(0xFFF0FDFA);
+      textColor = const Color(0xFF0D9488);
+      icon = Icons.language_rounded;
+    } else {
+      badgeColor = const Color(0xFFF3F4F6);
+      textColor = const Color(0xFF4B5563);
+      icon = Icons.phone_android_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: textColor.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            source,
+            style: GoogleFonts.outfit(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+        ],
       ),
     );
   }

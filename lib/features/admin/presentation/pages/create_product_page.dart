@@ -13,7 +13,7 @@ import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart
 import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart'
     hide TableRow;
 import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
-import 'package:image_editor_plus/image_editor_plus.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
@@ -2472,8 +2472,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         final Uint8List? editedImage = await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                ImageEditor(image: _productImages[index]),
+                            builder: (context) => ProImageEditor.memory(
+                              _productImages[index],
+                              callbacks: ProImageEditorCallbacks(
+                                onImageEditingComplete: (Uint8List editedBytes) async {
+                                  Navigator.pop(context, editedBytes);
+                                },
+                              ),
+                            ),
                           ),
                         );
                         if (editedImage != null) {

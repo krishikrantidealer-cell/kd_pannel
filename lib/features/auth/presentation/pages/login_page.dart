@@ -212,7 +212,7 @@ class _LoginPageState extends State<LoginPage> {
           _precacheProductData();
           Navigator.pushReplacementNamed(context, '/dashboard');
         } else {
-          Navigator.pushReplacementNamed(context, '/sales/dashboard');
+          Navigator.pushReplacementNamed(context, '/leads');
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -115,6 +115,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               purchaseValue: _dealer!.purchaseValue,
               isHighValue: _dealer!.isHighValue,
               isInactive: _orders.isEmpty,
+              source: freshUser['source'] ?? _dealer?.source ?? 'App',
+              deepLinkUrl: freshUser['deepLinkUrl'] ?? _dealer?.deepLinkUrl,
               id: freshUser['_id'],
               agentId: freshUser['assignedAgent']?['_id'],
               licenceImage: freshUser['licenceImage'],
@@ -232,6 +234,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               purchaseValue: _dealer!.purchaseValue,
               isHighValue: _dealer!.isHighValue,
               isInactive: _dealer!.isInactive,
+              source: _dealer?.source ?? 'App',
+              deepLinkUrl: _dealer?.deepLinkUrl,
               id: _dealer!.id,
               agentId: _agentId ?? _dealer!.agentId,
               licenceImage: _dealer!.licenceImage,
@@ -294,6 +298,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       purchaseValue: _dealer!.purchaseValue,
       isHighValue: _dealer!.isHighValue,
       isInactive: _orders.isEmpty,
+      source: _dealer?.source ?? 'App',
+      deepLinkUrl: _dealer?.deepLinkUrl,
       id: _dealer!.id,
       agentId: _agentId ?? _dealer!.agentId,
       licenceImage: _dealer!.licenceImage,
@@ -604,7 +610,7 @@ class _DealerHeroCard extends StatelessWidget {
           },
         ),
         _ActionButton(
-          icon: FontAwesomeIcons.whatsapp,
+          icon: Icons.message,
           label: 'WhatsApp',
           color: const Color(0xFF25D366),
           isSolid: true,
@@ -1021,6 +1027,39 @@ class _DealerInformationCard extends StatelessWidget {
             isMobile,
           ),
           _buildDivider(),
+          _buildInfoRow(
+            Icons.campaign_outlined,
+            'Source',
+            dealer.source,
+            Colors.teal,
+            isMobile,
+          ),
+          if (dealer.deepLinkUrl != null &&
+              dealer.deepLinkUrl!.trim().isNotEmpty) ...[
+            _buildDivider(),
+            _buildInfoRow(
+              Icons.link_outlined,
+              'Deep Link',
+              dealer.deepLinkUrl!,
+              Colors.blueGrey,
+              isMobile,
+            ),
+            ..._getDeepLinkAttributes(dealer.deepLinkUrl).entries.map((entry) {
+              return Column(
+                children: [
+                  _buildDivider(),
+                  _buildInfoRow(
+                    Icons.sell_outlined,
+                    entry.key,
+                    entry.value,
+                    Colors.grey,
+                    isMobile,
+                  ),
+                ],
+              );
+            }),
+          ],
+          _buildDivider(),
           // Custom row for Assigned Agent dropdown
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1178,6 +1217,16 @@ class _DealerInformationCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Map<String, String> _getDeepLinkAttributes(String? urlString) {
+    if (urlString == null || urlString.trim().isEmpty) return {};
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.queryParameters;
+    } catch (e) {
+      return {};
+    }
   }
 
   Widget _buildDivider() => const Divider(height: 1, color: Color(0xFFF3F4F6));

@@ -11,6 +11,8 @@ import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import '../bloc/dealers_bloc.dart';
 import '../bloc/dealers_event.dart';
 import '../bloc/dealers_state.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/util/export_helper.dart';
 
 class DealerManagementPage extends StatefulWidget {
   final bool isStandalone;
@@ -23,6 +25,80 @@ class DealerManagementPage extends StatefulWidget {
 class _DealerManagementPageState extends State<DealerManagementPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _tableHorizontalController = ScrollController();
+  bool _isExporting = false;
+
+  void _exportDealersToCSV() async {
+    setState(() => _isExporting = true);
+
+    // Get current state and retrieve filtered dealers
+    final state = context.read<DealersBloc>().state;
+    final dealers = _getFilteredDealers(state);
+
+    final headers = [
+      'Name',
+      'Phone',
+      'Email',
+      'City',
+      'State',
+      'Assigned Agent',
+      'GST Status',
+      'GST Number',
+      'Total Orders',
+      'Purchase Value',
+      'User Type',
+      'KYC Status'
+    ];
+    
+    final buffer = StringBuffer();
+    buffer.writeln(headers.map((h) => '"${h.replaceAll('"', '""')}"').join(','));
+    
+    for (final dealer in dealers) {
+      final row = [
+        dealer.name,
+        dealer.phone,
+        dealer.email ?? '',
+        dealer.city,
+        dealer.state,
+        dealer.agent,
+        dealer.gstStatus,
+        dealer.gstNumber ?? '',
+        dealer.totalOrders,
+        dealer.purchaseValue,
+        dealer.userType ?? '',
+        dealer.kycStatus ?? '',
+      ];
+      buffer.writeln(row.map((val) => '"${val.toString().replaceAll('"', '""')}"').join(','));
+    }
+
+    // Simulate delay for UI responsiveness
+    await Future.delayed(const Duration(milliseconds: 1000));
+
+    if (mounted) {
+      // Trigger download using the platform-specific export helper
+      downloadCsv(buffer.toString(), 'dealers_export.csv');
+
+      setState(() => _isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.info,
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              const Icon(Icons.download_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                'Dealers data exported successfully to CSV!',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
 
   final List<String> timeframeOptions = [
     'Today',
@@ -159,6 +235,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         purchaseValue: _formatCurrency(purchaseSum),
         isHighValue: isHighVal,
         isInactive: isInactiveDealer,
+        source: u['source'] ?? 'App',
+        deepLinkUrl: u['deepLinkUrl'],
         id: u['_id'],
         agentId: u['assignedAgent']?['_id'],
         licenceImage: u['licenceImage'],
@@ -211,162 +289,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     }).toList();
   }
 
-  void _showCreateSalesAgentDialog(BuildContext context) {
-    final formKey = GlobalKey<FormState>();
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final emailController = TextEditingController();
-    final phoneController = TextEditingController();
-    final passwordController = TextEditingController();
-    final dealersBloc = context.read<DealersBloc>();
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Create Sales Agent',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: firstNameController,
-                  decoration: _buildInputDecoration(
-                    'First Name',
-                    Icons.person_outline,
-                  ),
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: lastNameController,
-                  decoration: _buildInputDecoration(
-                    'Last Name',
-                    Icons.person_outline,
-                  ),
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: emailController,
-                  decoration: _buildInputDecoration(
-                    'Email Address',
-                    Icons.email_outlined,
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (val) => val == null || !val.contains('@')
-                      ? 'Invalid email'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneController,
-                  decoration: _buildInputDecoration(
-                    'Phone Number',
-                    Icons.phone_outlined,
-                  ),
-                  keyboardType: TextInputType.phone,
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: _buildInputDecoration(
-                    'Password',
-                    Icons.lock_outline,
-                  ),
-                  obscureText: true,
-                  validator: (val) => val == null || val.length < 6
-                      ? 'Password must be at least 6 characters'
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.outfit(
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                dealersBloc.add(
-                  CreateSalesAgentEvent(
-                    firstName: firstNameController.text.trim(),
-                    lastName: lastNameController.text.trim(),
-                    email: emailController.text.trim(),
-                    phoneNumber: phoneController.text.trim(),
-                    password: passwordController.text,
-                  ),
-                );
-                Navigator.pop(dialogContext);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.outfit(
-        color: AppTheme.textSecondary,
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
-      prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryColor),
-      filled: true,
-      fillColor: const Color(0xFFF9FAFB),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.borderColor, width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
-      ),
-    );
-  }
 
   void _showDatePicker(BuildContext context) {
     final dealersBloc = context.read<DealersBloc>();
@@ -544,33 +467,35 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           ],
           Row(
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _showCreateSalesAgentDialog(context),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(
-                    'Sales Agent',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+              Expanded(child: _buildTimeframeFilter(context, state, isMobile)),
+              const SizedBox(width: 8),
+              Container(
+                height: 38,
+                width: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _isExporting ? null : _exportDealersToCSV,
+                  icon: _isExporting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryColor,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.download_rounded,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(child: _buildTimeframeFilter(context, state, isMobile)),
             ],
           ),
         ],
@@ -593,17 +518,27 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ElevatedButton.icon(
-              onPressed: () => _showCreateSalesAgentDialog(context),
-              icon: const Icon(Icons.add, size: 16),
+            OutlinedButton.icon(
+              onPressed: _isExporting ? null : _exportDealersToCSV,
+              icon: _isExporting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    )
+                  : const Icon(Icons.download, size: 16),
               label: Text(
-                'Create Sales Agent',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                _isExporting ? 'Exporting...' : 'Export CSV',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor,
+                ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
@@ -845,18 +780,20 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       return Row(
         children: [
           _buildSearchField(context, 300),
-          const SizedBox(width: 12),
-          _buildFilterDropdown(
-            'All Sales Agents',
-            180,
-            agents,
-            state.selectedAgent,
-            (val) {
-              context.read<DealersBloc>().add(
-                UpdateDealersFilterEvent(selectedAgent: val!, currentPage: 1),
-              );
-            },
-          ),
+          if (AuthService().isAdmin) ...[
+            const SizedBox(width: 12),
+            _buildFilterDropdown(
+              'All Sales Agents',
+              180,
+              agents,
+              state.selectedAgent,
+              (val) {
+                context.read<DealersBloc>().add(
+                  UpdateDealersFilterEvent(selectedAgent: val!, currentPage: 1),
+                );
+              },
+            ),
+          ],
           const SizedBox(width: 12),
           _buildFilterDropdown(
             'All States',
@@ -891,23 +828,25 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildFilterDropdown(
-                  'Sales Agents',
-                  null,
-                  agents,
-                  state.selectedAgent,
-                  (val) {
-                    context.read<DealersBloc>().add(
-                      UpdateDealersFilterEvent(
-                        selectedAgent: val!,
-                        currentPage: 1,
-                      ),
-                    );
-                  },
+              if (AuthService().isAdmin) ...[
+                Expanded(
+                  child: _buildFilterDropdown(
+                    'Sales Agents',
+                    null,
+                    agents,
+                    state.selectedAgent,
+                    (val) {
+                      context.read<DealersBloc>().add(
+                        UpdateDealersFilterEvent(
+                          selectedAgent: val!,
+                          currentPage: 1,
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
+              ],
               Expanded(
                 child: _buildFilterDropdown(
                   'States',
@@ -1121,7 +1060,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Ensure table never gets clipped on smaller laptop widths.
-        const double minTableWidth = 980;
+        final double minTableWidth = isMobile
+            ? 1100.0
+            : (AuthService().isAdmin ? 900.0 : 800.0);
         final bool needsHorizontalScroll = constraints.maxWidth < minTableWidth;
         final double tableWidth = needsHorizontalScroll
             ? minTableWidth
@@ -1222,17 +1163,18 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   Widget _buildTableHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       color: const Color(0xFFF9FAFB),
-      child: const Row(
+      child: Row(
         children: [
-          Expanded(flex: 2, child: _HeaderText('DEALER NAME')),
-          Expanded(flex: 2, child: _HeaderText('PHONE NUMBER')),
-          Expanded(flex: 2, child: _HeaderText('LOCATION')),
-          Expanded(flex: 2, child: _HeaderText('ASSIGNED AGENT')),
-          Expanded(flex: 1, child: Center(child: _HeaderText('GST STATUS'))),
-          Expanded(flex: 1, child: Center(child: _HeaderText('ORDERS'))),
-          Expanded(
+          const Expanded(flex: 2, child: _HeaderText('DEALER NAME')),
+          const Expanded(flex: 2, child: _HeaderText('PHONE NUMBER')),
+          const Expanded(flex: 2, child: _HeaderText('LOCATION')),
+          if (AuthService().isAdmin)
+            const Expanded(flex: 2, child: _HeaderText('ASSIGNED AGENT')),
+          const Expanded(flex: 1, child: Center(child: _HeaderText('SOURCE'))),
+          const Expanded(flex: 1, child: Center(child: _HeaderText('ORDERS'))),
+          const Expanded(
             flex: 2,
             child: Center(child: _HeaderText('PURCHASE VALUE')),
           ),
@@ -1589,51 +1531,6 @@ class _HeaderText extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, style: AppTheme.tableHeader);
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    switch (status) {
-      case 'Verified':
-      case 'Completed':
-      case 'Verified ✓':
-        color = AppTheme.success;
-        break;
-      case 'Pending':
-      case 'Order Pending':
-        color = AppTheme.warning;
-        break;
-      case 'Rejected':
-      case 'Cancelled':
-        color = AppTheme.error;
-        break;
-      default:
-        color = AppTheme.info;
-    }
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-        ),
-        child: Text(
-          status,
-          style: GoogleFonts.outfit(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _DealerRow extends StatefulWidget {
   final Dealer dealer;
@@ -1669,7 +1566,7 @@ class _DealerRowState extends State<_DealerRow> {
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           decoration: BoxDecoration(
             color: _isHovered
                 ? AppTheme.primaryColor.withValues(alpha: 0.04)
@@ -1691,8 +1588,8 @@ class _DealerRowState extends State<_DealerRow> {
                 child: Text(
                   widget.dealer.name,
                   style: GoogleFonts.outfit(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 13.0,
+                    fontWeight: FontWeight.w700,
                     color: AppTheme.textPrimary,
                   ),
                   maxLines: 1,
@@ -1704,7 +1601,7 @@ class _DealerRowState extends State<_DealerRow> {
                 child: Text(
                   widget.dealer.phone,
                   style: GoogleFonts.outfit(
-                    fontSize: 11.5,
+                    fontSize: 13.0,
                     fontWeight: FontWeight.w500,
                     color: AppTheme.textSecondary,
                   ),
@@ -1722,7 +1619,7 @@ class _DealerRowState extends State<_DealerRow> {
                             ? widget.dealer.city
                             : widget.dealer.state),
                   style: GoogleFonts.outfit(
-                    fontSize: 11.5,
+                    fontSize: 13.0,
                     fontWeight: FontWeight.w500,
                     color: AppTheme.textSecondary,
                   ),
@@ -1730,97 +1627,109 @@ class _DealerRowState extends State<_DealerRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Expanded(
-                flex: 2,
-                child: GestureDetector(
-                  onTap:
-                      () {}, // Prevent navigating to profile when clicking dropdown
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    child: Container(
+              if (AuthService().isAdmin)
+                Expanded(
+                  flex: 2,
+                  child: GestureDetector(
+                    onTap:
+                        () {}, // Prevent navigating to profile when clicking dropdown
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
+                        horizontal: 4,
                         vertical: 2,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value:
-                              widget.salesAgents.any(
-                                (agent) =>
-                                    agent['_id'] == widget.dealer.agentId,
-                              )
-                              ? widget.dealer.agentId
-                              : null,
-                          isExpanded: true,
-                          isDense: true,
-                          icon: const Icon(
-                            Icons.arrow_drop_down,
-                            size: 16,
-                            color: AppTheme.textSecondary,
-                          ),
-                          hint: Text(
-                            '-',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11.0,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          onChanged: (String? newAgentId) {
-                            if (widget.dealer.id != null) {
-                              widget.onAssignAgent(
-                                widget.dealer.id!,
-                                newAgentId,
-                              );
-                            }
-                          },
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '-',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11.0,
-                                  color: AppTheme.textSecondary,
+                      child: !AuthService().isAdmin
+                          ? Text(
+                              widget.dealer.agent,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13.0,
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value:
+                                      widget.salesAgents.any(
+                                        (agent) =>
+                                            agent['_id'] == widget.dealer.agentId,
+                                      )
+                                      ? widget.dealer.agentId
+                                      : null,
+                                  isExpanded: true,
+                                  isDense: true,
+                                  icon: const Icon(
+                                    Icons.arrow_drop_down,
+                                    size: 16,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  hint: Text(
+                                    '-',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12.5,
+                                      color: AppTheme.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  onChanged: (String? newAgentId) {
+                                    if (widget.dealer.id != null) {
+                                      widget.onAssignAgent(
+                                        widget.dealer.id!,
+                                        newAgentId,
+                                      );
+                                    }
+                                  },
+                                  items: [
+                                    DropdownMenuItem<String>(
+                                      value: null,
+                                      child: Text(
+                                        '-',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12.5,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    ...widget.salesAgents.map((agent) {
+                                      final agentName =
+                                          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                              .trim();
+                                      return DropdownMenuItem<String>(
+                                        value: agent['_id'],
+                                        child: Text(
+                                          agentName.isNotEmpty
+                                              ? agentName
+                                              : (agent['phoneNumber'] ?? ''),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12.5,
+                                            color: AppTheme.textPrimary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ],
                                 ),
                               ),
                             ),
-                            ...widget.salesAgents.map((agent) {
-                              final agentName =
-                                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                      .trim();
-                              return DropdownMenuItem<String>(
-                                value: agent['_id'],
-                                child: Text(
-                                  agentName.isNotEmpty
-                                      ? agentName
-                                      : (agent['phoneNumber'] ?? ''),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11.0,
-                                    color: AppTheme.textPrimary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
                     ),
                   ),
                 ),
-              ),
               Expanded(
                 flex: 1,
-                child: _StatusBadge(status: widget.dealer.gstStatus),
+                child: Center(
+                  child: _SourceBadge(source: widget.dealer.source),
+                ),
               ),
               Expanded(
                 flex: 1,
@@ -1828,8 +1737,8 @@ class _DealerRowState extends State<_DealerRow> {
                   child: Text(
                     widget.dealer.totalOrders.toString(),
                     style: GoogleFonts.outfit(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 13.0,
+                      fontWeight: FontWeight.w700,
                       color: AppTheme.textPrimary,
                     ),
                     maxLines: 1,
@@ -1843,8 +1752,8 @@ class _DealerRowState extends State<_DealerRow> {
                   child: Text(
                     widget.dealer.purchaseValue,
                     style: GoogleFonts.outfit(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 13.0,
+                      fontWeight: FontWeight.w700,
                       color: AppTheme.textPrimary,
                     ),
                     maxLines: 1,
@@ -1869,3 +1778,69 @@ class _DealerRowState extends State<_DealerRow> {
     );
   }
 }
+
+class _SourceBadge extends StatelessWidget {
+  final String source;
+
+  const _SourceBadge({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    Color badgeColor;
+    Color textColor;
+    IconData icon;
+
+    final String sourceLower = source.toLowerCase();
+
+    if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
+      badgeColor = const Color(0xFFE8F8EF);
+      textColor = const Color(0xFF107C41);
+      icon = Icons.chat_bubble_outline_rounded;
+    } else if (sourceLower.contains('meta') || sourceLower.contains('facebook') || sourceLower.contains('instagram')) {
+      badgeColor = const Color(0xFFE8F3FF);
+      textColor = const Color(0xFF1877F2);
+      icon = Icons.campaign_outlined;
+    } else if (sourceLower.contains('google')) {
+      badgeColor = const Color(0xFFFEF3F2);
+      textColor = const Color(0xFFD92D20);
+      icon = Icons.search_rounded;
+    } else if (sourceLower.contains('firebase') || sourceLower.contains('notification')) {
+      badgeColor = const Color(0xFFFFF7ED);
+      textColor = const Color(0xFFEA580C);
+      icon = Icons.notifications_active_outlined;
+    } else if (sourceLower.contains('website') || sourceLower.contains('web')) {
+      badgeColor = const Color(0xFFF0FDFA);
+      textColor = const Color(0xFF0D9488);
+      icon = Icons.language_rounded;
+    } else {
+      badgeColor = const Color(0xFFF3F4F6);
+      textColor = const Color(0xFF4B5563);
+      icon = Icons.phone_android_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: textColor.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            source,
+            style: GoogleFonts.outfit(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

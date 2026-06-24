@@ -77,26 +77,33 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   }
 
   void _refreshLeadDetails() {
-    context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+    context.read<LeadsBloc>().add(
+      const FetchLeadsDataEvent(forceRefresh: true),
+    );
   }
 
   Map<String, dynamic> _mapUserToLead(Map<String, dynamic> u) {
     return {
       'id': u['_id'],
-      'name': (u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
+      'name':
+          (u['firstName'] != null &&
+              u['firstName'].toString().trim().isNotEmpty)
           ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
-          : (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
-              ? u['shopName']
-              : (u['phoneNumber'] ?? 'Unnamed Lead'),
+          : (u['shopName'] != null &&
+                u['shopName'].toString().trim().isNotEmpty)
+          ? u['shopName']
+          : (u['phoneNumber'] ?? 'Unnamed Lead'),
       'phone': u['phoneNumber'] ?? '',
       'city': u['address']?['cityTehsil'] ?? '',
       'state': u['address']?['state'] ?? '',
       'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
       'agent': u['assignedAgent'] != null
-          ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
+          ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                .trim()
           : '-',
       'agentId': u['assignedAgent']?['_id'],
       'source': u['source'] ?? 'App',
+      'deepLinkUrl': u['deepLinkUrl'],
       'status': u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
           ? 'KYC Pending'
           : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
@@ -350,6 +357,20 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                               ),
                             ),
                             _buildInfoRow('Source', _lead!['source'] ?? '-'),
+                            if (_lead!['deepLinkUrl'] != null &&
+                                _lead!['deepLinkUrl']
+                                    .toString()
+                                    .trim()
+                                    .isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: Divider(
+                                  height: 1,
+                                  color: Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              _buildInfoRow('Deep Link', _lead!['deepLinkUrl']),
+                            ],
                           ],
                         ),
                       ),
@@ -431,7 +452,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         onTap: () {
                           final userId = _lead!['id'] ?? _lead!['_id'];
                           if (userId != null) {
-                            context.read<LeadsBloc>().add(VerifyKYCEvent(userId));
+                            context.read<LeadsBloc>().add(
+                              VerifyKYCEvent(userId),
+                            );
                           }
                           Navigator.pop(context);
                         },
@@ -662,12 +685,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                     },
                     child: GestureDetector(
                       onTap: () {
-                              setStateDialog(() {
-                                selectedReason = reason;
-                                controller.text =
-                                    'KYC Rejected: $reason. Please re-upload valid documents.';
-                              });
-                            },
+                        setStateDialog(() {
+                          selectedReason = reason;
+                          controller.text =
+                              'KYC Rejected: $reason. Please re-upload valid documents.';
+                        });
+                      },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(
@@ -964,13 +987,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         final reason = controller.text.trim();
                         if (reason.isEmpty) {
                           setStateDialog(() {
-                            errorMessage = 'Please provide a rejection explanation.';
+                            errorMessage =
+                                'Please provide a rejection explanation.';
                           });
                           return;
                         }
                         final userId = _lead!['id'] ?? _lead!['_id'];
                         if (userId != null) {
-                          context.read<LeadsBloc>().add(RejectKYCEvent(userId, reason));
+                          context.read<LeadsBloc>().add(
+                            RejectKYCEvent(userId, reason),
+                          );
                         }
                         Navigator.pop(context); // Close dialog immediately
                       },
@@ -1101,7 +1127,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           backgroundColor: const Color(0xFFF8FAFC),
           body: isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryColor,
+                  ),
                 )
               : SingleChildScrollView(
                   padding: EdgeInsets.symmetric(
@@ -1416,7 +1444,7 @@ class _FlatHeaderSection extends StatelessWidget {
       runSpacing: 8,
       children: [
         _ActionButton(
-          icon: FontAwesomeIcons.whatsapp,
+          icon: Icons.message,
           label: 'WhatsApp',
           color: const Color(0xFF25D366),
           isSolid: true,
@@ -1463,7 +1491,7 @@ class _FlatHeaderSection extends StatelessWidget {
 }
 
 class _ActionButton extends StatefulWidget {
-  final IconData icon;
+  final dynamic icon;
   final String label;
   final Color color;
   final bool isSolid;
@@ -1528,13 +1556,21 @@ class _ActionButtonState extends State<_ActionButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                widget.icon,
-                size: isMobile ? 18 : 19,
-                color: isDisabled
-                    ? const Color(0xFF9CA3AF)
-                    : (widget.isSolid ? Colors.white : widget.color),
-              ),
+              widget.icon is IconData
+                  ? Icon(
+                      widget.icon as IconData,
+                      size: isMobile ? 18 : 19,
+                      color: isDisabled
+                          ? const Color(0xFF9CA3AF)
+                          : (widget.isSolid ? Colors.white : widget.color),
+                    )
+                  : FaIcon(
+                      widget.icon,
+                      size: isMobile ? 18 : 19,
+                      color: isDisabled
+                          ? const Color(0xFF9CA3AF)
+                          : (widget.isSolid ? Colors.white : widget.color),
+                    ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -1556,7 +1592,6 @@ class _ActionButtonState extends State<_ActionButton> {
     );
   }
 }
-
 
 class _LeadInformationCard extends StatelessWidget {
   final Map<String, dynamic> lead;
@@ -1623,9 +1658,34 @@ class _LeadInformationCard extends StatelessWidget {
           _buildInfoRow(
             Icons.campaign_outlined,
             'Lead Source',
-            lead['source'],
+            lead['source'] ?? 'App',
             Colors.teal,
           ),
+          if (lead['deepLinkUrl'] != null &&
+              lead['deepLinkUrl'].toString().trim().isNotEmpty) ...[
+            _buildDividerRow(),
+            _buildInfoRow(
+              Icons.link_outlined,
+              'Deep Link',
+              lead['deepLinkUrl'].toString(),
+              Colors.blueGrey,
+            ),
+            ..._getDeepLinkAttributes(
+              lead['deepLinkUrl'].toString(),
+            ).entries.map((entry) {
+              return Column(
+                children: [
+                  _buildDividerRow(),
+                  _buildInfoRow(
+                    Icons.sell_outlined,
+                    entry.key,
+                    entry.value,
+                    Colors.grey,
+                  ),
+                ],
+              );
+            }),
+          ],
           _buildDividerRow(),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1743,6 +1803,16 @@ class _LeadInformationCard extends StatelessWidget {
       ),
     );
   }
+
+  Map<String, String> _getDeepLinkAttributes(String? urlString) {
+    if (urlString == null || urlString.trim().isEmpty) return {};
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.queryParameters;
+    } catch (e) {
+      return {};
+    }
+  }
 }
 
 Widget _buildInfoRow(IconData icon, String label, String value, Color color) {
@@ -1789,7 +1859,6 @@ Widget _buildInfoRow(IconData icon, String label, String value, Color color) {
 }
 
 Widget _buildDividerRow() => const Divider(height: 1, color: Color(0xFFF1F5F9));
-
 
 class _DealerKycDocumentsCard extends StatelessWidget {
   final Map<String, dynamic> lead;

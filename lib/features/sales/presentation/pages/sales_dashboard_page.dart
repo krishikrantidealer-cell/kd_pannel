@@ -1,179 +1,191 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/table_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 
-class SalesDashboardPage extends StatelessWidget {
+class SalesDashboardPage extends StatefulWidget {
   const SalesDashboardPage({super.key});
+
+  @override
+  State<SalesDashboardPage> createState() => _SalesDashboardPageState();
+}
+
+class _SalesDashboardPageState extends State<SalesDashboardPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final leadsBloc = context.read<LeadsBloc>();
+      leadsBloc.add(const FetchLeadsDataEvent(forceRefresh: true));
+
+      final dealersBloc = context.read<DealersBloc>();
+      dealersBloc.add(const FetchDealersDataEvent(forceRefresh: true));
+    });
+  }
+
+  List<Map<String, dynamic>> _getLeadsList(List<Map<String, dynamic>> rawUsers) {
+    return rawUsers
+        .where((u) {
+          final role = u['role'] ?? 'user';
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          return role == 'user' && kycStatus != 'verified';
+        })
+        .map((u) {
+          return {
+            'id': u['_id'],
+            'name': (u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
+                ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
+                : (u['phoneNumber'] ?? 'Unnamed Lead'),
+            'phone': u['phoneNumber'] ?? '-',
+            'source': u['source'] ?? 'App',
+            'status': u['kycStatus'] ?? 'pending',
+          };
+        })
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _getDealersList(List<Map<String, dynamic>> rawUsers) {
+    return rawUsers
+        .where((u) {
+          final role = u['role'] ?? 'user';
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          return role == 'user' && kycStatus == 'verified';
+        })
+        .map((u) {
+          return {
+            'id': u['_id'],
+            'name': (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
+                ? u['shopName']
+                : ((u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
+                    ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
+                    : (u['phoneNumber'] ?? 'Unnamed Dealer')),
+            'phone': u['phoneNumber'] ?? '-',
+            'city': u['address']?['cityTehsil'] ?? '-',
+            'state': u['address']?['state'] ?? '-',
+          };
+        })
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
     final double gap = AppTheme.getResponsiveGap(context);
 
-    return SingleChildScrollView(
-      padding: AppTheme.getResponsivePadding(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  isDesktop
-                      ? 'KrishiDealer Sales Dashboard'
-                      : 'Sales Dashboard',
-                  style: TextStyle(
-                    fontSize: isDesktop ? 22 : 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.cardColor,
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.borderRadiusSmall,
-                  ),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: AppTheme.spacingSmall),
-                    Text(
-                      'This Month',
-                      style: TextStyle(
-                        fontSize: isDesktop ? 12 : 11,
-                        color: AppTheme.textBody,
-                        fontWeight: FontWeight.w500,
+    return BlocBuilder<LeadsBloc, LeadsState>(
+      builder: (context, leadsState) {
+        return BlocBuilder<DealersBloc, DealersState>(
+          builder: (context, dealersState) {
+            final leads = _getLeadsList(leadsState.allRawUsers);
+            final dealers = _getDealersList(dealersState.allRawUsers);
+
+            final bool isLoading = leadsState.status == LeadsStatus.loading ||
+                dealersState.status == DealersStatus.loading;
+
+            // Prepare tables rows: only show up to 5 elements on dashboard for clarity
+            final leadRows = leads.take(5).map((l) => [
+                  l['name'] as String,
+                  l['phone'] as String,
+                  l['source'] as String,
+                  l['status'] as String,
+                ]).toList();
+
+            final dealerRows = dealers.take(5).map((d) => [
+                  d['name'] as String,
+                  d['phone'] as String,
+                  d['city'] as String,
+                  d['state'] as String,
+                ]).toList();
+
+            return SingleChildScrollView(
+              padding: AppTheme.getResponsivePadding(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          isDesktop ? 'KrishiDealer Sales Dashboard' : 'Sales Dashboard',
+                          style: TextStyle(
+                            fontSize: isDesktop ? 22 : 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppTheme.spacingXSmall),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ],
-                ),
+                      if (isLoading)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: gap),
+                  _SalesStatsGrid(
+                    leadsCount: leads.length,
+                    dealersCount: dealers.length,
+                  ),
+                  SizedBox(height: gap),
+                  TableWidget(
+                    title: "My Assigned Leads (Recent)",
+                    columns: const ['Name', 'Phone', 'Source', 'KYC Status'],
+                    rows: leadRows.isNotEmpty
+                        ? leadRows
+                        : [
+                            const ['No assigned leads found', '-', '-', '-']
+                          ],
+                  ),
+                  SizedBox(height: gap),
+                  TableWidget(
+                    title: "My Assigned Dealers (Recent)",
+                    columns: const ['Dealer Name', 'Phone', 'City', 'State'],
+                    rows: dealerRows.isNotEmpty
+                        ? dealerRows
+                        : [
+                            const ['No assigned dealers found', '-', '-', '-']
+                          ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          SizedBox(height: gap),
-          const _SalesStatsGrid(),
-          SizedBox(height: gap),
-          const TableWidget(
-            title: "Today's Follow Ups",
-            columns: ['Dealer Name', 'Phone', 'Last Contact', 'Next Follow Up'],
-            rows: [
-              ['Anil Kumar', '+91 9876543210', '24 Oct, 2023', 'FOLLOW_UP_BTN'],
-              [
-                'Sunil Sharma',
-                '+91 8765432109',
-                '23 Oct, 2023',
-                'FOLLOW_UP_BTN',
-              ],
-              [
-                'Rajesh Gupta',
-                '+91 7654321098',
-                '22 Oct, 2023',
-                'FOLLOW_UP_BTN',
-              ],
-            ],
-          ),
-          SizedBox(height: gap),
-          if (isDesktop)
-            const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TableWidget(
-                    title: "Recent Leads (detailed)",
-                    columns: ['Dealer Name', 'Contact', 'Status', 'Date'],
-                    rows: [
-                      ['Vikas Enterprises', 'Vikas Singh', 'Pending', '24 Oct'],
-                      ['Agro World', 'Emily White', 'Completed', '23 Oct'],
-                      ['Krishi Store', 'Rahul Dev', 'Pending', '22 Oct'],
-                    ],
-                  ),
-                ),
-                SizedBox(width: 20),
-                Expanded(
-                  child: TableWidget(
-                    title: "Orders Created",
-                    columns: ['Order ID', 'Product', 'Amount', 'Status'],
-                    rows: [
-                      ['#7890', 'Fertilizer', '₹450', 'Completed'],
-                      ['#7891', 'Seeds', '₹120', 'Pending'],
-                      ['#7892', 'Pumps', '₹800', 'Completed'],
-                    ],
-                  ),
-                ),
-              ],
-            )
-          else
-            Column(
-              children: [
-                const TableWidget(
-                  title: "Recent Leads (detailed)",
-                  columns: ['Dealer Name', 'Contact', 'Status', 'Date'],
-                  rows: [
-                    ['Vikas Enterprises', 'Vikas Singh', 'Pending', '24 Oct'],
-                    ['Agro World', 'Emily White', 'Completed', '23 Oct'],
-                    ['Krishi Store', 'Rahul Dev', 'Pending', '22 Oct'],
-                  ],
-                ),
-                SizedBox(height: gap),
-                const TableWidget(
-                  title: "Orders Created",
-                  columns: ['Order ID', 'Product', 'Amount', 'Status'],
-                  rows: [
-                    ['#7890', 'Fertilizer', '₹450', 'Completed'],
-                    ['#7891', 'Seeds', '₹120', 'Pending'],
-                    ['#7892', 'Pumps', '₹800', 'Completed'],
-                  ],
-                ),
-              ],
-            ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
 
 class _SalesStatsGrid extends StatelessWidget {
-  const _SalesStatsGrid();
+  final int leadsCount;
+  final int dealersCount;
+
+  const _SalesStatsGrid({
+    required this.leadsCount,
+    required this.dealersCount,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double spacing = AppTheme.spacingMedium;
-        final int columns;
-        if (constraints.maxWidth >= 1200) {
-          columns = 5;
-        } else if (constraints.maxWidth >= 768) {
-          columns = 3;
-        } else {
-          columns = 2; // Mobile
-        }
-
+        final int columns = constraints.maxWidth >= 768 ? 2 : 1;
         final double width =
             (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
@@ -184,37 +196,16 @@ class _SalesStatsGrid extends StatelessWidget {
             StatCardWidget(
               width: width,
               title: 'My Leads',
-              value: '1,240',
+              value: '$leadsCount',
               icon: Icons.person_add_outlined,
               color: AppTheme.info,
             ),
             StatCardWidget(
               width: width,
-              title: 'New Leads Today',
-              value: '24',
-              icon: Icons.campaign_outlined,
-              color: AppTheme.warning,
-            ),
-            StatCardWidget(
-              width: width,
               title: 'My Dealers',
-              value: '850',
+              value: '$dealersCount',
               icon: Icons.storefront_outlined,
               color: AppTheme.primaryColor,
-            ),
-            StatCardWidget(
-              width: width,
-              title: 'Orders Created Today',
-              value: '12',
-              icon: Icons.shopping_bag_outlined,
-              color: Colors.purple,
-            ),
-            StatCardWidget(
-              width: width,
-              title: 'Pending KYC',
-              value: '45',
-              icon: Icons.verified_user_outlined,
-              color: AppTheme.error,
             ),
           ],
         );

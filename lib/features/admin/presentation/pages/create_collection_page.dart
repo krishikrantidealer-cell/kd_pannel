@@ -6,7 +6,7 @@ import 'package:kd_pannel/features/shared/widgets/morphing_save_button.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_editor_plus/image_editor_plus.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -169,7 +169,16 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
 
         final Uint8List? editedImage = await Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ImageEditor(image: bytes)),
+          MaterialPageRoute(
+            builder: (context) => ProImageEditor.memory(
+              bytes,
+              callbacks: ProImageEditorCallbacks(
+                onImageEditingComplete: (Uint8List editedBytes) async {
+                  Navigator.pop(context, editedBytes);
+                },
+              ),
+            ),
+          ),
         );
 
         if (editedImage != null) {

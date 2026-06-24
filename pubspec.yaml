@@ -40,26 +40,30 @@ dependencies:
   google_fonts: ^8.1.0
   fl_chart: ^1.2.0
   lottie: ^3.3.3
-  image_editor_plus: ^1.0.8
+  pro_image_editor: ^12.5.1
   image_picker: ^1.2.2
   http: ^1.2.0
   shared_preferences: ^2.5.5
   flutter_bloc: ^9.1.1
   equatable: ^2.0.5
-  flutter_quill: ^11.5.0
+  flutter_quill: ^11.5.1
   vsc_quill_delta_to_html: ^1.0.5
   animations: ^2.0.11
   flutter_staggered_animations: ^1.1.1
   shimmer: ^3.0.0
   file_picker: ^11.0.2
   url_launcher: ^6.3.2
-  font_awesome_flutter: ^10.12.0
+  font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  font_awesome_flutter: ^11.0.0
+
 
 flutter:
   uses-material-design: true

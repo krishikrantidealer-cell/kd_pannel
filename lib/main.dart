@@ -60,7 +60,7 @@ void main() async {
     final token = prefs.getString('kd_access_token');
     final role = prefs.getString('kd_user_role');
     if (token != null && role != null) {
-      initialRoute = role == 'sales' ? '/sales/dashboard' : '/dashboard';
+      initialRoute = role == 'sales' ? '/leads' : '/dashboard';
     }
   } catch (_) {}
 
@@ -141,9 +141,7 @@ class MyApp extends StatelessWidget {
           child: Scaffold(body: Center(child: Text('Marketing'))),
         ),
         '/support': (context) => const MainLayout(),
-        '/team': (context) => const MainLayout(
-          child: Scaffold(body: Center(child: Text('Team'))),
-        ),
+        '/team': (context) => const MainLayout(),
         '/reports': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Reports'))),
         ),

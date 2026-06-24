@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_editor_plus/image_editor_plus.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:file_picker/file_picker.dart' as fp;
@@ -166,7 +166,14 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                     ctx,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ImageEditor(image: bytes),
+                                          ProImageEditor.memory(
+                                            bytes,
+                                            callbacks: ProImageEditorCallbacks(
+                                              onImageEditingComplete: (Uint8List editedBytes) async {
+                                                Navigator.pop(context, editedBytes);
+                                              },
+                                            ),
+                                          ),
                                     ),
                                   );
                               if (editedImage != null) {
@@ -561,7 +568,14 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                     ctx,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ImageEditor(image: bytes),
+                                          ProImageEditor.memory(
+                                            bytes,
+                                            callbacks: ProImageEditorCallbacks(
+                                              onImageEditingComplete: (Uint8List editedBytes) async {
+                                                Navigator.pop(context, editedBytes);
+                                              },
+                                            ),
+                                          ),
                                     ),
                                   );
                               if (editedImage != null) {
@@ -2072,7 +2086,14 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                                     ctx,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ImageEditor(image: bytes),
+                                          ProImageEditor.memory(
+                                            bytes,
+                                            callbacks: ProImageEditorCallbacks(
+                                              onImageEditingComplete: (Uint8List editedBytes) async {
+                                                Navigator.pop(context, editedBytes);
+                                              },
+                                            ),
+                                          ),
                                     ),
                                   );
                               if (editedImage != null) {

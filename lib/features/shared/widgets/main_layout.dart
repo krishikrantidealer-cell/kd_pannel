@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/support_dashboard_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
@@ -34,14 +33,14 @@ class _MainLayoutState extends State<MainLayout> {
     const OrdersPage(),
     const LeadsPage(),
     const DealerManagementPage(),
+    const TeamManagementPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = [
-    const SalesDashboardPage(),
+    // const SalesDashboardPage(),
     const LeadsPage(),
     const DealerManagementPage(),
-    const OrdersPage(),
   ];
 
   @override
@@ -63,14 +62,14 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 2;
         } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 3;
+        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
+          _currentIdx = 4;
         } else {
           _currentIdx = 0;
         }
       } else {
-        if (routeName == '/sales/dashboard') _currentIdx = 0;
-        if (routeName == '/leads' || routeName.startsWith('/leads/')) _currentIdx = 1;
-        if (routeName == '/dealers' || routeName.startsWith('/dealers/')) _currentIdx = 2;
-        if (routeName.startsWith('/orders')) _currentIdx = 3;
+        if (routeName == '/leads' || routeName.startsWith('/leads/')) _currentIdx = 0;
+        if (routeName == '/dealers' || routeName.startsWith('/dealers/')) _currentIdx = 1;
       }
     }
   }
@@ -88,11 +87,10 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 1) route = '/orders';
       if (index == 2) route = '/leads';
       if (index == 3) route = '/dealers';
+      if (index == 4) route = '/team';
     } else {
-      if (index == 0) route = '/sales/dashboard';
-      if (index == 1) route = '/leads';
-      if (index == 2) route = '/dealers';
-      if (index == 3) route = '/orders';
+      if (index == 0) route = '/leads';
+      if (index == 1) route = '/dealers';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
