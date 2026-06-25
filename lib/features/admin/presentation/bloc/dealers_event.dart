@@ -56,6 +56,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
   final DateTime? customEndDate;
   final bool? showHighValueOnly;
   final bool? showInactiveOnly;
+  final bool? showActiveOnly;
   final int? currentPage;
   final int? pageSize;
 
@@ -68,6 +69,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
     this.customEndDate,
     this.showHighValueOnly,
     this.showInactiveOnly,
+    this.showActiveOnly,
     this.currentPage,
     this.pageSize,
   });
@@ -82,6 +84,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
         customEndDate,
         showHighValueOnly,
         showInactiveOnly,
+        showActiveOnly,
         currentPage,
         pageSize,
       ];
@@ -89,4 +92,12 @@ class UpdateDealersFilterEvent extends DealersEvent {
 
 class ClearDealersMessageEvent extends DealersEvent {
   const ClearDealersMessageEvent();
+}
+
+class ToggleBlockDealerEvent extends DealersEvent {
+  final String userId;
+  const ToggleBlockDealerEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
 }

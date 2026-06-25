@@ -342,10 +342,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: AppTheme.backgroundColor,
-          body: SafeArea(
-            child: Column(
+        return SelectionArea(
+          child: Scaffold(
+            backgroundColor: AppTheme.backgroundColor,
+            body: SafeArea(
+              child: Column(
               children: [
                 // Premium Header Appbar
                 _buildAppBar(),
@@ -382,8 +383,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ],
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 
@@ -703,7 +705,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 behavior: ScrollConfiguration.of(context).copyWith(
                   dragDevices: {
                     ui.PointerDeviceKind.touch,
-                    ui.PointerDeviceKind.mouse,
                     ui.PointerDeviceKind.trackpad,
                   },
                 ),

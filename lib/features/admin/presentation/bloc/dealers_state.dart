@@ -17,6 +17,7 @@ class DealersState extends Equatable {
   final DateTime? customEndDate;
   final bool showHighValueOnly;
   final bool showInactiveOnly;
+  final bool showActiveOnly;
   final int currentPage;
   final int pageSize;
   
@@ -37,6 +38,7 @@ class DealersState extends Equatable {
     this.customEndDate,
     this.showHighValueOnly = false,
     this.showInactiveOnly = false,
+    this.showActiveOnly = false,
     this.currentPage = 1,
     this.pageSize = 10,
     this.errorMessage,
@@ -56,6 +58,7 @@ class DealersState extends Equatable {
     DateTime? customEndDate,
     bool? showHighValueOnly,
     bool? showInactiveOnly,
+    bool? showActiveOnly,
     int? currentPage,
     int? pageSize,
     String? errorMessage,
@@ -74,6 +77,7 @@ class DealersState extends Equatable {
       customEndDate: customEndDate ?? this.customEndDate,
       showHighValueOnly: showHighValueOnly ?? this.showHighValueOnly,
       showInactiveOnly: showInactiveOnly ?? this.showInactiveOnly,
+      showActiveOnly: showActiveOnly ?? this.showActiveOnly,
       currentPage: currentPage ?? this.currentPage,
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage, // Reset by default when copyWith is called unless set
@@ -95,6 +99,7 @@ class DealersState extends Equatable {
     DateTime? customEndDate,
     bool? showHighValueOnly,
     bool? showInactiveOnly,
+    bool? showActiveOnly,
     int? currentPage,
     int? pageSize,
     String? errorMessage,
@@ -113,6 +118,7 @@ class DealersState extends Equatable {
       customEndDate: customEndDate ?? this.customEndDate,
       showHighValueOnly: showHighValueOnly ?? this.showHighValueOnly,
       showInactiveOnly: showInactiveOnly ?? this.showInactiveOnly,
+      showActiveOnly: showActiveOnly ?? this.showActiveOnly,
       currentPage: currentPage ?? this.currentPage,
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage ?? this.errorMessage,
@@ -134,6 +140,7 @@ class DealersState extends Equatable {
         customEndDate,
         showHighValueOnly,
         showInactiveOnly,
+        showActiveOnly,
         currentPage,
         pageSize,
         errorMessage,

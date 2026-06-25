@@ -11,6 +11,7 @@ class StatCardWidget extends StatefulWidget {
   final String? imagePath;
   final double? width;
   final bool isCompact;
+  final VoidCallback? onTap;
 
   const StatCardWidget({
     super.key,
@@ -22,6 +23,7 @@ class StatCardWidget extends StatefulWidget {
     this.imagePath,
     this.width,
     this.isCompact = false,
+    this.onTap,
   });
 
   @override
@@ -344,15 +346,19 @@ class _StatCardWidgetState extends State<StatCardWidget> {
       );
     }
 
+    final bool hasOnTap = widget.onTap != null;
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.basic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        transform: Matrix4.identity()..scale(_isHovered ? 1.01 : 1.0),
-        child: content,
+      cursor: hasOnTap ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.identity()..scale(_isHovered ? 1.01 : 1.0),
+          child: content,
+        ),
       ),
     );
   }

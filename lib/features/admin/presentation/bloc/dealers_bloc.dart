@@ -11,6 +11,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<CreateSalesAgentEvent>(_onCreateSalesAgent);
     on<UpdateDealersFilterEvent>(_onUpdateDealersFilter);
     on<ClearDealersMessageEvent>(_onClearDealersMessage);
+    on<ToggleBlockDealerEvent>(_onToggleBlockDealer);
   }
 
   Future<void> _onFetchDealersData(
@@ -165,6 +166,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       customEndDate: event.customEndDate,
       showHighValueOnly: event.showHighValueOnly,
       showInactiveOnly: event.showInactiveOnly,
+      showActiveOnly: event.showActiveOnly,
       currentPage: event.currentPage,
       pageSize: event.pageSize,
     ));
@@ -178,5 +180,36 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       errorMessage: null,
       actionSuccessMessage: null,
     ));
+  }
+
+  Future<void> _onToggleBlockDealer(
+    ToggleBlockDealerEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final res = await ApiClient().put('/users/${event.userId}/block', {});
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final String msg = data['message'] ?? 'Dealer block status updated';
+          emit(state.copyWithMessages(
+            status: DealersStatus.success,
+            actionSuccessMessage: msg,
+          ));
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update block status');
+        }
+      } else {
+        throw Exception('Server returned status code: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWithMessages(
+        status: DealersStatus.success,
+        errorMessage: e.toString(),
+      ));
+    }
   }
 }

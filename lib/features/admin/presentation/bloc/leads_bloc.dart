@@ -14,6 +14,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<RejectKYCEvent>(_onRejectKYC);
     on<UpdateLeadsFilterEvent>(_onUpdateLeadsFilter);
     on<ClearLeadsMessageEvent>(_onClearLeadsMessage);
+    on<ToggleBlockLeadEvent>(_onToggleBlockLead);
   }
 
   Future<void> _onFetchLeadsData(
@@ -297,5 +298,36 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       errorMessage: null,
       actionSuccessMessage: null,
     ));
+  }
+
+  Future<void> _onToggleBlockLead(
+    ToggleBlockLeadEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(status: LeadsStatus.submitting));
+    try {
+      final res = await ApiClient().put('/users/${event.userId}/block', {});
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final String msg = data['message'] ?? 'Lead block status updated';
+          emit(state.copyWith(
+            status: LeadsStatus.success,
+            actionSuccessMessage: msg,
+          ));
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update block status');
+        }
+      } else {
+        throw Exception('Server returned status code: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWithKeepMessages(
+        status: LeadsStatus.success,
+        errorMessage: e.toString(),
+      ));
+    }
   }
 }

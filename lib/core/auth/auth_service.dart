@@ -10,9 +10,13 @@ class AuthService {
   AuthService._internal();
 
   UserRole? _currentUserRole;
+  String? _currentUserId;
+  String? _currentUserEmail;
   String? _lastError;
 
   UserRole? get currentUserRole => _currentUserRole;
+  String? get currentUserId => _currentUserId;
+  String? get currentUserEmail => _currentUserEmail;
   String? get lastError => _lastError;
 
   Future<void> init() async {
@@ -24,6 +28,8 @@ class AuthService {
       } else if (roleStr == 'sales') {
         _currentUserRole = UserRole.sales;
       }
+      _currentUserId = prefs.getString('kd_user_id');
+      _currentUserEmail = prefs.getString('kd_user_email');
     } catch (_) {}
   }
 
@@ -49,8 +55,19 @@ class AuthService {
           await ApiClient().setTokens(accessToken, refreshToken, persistent: rememberMe);
           
           final userRoleStr = data['user']['role'];
+          final userIdStr = data['user']['id'] ?? data['user']['_id'];
+          final userEmailStr = data['user']['email'];
+          _currentUserId = userIdStr;
+          _currentUserEmail = userEmailStr;
+
+          final prefs = await SharedPreferences.getInstance();
+          if (userIdStr != null) {
+            await prefs.setString('kd_user_id', userIdStr);
+          }
+          if (userEmailStr != null) {
+            await prefs.setString('kd_user_email', userEmailStr);
+          }
           if (rememberMe) {
-            final prefs = await SharedPreferences.getInstance();
             await prefs.setString('kd_user_role', userRoleStr);
           }
 
@@ -87,11 +104,18 @@ class AuthService {
     clearLocalSessionState();
   }
 
-  void clearLocalSessionState() {
+  void clearLocalSessionState() async {
     _currentUserRole = null;
+    _currentUserId = null;
+    _currentUserEmail = null;
     _lastError = null;
     ApiClient().clearCache();
     ApiClient().clearTokens();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('kd_user_id');
+      await prefs.remove('kd_user_email');
+    } catch (_) {}
   }
 
   bool get isAdmin => _currentUserRole == UserRole.admin;

@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_switch/flutter_switch.dart';
@@ -13,6 +14,7 @@ import '../bloc/dealers_event.dart';
 import '../bloc/dealers_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 
 class DealerManagementPage extends StatefulWidget {
   final bool isStandalone;
@@ -26,6 +28,23 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _tableHorizontalController = ScrollController();
   bool _isExporting = false;
+  DealersBloc? _dealersBloc;
+  StreamSubscription? _wsSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Connect to WebSockets
+    WebSocketService().connect();
+
+    // Listen to WebSocket signals to refresh Dealers
+    _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
+      if (mounted && _dealersBloc != null) {
+        _dealersBloc!.add(const FetchDealersDataEvent(forceRefresh: true));
+      }
+    });
+  }
 
   void _exportDealersToCSV() async {
     setState(() => _isExporting = true);
@@ -156,6 +175,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   @override
   void dispose() {
+    _wsSubscription?.cancel();
     _searchController.dispose();
     _tableHorizontalController.dispose();
     super.dispose();
@@ -179,10 +199,20 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   }
 
   List<Dealer> _getallCalculatedDealers(DealersState state) {
+    final isSales = AuthService().isSales;
+    final agentId = AuthService().currentUserId;
+
     final verifiedUsers = state.allRawUsers.where((u) {
       final role = u['role'] ?? 'user';
       final kycStatus = u['kycStatus'] ?? 'pending';
-      return role == 'user' && kycStatus == 'verified';
+      final isDealer = role == 'user' && kycStatus == 'verified';
+      if (!isDealer) return false;
+
+      if (isSales) {
+        final assignedAgentId = u['assignedAgent']?['_id'];
+        return assignedAgentId == agentId;
+      }
+      return true;
     }).toList();
 
     return verifiedUsers.map((u) {
@@ -343,7 +373,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => DealersBloc()..add(const FetchDealersDataEvent()),
+      create: (context) {
+        final bloc = DealersBloc()..add(const FetchDealersDataEvent());
+        _dealersBloc = bloc;
+        return bloc;
+      },
       child: BlocConsumer<DealersBloc, DealersState>(
         listener: (context, state) {
           if (_searchController.text != state.searchQuery) {
@@ -374,8 +408,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
           final bool isLoaderShowing = state.status == DealersStatus.loading;
 
-          final Widget body = isLoaderShowing && state.allRawUsers.isEmpty
-              ? const Center(
+          final Widget body = SelectionArea(
+            child: isLoaderShowing && state.allRawUsers.isEmpty
+                ? const Center(
                   child: Padding(
                     padding: EdgeInsets.all(80.0),
                     child: CircularProgressIndicator(
@@ -419,14 +454,15 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                       ),
                     ),
                   ),
-                );
+                ),
+          );
 
           if (widget.isStandalone) {
             return Scaffold(
               backgroundColor: AppTheme.backgroundColor,
               appBar: AppBar(
                 title: Text(
-                  'Dealer Management',
+                  AuthService().isSales ? 'My Assigned Dealers' : 'Dealer Management',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textPrimary,
@@ -507,7 +543,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       children: [
         if (!widget.isStandalone)
           Text(
-            'Dealer Management',
+            AuthService().isSales ? 'My Assigned Dealers' : 'Dealer Management',
             style: AppTheme.headingXL.copyWith(
               letterSpacing: -0.5,
               fontWeight: FontWeight.w800,
@@ -1145,7 +1181,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             behavior: ScrollConfiguration.of(context).copyWith(
               dragDevices: {
                 ui.PointerDeviceKind.touch,
-                ui.PointerDeviceKind.mouse,
                 ui.PointerDeviceKind.trackpad,
               },
             ),

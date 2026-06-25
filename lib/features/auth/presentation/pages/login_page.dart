@@ -119,7 +119,9 @@ class _LoginPageState extends State<LoginPage> {
                   'vendor': p['brandName'] ?? p['vendor'] ?? 'N/A',
                   'price': priceRange,
                   'inStock': inStock,
-                  'availabilityStatus': p['availabilityStatus'] ?? (inStock ? 'In Stock' : 'Out of Stock'),
+                  'availabilityStatus':
+                      p['availabilityStatus'] ??
+                      (inStock ? 'In Stock' : 'Out of Stock'),
                   'variants': p['variants'] ?? [],
                   'images': p['images'] ?? [],
                   'thumbnail': p['thumbnail'],
@@ -218,7 +220,8 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AuthService().lastError ?? 'Authorization failed. Please verify your credentials.',
+              AuthService().lastError ??
+                  'Authorization failed. Please verify your credentials.',
             ),
             backgroundColor: Colors.redAccent,
           ),
@@ -233,7 +236,8 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
 
-    return Scaffold(
+    return SelectionArea(
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
@@ -624,6 +628,7 @@ class _LoginPageState extends State<LoginPage> {
                                 hint: 'Identity Identifier',
                                 icon: Icons.alternate_email_rounded,
                                 isDark: !isDesktop,
+                                textInputAction: TextInputAction.next,
                                 validator: (val) {
                                   if (val == null || val.trim().isEmpty) {
                                     return 'Please enter your identity identifier';
@@ -649,6 +654,9 @@ class _LoginPageState extends State<LoginPage> {
                                       _isPasswordVisible = !_isPasswordVisible,
                                 ),
                                 isDark: !isDesktop,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) =>
+                                    _handleLogin(_selectedRole),
                                 validator: (val) {
                                   if (val == null || val.trim().isEmpty) {
                                     return 'Please enter your security token';
@@ -797,8 +805,10 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
-    );
+    ), // closes Scaffold
+    ); // closes SelectionArea
   }
+
 
   Widget _buildCapsuleTab(UserRole role, String label, {bool isDark = false}) {
     final isSelected = _selectedRole == role;
@@ -1087,6 +1097,8 @@ class FocusableAdvancedField extends StatefulWidget {
   final VoidCallback? togglePassword;
   final bool isDark;
   final String? Function(String?)? validator;
+  final ValueChanged<String>? onFieldSubmitted;
+  final TextInputAction? textInputAction;
 
   const FocusableAdvancedField({
     super.key,
@@ -1098,6 +1110,8 @@ class FocusableAdvancedField extends StatefulWidget {
     this.togglePassword,
     required this.isDark,
     this.validator,
+    this.onFieldSubmitted,
+    this.textInputAction,
   });
 
   @override
@@ -1147,6 +1161,8 @@ class _FocusableAdvancedFieldState extends State<FocusableAdvancedField> {
       focusNode: _focusNode,
       obscureText: widget.obscure,
       validator: widget.validator,
+      textInputAction: widget.textInputAction,
+      onFieldSubmitted: widget.onFieldSubmitted,
       style: GoogleFonts.outfit(
         fontSize: 16,
         color: widget.isDark ? Colors.white : const Color(0xFF0F172A),

@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -11,6 +12,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 
 class LeadsPage extends StatefulWidget {
   final bool isStandalone;
@@ -95,6 +97,8 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
+  StreamSubscription? _wsSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -103,10 +107,19 @@ class _LeadsPageState extends State<LeadsPage> {
     if (bloc.state.status == LeadsStatus.initial) {
       bloc.add(const FetchLeadsDataEvent());
     }
+
+    WebSocketService().connect();
+
+    _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
+      if (mounted) {
+        context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -141,11 +154,21 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   List<Map<String, dynamic>> _getAllLeads(List<Map<String, dynamic>> rawUsers) {
+    final isSales = AuthService().isSales;
+    final agentId = AuthService().currentUserId;
+
     return rawUsers
         .where((u) {
           final role = u['role'] ?? 'user';
           final kycStatus = u['kycStatus'] ?? 'pending';
-          return role == 'user' && kycStatus != 'verified';
+          final isLead = role == 'user' && kycStatus != 'verified';
+          if (!isLead) return false;
+
+          if (isSales) {
+            final assignedAgentId = u['assignedAgent']?['_id'];
+            return assignedAgentId == agentId;
+          }
+          return true;
         })
         .map((u) {
           return {
@@ -194,7 +217,11 @@ class _LeadsPageState extends State<LeadsPage> {
     'This Month',
   ];
 
-  final List<String> filterChips = ['All', 'Assigned', 'Unassigned'];
+  final List<String> filterChips = [
+    'All',
+    'Assigned',
+    'Unassigned',
+  ];
 
   final Map<String, String> statusMapping = {
     'Assigned': 'Assigned',
@@ -222,6 +249,10 @@ class _LeadsPageState extends State<LeadsPage> {
         result = result.where((l) => l['agentId'] == null).toList();
       } else if (selectedFilterChip == 'Assigned') {
         result = result.where((l) => l['agentId'] != null).toList();
+      } else if (selectedFilterChip == 'KYC Pending') {
+        result = result.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').toList();
+      } else if (selectedFilterChip == 'KYC Confirm') {
+        result = result.where((l) => l['kycStatus'] == 'verified').toList();
       }
     }
 
@@ -337,12 +368,23 @@ class _LeadsPageState extends State<LeadsPage> {
       },
       builder: (context, state) {
         final verifiedDealersCount = state.allRawUsers
-            .where((u) => u['role'] == 'user' && u['kycStatus'] == 'verified')
+            .where((u) {
+              final role = u['role'] ?? 'user';
+              final kycStatus = u['kycStatus'] ?? 'pending';
+              final isVerifiedDealer = role == 'user' && kycStatus == 'verified';
+              if (!isVerifiedDealer) return false;
+
+              if (AuthService().isSales) {
+                final assignedAgentId = u['assignedAgent']?['_id'];
+                return assignedAgentId == AuthService().currentUserId;
+              }
+              return true;
+            })
             .length;
 
-        final Widget body =
-            (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
-            ? const Center(
+        final Widget body = SelectionArea(
+          child: (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+              ? const Center(
                 child: Padding(
                   padding: EdgeInsets.all(80.0),
                   child: CircularProgressIndicator(
@@ -425,7 +467,9 @@ class _LeadsPageState extends State<LeadsPage> {
                             children: [
                               if (!widget.isStandalone)
                                 Text(
-                                  'Leads Management',
+                                  AuthService().isSales
+                                      ? 'My Assigned Leads'
+                                      : 'Leads Management',
                                   style: AppTheme.headingXL.copyWith(
                                     letterSpacing: -0.5,
                                     fontWeight: FontWeight.w700,
@@ -500,7 +544,8 @@ class _LeadsPageState extends State<LeadsPage> {
                     ),
                   ),
                 ),
-              );
+              ),
+        );
 
         if (widget.isStandalone) {
           return Scaffold(
@@ -780,6 +825,10 @@ class _LeadsPageState extends State<LeadsPage> {
         return Icons.person_pin_rounded;
       case 'Unassigned':
         return Icons.person_off_rounded;
+      case 'KYC Pending':
+        return Icons.pending_actions_rounded;
+      case 'KYC Confirm':
+        return Icons.verified_user_rounded;
       default:
         return Icons.filter_list_rounded;
     }
@@ -1870,16 +1919,20 @@ class _LeadsTableState extends State<_LeadsTable> {
         final double minTableWidth = widget.isMobile
             ? 1100.0
             : (AuthService().isAdmin ? 900.0 : 800.0);
-        final double tableWidth = constraints.maxWidth > minTableWidth
-            ? constraints.maxWidth
-            : minTableWidth;
+        // Guard against infinite constraints which occur on first layout
+        // when this LayoutBuilder sits inside a horizontal SingleChildScrollView.
+        // In that case, fall back to minTableWidth so rows have a known width.
+        final double safeMaxWidth = constraints.maxWidth.isInfinite
+            ? minTableWidth
+            : constraints.maxWidth;
+        final double tableWidth =
+            safeMaxWidth > minTableWidth ? safeMaxWidth : minTableWidth;
 
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
             scrollbars: false,
             dragDevices: {
               ui.PointerDeviceKind.touch,
-              ui.PointerDeviceKind.mouse,
               ui.PointerDeviceKind.trackpad,
             },
           ),
@@ -1888,36 +1941,35 @@ class _LeadsTableState extends State<_LeadsTable> {
             physics: const BouncingScrollPhysics(),
             child: SizedBox(
               width: tableWidth,
-              child: SelectionArea(
-                child: Column(
-                  children: [
-                    tableHeader,
-                    ...widget.leads.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final lead = entry.value;
-                      final bool isAlternate = index % 2 == 1;
-                      final String leadId = lead['id'] ?? '';
-                      return _LeadRow(
-                        lead: lead,
-                        isAlternate: isAlternate,
-                        isMobile: widget.isMobile,
-                        isHovered: hoveredRowIndex == index,
-                        isSelected: widget.selectedLeadIds.contains(leadId),
-                        isAllSelected: isAllSelected,
-                        onToggleSelection: () => _toggleSelection(leadId),
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          '/leads/profile',
-                          arguments: lead,
-                        ),
-                        onHover: () => setState(() => hoveredRowIndex = index),
-                        onExit: () => setState(() => hoveredRowIndex = null),
-                        salesAgents: widget.salesAgents,
-                        onAssignAgent: widget.onAssignAgent,
-                      );
-                    }),
-                  ],
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tableHeader,
+                  ...widget.leads.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final lead = entry.value;
+                    final bool isAlternate = index % 2 == 1;
+                    final String leadId = lead['id'] ?? '';
+                    return _LeadRow(
+                      lead: lead,
+                      isAlternate: isAlternate,
+                      isMobile: widget.isMobile,
+                      isHovered: hoveredRowIndex == index,
+                      isSelected: widget.selectedLeadIds.contains(leadId),
+                      isAllSelected: isAllSelected,
+                      onToggleSelection: () => _toggleSelection(leadId),
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        '/leads/profile',
+                        arguments: lead,
+                      ),
+                      onHover: () => setState(() => hoveredRowIndex = index),
+                      onExit: () => setState(() => hoveredRowIndex = null),
+                      salesAgents: widget.salesAgents,
+                      onAssignAgent: widget.onAssignAgent,
+                    );
+                  }),
+                ],
               ),
             ),
           ),
@@ -2304,7 +2356,7 @@ class _LeadsStatsGrid extends StatelessWidget {
         final double spacing = AppTheme.spacingSmall;
         final int columns;
         if (constraints.maxWidth >= 1200) {
-          columns = 4;
+          columns = 3;
         } else if (constraints.maxWidth >= 768) {
           columns = 2;
         } else {
@@ -2325,6 +2377,15 @@ class _LeadsStatsGrid extends StatelessWidget {
               icon: Icons.person_off_outlined,
               color: AppTheme.warning,
               isCompact: true,
+              onTap: () {
+                context.read<LeadsBloc>().add(
+                  const UpdateLeadsFilterEvent(
+                    selectedFilterChip: 'Unassigned',
+                    currentPage: 1,
+                    searchQuery: '',
+                  ),
+                );
+              },
             ),
             StatCardWidget(
               width: width,
@@ -2333,6 +2394,15 @@ class _LeadsStatsGrid extends StatelessWidget {
               icon: Icons.person_pin_outlined,
               color: AppTheme.info,
               isCompact: true,
+              onTap: () {
+                context.read<LeadsBloc>().add(
+                  const UpdateLeadsFilterEvent(
+                    selectedFilterChip: 'Assigned',
+                    currentPage: 1,
+                    searchQuery: '',
+                  ),
+                );
+              },
             ),
             StatCardWidget(
               width: width,
@@ -2341,14 +2411,15 @@ class _LeadsStatsGrid extends StatelessWidget {
               icon: Icons.pending_actions_outlined,
               color: AppTheme.error,
               isCompact: true,
-            ),
-            StatCardWidget(
-              width: width,
-              title: 'KYC Confirm',
-              value: '$verifiedDealersCount',
-              icon: Icons.verified_user_outlined,
-              color: AppTheme.success,
-              isCompact: true,
+              onTap: () {
+                context.read<LeadsBloc>().add(
+                  const UpdateLeadsFilterEvent(
+                    selectedFilterChip: 'KYC Pending',
+                    currentPage: 1,
+                    searchQuery: '',
+                  ),
+                );
+              },
             ),
           ],
         );

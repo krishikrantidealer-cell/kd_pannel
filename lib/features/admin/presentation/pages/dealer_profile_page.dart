@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class DealerProfilePage extends StatefulWidget {
   const DealerProfilePage({super.key});
@@ -261,6 +263,99 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     }
   }
 
+  void _toggleBlockDealer() {
+    if (_dealer == null) return;
+    final isBlocked = _dealer!.isBlocked;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                isBlocked ? Icons.lock_open : Icons.block,
+                color: isBlocked ? Colors.blue : AppTheme.error,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isBlocked ? 'Unblock Dealer' : 'Block Dealer',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            isBlocked
+                ? 'Are you sure you want to unblock this dealer? They will regain access to place orders.'
+                : 'Are you sure you want to block this dealer? They will be force logged out instantly and restricted from placing any orders or accessing the application.',
+            style: GoogleFonts.outfit(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.outfit(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                context.read<DealersBloc>().add(
+                  ToggleBlockDealerEvent(_dealer!.id!),
+                );
+                setState(() {
+                  _dealer = Dealer(
+                    name: _dealer!.name,
+                    phone: _dealer!.phone,
+                    city: _dealer!.city,
+                    state: _dealer!.state,
+                    agent: _dealer!.agent,
+                    gstStatus: _dealer!.gstStatus,
+                    totalOrders: _dealer!.totalOrders,
+                    purchaseValue: _dealer!.purchaseValue,
+                    isHighValue: _dealer!.isHighValue,
+                    isInactive: _dealer!.isInactive,
+                    source: _dealer!.source,
+                    deepLinkUrl: _dealer!.deepLinkUrl,
+                    id: _dealer!.id,
+                    agentId: _dealer!.agentId,
+                    licenceImage: _dealer!.licenceImage,
+                    shopImage: _dealer!.shopImage,
+                    gstNumber: _dealer!.gstNumber,
+                    email: _dealer!.email,
+                    userType: _dealer!.userType,
+                    kycStatus: _dealer!.kycStatus,
+                    address: _dealer!.address,
+                    isBlocked: !isBlocked,
+                  );
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isBlocked ? Colors.blue : AppTheme.error,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                isBlocked ? 'Unblock' : 'Block',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -311,9 +406,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       address: _dealer!.address,
     );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: _isLoading
+    return SelectionArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.primaryColor),
             )
@@ -330,7 +426,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   const SizedBox(height: 16),
 
                   // 2. HEADER SECTION
-                  _DealerHeroCard(dealer: currentDealer),
+                  _DealerHeroCard(
+                    dealer: currentDealer,
+                    onToggleBlock: _toggleBlockDealer,
+                  ),
                   const SizedBox(height: 24),
 
                   // 3. STATS CARDS ROW
@@ -387,6 +486,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                 ],
               ),
             ),
+      ),
     );
   }
 
@@ -426,7 +526,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
 
 class _DealerHeroCard extends StatelessWidget {
   final Dealer dealer;
-  const _DealerHeroCard({required this.dealer});
+  final VoidCallback onToggleBlock;
+  const _DealerHeroCard({required this.dealer, required this.onToggleBlock});
 
   @override
   Widget build(BuildContext context) {
@@ -622,6 +723,15 @@ class _DealerHeroCard extends StatelessWidget {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             }
           },
+        ),
+        _ActionButton(
+          icon: dealer.isBlocked
+              ? Icons.lock_open_outlined
+              : Icons.block_outlined,
+          label: dealer.isBlocked ? 'Unblock' : 'Block',
+          color: dealer.isBlocked ? Colors.blue : AppTheme.error,
+          isSolid: true,
+          onTap: onToggleBlock,
         ),
       ],
     );

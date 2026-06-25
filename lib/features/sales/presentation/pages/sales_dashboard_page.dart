@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -10,6 +11,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 
 class SalesDashboardPage extends StatefulWidget {
   const SalesDashboardPage({super.key});
@@ -19,6 +22,9 @@ class SalesDashboardPage extends StatefulWidget {
 }
 
 class _SalesDashboardPageState extends State<SalesDashboardPage> {
+  StreamSubscription? _leadsSubscription;
+  StreamSubscription? _dealersSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -29,14 +35,40 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
       final dealersBloc = context.read<DealersBloc>();
       dealersBloc.add(const FetchDealersDataEvent(forceRefresh: true));
     });
+
+    WebSocketService().connect();
+
+    _leadsSubscription = WebSocketService().leadsUpdates.listen((_) {
+      if (mounted) {
+        context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+      }
+    });
+
+    _dealersSubscription = WebSocketService().dealersUpdates.listen((_) {
+      if (mounted) {
+        context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _leadsSubscription?.cancel();
+    _dealersSubscription?.cancel();
+    super.dispose();
   }
 
   List<Map<String, dynamic>> _getLeadsList(List<Map<String, dynamic>> rawUsers) {
+    final agentId = AuthService().currentUserId;
     return rawUsers
         .where((u) {
           final role = u['role'] ?? 'user';
           final kycStatus = u['kycStatus'] ?? 'pending';
-          return role == 'user' && kycStatus != 'verified';
+          final isLead = role == 'user' && kycStatus != 'verified';
+          if (!isLead) return false;
+
+          final assignedAgentId = u['assignedAgent']?['_id'];
+          return assignedAgentId == agentId;
         })
         .map((u) {
           return {
@@ -53,11 +85,16 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   }
 
   List<Map<String, dynamic>> _getDealersList(List<Map<String, dynamic>> rawUsers) {
+    final agentId = AuthService().currentUserId;
     return rawUsers
         .where((u) {
           final role = u['role'] ?? 'user';
           final kycStatus = u['kycStatus'] ?? 'pending';
-          return role == 'user' && kycStatus == 'verified';
+          final isDealer = role == 'user' && kycStatus == 'verified';
+          if (!isDealer) return false;
+
+          final assignedAgentId = u['assignedAgent']?['_id'];
+          return assignedAgentId == agentId;
         })
         .map((u) {
           return {

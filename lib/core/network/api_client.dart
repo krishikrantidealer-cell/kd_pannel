@@ -75,6 +75,7 @@ class ApiClient {
       await prefs.remove('kd_access_token');
       await prefs.remove('kd_refresh_token');
       await prefs.remove('kd_user_role');
+      await prefs.remove('kd_user_id');
     } catch (e) {
       debugPrint('Failed to clear persisted tokens: $e');
     }

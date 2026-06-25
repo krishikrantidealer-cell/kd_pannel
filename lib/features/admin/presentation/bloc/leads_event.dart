@@ -106,3 +106,11 @@ class UpdateLeadsFilterEvent extends LeadsEvent {
 class ClearLeadsMessageEvent extends LeadsEvent {
   const ClearLeadsMessageEvent();
 }
+
+class ToggleBlockLeadEvent extends LeadsEvent {
+  final String userId;
+  const ToggleBlockLeadEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}

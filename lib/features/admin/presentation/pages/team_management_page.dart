@@ -373,8 +373,9 @@ class _TeamManagementPageState extends State<TeamManagementPage> {
           }
         }
 
-        final Widget bodyContent = (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
-            ? const Center(
+        final Widget bodyContent = SelectionArea(
+          child: (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+              ? const Center(
                 child: Padding(
                   padding: EdgeInsets.all(80.0),
                   child: CircularProgressIndicator(color: AppTheme.primaryColor),
@@ -795,7 +796,8 @@ class _TeamManagementPageState extends State<TeamManagementPage> {
                     ),
                   ),
                 ),
-              );
+              ),
+        );
 
         return Scaffold(
           backgroundColor: const Color(0xFFF8FAFC),

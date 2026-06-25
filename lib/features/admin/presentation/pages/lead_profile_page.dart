@@ -10,6 +10,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 
 class LeadProfilePage extends StatefulWidget {
   const LeadProfilePage({super.key});
@@ -82,6 +83,64 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
+  void _toggleBlockLead() {
+    if (_lead == null) return;
+    final isBlocked = _lead!['isBlocked'] ?? false;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(
+                isBlocked ? Icons.lock_open : Icons.block,
+                color: isBlocked ? Colors.blue : AppTheme.error,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isBlocked ? 'Unblock User' : 'Block User',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            isBlocked
+                ? 'Are you sure you want to unblock this lead? They will regain full access to their account.'
+                : 'Are you sure you want to block this lead? They will be instantly force logged out on their device and restricted from accessing the application.',
+            style: GoogleFonts.outfit(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                context.read<LeadsBloc>().add(ToggleBlockLeadEvent(_lead!['id']));
+                setState(() {
+                  _lead!['isBlocked'] = !isBlocked;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isBlocked ? Colors.blue : AppTheme.error,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text(
+                isBlocked ? 'Unblock' : 'Block',
+                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Map<String, dynamic> _mapUserToLead(Map<String, dynamic> u) {
     return {
       'id': u['_id'],
@@ -112,6 +171,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       'userType': u['userType'] ?? '',
       'licenceImage': u['licenceImage'] ?? '',
       'shopImage': u['shopImage'] ?? '',
+      'isBlocked': u['isBlocked'] ?? false,
     };
   }
 
@@ -1123,9 +1183,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         final isTablet = Responsive.isTablet(context);
         final isLoading = state.status == LeadsStatus.submitting;
 
-        return Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: isLoading
+        return SelectionArea(
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FAFC),
+            body: isLoading
               ? const Center(
                   child: CircularProgressIndicator(
                     color: AppTheme.primaryColor,
@@ -1175,8 +1236,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       // 1. Flat Header section
                       _FlatHeaderSection(
                         lead: currentLead,
+                        isSales: AuthService().isSales,
                         onConvertDealer: _showConvertDealerDialog,
                         onRejectKyc: _showRejectDialog,
+                        onToggleBlock: _toggleBlockLead,
                       ),
                       const SizedBox(height: 28),
 
@@ -1221,6 +1284,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                     ],
                   ),
                 ),
+          ),
         );
       },
     );
@@ -1229,13 +1293,17 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
 class _FlatHeaderSection extends StatelessWidget {
   final Map<String, dynamic> lead;
+  final bool isSales;
   final VoidCallback onConvertDealer;
   final VoidCallback onRejectKyc;
+  final VoidCallback onToggleBlock;
 
   const _FlatHeaderSection({
     required this.lead,
+    required this.isSales,
     required this.onConvertDealer,
     required this.onRejectKyc,
+    required this.onToggleBlock,
   });
 
   @override
@@ -1473,18 +1541,28 @@ class _FlatHeaderSection extends StatelessWidget {
               ? null
               : onConvertDealer,
         ),
-        _ActionButton(
-          icon: Icons.block_outlined,
-          label: 'Reject KYC',
-          color: const Color(0xFFD32F2F),
-          isSolid: true,
-          onTap:
-              ((kycStatus.toLowerCase() == 'pending' ||
-                      kycStatus.toLowerCase() == 'submitted') &&
-                  hasDocuments)
-              ? onRejectKyc
-              : null,
-        ),
+        // Admin-only actions
+        if (!isSales) ...[
+          _ActionButton(
+            icon: Icons.block_outlined,
+            label: 'Reject KYC',
+            color: const Color(0xFFD32F2F),
+            isSolid: true,
+            onTap:
+                ((kycStatus.toLowerCase() == 'pending' ||
+                        kycStatus.toLowerCase() == 'submitted') &&
+                    hasDocuments)
+                ? onRejectKyc
+                : null,
+          ),
+          _ActionButton(
+            icon: (lead['isBlocked'] ?? false) ? Icons.lock_open_outlined : Icons.lock_outline,
+            label: (lead['isBlocked'] ?? false) ? 'Unblock' : 'Block',
+            color: (lead['isBlocked'] ?? false) ? Colors.blue : AppTheme.error,
+            isSolid: true,
+            onTap: onToggleBlock,
+          ),
+        ],
       ],
     );
   }

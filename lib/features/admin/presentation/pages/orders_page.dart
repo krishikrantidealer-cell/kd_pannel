@@ -171,58 +171,60 @@ class _OrdersPageState extends State<OrdersPage> {
           );
         }
 
-        final Widget bodyContent = SizedBox.expand(
-          child: RefreshIndicator(
-            color: AppTheme.primaryColor,
-            onRefresh: () async {
-              context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
-            },
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.symmetric(vertical: screenPadding.top),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  if (!widget.isStandalone) ...[
+        final Widget bodyContent = SelectionArea(
+          child: SizedBox.expand(
+            child: RefreshIndicator(
+              color: AppTheme.primaryColor,
+              onRefresh: () async {
+                context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+              },
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.symmetric(vertical: screenPadding.top),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    if (!widget.isStandalone) ...[
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: screenPadding.left,
+                        ),
+                        child: _buildHeader(),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Statistics Grid
                     Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: screenPadding.left,
                       ),
-                      child: _buildHeader(),
+                      child: _buildStatsGrid(state),
                     ),
                     const SizedBox(height: 24),
+
+                    // Search & Filter controls
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: screenPadding.left,
+                      ),
+                      child: _buildFilterControls(isMobile, state),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Orders Table
+                    _buildOrdersTable(
+                      paginatedOrders,
+                      filtered.length,
+                      isMobile,
+                      screenPadding,
+                      state,
+                      currentPage,
+                    ),
                   ],
-
-                  // Statistics Grid
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: screenPadding.left,
-                    ),
-                    child: _buildStatsGrid(state),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Search & Filter controls
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: screenPadding.left,
-                    ),
-                    child: _buildFilterControls(isMobile, state),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Orders Table
-                  _buildOrdersTable(
-                    paginatedOrders,
-                    filtered.length,
-                    isMobile,
-                    screenPadding,
-                    state,
-                    currentPage,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -901,7 +903,6 @@ class _OrdersPageState extends State<OrdersPage> {
             behavior: ScrollConfiguration.of(context).copyWith(
               dragDevices: {
                 ui.PointerDeviceKind.touch,
-                ui.PointerDeviceKind.mouse,
                 ui.PointerDeviceKind.trackpad,
               },
             ),

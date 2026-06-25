@@ -6,9 +6,9 @@ import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
-import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 
@@ -46,6 +46,10 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // Connect to WebSockets
+    WebSocketService().connect();
+
     // Pre-cache core layout assets to prevent empty/flickering render on direct load or restart
     precacheImage(const AssetImage('assets/images/logo.png'), context);
     precacheImage(const AssetImage('assets/images/admin.png'), context);
@@ -136,6 +140,7 @@ class _MainLayoutState extends State<MainLayout> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context); // Close the dialog
+                WebSocketService().disconnect();
                 AuthService().logout();
                 Navigator.pushReplacementNamed(context, '/login');
               },
@@ -169,20 +174,22 @@ class _MainLayoutState extends State<MainLayout> {
         ? _currentIdx
         : 0;
 
-    final Widget content = Column(
-      children: [
-        // Topbar (fixed height)
-        TopbarWidget(
-          onMenuPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
-          },
-        ),
+    final Widget content = SelectionArea(
+      child: Column(
+        children: [
+          // Topbar (fixed height)
+          TopbarWidget(
+            onMenuPressed: () {
+              _scaffoldKey.currentState?.openDrawer();
+            },
+          ),
 
-        // Screen Content
-        Expanded(
-          child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
-        ),
-      ],
+          // Screen Content
+          Expanded(
+            child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
+          ),
+        ],
+      ),
     );
 
     return Scaffold(

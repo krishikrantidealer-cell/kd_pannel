@@ -8,6 +8,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.d
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
@@ -53,13 +54,18 @@ void main() async {
   // Initialize AuthService and restore persisted session
   await AuthService().init();
 
+  if (AuthService().currentUserId != null) {
+    WebSocketService().connect();
+  }
+
   // Determine initial route based on session presence
   String initialRoute = '/login';
   try {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('kd_access_token');
     final role = prefs.getString('kd_user_role');
-    if (token != null && role != null) {
+    final userId = prefs.getString('kd_user_id');
+    if (token != null && role != null && userId != null) {
       initialRoute = role == 'sales' ? '/leads' : '/dashboard';
     }
   } catch (_) {}
@@ -111,7 +117,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: NavigationService.navigatorKey,
       scaffoldMessengerKey: NavigationService.messengerKey,
-      title: 'KrishiDealer Admin Panel',
+      title: 'KrishiDealer Portal',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       localizationsDelegates: const [
