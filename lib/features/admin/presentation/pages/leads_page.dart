@@ -112,7 +112,9 @@ class _LeadsPageState extends State<LeadsPage> {
 
     _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
       if (mounted) {
-        context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+        context.read<LeadsBloc>().add(
+          const FetchLeadsDataEvent(forceRefresh: true),
+        );
       }
     });
   }
@@ -217,11 +219,7 @@ class _LeadsPageState extends State<LeadsPage> {
     'This Month',
   ];
 
-  final List<String> filterChips = [
-    'All',
-    'Assigned',
-    'Unassigned',
-  ];
+  final List<String> filterChips = ['All', 'Assigned', 'Unassigned'];
 
   final Map<String, String> statusMapping = {
     'Assigned': 'Assigned',
@@ -250,7 +248,12 @@ class _LeadsPageState extends State<LeadsPage> {
       } else if (selectedFilterChip == 'Assigned') {
         result = result.where((l) => l['agentId'] != null).toList();
       } else if (selectedFilterChip == 'KYC Pending') {
-        result = result.where((l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted').toList();
+        result = result
+            .where(
+              (l) =>
+                  l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
+            )
+            .toList();
       } else if (selectedFilterChip == 'KYC Confirm') {
         result = result.where((l) => l['kycStatus'] == 'verified').toList();
       }
@@ -338,8 +341,6 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -348,203 +349,216 @@ class _LeadsPageState extends State<LeadsPage> {
     return BlocConsumer<LeadsBloc, LeadsState>(
       listener: (context, state) {
         if (state.errorMessage != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.errorMessage!),
-              backgroundColor: AppTheme.error,
-            ),
-          );
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.errorMessage!),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+          }
           context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
         }
         if (state.actionSuccessMessage != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.actionSuccessMessage!),
-              backgroundColor: AppTheme.success,
-            ),
-          );
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.actionSuccessMessage!),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+          }
           context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
         }
       },
       builder: (context, state) {
-        final verifiedDealersCount = state.allRawUsers
-            .where((u) {
-              final role = u['role'] ?? 'user';
-              final kycStatus = u['kycStatus'] ?? 'pending';
-              final isVerifiedDealer = role == 'user' && kycStatus == 'verified';
-              if (!isVerifiedDealer) return false;
+        final verifiedDealersCount = state.allRawUsers.where((u) {
+          final role = u['role'] ?? 'user';
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          final isVerifiedDealer = role == 'user' && kycStatus == 'verified';
+          if (!isVerifiedDealer) return false;
 
-              if (AuthService().isSales) {
-                final assignedAgentId = u['assignedAgent']?['_id'];
-                return assignedAgentId == AuthService().currentUserId;
-              }
-              return true;
-            })
-            .length;
+          if (AuthService().isSales) {
+            final assignedAgentId = u['assignedAgent']?['_id'];
+            return assignedAgentId == AuthService().currentUserId;
+          }
+          return true;
+        }).length;
 
-        final Widget body = SelectionArea(
-          child: (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+        final Widget body = Builder(
+          builder: (context) =>
+              (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
               ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(80.0),
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-              )
-            : ScrollConfiguration(
-                behavior: ScrollConfiguration.of(
-                  context,
-                ).copyWith(scrollbars: false),
-                child: SingleChildScrollView(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isDesktop ? 28 : 16,
-                      vertical: isDesktop ? 20 : 12,
+                    padding: EdgeInsets.all(80.0),
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryColor,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        if (isMobile)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (!widget.isStandalone) ...[
-                                Text(
-                                  'Leads',
-                                  style: AppTheme.headingXL.copyWith(
-                                    letterSpacing: -0.5,
-                                    fontWeight: FontWeight.w700,
+                  ),
+                )
+              : ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isDesktop ? 28 : 16,
+                        vertical: isDesktop ? 20 : 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          if (isMobile)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!widget.isStandalone) ...[
+                                  Text(
+                                    'Leads',
+                                    style: AppTheme.headingXL.copyWith(
+                                      letterSpacing: -0.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildTimeframeRow(isMobile, state),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    height: 38,
-                                    width: 38,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: AppTheme.borderColor,
+                                  const SizedBox(height: 12),
+                                ],
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildTimeframeRow(
+                                        isMobile,
+                                        state,
                                       ),
                                     ),
-                                    child: IconButton(
-                                      padding: EdgeInsets.zero,
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      height: 38,
+                                      width: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: AppTheme.borderColor,
+                                        ),
+                                      ),
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        onPressed: _isExporting
+                                            ? null
+                                            : _exportLeadsToCSV,
+                                        icon: _isExporting
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color:
+                                                          AppTheme.primaryColor,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.download_rounded,
+                                                size: 18,
+                                                color: AppTheme.primaryColor,
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          else
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (!widget.isStandalone)
+                                  Text(
+                                    AuthService().isSales
+                                        ? 'My Assigned Leads'
+                                        : 'Leads Management',
+                                    style: AppTheme.headingXL.copyWith(
+                                      letterSpacing: -0.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
+                                else
+                                  const SizedBox.shrink(),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    OutlinedButton.icon(
                                       onPressed: _isExporting
                                           ? null
                                           : _exportLeadsToCSV,
                                       icon: _isExporting
                                           ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
+                                              width: 14,
+                                              height: 14,
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
                                                 color: AppTheme.primaryColor,
                                               ),
                                             )
                                           : const Icon(
-                                              Icons.download_rounded,
-                                              size: 18,
-                                              color: AppTheme.primaryColor,
+                                              Icons.download,
+                                              size: 16,
                                             ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          )
-                        else
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              if (!widget.isStandalone)
-                                Text(
-                                  AuthService().isSales
-                                      ? 'My Assigned Leads'
-                                      : 'Leads Management',
-                                  style: AppTheme.headingXL.copyWith(
-                                    letterSpacing: -0.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                )
-                              else
-                                const SizedBox.shrink(),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  OutlinedButton.icon(
-                                    onPressed: _isExporting
-                                        ? null
-                                        : _exportLeadsToCSV,
-                                    icon: _isExporting
-                                        ? const SizedBox(
-                                            width: 14,
-                                            height: 14,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: AppTheme.primaryColor,
-                                            ),
-                                          )
-                                        : const Icon(Icons.download, size: 16),
-                                    label: Text(
-                                      _isExporting
-                                          ? 'Exporting...'
-                                          : 'Export CSV',
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primaryColor,
+                                      label: Text(
+                                        _isExporting
+                                            ? 'Exporting...'
+                                            : 'Export CSV',
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.primaryColor,
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(
+                                          color: AppTheme.primaryColor,
+                                          width: 1.5,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(
-                                        color: AppTheme.primaryColor,
-                                        width: 1.5,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _buildTimeframeRow(isMobile, state),
-                                ],
-                              ),
-                            ],
+                                    const SizedBox(width: 12),
+                                    _buildTimeframeRow(isMobile, state),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 16),
+                          _LeadsStatsGrid(
+                            leads: allLeads,
+                            verifiedDealersCount: verifiedDealersCount,
                           ),
-                        const SizedBox(height: 16),
-                        _LeadsStatsGrid(
-                          leads: allLeads,
-                          verifiedDealersCount: verifiedDealersCount,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildFilterChips(isMobile, state),
-                        const SizedBox(height: 16),
-                        _LeadsTableCard(
-                          leads: filteredLeads,
-                          totalEntries: filteredLeads.length,
-                          isMobile: isMobile,
-                          salesAgents: state.salesAgents,
-                          onAssignAgent: _assignAgent,
-                          onBulkAssignAgent: _bulkAssignAgent,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+                          const SizedBox(height: 24),
+                          _buildFilterChips(isMobile, state),
+                          const SizedBox(height: 16),
+                          _LeadsTableCard(
+                            leads: filteredLeads,
+                            totalEntries: filteredLeads.length,
+                            isMobile: isMobile,
+                            salesAgents: state.salesAgents,
+                            onAssignAgent: _assignAgent,
+                            onBulkAssignAgent: _bulkAssignAgent,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
         );
 
         if (widget.isStandalone) {
@@ -1925,8 +1939,9 @@ class _LeadsTableState extends State<_LeadsTable> {
         final double safeMaxWidth = constraints.maxWidth.isInfinite
             ? minTableWidth
             : constraints.maxWidth;
-        final double tableWidth =
-            safeMaxWidth > minTableWidth ? safeMaxWidth : minTableWidth;
+        final double tableWidth = safeMaxWidth > minTableWidth
+            ? safeMaxWidth
+            : minTableWidth;
 
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
@@ -2309,7 +2324,6 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
   }
 }
 
-
 class _HeaderText extends StatelessWidget {
   final String text;
 
@@ -2596,11 +2610,7 @@ class _LeadColumnConfig {
   final int flex;
   final bool isCenter;
 
-  const _LeadColumnConfig(
-    this.title,
-    this.flex, {
-    this.isCenter = false,
-  });
+  const _LeadColumnConfig(this.title, this.flex, {this.isCenter = false});
 }
 
 class _SourceBadge extends StatelessWidget {
@@ -2620,7 +2630,9 @@ class _SourceBadge extends StatelessWidget {
       badgeColor = const Color(0xFFE8F8EF);
       textColor = const Color(0xFF107C41);
       icon = Icons.chat_bubble_outline_rounded;
-    } else if (sourceLower.contains('meta') || sourceLower.contains('facebook') || sourceLower.contains('instagram')) {
+    } else if (sourceLower.contains('meta') ||
+        sourceLower.contains('facebook') ||
+        sourceLower.contains('instagram')) {
       badgeColor = const Color(0xFFE8F3FF);
       textColor = const Color(0xFF1877F2);
       icon = Icons.campaign_outlined;
@@ -2628,7 +2640,8 @@ class _SourceBadge extends StatelessWidget {
       badgeColor = const Color(0xFFFEF3F2);
       textColor = const Color(0xFFD92D20);
       icon = Icons.search_rounded;
-    } else if (sourceLower.contains('firebase') || sourceLower.contains('notification')) {
+    } else if (sourceLower.contains('firebase') ||
+        sourceLower.contains('notification')) {
       badgeColor = const Color(0xFFFFF7ED);
       textColor = const Color(0xFFEA580C);
       icon = Icons.notifications_active_outlined;

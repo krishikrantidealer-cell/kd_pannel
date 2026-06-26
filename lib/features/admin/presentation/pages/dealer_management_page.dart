@@ -15,6 +15,7 @@ import '../bloc/dealers_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'create_order_page.dart';
 
 class DealerManagementPage extends StatefulWidget {
   final bool isStandalone;
@@ -34,7 +35,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   @override
   void initState() {
     super.initState();
-    
+
     // Connect to WebSockets
     WebSocketService().connect();
 
@@ -65,12 +66,14 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       'Total Orders',
       'Purchase Value',
       'User Type',
-      'KYC Status'
+      'KYC Status',
     ];
-    
+
     final buffer = StringBuffer();
-    buffer.writeln(headers.map((h) => '"${h.replaceAll('"', '""')}"').join(','));
-    
+    buffer.writeln(
+      headers.map((h) => '"${h.replaceAll('"', '""')}"').join(','),
+    );
+    // in the leads and dealers screen  on search when the user enters the number in the table you remove all the other leads and the delaers keep them there
     for (final dealer in dealers) {
       final row = [
         dealer.name,
@@ -86,7 +89,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         dealer.userType ?? '',
         dealer.kycStatus ?? '',
       ];
-      buffer.writeln(row.map((val) => '"${val.toString().replaceAll('"', '""')}"').join(','));
+      buffer.writeln(
+        row.map((val) => '"${val.toString().replaceAll('"', '""')}"').join(','),
+      );
     }
 
     // Simulate delay for UI responsiveness
@@ -319,8 +324,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     }).toList();
   }
 
-
-
   void _showDatePicker(BuildContext context) {
     final dealersBloc = context.read<DealersBloc>();
     showDialog(
@@ -384,21 +387,25 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             _searchController.text = state.searchQuery;
           }
           if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppTheme.error,
-              ),
-            );
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.errorMessage!),
+                  backgroundColor: AppTheme.error,
+                ),
+              );
+            }
             context.read<DealersBloc>().add(const ClearDealersMessageEvent());
           }
           if (state.actionSuccessMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.actionSuccessMessage!),
-                backgroundColor: AppTheme.success,
-              ),
-            );
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.actionSuccessMessage!),
+                  backgroundColor: AppTheme.success,
+                ),
+              );
+            }
             context.read<DealersBloc>().add(const ClearDealersMessageEvent());
           }
         },
@@ -408,53 +415,58 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
           final bool isLoaderShowing = state.status == DealersStatus.loading;
 
-          final Widget body = SelectionArea(
-            child: isLoaderShowing && state.allRawUsers.isEmpty
+          final Widget body = Builder(
+            builder: (context) => isLoaderShowing && state.allRawUsers.isEmpty
                 ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(80.0),
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                )
-              : state.status == DealersStatus.failure &&
-                    state.allRawUsers.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(40.0),
-                    child: Text(
-                      'Error: ${state.errorMessage ?? "Failed to load"}',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                )
-              : ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
-                  child: SingleChildScrollView(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 28 : 16,
-                        vertical: isDesktop ? 20 : 12,
+                      padding: EdgeInsets.all(80.0),
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryColor,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildHeader(context, state, isMobile),
-                          const SizedBox(height: 16),
-                          _buildStatsCards(state, context),
-                          const SizedBox(height: 24),
-                          _buildFiltersRow(context, state, isMobile, isDesktop),
-                          const SizedBox(height: 16),
-                          _buildDealerTable(context, state, isMobile),
-                          const SizedBox(height: 12),
-                        ],
+                    ),
+                  )
+                : state.status == DealersStatus.failure &&
+                      state.allRawUsers.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40.0),
+                      child: Text(
+                        'Error: ${state.errorMessage ?? "Failed to load"}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  )
+                : ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(
+                      context,
+                    ).copyWith(scrollbars: false),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isDesktop ? 28 : 16,
+                          vertical: isDesktop ? 20 : 12,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(context, state, isMobile),
+                            const SizedBox(height: 16),
+                            _buildStatsCards(state, context),
+                            const SizedBox(height: 24),
+                            _buildFiltersRow(
+                              context,
+                              state,
+                              isMobile,
+                              isDesktop,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDealerTable(context, state, isMobile),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
           );
 
           if (widget.isStandalone) {
@@ -462,7 +474,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
               backgroundColor: AppTheme.backgroundColor,
               appBar: AppBar(
                 title: Text(
-                  AuthService().isSales ? 'My Assigned Dealers' : 'Dealer Management',
+                  AuthService().isSales
+                      ? 'My Assigned Dealers'
+                      : 'Dealer Management',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textPrimary,
@@ -574,7 +588,10 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 ),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                side: const BorderSide(
+                  color: AppTheme.primaryColor,
+                  width: 1.5,
+                ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
@@ -940,37 +957,45 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   Widget _buildSearchField(BuildContext context, double? width) {
     return Container(
-      width: width,
       height: 38,
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.borderColor),
       ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (val) {
-          context.read<DealersBloc>().add(
-            UpdateDealersFilterEvent(searchQuery: val, currentPage: 1),
-          );
-        },
-        textAlignVertical: TextAlignVertical.center,
-        style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Search dealers...',
-          hintStyle: GoogleFonts.outfit(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-          ),
-          prefixIcon: const Icon(
+      child: Row(
+        children: [
+          const Icon(
             Icons.search,
             size: 18,
             color: AppTheme.textSecondary,
           ),
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                context.read<DealersBloc>().add(
+                  UpdateDealersFilterEvent(searchQuery: val, currentPage: 1),
+                );
+              },
+              textAlignVertical: TextAlignVertical.center,
+              style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Search dealers...',
+                hintStyle: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1213,6 +1238,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             flex: 2,
             child: Center(child: _HeaderText('PURCHASE VALUE')),
           ),
+          if (AuthService().isSales)
+            const Expanded(
+              flex: 2,
+              child: Center(child: _HeaderText('ACTION')),
+            ),
         ],
       ),
     );
@@ -1236,6 +1266,22 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       },
       onTap: () =>
           Navigator.pushNamed(context, '/dealers/profile', arguments: dealer),
+      onCreateOrder: AuthService().isSales
+          ? () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreateOrderPage(dealer: dealer),
+                ),
+              );
+              // Refresh dealers list after order creation
+              if (result == true && context.mounted) {
+                context.read<DealersBloc>().add(
+                  const FetchDealersDataEvent(forceRefresh: true),
+                );
+              }
+            }
+          : null,
     );
   }
 
@@ -1566,13 +1612,13 @@ class _HeaderText extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, style: AppTheme.tableHeader);
 }
 
-
 class _DealerRow extends StatefulWidget {
   final Dealer dealer;
   final bool isAlternate;
   final VoidCallback onTap;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final VoidCallback? onCreateOrder;
 
   const _DealerRow({
     super.key,
@@ -1581,6 +1627,7 @@ class _DealerRow extends StatefulWidget {
     required this.onTap,
     required this.salesAgents,
     required this.onAssignAgent,
+    this.onCreateOrder,
   });
 
   @override
@@ -1690,14 +1737,17 @@ class _DealerRowState extends State<_DealerRow> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF9FAFB),
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
                                   value:
                                       widget.salesAgents.any(
                                         (agent) =>
-                                            agent['_id'] == widget.dealer.agentId,
+                                            agent['_id'] ==
+                                            widget.dealer.agentId,
                                       )
                                       ? widget.dealer.agentId
                                       : null,
@@ -1796,16 +1846,74 @@ class _DealerRowState extends State<_DealerRow> {
                   ),
                 ),
               ),
-              SizedBox(
-                width: 22,
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 12,
-                  color: _isHovered
-                      ? AppTheme.primaryColor.withValues(alpha: 0.9)
-                      : AppTheme.textSecondary.withValues(alpha: 0.6),
+              if (widget.onCreateOrder != null)
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {}, // absorb row-level tap
+                      behavior: HitTestBehavior.opaque,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: widget.onCreateOrder,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppTheme.primaryColor.withValues(alpha: 0.85),
+                                  AppTheme.primaryColor,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.add_shopping_cart_rounded,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Create Order',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  width: 22,
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 12,
+                    color: _isHovered
+                        ? AppTheme.primaryColor.withValues(alpha: 0.9)
+                        : AppTheme.textSecondary.withValues(alpha: 0.6),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1831,7 +1939,9 @@ class _SourceBadge extends StatelessWidget {
       badgeColor = const Color(0xFFE8F8EF);
       textColor = const Color(0xFF107C41);
       icon = Icons.chat_bubble_outline_rounded;
-    } else if (sourceLower.contains('meta') || sourceLower.contains('facebook') || sourceLower.contains('instagram')) {
+    } else if (sourceLower.contains('meta') ||
+        sourceLower.contains('facebook') ||
+        sourceLower.contains('instagram')) {
       badgeColor = const Color(0xFFE8F3FF);
       textColor = const Color(0xFF1877F2);
       icon = Icons.campaign_outlined;
@@ -1839,7 +1949,8 @@ class _SourceBadge extends StatelessWidget {
       badgeColor = const Color(0xFFFEF3F2);
       textColor = const Color(0xFFD92D20);
       icon = Icons.search_rounded;
-    } else if (sourceLower.contains('firebase') || sourceLower.contains('notification')) {
+    } else if (sourceLower.contains('firebase') ||
+        sourceLower.contains('notification')) {
       badgeColor = const Color(0xFFFFF7ED);
       textColor = const Color(0xFFEA580C);
       icon = Icons.notifications_active_outlined;
@@ -1878,4 +1989,3 @@ class _SourceBadge extends StatelessWidget {
     );
   }
 }
-

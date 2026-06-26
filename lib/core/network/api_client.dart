@@ -108,7 +108,10 @@ class ApiClient {
         final response = await http
             .post(
               uri,
-              headers: {'Content-Type': 'application/json'},
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
               body: jsonEncode({'refreshToken': _refreshToken}),
             )
             .timeout(const Duration(seconds: 15));

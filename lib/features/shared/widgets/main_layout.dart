@@ -5,6 +5,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_pa
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
@@ -33,6 +34,7 @@ class _MainLayoutState extends State<MainLayout> {
     const OrdersPage(),
     const LeadsPage(),
     const DealerManagementPage(),
+    const SalesCouponPage(),
     const TeamManagementPage(),
   ];
 
@@ -41,6 +43,7 @@ class _MainLayoutState extends State<MainLayout> {
     // const SalesDashboardPage(),
     const LeadsPage(),
     const DealerManagementPage(),
+    const SalesCouponPage(),
   ];
 
   @override
@@ -66,14 +69,17 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 2;
         } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 3;
-        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
+        } else if (routeName == '/sales/coupons') {
           _currentIdx = 4;
+        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
+          _currentIdx = 5;
         } else {
           _currentIdx = 0;
         }
       } else {
         if (routeName == '/leads' || routeName.startsWith('/leads/')) _currentIdx = 0;
         if (routeName == '/dealers' || routeName.startsWith('/dealers/')) _currentIdx = 1;
+        if (routeName == '/sales/coupons') _currentIdx = 2;
       }
     }
   }
@@ -91,10 +97,12 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 1) route = '/orders';
       if (index == 2) route = '/leads';
       if (index == 3) route = '/dealers';
-      if (index == 4) route = '/team';
+      if (index == 4) route = '/sales/coupons';
+      if (index == 5) route = '/team';
     } else {
       if (index == 0) route = '/leads';
       if (index == 1) route = '/dealers';
+      if (index == 2) route = '/sales/coupons';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
@@ -174,22 +182,20 @@ class _MainLayoutState extends State<MainLayout> {
         ? _currentIdx
         : 0;
 
-    final Widget content = SelectionArea(
-      child: Column(
-        children: [
-          // Topbar (fixed height)
-          TopbarWidget(
-            onMenuPressed: () {
-              _scaffoldKey.currentState?.openDrawer();
-            },
-          ),
+    final Widget content = Column(
+      children: [
+        // Topbar (fixed height)
+        TopbarWidget(
+          onMenuPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
+        ),
 
-          // Screen Content
-          Expanded(
-            child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
-          ),
-        ],
-      ),
+        // Screen Content
+        Expanded(
+          child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
+        ),
+      ],
     );
 
     return Scaffold(

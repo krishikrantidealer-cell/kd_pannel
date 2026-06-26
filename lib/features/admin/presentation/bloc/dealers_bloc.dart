@@ -68,17 +68,21 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         throw Exception('Failed to load orders: ${ordersRes.statusCode}');
       }
 
-      emit(state.copyWith(
-        status: DealersStatus.success,
-        allRawUsers: users,
-        salesAgents: salesAgents,
-        allRawOrders: orders,
-      ));
+      emit(
+        state.copyWith(
+          status: DealersStatus.success,
+          allRawUsers: users,
+          salesAgents: salesAgents,
+          allRawOrders: orders,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: DealersStatus.failure,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: DealersStatus.failure,
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 
@@ -95,10 +99,12 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
-          emit(state.copyWithMessages(
-            status: DealersStatus.success,
-            actionSuccessMessage: 'Agent assigned successfully',
-          ));
+          emit(
+            state.copyWithMessages(
+              status: DealersStatus.success,
+              actionSuccessMessage: 'Agent assigned successfully',
+            ),
+          );
           // Refresh list
           add(const FetchDealersDataEvent(forceRefresh: true));
         } else {
@@ -108,10 +114,13 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         throw Exception('Failed to assign agent: ${res.statusCode}');
       }
     } catch (e) {
-      emit(state.copyWithMessages(
-        status: DealersStatus.success, // Keep success status to show existing tables
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus
+              .success, // Keep success status to show existing tables
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 
@@ -132,10 +141,12 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 201) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
-          emit(state.copyWithMessages(
-            status: DealersStatus.success,
-            actionSuccessMessage: 'Sales agent created successfully',
-          ));
+          emit(
+            state.copyWithMessages(
+              status: DealersStatus.success,
+              actionSuccessMessage: 'Sales agent created successfully',
+            ),
+          );
           // Refresh list
           add(const FetchDealersDataEvent(forceRefresh: true));
         } else {
@@ -146,10 +157,13 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         throw Exception(data['message'] ?? 'Failed to create sales agent');
       }
     } catch (e) {
-      emit(state.copyWithMessages(
-        status: DealersStatus.success, // Keep success status to show existing tables
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus
+              .success, // Keep success status to show existing tables
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 
@@ -157,29 +171,28 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     UpdateDealersFilterEvent event,
     Emitter<DealersState> emit,
   ) {
-    emit(state.copyWith(
-      searchQuery: event.searchQuery,
-      selectedAgent: event.selectedAgent,
-      selectedState: event.selectedState,
-      selectedTimeframe: event.selectedTimeframe,
-      customStartDate: event.customStartDate,
-      customEndDate: event.customEndDate,
-      showHighValueOnly: event.showHighValueOnly,
-      showInactiveOnly: event.showInactiveOnly,
-      showActiveOnly: event.showActiveOnly,
-      currentPage: event.currentPage,
-      pageSize: event.pageSize,
-    ));
+    emit(
+      state.copyWith(
+        searchQuery: event.searchQuery,
+        selectedAgent: event.selectedAgent,
+        selectedState: event.selectedState,
+        selectedTimeframe: event.selectedTimeframe,
+        customStartDate: event.customStartDate,
+        customEndDate: event.customEndDate,
+        showHighValueOnly: event.showHighValueOnly,
+        showInactiveOnly: event.showInactiveOnly,
+        showActiveOnly: event.showActiveOnly,
+        currentPage: event.currentPage,
+        pageSize: event.pageSize,
+      ),
+    );
   }
 
   void _onClearDealersMessage(
     ClearDealersMessageEvent event,
     Emitter<DealersState> emit,
   ) {
-    emit(state.copyWith(
-      errorMessage: null,
-      actionSuccessMessage: null,
-    ));
+    emit(state.copyWith(errorMessage: null, actionSuccessMessage: null));
   }
 
   Future<void> _onToggleBlockDealer(
@@ -194,10 +207,12 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
           final String msg = data['message'] ?? 'Dealer block status updated';
-          emit(state.copyWithMessages(
-            status: DealersStatus.success,
-            actionSuccessMessage: msg,
-          ));
+          emit(
+            state.copyWithMessages(
+              status: DealersStatus.success,
+              actionSuccessMessage: msg,
+            ),
+          );
           add(const FetchDealersDataEvent(forceRefresh: true));
         } else {
           throw Exception(data['message'] ?? 'Failed to update block status');
@@ -206,10 +221,12 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         throw Exception('Server returned status code: ${res.statusCode}');
       }
     } catch (e) {
-      emit(state.copyWithMessages(
-        status: DealersStatus.success,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 }

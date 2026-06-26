@@ -1595,34 +1595,42 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
             Expanded(
               child: Container(
                 height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppTheme.borderColor),
                 ),
-                child: TextField(
-                  onChanged: (val) =>
-                      setState(() => _categorySearchQuery = val),
-                  textAlignVertical: TextAlignVertical.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textPrimary,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Search category name...',
-                    hintStyle: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
-                    ),
-                    prefixIcon: Icon(
+                child: Row(
+                  children: [
+                    const Icon(
                       Icons.search,
                       size: 18,
                       color: AppTheme.textSecondary,
                     ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        onChanged: (val) =>
+                            setState(() => _categorySearchQuery = val),
+                        textAlignVertical: TextAlignVertical.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textPrimary,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Search category name...',
+                          hintStyle: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

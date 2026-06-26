@@ -38,7 +38,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 1},
     {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
     {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 3},
-    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 4},
+    {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 4},
+    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 5},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
@@ -46,6 +47,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
     {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 0},
     {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 1},
+    {'icon': Icons.price_change_rounded, 'title': 'My Price Coupons', 'index': 2},
   ];
 
   @override

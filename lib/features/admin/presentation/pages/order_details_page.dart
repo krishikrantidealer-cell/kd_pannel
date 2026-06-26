@@ -347,45 +347,45 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             backgroundColor: AppTheme.backgroundColor,
             body: SafeArea(
               child: Column(
-              children: [
-                // Premium Header Appbar
-                _buildAppBar(),
-                const Divider(height: 1, color: AppTheme.lightBorderColor),
+                children: [
+                  // Premium Header Appbar
+                  _buildAppBar(),
+                  const Divider(height: 1, color: AppTheme.lightBorderColor),
 
-                // Scrollable Layout
-                Expanded(
-                  child: RefreshIndicator(
-                    color: AppTheme.primaryColor,
-                    onRefresh: () async {
-                      context.read<OrdersBloc>().add(
-                        const FetchOrdersEvent(forceRefresh: true),
-                      );
-                    },
-                    child: SingleChildScrollView(
-                      padding: AppTheme.getResponsivePadding(
-                        context,
-                      ).copyWith(top: gapHeight, bottom: gapHeight),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: Column(
-                        children: [
-                          _buildOrderHeroCard(),
-                          SizedBox(height: gapHeight),
-                          _buildCustomerAndShippingCard(),
-                          SizedBox(height: gapHeight),
-                          _buildItemsOrderedCard(),
-                          SizedBox(height: gapHeight),
-                          _buildFinancialSummaryCard(),
-                        ],
+                  // Scrollable Layout
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: AppTheme.primaryColor,
+                      onRefresh: () async {
+                        context.read<OrdersBloc>().add(
+                          const FetchOrdersEvent(forceRefresh: true),
+                        );
+                      },
+                      child: SingleChildScrollView(
+                        padding: AppTheme.getResponsivePadding(
+                          context,
+                        ).copyWith(top: gapHeight, bottom: gapHeight),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Column(
+                          children: [
+                            _buildOrderHeroCard(),
+                            SizedBox(height: gapHeight),
+                            _buildCustomerAndShippingCard(),
+                            SizedBox(height: gapHeight),
+                            _buildItemsOrderedCard(),
+                            SizedBox(height: gapHeight),
+                            _buildFinancialSummaryCard(),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
+        );
+      },
     );
   }
 

@@ -90,7 +90,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Icon(
@@ -115,24 +117,34 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(
                 'Cancel',
-                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                style: GoogleFonts.outfit(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                context.read<LeadsBloc>().add(ToggleBlockLeadEvent(_lead!['id']));
+                context.read<LeadsBloc>().add(
+                  ToggleBlockLeadEvent(_lead!['id']),
+                );
                 setState(() {
                   _lead!['isBlocked'] = !isBlocked;
                 });
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: isBlocked ? Colors.blue : AppTheme.error,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: Text(
                 isBlocked ? 'Unblock' : 'Block',
-                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -1187,103 +1199,103 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FAFC),
             body: isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryColor,
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-                    vertical: isMobile ? 20 : 32,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Back Button Row
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              size: 20,
-                              color: Color(0xFF6B7280),
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryColor,
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
+                      vertical: isMobile ? 20 : 32,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Back Button Row
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                size: 20,
+                                color: Color(0xFF6B7280),
+                              ),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                              splashRadius: 20,
                             ),
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
-                            splashRadius: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: Text(
-                                'Back to Leads',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF6B7280),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Text(
+                                  'Back to Leads',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF6B7280),
+                                  ),
                                 ),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 1. Flat Header section
+                        _FlatHeaderSection(
+                          lead: currentLead,
+                          isSales: AuthService().isSales,
+                          onConvertDealer: _showConvertDealerDialog,
+                          onRejectKyc: _showRejectDialog,
+                          onToggleBlock: _toggleBlockLead,
+                        ),
+                        const SizedBox(height: 28),
+
+                        // 2. Lead Information and KYC Documents side-by-side on desktop
+                        if (!isMobile)
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  flex: 1,
+                                  child: _LeadInformationCard(
+                                    lead: currentLead,
+                                    salesAgents: state.salesAgents,
+                                    onAssignAgent: _assignAgent,
+                                  ),
+                                ),
+                                const SizedBox(width: 32),
+                                Expanded(
+                                  flex: 1,
+                                  child: _DealerKycDocumentsCard(
+                                    lead: currentLead,
+                                    onViewDocument: _launchUrl,
+                                    isVertical: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else ...[
+                          _LeadInformationCard(
+                            lead: currentLead,
+                            salesAgents: state.salesAgents,
+                            onAssignAgent: _assignAgent,
+                          ),
+                          const SizedBox(height: 24),
+                          _DealerKycDocumentsCard(
+                            lead: currentLead,
+                            onViewDocument: _launchUrl,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // 1. Flat Header section
-                      _FlatHeaderSection(
-                        lead: currentLead,
-                        isSales: AuthService().isSales,
-                        onConvertDealer: _showConvertDealerDialog,
-                        onRejectKyc: _showRejectDialog,
-                        onToggleBlock: _toggleBlockLead,
-                      ),
-                      const SizedBox(height: 28),
-
-                      // 2. Lead Information and KYC Documents side-by-side on desktop
-                      if (!isMobile)
-                        IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 1,
-                                child: _LeadInformationCard(
-                                  lead: currentLead,
-                                  salesAgents: state.salesAgents,
-                                  onAssignAgent: _assignAgent,
-                                ),
-                              ),
-                              const SizedBox(width: 32),
-                              Expanded(
-                                flex: 1,
-                                child: _DealerKycDocumentsCard(
-                                  lead: currentLead,
-                                  onViewDocument: _launchUrl,
-                                  isVertical: true,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else ...[
-                        _LeadInformationCard(
-                          lead: currentLead,
-                          salesAgents: state.salesAgents,
-                          onAssignAgent: _assignAgent,
-                        ),
-                        const SizedBox(height: 24),
-                        _DealerKycDocumentsCard(
-                          lead: currentLead,
-                          onViewDocument: _launchUrl,
-                        ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
           ),
         );
       },
@@ -1556,7 +1568,9 @@ class _FlatHeaderSection extends StatelessWidget {
                 : null,
           ),
           _ActionButton(
-            icon: (lead['isBlocked'] ?? false) ? Icons.lock_open_outlined : Icons.lock_outline,
+            icon: (lead['isBlocked'] ?? false)
+                ? Icons.lock_open_outlined
+                : Icons.lock_outline,
             label: (lead['isBlocked'] ?? false) ? 'Unblock' : 'Block',
             color: (lead['isBlocked'] ?? false) ? Colors.blue : AppTheme.error,
             isSolid: true,
@@ -1764,112 +1778,114 @@ class _LeadInformationCard extends StatelessWidget {
               );
             }),
           ],
-          _buildDividerRow(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.badge_outlined,
-                    size: 14,
-                    color: Colors.indigo,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Assigned Sales',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
-                      fontWeight: FontWeight.w500,
+          if (!AuthService().isSales) ...[
+            _buildDividerRow(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.badge_outlined,
+                      size: 14,
+                      color: Colors.indigo,
                     ),
                   ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    flex: 2,
+                    child: Text(
+                      'Assigned Sales',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF6B7280),
+                        fontWeight: FontWeight.w500,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value:
-                              salesAgents.any(
-                                (agent) => agent['_id'] == lead['agentId'],
-                              )
-                              ? lead['agentId']
-                              : null,
-                          isExpanded: false,
-                          isDense: true,
-                          alignment: Alignment.centerRight,
-                          icon: const Icon(Icons.arrow_drop_down, size: 16),
-                          hint: Text(
-                            '-',
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              color: const Color(0xFF111827),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          onChanged: (String? newAgentId) {
-                            onAssignAgent(newAgentId);
-                          },
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '-',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  color: const Color(0xFF111827),
-                                  fontWeight: FontWeight.w700,
-                                ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9FAFB),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value:
+                                salesAgents.any(
+                                  (agent) => agent['_id'] == lead['agentId'],
+                                )
+                                ? lead['agentId']
+                                : null,
+                            isExpanded: false,
+                            isDense: true,
+                            alignment: Alignment.centerRight,
+                            icon: const Icon(Icons.arrow_drop_down, size: 16),
+                            hint: Text(
+                              '-',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: const Color(0xFF111827),
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                            ...salesAgents.map((agent) {
-                              final agentName =
-                                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                      .trim();
-                              return DropdownMenuItem<String>(
-                                value: agent['_id'],
+                            onChanged: (String? newAgentId) {
+                              onAssignAgent(newAgentId);
+                            },
+                            items: [
+                              DropdownMenuItem<String>(
+                                value: null,
                                 child: Text(
-                                  agentName.isNotEmpty
-                                      ? agentName
-                                      : (agent['phoneNumber'] ?? ''),
+                                  '-',
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     color: const Color(0xFF111827),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              );
-                            }),
-                          ],
+                              ),
+                              ...salesAgents.map((agent) {
+                                final agentName =
+                                    '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                        .trim();
+                                return DropdownMenuItem<String>(
+                                  value: agent['_id'],
+                                  child: Text(
+                                    agentName.isNotEmpty
+                                        ? agentName
+                                        : (agent['phoneNumber'] ?? ''),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      color: const Color(0xFF111827),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
           _buildDividerRow(),
           _buildInfoRow(
             Icons.history_outlined,

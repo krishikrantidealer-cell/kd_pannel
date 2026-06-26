@@ -5,6 +5,7 @@ import 'package:kd_pannel/features/auth/presentation/pages/login_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
@@ -156,6 +157,7 @@ class MyApp extends StatelessWidget {
         ),
         // Sales Routes
         '/sales/dashboard': (context) => const MainLayout(),
+        '/sales/coupons': (context) => const MainLayout(child: SalesCouponPage()),
       },
     );
   }

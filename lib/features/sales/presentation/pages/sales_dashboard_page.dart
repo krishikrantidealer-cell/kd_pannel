@@ -99,7 +99,9 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
         .map((u) {
           return {
             'id': u['_id'],
-            'name': (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
+            'name': (u['shopName'] != null &&
+                    u['shopName'].toString().trim().isNotEmpty &&
+                    u['shopName'].toString().trim().toLowerCase() != 'my store')
                 ? u['shopName']
                 : ((u['firstName'] != null && u['firstName'].toString().trim().isNotEmpty)
                     ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()

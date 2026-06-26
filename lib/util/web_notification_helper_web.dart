@@ -62,10 +62,9 @@ void _playBeep() {
       } catch(e) {
         console.log('Error playing notification sound:', e);
       }
-      '''
+      ''',
     ]);
   } catch (e) {
     // Ignore sound play error
   }
 }
-

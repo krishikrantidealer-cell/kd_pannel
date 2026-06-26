@@ -98,7 +98,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
 
             final String name =
                 (freshUser['shopName'] != null &&
-                    freshUser['shopName'].toString().trim().isNotEmpty)
+                    freshUser['shopName'].toString().trim().isNotEmpty &&
+                    freshUser['shopName'].toString().trim().toLowerCase() != 'my store')
                 ? freshUser['shopName']
                 : ((freshUser['firstName'] != null &&
                           freshUser['firstName'].toString().trim().isNotEmpty)
@@ -130,6 +131,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               address: freshUser['address'] != null
                   ? Map<String, dynamic>.from(freshUser['address'])
                   : null,
+              isBlocked: freshUser['isBlocked'] ?? false,
             );
 
             if (mounted) {
@@ -247,6 +249,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               userType: _dealer!.userType,
               kycStatus: _dealer!.kycStatus,
               address: _dealer!.address,
+              isBlocked: _dealer!.isBlocked,
             );
             _saveDealerToCache(updatedDealer);
           }
@@ -404,6 +407,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       userType: _dealer!.userType,
       kycStatus: _dealer!.kycStatus,
       address: _dealer!.address,
+      isBlocked: _dealer!.isBlocked,
     );
 
     return SelectionArea(

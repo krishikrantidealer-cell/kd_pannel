@@ -48,7 +48,10 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // --- QUERY FILTERING MECHANICS ---
-  List<OrderModel> _getFilteredOrders(List<OrderModel> orders, OrdersState state) {
+  List<OrderModel> _getFilteredOrders(
+    List<OrderModel> orders,
+    OrdersState state,
+  ) {
     return orders.where((order) {
       final query = state.searchQuery.toLowerCase();
       final matchesSearch =
@@ -76,7 +79,6 @@ class _OrdersPageState extends State<OrdersPage> {
     }).toList();
   }
 
-
   // --- WIDGET BUILDER ---
   @override
   Widget build(BuildContext context) {
@@ -99,8 +101,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
         final int total = filtered.length;
         final int totalPages = (total / state.pageSize).ceil();
-        final int currentPage = state.currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
-        
+        final int currentPage = state.currentPage.clamp(
+          1,
+          totalPages > 0 ? totalPages : 1,
+        );
+
         final int startIndex = (currentPage - 1) * state.pageSize;
         final int endIndex = (startIndex + state.pageSize) > total
             ? total
@@ -143,7 +148,9 @@ class _OrdersPageState extends State<OrdersPage> {
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       onTap: () {
-                        context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+                        context.read<OrdersBloc>().add(
+                          const FetchOrdersEvent(forceRefresh: true),
+                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -171,12 +178,14 @@ class _OrdersPageState extends State<OrdersPage> {
           );
         }
 
-        final Widget bodyContent = SelectionArea(
-          child: SizedBox.expand(
+        final Widget bodyContent = Builder(
+          builder: (context) => SizedBox.expand(
             child: RefreshIndicator(
               color: AppTheme.primaryColor,
               onRefresh: () async {
-                context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+                context.read<OrdersBloc>().add(
+                  const FetchOrdersEvent(forceRefresh: true),
+                );
               },
               child: SingleChildScrollView(
                 controller: _scrollController,
@@ -341,10 +350,12 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '+$placedToday placed today',
               trendIcon: Icons.trending_up,
               onTap: () {
-                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
-                  selectedOrderStatus: 'All Statuses',
-                  currentPage: 1,
-                ));
+                context.read<OrdersBloc>().add(
+                  const UpdateOrdersFilterEvent(
+                    selectedOrderStatus: 'All Statuses',
+                    currentPage: 1,
+                  ),
+                );
               },
               visualWidget: SizedBox(
                 width: 50,
@@ -372,10 +383,12 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '$processingOrders awaiting dispatch',
               trendIcon: Icons.hourglass_empty_rounded,
               onTap: () {
-                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
-                  selectedOrderStatus: 'Processing',
-                  currentPage: 1,
-                ));
+                context.read<OrdersBloc>().add(
+                  const UpdateOrdersFilterEvent(
+                    selectedOrderStatus: 'Processing',
+                    currentPage: 1,
+                  ),
+                );
               },
               visualWidget: SizedBox(
                 width: 28,
@@ -398,10 +411,12 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: '$outForDeliveryOrders out for delivery',
               trendIcon: Icons.local_shipping_outlined,
               onTap: () {
-                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
-                  selectedOrderStatus: 'Shipped',
-                  currentPage: 1,
-                ));
+                context.read<OrdersBloc>().add(
+                  const UpdateOrdersFilterEvent(
+                    selectedOrderStatus: 'Shipped',
+                    currentPage: 1,
+                  ),
+                );
               },
               visualWidget: SizedBox(
                 width: 50,
@@ -429,10 +444,12 @@ class _OrdersPageState extends State<OrdersPage> {
               trendLabel: 'Successful deliveries',
               trendIcon: Icons.check_circle_outline,
               onTap: () {
-                context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
-                  selectedOrderStatus: 'Delivered',
-                  currentPage: 1,
-                ));
+                context.read<OrdersBloc>().add(
+                  const UpdateOrdersFilterEvent(
+                    selectedOrderStatus: 'Delivered',
+                    currentPage: 1,
+                  ),
+                );
               },
               visualWidget: SizedBox(
                 width: 28,
@@ -454,33 +471,43 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildFilterControls(bool isMobile, OrdersState state) {
     final Widget searchField = Container(
       height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.borderColor),
       ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (val) {
-          context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-            searchQuery: val,
-            currentPage: 1,
-          ));
-        },
-        textAlignVertical: TextAlignVertical.center,
-        style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Search order ID, client name, phone...',
-          hintStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13),
-          prefixIcon: const Icon(
+      child: Row(
+        children: [
+          const Icon(
             Icons.search_rounded,
             color: AppTheme.textSecondary,
             size: 18,
           ),
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                context.read<OrdersBloc>().add(
+                  UpdateOrdersFilterEvent(searchQuery: val, currentPage: 1),
+                );
+              },
+              textAlignVertical: TextAlignVertical.center,
+              style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Search order ID, client name, phone...',
+                hintStyle: GoogleFonts.outfit(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        ],
       ),
     );
 
@@ -517,10 +544,12 @@ class _OrdersPageState extends State<OrdersPage> {
                   orderStatusOptions,
                   state.selectedOrderStatus,
                   (val) {
-                    context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                      selectedOrderStatus: val,
-                      currentPage: 1,
-                    ));
+                    context.read<OrdersBloc>().add(
+                      UpdateOrdersFilterEvent(
+                        selectedOrderStatus: val,
+                        currentPage: 1,
+                      ),
+                    );
                   },
                 ),
               ),
@@ -530,26 +559,28 @@ class _OrdersPageState extends State<OrdersPage> {
                   paymentStatusOptions,
                   state.selectedPaymentStatus,
                   (val) {
-                    context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                      selectedPaymentStatus: val,
-                      currentPage: 1,
-                    ));
+                    context.read<OrdersBloc>().add(
+                      UpdateOrdersFilterEvent(
+                        selectedPaymentStatus: val,
+                        currentPage: 1,
+                      ),
+                    );
                   },
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          _buildDropdown(
-            paymentMethodOptions,
-            state.selectedPaymentMethod,
-            (val) {
-              context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
+          _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
+            val,
+          ) {
+            context.read<OrdersBloc>().add(
+              UpdateOrdersFilterEvent(
                 selectedPaymentMethod: val,
                 currentPage: 1,
-              ));
-            },
-          ),
+              ),
+            );
+          }),
         ],
       );
     }
@@ -558,41 +589,27 @@ class _OrdersPageState extends State<OrdersPage> {
       children: [
         Expanded(child: searchField),
         const SizedBox(width: 12),
-        _buildDropdown(
-          orderStatusOptions,
-          state.selectedOrderStatus,
-          (val) {
-            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-              selectedOrderStatus: val,
-              currentPage: 1,
-            ));
-          },
-          width: 150,
-        ),
+        _buildDropdown(orderStatusOptions, state.selectedOrderStatus, (val) {
+          context.read<OrdersBloc>().add(
+            UpdateOrdersFilterEvent(selectedOrderStatus: val, currentPage: 1),
+          );
+        }, width: 150),
         const SizedBox(width: 12),
-        _buildDropdown(
-          paymentStatusOptions,
-          state.selectedPaymentStatus,
-          (val) {
-            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-              selectedPaymentStatus: val,
-              currentPage: 1,
-            ));
-          },
-          width: 150,
-        ),
+        _buildDropdown(paymentStatusOptions, state.selectedPaymentStatus, (
+          val,
+        ) {
+          context.read<OrdersBloc>().add(
+            UpdateOrdersFilterEvent(selectedPaymentStatus: val, currentPage: 1),
+          );
+        }, width: 150),
         const SizedBox(width: 12),
-        _buildDropdown(
-          paymentMethodOptions,
-          state.selectedPaymentMethod,
-          (val) {
-            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-              selectedPaymentMethod: val,
-              currentPage: 1,
-            ));
-          },
-          width: 130,
-        ),
+        _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
+          val,
+        ) {
+          context.read<OrdersBloc>().add(
+            UpdateOrdersFilterEvent(selectedPaymentMethod: val, currentPage: 1),
+          );
+        }, width: 130),
       ],
     );
   }
@@ -704,7 +721,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   '/orders/details',
                   arguments: order,
                 ).then((_) {
-                  context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+                  context.read<OrdersBloc>().add(
+                    const FetchOrdersEvent(forceRefresh: true),
+                  );
                 });
               },
               child: Container(
@@ -1019,8 +1038,6 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-
-
   String _formatDate(DateTime dt) {
     final months = [
       'Jan',
@@ -1089,10 +1106,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   .toList(),
               onChanged: (int? newValue) {
                 if (newValue != null) {
-                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                    pageSize: newValue,
-                    currentPage: 1,
-                  ));
+                  context.read<OrdersBloc>().add(
+                    UpdateOrdersFilterEvent(pageSize: newValue, currentPage: 1),
+                  );
                 }
               },
             ),
@@ -1111,7 +1127,12 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildTableFooter(int total, bool isMobile, OrdersState state, int currentPage) {
+  Widget _buildTableFooter(
+    int total,
+    bool isMobile,
+    OrdersState state,
+    int currentPage,
+  ) {
     final start = total == 0 ? 0 : (currentPage - 1) * state.pageSize + 1;
     final end = (currentPage * state.pageSize) > total
         ? total
@@ -1178,7 +1199,11 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildPaginationControls(int total, OrdersState state, int currentPage) {
+  Widget _buildPaginationControls(
+    int total,
+    OrdersState state,
+    int currentPage,
+  ) {
     final int totalPages = (total / state.pageSize).ceil();
     final int displayPages = totalPages > 0 ? totalPages : 1;
 
@@ -1191,9 +1216,9 @@ class _OrdersPageState extends State<OrdersPage> {
             page: i,
             isActive: currentPage == i,
             onTap: () {
-              context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                currentPage: i,
-              ));
+              context.read<OrdersBloc>().add(
+                UpdateOrdersFilterEvent(currentPage: i),
+              );
             },
           ),
         );
@@ -1207,9 +1232,9 @@ class _OrdersPageState extends State<OrdersPage> {
           page: 1,
           isActive: currentPage == 1,
           onTap: () {
-            context.read<OrdersBloc>().add(const UpdateOrdersFilterEvent(
-              currentPage: 1,
-            ));
+            context.read<OrdersBloc>().add(
+              const UpdateOrdersFilterEvent(currentPage: 1),
+            );
           },
         ),
       );
@@ -1238,9 +1263,9 @@ class _OrdersPageState extends State<OrdersPage> {
               page: i,
               isActive: currentPage == i,
               onTap: () {
-                context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                  currentPage: i,
-                ));
+                context.read<OrdersBloc>().add(
+                  UpdateOrdersFilterEvent(currentPage: i),
+                );
               },
             ),
           );
@@ -1266,9 +1291,9 @@ class _OrdersPageState extends State<OrdersPage> {
           page: displayPages,
           isActive: currentPage == displayPages,
           onTap: () {
-            context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-              currentPage: displayPages,
-            ));
+            context.read<OrdersBloc>().add(
+              UpdateOrdersFilterEvent(currentPage: displayPages),
+            );
           },
         ),
       );
@@ -1280,9 +1305,9 @@ class _OrdersPageState extends State<OrdersPage> {
         _PaginationButton(
           onTap: currentPage > 1
               ? () {
-                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                    currentPage: currentPage - 1,
-                  ));
+                  context.read<OrdersBloc>().add(
+                    UpdateOrdersFilterEvent(currentPage: currentPage - 1),
+                  );
                 }
               : null,
           icon: Icons.chevron_left,
@@ -1294,9 +1319,9 @@ class _OrdersPageState extends State<OrdersPage> {
         _PaginationButton(
           onTap: currentPage < displayPages
               ? () {
-                  context.read<OrdersBloc>().add(UpdateOrdersFilterEvent(
-                    currentPage: currentPage + 1,
-                  ));
+                  context.read<OrdersBloc>().add(
+                    UpdateOrdersFilterEvent(currentPage: currentPage + 1),
+                  );
                 }
               : null,
           icon: Icons.chevron_right,

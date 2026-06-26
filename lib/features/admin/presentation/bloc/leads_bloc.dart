@@ -312,8 +312,19 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
           final String msg = data['message'] ?? 'Lead block status updated';
+          final updatedRawUsers = state.allRawUsers.map((user) {
+            if (user['_id'] == event.userId || user['id'] == event.userId) {
+              final updatedUser = Map<String, dynamic>.from(user);
+              final bool currentBlocked = updatedUser['isBlocked'] ?? false;
+              updatedUser['isBlocked'] = !currentBlocked;
+              return updatedUser;
+            }
+            return user;
+          }).toList();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
+            allRawUsers: updatedRawUsers,
             actionSuccessMessage: msg,
           ));
           add(const FetchLeadsDataEvent(forceRefresh: true));
