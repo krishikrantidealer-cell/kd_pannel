@@ -12,6 +12,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<UpdateDealersFilterEvent>(_onUpdateDealersFilter);
     on<ClearDealersMessageEvent>(_onClearDealersMessage);
     on<ToggleBlockDealerEvent>(_onToggleBlockDealer);
+    on<DeleteDealerEvent>(_onDeleteDealer);
   }
 
   Future<void> _onFetchDealersData(
@@ -219,6 +220,41 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         }
       } else {
         throw Exception('Server returned status code: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onDeleteDealer(
+    DeleteDealerEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final res = await ApiClient().delete('/users/${event.userId}');
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(
+            state.copyWithMessages(
+              status: DealersStatus.success,
+              actionSuccessMessage: 'Dealer deleted successfully',
+            ),
+          );
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to delete dealer');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Server error');
       }
     } catch (e) {
       emit(

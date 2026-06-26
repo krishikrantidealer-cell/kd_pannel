@@ -373,6 +373,29 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
+  Future<void> _deleteDealer(String userId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Dealer?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to delete dealer "$name"? This will remove all their profile data but keep their order history record.', style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      context.read<DealersBloc>().add(DeleteDealerEvent(userId));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
@@ -1282,6 +1305,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
               }
             }
           : null,
+      onDelete: () => _deleteDealer(dealer.id!, dealer.name),
     );
   }
 
@@ -1619,6 +1643,7 @@ class _DealerRow extends StatefulWidget {
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
   final VoidCallback? onCreateOrder;
+  final VoidCallback onDelete;
 
   const _DealerRow({
     super.key,
@@ -1628,6 +1653,7 @@ class _DealerRow extends StatefulWidget {
     required this.salesAgents,
     required this.onAssignAgent,
     this.onCreateOrder,
+    required this.onDelete,
   });
 
   @override
@@ -1850,68 +1876,110 @@ class _DealerRowState extends State<_DealerRow> {
                 Expanded(
                   flex: 2,
                   child: Center(
-                    child: GestureDetector(
-                      onTap: () {}, // absorb row-level tap
-                      behavior: HitTestBehavior.opaque,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: widget.onCreateOrder,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppTheme.primaryColor.withValues(alpha: 0.85),
-                                  AppTheme.primaryColor,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.primaryColor.withValues(alpha: 0.25),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {}, // absorb row-level tap
+                          behavior: HitTestBehavior.opaque,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: widget.onCreateOrder,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.add_shopping_cart_rounded,
-                                  size: 13,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  'Create Order',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.primaryColor.withValues(alpha: 0.85),
+                                      AppTheme.primaryColor,
+                                    ],
                                   ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.add_shopping_cart_rounded,
+                                      size: 13,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'Order',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: widget.onDelete,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 16,
+                              color: AppTheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 )
               else
-                SizedBox(
-                  width: 22,
-                  child: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 12,
-                    color: _isHovered
-                        ? AppTheme.primaryColor.withValues(alpha: 0.9)
-                        : AppTheme.textSecondary.withValues(alpha: 0.6),
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 12,
+                          color: Colors.transparent, // placeholder
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: widget.onDelete,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 16,
+                              color: AppTheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
             ],

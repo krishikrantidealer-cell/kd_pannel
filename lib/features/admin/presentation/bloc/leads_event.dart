@@ -114,3 +114,11 @@ class ToggleBlockLeadEvent extends LeadsEvent {
   @override
   List<Object?> get props => [userId];
 }
+
+class DeleteLeadEvent extends LeadsEvent {
+  final String userId;
+  const DeleteLeadEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}

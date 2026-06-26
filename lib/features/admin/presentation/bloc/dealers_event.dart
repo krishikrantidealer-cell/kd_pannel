@@ -101,3 +101,11 @@ class ToggleBlockDealerEvent extends DealersEvent {
   @override
   List<Object?> get props => [userId];
 }
+
+class DeleteDealerEvent extends DealersEvent {
+  final String userId;
+  const DeleteDealerEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}

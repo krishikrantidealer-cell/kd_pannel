@@ -15,6 +15,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<UpdateLeadsFilterEvent>(_onUpdateLeadsFilter);
     on<ClearLeadsMessageEvent>(_onClearLeadsMessage);
     on<ToggleBlockLeadEvent>(_onToggleBlockLead);
+    on<DeleteLeadEvent>(_onDeleteLead);
   }
 
   Future<void> _onFetchLeadsData(
@@ -333,6 +334,37 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         }
       } else {
         throw Exception('Server returned status code: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWithKeepMessages(
+        status: LeadsStatus.success,
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onDeleteLead(
+    DeleteLeadEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(status: LeadsStatus.submitting));
+    try {
+      final res = await ApiClient().delete('/users/${event.userId}');
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWith(
+            status: LeadsStatus.success,
+            actionSuccessMessage: 'Lead deleted successfully',
+          ));
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to delete lead');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Server error');
       }
     } catch (e) {
       emit(state.copyWithKeepMessages(

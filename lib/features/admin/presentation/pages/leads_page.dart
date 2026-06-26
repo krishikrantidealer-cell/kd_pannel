@@ -136,6 +136,29 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  Future<void> _deleteLead(String userId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete Lead?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to delete lead "$name"? This action cannot be undone.', style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      context.read<LeadsBloc>().add(DeleteLeadEvent(userId));
+    }
+  }
+
   String _formatTimeAgo(String dateStr) {
     try {
       final dt = DateTime.parse(dateStr).toLocal();
@@ -552,6 +575,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             salesAgents: state.salesAgents,
                             onAssignAgent: _assignAgent,
                             onBulkAssignAgent: _bulkAssignAgent,
+                            onDeleteLead: _deleteLead,
                           ),
                           const SizedBox(height: 12),
                         ],
@@ -1038,6 +1062,7 @@ class _LeadsTableCard extends StatefulWidget {
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
   final Function(List<String> userIds, String? agentId) onBulkAssignAgent;
+  final Function(String userId, String name) onDeleteLead;
 
   const _LeadsTableCard({
     required this.leads,
@@ -1046,6 +1071,7 @@ class _LeadsTableCard extends StatefulWidget {
     required this.salesAgents,
     required this.onAssignAgent,
     required this.onBulkAssignAgent,
+    required this.onDeleteLead,
   });
 
   @override
@@ -1377,6 +1403,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
             isMobile: widget.isMobile,
             salesAgents: widget.salesAgents,
             onAssignAgent: widget.onAssignAgent,
+            onDeleteLead: widget.onDeleteLead,
             selectedLeadIds: _selectedLeadIds,
             onSelectionChanged: () {
               setState(() {});
@@ -1832,6 +1859,7 @@ class _LeadsTable extends StatefulWidget {
   final bool isMobile;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Function(String userId, String name) onDeleteLead;
   final Set<String> selectedLeadIds;
   final VoidCallback onSelectionChanged;
 
@@ -1840,6 +1868,7 @@ class _LeadsTable extends StatefulWidget {
     required this.isMobile,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.onDeleteLead,
     required this.selectedLeadIds,
     required this.onSelectionChanged,
   });
@@ -1982,6 +2011,7 @@ class _LeadsTableState extends State<_LeadsTable> {
                       onExit: () => setState(() => hoveredRowIndex = null),
                       salesAgents: widget.salesAgents,
                       onAssignAgent: widget.onAssignAgent,
+                      onDelete: widget.onDeleteLead,
                     );
                   }),
                 ],
@@ -2007,6 +2037,7 @@ class _LeadRow extends StatelessWidget {
   final VoidCallback onExit;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Function(String userId, String name) onDelete;
 
   const _LeadRow({
     required this.lead,
@@ -2021,6 +2052,7 @@ class _LeadRow extends StatelessWidget {
     required this.onExit,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.onDelete,
   });
 
   @override
@@ -2204,7 +2236,10 @@ class _LeadRow extends StatelessWidget {
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: _ConnectedActionButtons(onView: onTap),
+                      child: _ConnectedActionButtons(
+                        onView: onTap,
+                        onDelete: () => onDelete(lead['id'], lead['name']),
+                      ),
                     ),
                   ),
                 ),
@@ -2247,8 +2282,9 @@ class _LeadRow extends StatelessWidget {
 
 class _ConnectedActionButtons extends StatefulWidget {
   final VoidCallback onView;
+  final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({required this.onView});
+  const _ConnectedActionButtons({required this.onView, required this.onDelete});
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -2257,69 +2293,93 @@ class _ConnectedActionButtons extends StatefulWidget {
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
   bool isViewHovered = false;
+  bool isDeleteHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 100, // Reduced width for single button
-      height: 32, // Refined height
-      child: MouseRegion(
-        onEnter: (_) => setState(() => isViewHovered = true),
-        onExit: (_) => setState(() => isViewHovered = false),
-        child: GestureDetector(
-          onTap: widget.onView,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
-            transform: Matrix4.translationValues(
-              0,
-              isViewHovered ? -1.5 : 0.0,
-              0,
-            ),
-            decoration: BoxDecoration(
-              color: isViewHovered ? AppTheme.primaryColor : Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isViewHovered
-                    ? AppTheme.primaryColor
-                    : AppTheme.borderColor.withValues(alpha: 0.6),
-              ),
-              boxShadow: isViewHovered
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 70,
+          height: 32,
+          child: MouseRegion(
+            onEnter: (_) => setState(() => isViewHovered = true),
+            onExit: (_) => setState(() => isViewHovered = false),
+            child: GestureDetector(
+              onTap: widget.onView,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: isViewHovered ? AppTheme.primaryColor : Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isViewHovered
+                        ? AppTheme.primaryColor
+                        : AppTheme.borderColor.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.visibility_outlined,
+                        size: 14,
+                        color: isViewHovered ? Colors.white : AppTheme.primaryColor,
                       ),
-                    ]
-                  : null,
-            ),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.visibility_outlined,
-                    size: 14,
-                    color: isViewHovered ? Colors.white : AppTheme.primaryColor,
+                      const SizedBox(width: 4),
+                      Text(
+                        'View',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isViewHovered
+                              ? Colors.white
+                              : AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 5),
-                  Text(
-                    'View',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: isViewHovered
-                          ? Colors.white
-                          : AppTheme.textPrimary,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: MouseRegion(
+            onEnter: (_) => setState(() => isDeleteHovered = true),
+            onExit: (_) => setState(() => isDeleteHovered = false),
+            child: GestureDetector(
+              onTap: widget.onDelete,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: isDeleteHovered ? AppTheme.error : Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDeleteHovered
+                        ? AppTheme.error
+                        : AppTheme.error.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: isDeleteHovered ? Colors.white : AppTheme.error,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
