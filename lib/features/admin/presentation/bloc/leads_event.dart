@@ -122,3 +122,13 @@ class DeleteLeadEvent extends LeadsEvent {
   @override
   List<Object?> get props => [userId];
 }
+
+class UpdateLeadDetailsEvent extends LeadsEvent {
+  final String userId;
+  final Map<String, dynamic> updateData;
+
+  const UpdateLeadDetailsEvent({required this.userId, required this.updateData});
+
+  @override
+  List<Object?> get props => [userId, updateData];
+}

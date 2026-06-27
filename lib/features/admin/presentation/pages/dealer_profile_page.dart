@@ -7,10 +7,12 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/create_order_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 
 class DealerProfilePage extends StatefulWidget {
   const DealerProfilePage({super.key});
@@ -96,19 +98,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       .trim()
                 : '-';
 
-            final String name =
-                (freshUser['shopName'] != null &&
-                    freshUser['shopName'].toString().trim().isNotEmpty &&
-                    freshUser['shopName'].toString().trim().toLowerCase() != 'my store')
-                ? freshUser['shopName']
-                : ((freshUser['firstName'] != null &&
-                          freshUser['firstName'].toString().trim().isNotEmpty)
-                      ? '${freshUser['firstName']} ${freshUser['lastName'] ?? ''}'
-                            .trim()
-                      : (freshUser['phoneNumber'] ?? 'Unnamed Dealer'));
+            final String personName = (freshUser['firstName'] != null || freshUser['lastName'] != null)
+                ? '${freshUser['firstName'] ?? ''} ${freshUser['lastName'] ?? ''}'.trim()
+                : '';
 
             final freshDealer = Dealer(
-              name: name,
+              name: personName.isNotEmpty ? personName : (freshUser['phoneNumber'] ?? 'Unnamed Dealer'),
               phone: freshUser['phoneNumber'] ?? '',
               city: freshUser['address']?['cityTehsil'] ?? '',
               state: freshUser['address']?['state'] ?? '',
@@ -128,6 +123,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               email: freshUser['email'],
               userType: freshUser['userType'],
               kycStatus: freshUser['kycStatus'],
+              shopName: freshUser['shopName'],
               address: freshUser['address'] != null
                   ? Map<String, dynamic>.from(freshUser['address'])
                   : null,
@@ -273,6 +269,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -334,6 +332,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                     email: _dealer!.email,
                     userType: _dealer!.userType,
                     kycStatus: _dealer!.kycStatus,
+                    shopName: _dealer!.shopName,
                     address: _dealer!.address,
                     isBlocked: !isBlocked,
                   );
@@ -356,6 +355,232 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           ],
         );
       },
+    );
+  }
+
+  Future<void> _deleteDealer() async {
+    if (_dealer == null || _dealer!.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.error,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Delete Record',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete dealer "${_dealer!.name}"? This action cannot be undone and all associated profile data will be removed.',
+          style: GoogleFonts.outfit(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: Text(
+              'Confirm Delete',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      context.read<DealersBloc>().add(DeleteDealerEvent(_dealer!.id!));
+      Navigator.pop(context); // Go back to management list after deletion
+    }
+  }
+
+  Future<void> _editDealer() async {
+    if (_dealer == null) return;
+    final nameController = TextEditingController(text: _dealer!.name);
+    final shopNameController =
+        TextEditingController(text: _dealer!.shopName ?? '');
+    final phoneController = TextEditingController(text: _dealer!.phone);
+    final villageAreaController =
+        TextEditingController(text: _dealer!.address?['villageArea'] ?? '');
+    final addressLine2Controller =
+        TextEditingController(text: _dealer!.address?['addressLine2'] ?? '');
+    final cityController = TextEditingController(text: _dealer!.city);
+    final stateController = TextEditingController(text: _dealer!.state);
+    final pincodeController =
+        TextEditingController(text: _dealer!.address?['pincode'] ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Details',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditField('Name', nameController),
+              const SizedBox(height: 12),
+              _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Phone (Not Editable)',
+                phoneController,
+                readOnly: true,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Village/Area (Address 1)',
+                villageAreaController,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Address Line 2 (Optional)',
+                addressLine2Controller,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField('City/Tehsil', cityController),
+              const SizedBox(height: 12),
+              _buildEditField('State', stateController),
+              const SizedBox(height: 12),
+              _buildEditField('Pincode', pincodeController),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final String fullName = nameController.text.trim();
+      final names = fullName.split(' ');
+      final firstName = names.isNotEmpty ? names[0] : '';
+      final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+
+      context.read<DealersBloc>().add(
+        UpdateDealerDetailsEvent(
+          userId: _dealer!.id!,
+          updateData: {
+            'firstName': firstName,
+            'lastName': lastName,
+            'shopName': shopNameController.text.trim(),
+            'phoneNumber': phoneController.text.trim(),
+            'address': {
+              'villageArea': villageAreaController.text.trim(),
+              'addressLine2': addressLine2Controller.text.trim(),
+              'address2': addressLine2Controller.text.trim(),
+              'cityTehsil': cityController.text.trim(),
+              'state': stateController.text.trim(),
+              'pincode': pincodeController.text.trim(),
+            },
+          },
+        ),
+      );
+      // Wait for bloc to finish and refresh locally
+      await Future.delayed(const Duration(milliseconds: 500));
+      _refreshDealerDetails();
+    }
+  }
+
+  Widget _buildEditField(
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: readOnly ? AppTheme.textSecondary : AppTheme.textPrimary,
+          ),
+          decoration: InputDecoration(
+            fillColor: readOnly ? const Color(0xFFF9FAFB) : Colors.white,
+            filled: readOnly,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryColor,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -433,6 +658,20 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   _DealerHeroCard(
                     dealer: currentDealer,
                     onToggleBlock: _toggleBlockDealer,
+                    onEdit: _editDealer,
+                    onDelete: _deleteDealer,
+                    onCreateOrder: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreateOrderPage(dealer: currentDealer),
+                        ),
+                      );
+                      if (result == true && mounted) {
+                        _fetchOrders();
+                        _refreshDealerDetails();
+                      }
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -531,7 +770,17 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
 class _DealerHeroCard extends StatelessWidget {
   final Dealer dealer;
   final VoidCallback onToggleBlock;
-  const _DealerHeroCard({required this.dealer, required this.onToggleBlock});
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onCreateOrder;
+
+  const _DealerHeroCard({
+    required this.dealer,
+    required this.onToggleBlock,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onCreateOrder,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -644,6 +893,16 @@ class _DealerHeroCard extends StatelessWidget {
   }
 
   Widget _buildContactRow(bool isMobile) {
+    final List<String> addressParts = [];
+    if (dealer.address?['villageArea']?.toString().isNotEmpty ?? false) {
+      addressParts.add(dealer.address!['villageArea']);
+    }
+    if (dealer.address?['addressLine2']?.toString().isNotEmpty ?? false) {
+      addressParts.add(dealer.address!['addressLine2']);
+    }
+    if (dealer.city.isNotEmpty) addressParts.add(dealer.city);
+    if (dealer.state.isNotEmpty) addressParts.add(dealer.state);
+
     return Wrap(
       spacing: 16,
       runSpacing: 8,
@@ -653,9 +912,7 @@ class _DealerHeroCard extends StatelessWidget {
         _buildContactDivider(),
         _buildContactItem(
           Icons.location_on_outlined,
-          dealer.city.isNotEmpty
-              ? '${dealer.city}, ${dealer.state}'
-              : dealer.state,
+          addressParts.join(', '),
         ),
         _buildContactDivider(),
         _buildContactItem(Icons.person_outline, 'Agent: ${dealer.agent}'),
@@ -702,6 +959,20 @@ class _DealerHeroCard extends StatelessWidget {
       runSpacing: 8,
       children: [
         _ActionButton(
+          icon: Icons.add_shopping_cart_rounded,
+          label: 'Order',
+          color: AppTheme.primaryColor,
+          isSolid: true,
+          onTap: onCreateOrder,
+        ),
+        _ActionButton(
+          icon: Icons.edit_outlined,
+          label: 'Edit',
+          color: AppTheme.info,
+          isSolid: true,
+          onTap: onEdit,
+        ),
+        _ActionButton(
           icon: Icons.call,
           label: 'Call',
           color: const Color(0xFF2E7D32),
@@ -736,6 +1007,13 @@ class _DealerHeroCard extends StatelessWidget {
           color: dealer.isBlocked ? Colors.blue : AppTheme.error,
           isSolid: true,
           onTap: onToggleBlock,
+        ),
+        _ActionButton(
+          icon: Icons.delete_outline_rounded,
+          label: 'Delete',
+          color: AppTheme.error,
+          isSolid: true,
+          onTap: onDelete,
         ),
       ],
     );

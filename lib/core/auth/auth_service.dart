@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum UserRole { admin, sales }
@@ -111,6 +112,7 @@ class AuthService {
     _lastError = null;
     ApiClient().clearCache();
     ApiClient().clearTokens();
+    WebSocketService().disconnect();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('kd_user_id');

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_switch/flutter_switch.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
@@ -15,6 +16,7 @@ import '../bloc/dealers_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'create_order_page.dart';
 
 class DealerManagementPage extends StatefulWidget {
@@ -31,10 +33,12 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   bool _isExporting = false;
   DealersBloc? _dealersBloc;
   StreamSubscription? _wsSubscription;
+  final Set<String> _selectedDealerIds = {};
 
   @override
   void initState() {
     super.initState();
+    _dealersBloc = DealersBloc()..add(const FetchDealersDataEvent());
 
     // Connect to WebSockets
     WebSocketService().connect();
@@ -45,6 +49,15 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         _dealersBloc!.add(const FetchDealersDataEvent(forceRefresh: true));
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _wsSubscription?.cancel();
+    _dealersBloc?.close(); // Manually dispose since we created it
+    _searchController.dispose();
+    _tableHorizontalController.dispose();
+    super.dispose();
   }
 
   void _exportDealersToCSV() async {
@@ -102,7 +115,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       downloadCsv(buffer.toString(), 'dealers_export.csv');
 
       setState(() => _isExporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      NavigationService.messengerKey.currentState?.showSnackBar(
         SnackBar(
           backgroundColor: AppTheme.info,
           behavior: SnackBarBehavior.floating,
@@ -178,14 +191,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return ['All States', ..._indianStatesAndUTs];
   }
 
-  @override
-  void dispose() {
-    _wsSubscription?.cancel();
-    _searchController.dispose();
-    _tableHorizontalController.dispose();
-    super.dispose();
-  }
-
   String _formatCurrency(double amount) {
     final int val = amount.round();
     if (val == 0) return '₹0';
@@ -248,19 +253,15 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 .trim()
           : '-';
 
-      final String name =
-          (u['shopName'] != null && u['shopName'].toString().trim().isNotEmpty)
-          ? u['shopName']
-          : ((u['firstName'] != null &&
-                    u['firstName'].toString().trim().isNotEmpty)
-                ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
-                : (u['phoneNumber'] ?? 'Unnamed Dealer'));
+      final String personName = (u['firstName'] != null || u['lastName'] != null)
+          ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
+          : '';
 
       final isHighVal = purchaseSum >= 500000;
       final isInactiveDealer = totalOrdersCount == 0;
 
       return Dealer(
-        name: name,
+        name: personName.isNotEmpty ? personName : (u['phoneNumber'] ?? 'Unnamed Dealer'),
         phone: u['phoneNumber'] ?? '',
         city: u['address']?['cityTehsil'] ?? '',
         state: u['address']?['state'] ?? '',
@@ -280,6 +281,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         email: u['email'],
         userType: u['userType'],
         kycStatus: u['kycStatus'],
+        shopName: u['shopName'],
         address: u['address'] != null
             ? Map<String, dynamic>.from(u['address'])
             : null,
@@ -373,19 +375,72 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
+  void _bulkAssignAgent(List<String> userIds, String? agentId) {
+    context.read<DealersBloc>().add(
+      BulkAssignAgentToDealersEvent(userIds: userIds, agentId: agentId),
+    );
+    setState(() {
+      _selectedDealerIds.clear();
+    });
+  }
+
   Future<void> _deleteDealer(String userId, String name) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete Dealer?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete dealer "$name"? This will remove all their profile data but keep their order history record.', style: GoogleFonts.outfit()),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.error,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Delete Record',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete dealer "$name"? This action cannot be undone and all associated profile data will be removed.',
+          style: GoogleFonts.outfit(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
-            child: const Text('Delete'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: Text(
+              'Confirm Delete',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -396,40 +451,246 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     }
   }
 
+  Future<void> _editDealer(Dealer dealer) async {
+    final nameController = TextEditingController(text: dealer.name);
+    final shopNameController = TextEditingController(text: dealer.shopName ?? '');
+    final phoneController = TextEditingController(text: dealer.phone);
+    final villageAreaController =
+        TextEditingController(text: dealer.address?['villageArea'] ?? '');
+    final addressLine2Controller =
+        TextEditingController(text: dealer.address?['addressLine2'] ?? '');
+    final cityController = TextEditingController(text: dealer.city);
+    final stateController = TextEditingController(text: dealer.state);
+    final pincodeController =
+        TextEditingController(text: dealer.address?['pincode'] ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Details',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditField('Name', nameController),
+              const SizedBox(height: 12),
+              _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Phone (Not Editable)',
+                phoneController,
+                readOnly: true,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Village/Area (Address 1)',
+                villageAreaController,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Address Line 2 (Optional)',
+                addressLine2Controller,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField('City/Tehsil', cityController),
+              const SizedBox(height: 12),
+              _buildEditField('State', stateController),
+              const SizedBox(height: 12),
+              _buildEditField('Pincode', pincodeController),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final String fullName = nameController.text.trim();
+      final names = fullName.split(' ');
+      final firstName = names.isNotEmpty ? names[0] : '';
+      final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+
+      _dealersBloc?.add(
+        UpdateDealerDetailsEvent(
+          userId: dealer.id!,
+          updateData: {
+            'firstName': firstName,
+            'lastName': lastName,
+            'shopName': shopNameController.text.trim(),
+            'phoneNumber': phoneController.text.trim(),
+            'address': {
+              'villageArea': villageAreaController.text.trim(),
+              'addressLine2': addressLine2Controller.text.trim(),
+              'address2': addressLine2Controller.text.trim(),
+              'cityTehsil': cityController.text.trim(),
+              'state': stateController.text.trim(),
+              'pincode': pincodeController.text.trim(),
+            },
+          },
+        ),
+      );
+    }
+  }
+
+  Widget _buildEditField(
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: readOnly ? AppTheme.textSecondary : AppTheme.textPrimary,
+          ),
+          decoration: InputDecoration(
+            fillColor: readOnly ? const Color(0xFFF9FAFB) : Colors.white,
+            filled: readOnly,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryColor,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) {
-        final bloc = DealersBloc()..add(const FetchDealersDataEvent());
-        _dealersBloc = bloc;
-        return bloc;
-      },
+    if (_dealersBloc == null) return const SizedBox.shrink();
+
+    return BlocProvider.value(
+      value: _dealersBloc!,
       child: BlocConsumer<DealersBloc, DealersState>(
         listener: (context, state) {
           if (_searchController.text != state.searchQuery) {
             _searchController.text = state.searchQuery;
           }
           if (state.errorMessage != null) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(state.errorMessage!),
-                  backgroundColor: AppTheme.error,
-                ),
-              );
-            }
-            context.read<DealersBloc>().add(const ClearDealersMessageEvent());
+            NavigationService.messengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text(state.errorMessage!),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+            _dealersBloc?.add(const ClearDealersMessageEvent());
           }
           if (state.actionSuccessMessage != null) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(state.actionSuccessMessage!),
-                  backgroundColor: AppTheme.success,
-                ),
-              );
-            }
-            context.read<DealersBloc>().add(const ClearDealersMessageEvent());
+            NavigationService.messengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text(state.actionSuccessMessage!),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+            _dealersBloc?.add(const ClearDealersMessageEvent());
           }
         },
         builder: (context, state) {
@@ -440,14 +701,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
           final Widget body = Builder(
             builder: (context) => isLoaderShowing && state.allRawUsers.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(80.0),
-                      child: CircularProgressIndicator(
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  )
+                ? _buildSkeletonLoading(isDesktop, isMobile)
                 : state.status == DealersStatus.failure &&
                       state.allRawUsers.isEmpty
                 ? Center(
@@ -855,7 +1109,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     if (!isMobile) {
       return Row(
         children: [
-          _buildSearchField(context, 300),
+          _buildSearchField(300),
           if (AuthService().isAdmin) ...[
             const SizedBox(width: 12),
             _buildFilterDropdown(
@@ -900,7 +1154,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildSearchField(context, double.infinity),
+          _buildSearchField(double.infinity),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -978,39 +1232,50 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     }
   }
 
-  Widget _buildSearchField(BuildContext context, double? width) {
+  Widget _buildSearchField(double? width) {
     return Container(
-      height: 38,
       width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           const Icon(
-            Icons.search,
-            size: 18,
+            Icons.search_rounded,
+            size: 20,
             color: AppTheme.textSecondary,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchController,
               onChanged: (val) {
-                context.read<DealersBloc>().add(
+                _dealersBloc?.add(
                   UpdateDealersFilterEvent(searchQuery: val, currentPage: 1),
                 );
               },
-              textAlignVertical: TextAlignVertical.center,
-              style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
               decoration: InputDecoration(
                 hintText: 'Search dealers...',
                 hintStyle: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
                 ),
                 border: InputBorder.none,
                 isDense: true,
@@ -1141,134 +1406,73 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     final dealersToShow = total == 0
         ? <Dealer>[]
         : filtered.sublist(startIndex, endIndex);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Ensure table never gets clipped on smaller laptop widths.
-        final double minTableWidth = isMobile
-            ? 1100.0
-            : (AuthService().isAdmin ? 900.0 : 800.0);
-        final bool needsHorizontalScroll = constraints.maxWidth < minTableWidth;
-        final double tableWidth = needsHorizontalScroll
-            ? minTableWidth
-            : constraints.maxWidth;
 
-        final table = Container(
-          width: tableWidth,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-            border: Border.all(
-              color: AppTheme.borderColor.withValues(alpha: 0.5),
-            ),
-            boxShadow: AppTheme.softShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: isMobile
-                    ? const EdgeInsets.all(16)
-                    : const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Dealer Records',
-                      style: GoogleFonts.outfit(
-                        fontSize: isMobile ? 15 : 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: isMobile ? 0.2 : 0.0,
-                      ),
-                    ),
-                    if (state.status == DealersStatus.submitting)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              _buildTableHeader(),
-              if (dealersToShow.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(40),
-                  child: Center(
-                    child: Text(
-                      'No dealers found matching your criteria',
-                      style: GoogleFonts.outfit(
-                        color: AppTheme.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                ...dealersToShow.asMap().entries.map(
-                  (entry) => _buildDealerRow(
-                    context,
-                    state,
-                    entry.value,
-                    entry.key % 2 == 1,
-                  ),
-                ),
-              _buildTableFooter(context, state, isMobile),
-            ],
-          ),
-        );
-
-        return Scrollbar(
-          controller: _tableHorizontalController,
-          thumbVisibility: needsHorizontalScroll,
-          trackVisibility: needsHorizontalScroll,
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: {
-                ui.PointerDeviceKind.touch,
-                ui.PointerDeviceKind.trackpad,
-              },
-            ),
-            child: SingleChildScrollView(
-              controller: _tableHorizontalController,
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: table,
-            ),
-          ),
+    return _DealerTable(
+      dealers: dealersToShow,
+      isMobile: isMobile,
+      salesAgents: state.salesAgents,
+      onAssignAgent: (userId, agentId) {
+        _dealersBloc?.add(
+          AssignAgentToDealerEvent(userId: userId, agentId: agentId),
         );
       },
+      onEditDealer: _editDealer,
+      onDeleteDealer: _deleteDealer,
+      selectedDealerIds: _selectedDealerIds,
+      isSubmitting: state.status == DealersStatus.submitting,
+      onSelectionChanged: () => setState(() {}),
     );
   }
 
-  Widget _buildTableHeader() {
+  Widget _buildBulkActionDropdown(BuildContext context, DealersState state) {
+    if (!AuthService().isAdmin) return const SizedBox.shrink();
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      color: const Color(0xFFF9FAFB),
-      child: Row(
-        children: [
-          const Expanded(flex: 2, child: _HeaderText('DEALER NAME')),
-          const Expanded(flex: 2, child: _HeaderText('PHONE NUMBER')),
-          const Expanded(flex: 2, child: _HeaderText('LOCATION')),
-          if (AuthService().isAdmin)
-            const Expanded(flex: 2, child: _HeaderText('ASSIGNED AGENT')),
-          const Expanded(flex: 1, child: Center(child: _HeaderText('SOURCE'))),
-          const Expanded(flex: 1, child: Center(child: _HeaderText('ORDERS'))),
-          const Expanded(
-            flex: 2,
-            child: Center(child: _HeaderText('PURCHASE VALUE')),
-          ),
-          if (AuthService().isSales)
-            const Expanded(
-              flex: 2,
-              child: Center(child: _HeaderText('ACTION')),
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          hint: Text(
+            'Bulk Assign Agent',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primaryColor,
             ),
-        ],
+          ),
+          icon: const Icon(
+            Icons.arrow_drop_down,
+            size: 18,
+            color: AppTheme.primaryColor,
+          ),
+          onChanged: (String? agentId) {
+            if (agentId != null) {
+              _bulkAssignAgent(_selectedDealerIds.toList(), agentId);
+            }
+          },
+          items: state.salesAgents.map((agent) {
+            final name =
+                '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+            return DropdownMenuItem<String>(
+              value: agent['_id'],
+              child: Text(
+                name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
+                style: GoogleFonts.outfit(fontSize: 12),
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
+  }
+
+  Widget _buildTableHeader(List<Dealer> visibleDealers) {
+    return const SizedBox.shrink(); // Handled in _DealerTable now
   }
 
   Widget _buildDealerRow(
@@ -1277,36 +1481,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     Dealer dealer,
     bool isAlternate,
   ) {
-    return _DealerRow(
-      key: ValueKey(dealer.phone),
-      dealer: dealer,
-      isAlternate: isAlternate,
-      salesAgents: state.salesAgents,
-      onAssignAgent: (userId, agentId) {
-        context.read<DealersBloc>().add(
-          AssignAgentToDealerEvent(userId: userId, agentId: agentId),
-        );
-      },
-      onTap: () =>
-          Navigator.pushNamed(context, '/dealers/profile', arguments: dealer),
-      onCreateOrder: AuthService().isSales
-          ? () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CreateOrderPage(dealer: dealer),
-                ),
-              );
-              // Refresh dealers list after order creation
-              if (result == true && context.mounted) {
-                context.read<DealersBloc>().add(
-                  const FetchDealersDataEvent(forceRefresh: true),
-                );
-              }
-            }
-          : null,
-      onDelete: () => _deleteDealer(dealer.id!, dealer.name),
-    );
+    return const SizedBox.shrink(); // Handled in _DealerTable now
   }
 
   Widget _buildPageSizeSelector(BuildContext context, DealersState state) {
@@ -1633,132 +1808,493 @@ class _HeaderText extends StatelessWidget {
   const _HeaderText(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(text, style: AppTheme.tableHeader);
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    style: GoogleFonts.outfit(
+      fontSize: 11,
+      fontWeight: FontWeight.w800,
+      color: AppTheme.textSecondary,
+      letterSpacing: 0.5,
+    ),
+  );
 }
 
-class _DealerRow extends StatefulWidget {
-  final Dealer dealer;
-  final bool isAlternate;
-  final VoidCallback onTap;
+class _DealerTable extends StatefulWidget {
+  final List<Dealer> dealers;
+  final bool isMobile;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
-  final VoidCallback? onCreateOrder;
-  final VoidCallback onDelete;
+  final Function(Dealer dealer) onEditDealer;
+  final Function(String userId, String name) onDeleteDealer;
+  final Set<String> selectedDealerIds;
+  final VoidCallback onSelectionChanged;
+  final bool isSubmitting;
 
-  const _DealerRow({
-    super.key,
-    required this.dealer,
-    required this.isAlternate,
-    required this.onTap,
+  const _DealerTable({
+    required this.dealers,
+    required this.isMobile,
     required this.salesAgents,
     required this.onAssignAgent,
-    this.onCreateOrder,
-    required this.onDelete,
+    required this.onEditDealer,
+    required this.onDeleteDealer,
+    required this.selectedDealerIds,
+    required this.onSelectionChanged,
+    this.isSubmitting = false,
   });
 
   @override
-  State<_DealerRow> createState() => _DealerRowState();
+  State<_DealerTable> createState() => _DealerTableState();
 }
 
-class _DealerRowState extends State<_DealerRow> {
-  bool _isHovered = false;
+class _DealerTableState extends State<_DealerTable> {
+  int? hoveredRowIndex;
+
+  bool get isAllSelected =>
+      widget.dealers.isNotEmpty &&
+      widget.dealers.every((d) => widget.selectedDealerIds.contains(d.id));
+
+  void _toggleAll() {
+    setState(() {
+      if (isAllSelected) {
+        for (var d in widget.dealers) {
+          widget.selectedDealerIds.remove(d.id ?? '');
+        }
+      } else {
+        for (var d in widget.dealers) {
+          if (d.id != null) {
+            widget.selectedDealerIds.add(d.id!);
+          }
+        }
+      }
+    });
+    widget.onSelectionChanged();
+  }
+
+  void _toggleSelection(String dealerId) {
+    setState(() {
+      if (widget.selectedDealerIds.contains(dealerId)) {
+        widget.selectedDealerIds.remove(dealerId);
+      } else {
+        widget.selectedDealerIds.add(dealerId);
+      }
+    });
+    widget.onSelectionChanged();
+  }
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? AppTheme.primaryColor.withValues(alpha: 0.04)
-                : (widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white),
-            border: Border(
-              bottom: const BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
-              left: BorderSide(
-                color: _isHovered
-                    ? AppTheme.primaryColor.withValues(alpha: 0.55)
-                    : Colors.transparent,
-                width: 2,
+    final columns = [
+      const _DealerColumnConfig('Dealer Name', 20),
+      const _DealerColumnConfig('Phone Number', 20),
+      const _DealerColumnConfig('Location', 20),
+      if (AuthService().isAdmin) const _DealerColumnConfig('Assigned Agent', 20),
+      const _DealerColumnConfig('Source', 12, isCenter: true),
+      const _DealerColumnConfig('Orders', 12, isCenter: true),
+      const _DealerColumnConfig('Purchase Value', 20, isCenter: true),
+      const _DealerColumnConfig('Actions', 30, isCenter: true),
+    ];
+
+    Widget tableHeader = Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppTheme.lightBorderColor, width: 1.5),
+        ),
+        color: Color(0xFFF9FAFB),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.isSubmitting)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              ),
+            ),
+          Row(
+            children: [
+              if (AuthService().isAdmin)
+                SizedBox(
+                  width: 40,
+                  child: Center(
+                    child: _CustomCheckbox(
+                      isSelected: isAllSelected,
+                      onTap: _toggleAll,
+                    ),
+                  ),
+                ),
+              ...columns.map((col) {
+                final Widget child = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _HeaderText(col.title),
+                );
+                return Expanded(
+                  flex: col.flex,
+                  child: col.isCenter ? Center(child: child) : child,
+                );
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double minTableWidth = widget.isMobile
+            ? 1200.0
+            : (AuthService().isAdmin ? 1100.0 : 900.0);
+        final double safeMaxWidth = constraints.maxWidth.isInfinite
+            ? minTableWidth
+            : constraints.maxWidth;
+        final double tableWidth = safeMaxWidth > minTableWidth
+            ? safeMaxWidth
+            : minTableWidth;
+
+        return SelectionArea(
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              scrollbars: false,
+              dragDevices: {
+                ui.PointerDeviceKind.touch,
+                ui.PointerDeviceKind.trackpad,
+              },
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: SizedBox(
+                width: tableWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tableHeader,
+                    ...widget.dealers.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final dealer = entry.value;
+                      final bool isAlternate = index % 2 == 1;
+                      final String dealerId = dealer.id ?? '';
+                      return _DealerRow(
+                        dealer: dealer,
+                        isAlternate: isAlternate,
+                        isMobile: widget.isMobile,
+                        isHovered: hoveredRowIndex == index,
+                        isSelected: widget.selectedDealerIds.contains(dealerId),
+                        onToggleSelection: () => _toggleSelection(dealerId),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/dealers/profile',
+                          arguments: dealer,
+                        ),
+                        onHover: () => setState(() => hoveredRowIndex = index),
+                        onExit: () => setState(() => hoveredRowIndex = null),
+                        salesAgents: widget.salesAgents,
+                        onAssignAgent: widget.onAssignAgent,
+                        onCreateOrder: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CreateOrderPage(dealer: dealer),
+                            ),
+                          );
+                          if (result == true && context.mounted) {
+                            context.read<DealersBloc>().add(
+                              const FetchDealersDataEvent(forceRefresh: true),
+                            );
+                          }
+                        },
+                        onEdit: () => widget.onEditDealer(dealer),
+                        onDelete: () => widget.onDeleteDealer(dealerId, dealer.name),
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
           ),
-          child: Row(
+        );
+      },
+    );
+  }
+}
+
+class _DealerRow extends StatelessWidget {
+  final Dealer dealer;
+  final bool isAlternate;
+  final bool isMobile;
+  final bool isHovered;
+  final bool isSelected;
+  final VoidCallback onToggleSelection;
+  final VoidCallback onTap;
+  final VoidCallback onHover;
+  final VoidCallback onExit;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String userId, String? agentId) onAssignAgent;
+  final VoidCallback? onCreateOrder;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _DealerRow({
+    required this.dealer,
+    required this.isAlternate,
+    required this.isMobile,
+    required this.isHovered,
+    required this.isSelected,
+    required this.onToggleSelection,
+    required this.onTap,
+    required this.onHover,
+    required this.onExit,
+    required this.salesAgents,
+    required this.onAssignAgent,
+    this.onCreateOrder,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color rowBgColor = isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
+    if (isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
+    if (isHovered) rowBgColor = const Color(0xFFF1F9F3);
+
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      onExit: (_) => onExit(),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          decoration: BoxDecoration(
+            border: const Border(
+              bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+            ),
+            color: rowBgColor,
+          ),
+          child: Stack(
             children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  widget.dealer.name,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.0,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  widget.dealer.phone,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.0,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  (widget.dealer.city.isNotEmpty &&
-                          widget.dealer.state.isNotEmpty)
-                      ? '${widget.dealer.city}, ${widget.dealer.state}'
-                      : (widget.dealer.city.isNotEmpty
-                            ? widget.dealer.city
-                            : widget.dealer.state),
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.0,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (AuthService().isAdmin)
-                Expanded(
-                  flex: 2,
-                  child: GestureDetector(
-                    onTap:
-                        () {}, // Prevent navigating to profile when clicking dropdown
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
+              // Animated Left Accent Strip
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                left: 0,
+                top: isHovered ? 0 : 12,
+                bottom: isHovered ? 0 : 12,
+                width: isHovered ? 4 : 0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 160),
+                  opacity: isHovered ? 1 : 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(4),
                       ),
-                      child: !AuthService().isAdmin
-                          ? Text(
-                              widget.dealer.agent,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    if (AuthService().isAdmin)
+                      SizedBox(
+                        width: 40,
+                        child: Center(
+                          child: (isHovered || isSelected)
+                              ? _CustomCheckbox(
+                                  isSelected: isSelected,
+                                  onTap: onToggleSelection,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
+                    Expanded(
+                      flex: 20,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 12,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              dealer.shopName != null &&
+                                      dealer.shopName!.isNotEmpty
+                                  ? dealer.shopName!
+                                  : 'Unnamed Shop',
                               style: GoogleFonts.outfit(
-                                fontSize: 13.0,
+                                fontSize: 13,
                                 color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              dealer.name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
                                 fontWeight: FontWeight.w500,
                               ),
-                            )
-                          : Container(
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _cell(dealer.phone, flex: 20, isSecondary: true),
+                    _cell(
+                      (dealer.city.isNotEmpty && dealer.state.isNotEmpty)
+                          ? '${dealer.city}, ${dealer.state}'
+                          : (dealer.city.isNotEmpty
+                              ? dealer.city
+                              : dealer.state),
+                      flex: 20,
+                      isSecondary: true,
+                    ),
+                    if (AuthService().isAdmin)
+                      Expanded(
+                        flex: 20,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: GestureDetector(
+                            onTap: () {}, // Stop propagation for dropdown
+                            child: Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
+                                horizontal: 10,
+                                vertical: 5,
                               ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF9FAFB),
@@ -1769,13 +2305,10 @@ class _DealerRowState extends State<_DealerRow> {
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  value:
-                                      widget.salesAgents.any(
-                                        (agent) =>
-                                            agent['_id'] ==
-                                            widget.dealer.agentId,
-                                      )
-                                      ? widget.dealer.agentId
+                                  value: salesAgents.any(
+                                    (agent) => agent['_id'] == dealer.agentId,
+                                  )
+                                      ? dealer.agentId
                                       : null,
                                   isExpanded: true,
                                   isDense: true,
@@ -1793,11 +2326,8 @@ class _DealerRowState extends State<_DealerRow> {
                                     ),
                                   ),
                                   onChanged: (String? newAgentId) {
-                                    if (widget.dealer.id != null) {
-                                      widget.onAssignAgent(
-                                        widget.dealer.id!,
-                                        newAgentId,
-                                      );
+                                    if (dealer.id != null) {
+                                      onAssignAgent(dealer.id!, newAgentId);
                                     }
                                   },
                                   items: [
@@ -1811,7 +2341,7 @@ class _DealerRowState extends State<_DealerRow> {
                                         ),
                                       ),
                                     ),
-                                    ...widget.salesAgents.map((agent) {
+                                    ...salesAgents.map((agent) {
                                       final agentName =
                                           '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                               .trim();
@@ -1833,159 +2363,419 @@ class _DealerRowState extends State<_DealerRow> {
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      flex: 12,
+                      child: Center(
+                        child: _SourceBadge(source: dealer.source),
+                      ),
                     ),
-                  ),
-                ),
-              Expanded(
-                flex: 1,
-                child: Center(
-                  child: _SourceBadge(source: widget.dealer.source),
-                ),
-              ),
-              Expanded(
-                flex: 1,
-                child: Center(
-                  child: Text(
-                    widget.dealer.totalOrders.toString(),
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.0,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                    _cell(
+                      dealer.totalOrders.toString(),
+                      flex: 12,
+                      isBold: true,
+                      textAlign: TextAlign.center,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    widget.dealer.purchaseValue,
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.0,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                    _cell(
+                      dealer.purchaseValue,
+                      flex: 20,
+                      isBold: true,
+                      textAlign: TextAlign.center,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              if (widget.onCreateOrder != null)
-                Expanded(
-                  flex: 2,
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: () {}, // absorb row-level tap
-                          behavior: HitTestBehavior.opaque,
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: widget.onCreateOrder,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      AppTheme.primaryColor.withValues(alpha: 0.85),
-                                      AppTheme.primaryColor,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.add_shopping_cart_rounded,
-                                      size: 13,
-                                      color: Colors.white,
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      'Order',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                    Expanded(
+                      flex: 30,
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: () {}, // Stop propagation for buttons
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (onCreateOrder != null) ...[
+                                GestureDetector(
+                                  onTap: onCreateOrder,
+                                  child: MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            AppTheme.primaryColor.withValues(
+                                              alpha: 0.85,
+                                            ),
+                                            AppTheme.primaryColor,
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppTheme.primaryColor
+                                                .withValues(alpha: 0.25),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.add_shopping_cart_rounded,
+                                            size: 13,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Order',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
+                              ],
+                              _ConnectedActionButtons(
+                                onEdit: onEdit,
+                                onDelete: onDelete,
                               ),
-                            ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: widget.onDelete,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 16,
-                              color: AppTheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                )
-              else
-                Expanded(
-                  flex: 2,
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 12,
-                          color: Colors.transparent, // placeholder
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: widget.onDelete,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 16,
-                              color: AppTheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _cell(
+    String text, {
+    int flex = 1,
+    bool isBold = false,
+    bool isSecondary = false,
+    TextAlign textAlign = TextAlign.left,
+  }) {
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Text(
+          text,
+          textAlign: textAlign,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            color: isBold
+                ? AppTheme.textPrimary
+                : (isSecondary ? AppTheme.textSecondary : AppTheme.textBody),
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+}
+
+class _DealerColumnConfig {
+  final String title;
+  final int flex;
+  final bool isCenter;
+
+  const _DealerColumnConfig(this.title, this.flex, {this.isCenter = false});
+}
+
+class _CustomCheckbox extends StatefulWidget {
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  const _CustomCheckbox({required this.isSelected, this.onTap});
+
+  @override
+  State<_CustomCheckbox> createState() => _CustomCheckboxState();
+}
+
+class _CustomCheckboxState extends State<_CustomCheckbox> {
+  bool isHovered = false;
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? AppTheme.primaryColor
+                : (isHovered
+                    ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                    : Colors.white),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: widget.isSelected
+                  ? AppTheme.primaryColor
+                  : (isHovered
+                      ? AppTheme.primaryColor.withValues(alpha: 0.5)
+                      : AppTheme.borderColor),
+              width: 1.5,
+            ),
+          ),
+          child: widget.isSelected
+              ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectedActionButtons extends StatefulWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _ConnectedActionButtons({
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_ConnectedActionButtons> createState() =>
+      _ConnectedActionButtonsState();
+}
+
+class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
+  bool isEditHovered = false;
+  bool isDeleteHovered = false;
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 65,
+          height: 32,
+          child: MouseRegion(
+            onEnter: (_) => setState(() => isEditHovered = true),
+            onExit: (_) => setState(() => isEditHovered = false),
+            child: GestureDetector(
+              onTap: widget.onEdit,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: isEditHovered ? AppTheme.info : Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isEditHovered
+                        ? AppTheme.info
+                        : AppTheme.borderColor.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.edit_outlined,
+                        size: 14,
+                        color: isEditHovered ? Colors.white : AppTheme.info,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Edit',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              isEditHovered ? Colors.white : AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: MouseRegion(
+            onEnter: (_) => setState(() => isDeleteHovered = true),
+            onExit: (_) => setState(() => isDeleteHovered = false),
+            child: GestureDetector(
+              onTap: widget.onDelete,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: isDeleteHovered ? AppTheme.error : Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDeleteHovered
+                        ? AppTheme.error
+                        : AppTheme.error.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: isDeleteHovered ? Colors.white : AppTheme.error,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1994,6 +2784,66 @@ class _SourceBadge extends StatelessWidget {
   final String source;
 
   const _SourceBadge({required this.source});
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 250,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

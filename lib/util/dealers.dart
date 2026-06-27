@@ -19,6 +19,7 @@ class Dealer {
   final String? email;
   final String? userType;
   final String? kycStatus;
+  final String? shopName;
   final Map<String, dynamic>? address;
   final bool isBlocked;
 
@@ -43,6 +44,7 @@ class Dealer {
     this.email,
     this.userType,
     this.kycStatus,
+    this.shopName,
     this.address,
     this.isBlocked = false,
   });
@@ -69,6 +71,7 @@ class Dealer {
       'email': email,
       'userType': userType,
       'kycStatus': kycStatus,
+      'shopName': shopName,
       'address': address,
       'isBlocked': isBlocked,
     };
@@ -96,6 +99,7 @@ class Dealer {
       email: map['email'],
       userType: map['userType'],
       kycStatus: map['kycStatus'],
+      shopName: map['shopName'],
       address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
       isBlocked: map['isBlocked'] ?? false,
     );

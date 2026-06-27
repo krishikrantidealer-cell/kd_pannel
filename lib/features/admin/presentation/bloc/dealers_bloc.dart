@@ -8,11 +8,13 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
     on<AssignAgentToDealerEvent>(_onAssignAgentToDealer);
+    on<BulkAssignAgentToDealersEvent>(_onBulkAssignAgentToDealers);
     on<CreateSalesAgentEvent>(_onCreateSalesAgent);
     on<UpdateDealersFilterEvent>(_onUpdateDealersFilter);
     on<ClearDealersMessageEvent>(_onClearDealersMessage);
     on<ToggleBlockDealerEvent>(_onToggleBlockDealer);
     on<DeleteDealerEvent>(_onDeleteDealer);
+    on<UpdateDealerDetailsEvent>(_onUpdateDealerDetails);
   }
 
   Future<void> _onFetchDealersData(
@@ -91,7 +93,25 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     AssignAgentToDealerEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(status: DealersStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        final agent = state.salesAgents.firstWhere(
+          (a) => a['_id'] == event.agentId,
+          orElse: () => <String, dynamic>{},
+        );
+        updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: DealersStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().put('/users/${event.userId}/assign-agent', {
         'agentId': event.agentId,
@@ -122,6 +142,45 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
           errorMessage: e.toString(),
         ),
       );
+      add(const FetchDealersDataEvent(forceRefresh: true));
+    }
+  }
+
+  Future<void> _onBulkAssignAgentToDealers(
+    BulkAssignAgentToDealersEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final client = ApiClient();
+      final futures = event.userIds.map((userId) {
+        return client.put('/users/$userId/assign-agent', {
+          'agentId': event.agentId,
+        });
+      }).toList();
+
+      final responses = await Future.wait(futures);
+      int successCount = 0;
+      for (final res in responses) {
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['success'] == true) {
+            successCount++;
+          }
+        }
+      }
+
+      emit(state.copyWithMessages(
+        status: DealersStatus.success,
+        actionSuccessMessage:
+            'Agent assigned to $successCount dealers successfully',
+      ));
+      add(const FetchDealersDataEvent(forceRefresh: true));
+    } catch (e) {
+      emit(state.copyWithMessages(
+        status: DealersStatus.success,
+        errorMessage: e.toString(),
+      ));
     }
   }
 
@@ -235,7 +294,17 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     DeleteDealerEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(status: DealersStatus.submitting));
+    // Optimistic Update
+    final updatedUsers =
+        state.allRawUsers
+            .where((u) => u['_id'] != event.userId && u['id'] != event.userId)
+            .toList();
+
+    emit(state.copyWith(
+      status: DealersStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().delete('/users/${event.userId}');
 
@@ -263,6 +332,68 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
           errorMessage: e.toString(),
         ),
       );
+      add(const FetchDealersDataEvent(forceRefresh: true));
+    }
+  }
+
+  Future<void> _onUpdateDealerDetails(
+    UpdateDealerDetailsEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    // Optimistic Update: Change the local state immediately for instant feedback
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        updatedUser['firstName'] = event.updateData['firstName'];
+        updatedUser['lastName'] = event.updateData['lastName'];
+        updatedUser['shopName'] = event.updateData['shopName'];
+        if (event.updateData.containsKey('address')) {
+          final existingAddress =
+              Map<String, dynamic>.from(updatedUser['address'] ?? {});
+          updatedUser['address'] = {
+            ...existingAddress,
+            ...event.updateData['address'],
+          };
+        }
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: DealersStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
+    try {
+      final res = await ApiClient().put('/users/${event.userId}', event.updateData);
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(
+            state.copyWithMessages(
+              status: DealersStatus.success,
+              actionSuccessMessage: 'Dealer updated successfully',
+            ),
+          );
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update dealer');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Server error');
+      }
+    } catch (e) {
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          errorMessage: e.toString(),
+        ),
+      );
+      // Trigger a refresh to revert to server state on failure
+      add(const FetchDealersDataEvent(forceRefresh: true));
     }
   }
 }

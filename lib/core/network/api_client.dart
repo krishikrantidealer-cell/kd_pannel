@@ -117,15 +117,25 @@ class ApiClient {
             .timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['success'] == true) {
-            final newAccess = data['accessToken'] ?? data['token'];
-            if (newAccess != null) {
-              // Update but keep old refresh token if a new one isn't provided
-              final newRefresh = data['refreshToken'] ?? _refreshToken;
-              await setTokens(newAccess, newRefresh!, persistent: true);
-              return true;
+          try {
+            final dynamic decoded = jsonDecode(response.body);
+            if (decoded != null && decoded is Map) {
+              final Map dataMap = decoded;
+              final bool hasSuccess = dataMap['success'] == true;
+              final bool hasToken = dataMap['token'] != null || dataMap['accessToken'] != null;
+              
+              if (hasSuccess || hasToken) {
+                final String? newAccess = dataMap['accessToken']?.toString() ?? dataMap['token']?.toString();
+                if (newAccess != null) {
+                  // Update but keep old refresh token if a new one isn't provided
+                  final String newRefresh = dataMap['refreshToken']?.toString() ?? _refreshToken!;
+                  await setTokens(newAccess, newRefresh, persistent: true);
+                  return true;
+                }
+              }
             }
+          } catch (e) {
+            debugPrint('[ApiClient] Token refresh logic error: $e');
           }
         }
 
@@ -469,8 +479,11 @@ class ApiClient {
     if (response.statusCode == 401 || response.statusCode == 403) {
       final path = response.request?.url.path ?? '';
       if (!path.endsWith('/auth/admin/login')) {
-        debugPrint('[ApiClient] Terminal auth failure (${response.statusCode}) at path: $path. Redirecting to login.');
-        NavigationService.navigateToLogin();
+        // Only log and redirect if we aren't already doing so
+        if (!NavigationService.isRedirectingToLogin) {
+          debugPrint('[ApiClient] Terminal auth failure (${response.statusCode}) at path: $path. Redirecting to login.');
+          NavigationService.navigateToLogin();
+        }
       }
     }
   }

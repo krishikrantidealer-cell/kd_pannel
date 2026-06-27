@@ -7,12 +7,14 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 
 class LeadsPage extends StatefulWidget {
   final bool isStandalone;
@@ -25,6 +27,7 @@ class LeadsPage extends StatefulWidget {
 class _LeadsPageState extends State<LeadsPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isExporting = false;
+  LeadsBloc? _leadsBloc;
 
   void _exportLeadsToCSV() async {
     setState(() => _isExporting = true);
@@ -75,7 +78,7 @@ class _LeadsPageState extends State<LeadsPage> {
       downloadCsv(buffer.toString(), 'leads_export.csv');
 
       setState(() => _isExporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      NavigationService.messengerKey.currentState?.showSnackBar(
         SnackBar(
           backgroundColor: AppTheme.info,
           behavior: SnackBarBehavior.floating,
@@ -102,7 +105,8 @@ class _LeadsPageState extends State<LeadsPage> {
   @override
   void initState() {
     super.initState();
-    final bloc = context.read<LeadsBloc>();
+    _leadsBloc = context.read<LeadsBloc>();
+    final bloc = _leadsBloc!;
     _searchController.text = bloc.state.searchQuery;
     if (bloc.state.status == LeadsStatus.initial) {
       bloc.add(const FetchLeadsDataEvent());
@@ -111,8 +115,8 @@ class _LeadsPageState extends State<LeadsPage> {
     WebSocketService().connect();
 
     _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
-      if (mounted) {
-        context.read<LeadsBloc>().add(
+      if (mounted && _leadsBloc != null) {
+        _leadsBloc!.add(
           const FetchLeadsDataEvent(forceRefresh: true),
         );
       }
@@ -136,19 +140,192 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  Future<void> _editLead(Map<String, dynamic> lead) async {
+    final nameController = TextEditingController(text: lead['name']);
+    final shopNameController = TextEditingController(text: lead['shopName'] ?? '');
+    final phoneController = TextEditingController(text: lead['phone']);
+    final villageAreaController = TextEditingController(text: lead['villageArea'] ?? '');
+    final addressLine2Controller = TextEditingController(text: lead['addressLine2'] ?? '');
+    final cityController = TextEditingController(text: lead['city']);
+    final stateController = TextEditingController(text: lead['state']);
+    final pincodeController = TextEditingController(text: lead['pincode'] ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Details',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditField('Name', nameController),
+              const SizedBox(height: 12),
+              _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField('Phone (Not Editable)', phoneController, readOnly: true),
+              const SizedBox(height: 12),
+              _buildEditField('Village/Area (Address 1)', villageAreaController),
+              const SizedBox(height: 12),
+              _buildEditField('Address Line 2 (Optional)', addressLine2Controller),
+              const SizedBox(height: 12),
+              _buildEditField('City/Tehsil', cityController),
+              const SizedBox(height: 12),
+              _buildEditField('State', stateController),
+              const SizedBox(height: 12),
+              _buildEditField('Pincode', pincodeController),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final String fullName = nameController.text.trim();
+      final names = fullName.split(' ');
+      final firstName = names.isNotEmpty ? names[0] : '';
+      final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+
+      _leadsBloc?.add(
+        UpdateLeadDetailsEvent(
+          userId: lead['id'],
+          updateData: {
+            'firstName': firstName,
+            'lastName': lastName,
+            'shopName': shopNameController.text.trim(),
+            'phoneNumber': phoneController.text.trim(),
+            'address': {
+              'villageArea': villageAreaController.text.trim(),
+              'addressLine2': addressLine2Controller.text.trim(),
+              'address2': addressLine2Controller.text.trim(),
+              'cityTehsil': cityController.text.trim(),
+              'state': stateController.text.trim(),
+              'pincode': pincodeController.text.trim(),
+            },
+          },
+        ),
+      );
+    }
+  }
+
+  Widget _buildEditField(String label, TextEditingController controller, {bool readOnly = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: readOnly ? AppTheme.textSecondary : AppTheme.textPrimary,
+          ),
+          decoration: InputDecoration(
+            fillColor: readOnly ? const Color(0xFFF9FAFB) : Colors.white,
+            filled: readOnly,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryColor,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _deleteLead(String userId, String name) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete Lead?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete lead "$name"? This action cannot be undone.', style: GoogleFonts.outfit()),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              'Delete Record',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete lead "$name"? This action cannot be undone and all associated data will be removed.',
+          style: GoogleFonts.outfit(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
-            child: const Text('Delete'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: Text(
+              'Confirm Delete',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -185,9 +362,7 @@ class _LeadsPageState extends State<LeadsPage> {
     return rawUsers
         .where((u) {
           final role = u['role'] ?? 'user';
-          final kycStatus = u['kycStatus'] ?? 'pending';
-          final isLead = role == 'user' && kycStatus != 'verified';
-          if (!isLead) return false;
+          if (role != 'user') return false;
 
           if (isSales) {
             final assignedAgentId = u['assignedAgent']?['_id'];
@@ -196,19 +371,19 @@ class _LeadsPageState extends State<LeadsPage> {
           return true;
         })
         .map((u) {
+          final String personName = (u['firstName'] != null || u['lastName'] != null)
+              ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
+              : '';
           return {
             'id': u['_id'],
-            'name':
-                (u['firstName'] != null &&
-                    u['firstName'].toString().trim().isNotEmpty)
-                ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
-                : (u['shopName'] != null &&
-                      u['shopName'].toString().trim().isNotEmpty)
-                ? u['shopName']
-                : (u['phoneNumber'] ?? 'Unnamed Lead'),
+            'name': personName.isNotEmpty ? personName : (u['phoneNumber'] ?? 'Unnamed Lead'),
             'phone': u['phoneNumber'] ?? '',
+            'shopName': u['shopName'] ?? '',
+            'villageArea': u['address']?['villageArea'] ?? '',
+            'addressLine2': u['address']?['addressLine2'] ?? '',
             'city': u['address']?['cityTehsil'] ?? '',
             'state': u['address']?['state'] ?? '',
+            'pincode': u['address']?['pincode'] ?? '',
             'activity': u['updatedAt'] != null
                 ? _formatTimeAgo(u['updatedAt'])
                 : '-',
@@ -242,7 +417,13 @@ class _LeadsPageState extends State<LeadsPage> {
     'This Month',
   ];
 
-  final List<String> filterChips = ['All', 'Assigned', 'Unassigned'];
+  final List<String> filterChips = [
+    'All',
+    'Assigned',
+    'Unassigned',
+    'KYC Pending',
+    'KYC Confirm',
+  ];
 
   final Map<String, String> statusMapping = {
     'Assigned': 'Assigned',
@@ -267,9 +448,13 @@ class _LeadsPageState extends State<LeadsPage> {
 
     if (selectedFilterChip != 'All') {
       if (selectedFilterChip == 'Unassigned') {
-        result = result.where((l) => l['agentId'] == null).toList();
+        result = result
+            .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
+            .toList();
       } else if (selectedFilterChip == 'Assigned') {
-        result = result.where((l) => l['agentId'] != null).toList();
+        result = result
+            .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
+            .toList();
       } else if (selectedFilterChip == 'KYC Pending') {
         result = result
             .where(
@@ -280,6 +465,11 @@ class _LeadsPageState extends State<LeadsPage> {
       } else if (selectedFilterChip == 'KYC Confirm') {
         result = result.where((l) => l['kycStatus'] == 'verified').toList();
       }
+    } else {
+      // For 'All', show everything except verified dealers unless specifically filtered?
+      // Actually, if it's "Leads Management", usually we want to see leads by default.
+      // But user said "leads and the dealer".
+      // Let's just show everything in 'All'.
     }
 
     final query = searchQuery.toLowerCase();
@@ -364,6 +554,66 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -372,26 +622,22 @@ class _LeadsPageState extends State<LeadsPage> {
     return BlocConsumer<LeadsBloc, LeadsState>(
       listener: (context, state) {
         if (state.errorMessage != null) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppTheme.error,
-              ),
-            );
-          }
-          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+          NavigationService.messengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+          _leadsBloc?.add(const ClearLeadsMessageEvent());
         }
         if (state.actionSuccessMessage != null) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.actionSuccessMessage!),
-                backgroundColor: AppTheme.success,
-              ),
-            );
-          }
-          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+          NavigationService.messengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          _leadsBloc?.add(const ClearLeadsMessageEvent());
         }
       },
       builder: (context, state) {
@@ -411,14 +657,7 @@ class _LeadsPageState extends State<LeadsPage> {
         final Widget body = Builder(
           builder: (context) =>
               (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(80.0),
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                )
+              ? _buildSkeletonLoading(isDesktop, isMobile)
               : ScrollConfiguration(
                   behavior: ScrollConfiguration.of(
                     context,
@@ -575,6 +814,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             salesAgents: state.salesAgents,
                             onAssignAgent: _assignAgent,
                             onBulkAssignAgent: _bulkAssignAgent,
+                            onEditLead: _editLead,
                             onDeleteLead: _deleteLead,
                           ),
                           const SizedBox(height: 12),
@@ -949,6 +1189,66 @@ class _FilterChipItem extends StatefulWidget {
 class _FilterChipItemState extends State<_FilterChipItem> {
   bool isHovered = false;
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
@@ -1062,6 +1362,7 @@ class _LeadsTableCard extends StatefulWidget {
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
   final Function(List<String> userIds, String? agentId) onBulkAssignAgent;
+  final Function(Map<String, dynamic> lead) onEditLead;
   final Function(String userId, String name) onDeleteLead;
 
   const _LeadsTableCard({
@@ -1071,6 +1372,7 @@ class _LeadsTableCard extends StatefulWidget {
     required this.salesAgents,
     required this.onAssignAgent,
     required this.onBulkAssignAgent,
+    required this.onEditLead,
     required this.onDeleteLead,
   });
 
@@ -1329,6 +1631,66 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     }
   }
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -1403,8 +1765,10 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
             isMobile: widget.isMobile,
             salesAgents: widget.salesAgents,
             onAssignAgent: widget.onAssignAgent,
+            onEditLead: widget.onEditLead,
             onDeleteLead: widget.onDeleteLead,
             selectedLeadIds: _selectedLeadIds,
+            isSubmitting: context.read<LeadsBloc>().state.status == LeadsStatus.submitting,
             onSelectionChanged: () {
               setState(() {});
             },
@@ -1859,18 +2223,22 @@ class _LeadsTable extends StatefulWidget {
   final bool isMobile;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Function(Map<String, dynamic> lead) onEditLead;
   final Function(String userId, String name) onDeleteLead;
   final Set<String> selectedLeadIds;
   final VoidCallback onSelectionChanged;
+  final bool isSubmitting;
 
   const _LeadsTable({
     required this.leads,
     required this.isMobile,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.onEditLead,
     required this.onDeleteLead,
     required this.selectedLeadIds,
     required this.onSelectionChanged,
+    this.isSubmitting = false,
   });
 
   @override
@@ -1912,16 +2280,76 @@ class _LeadsTableState extends State<_LeadsTable> {
     widget.onSelectionChanged();
   }
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final columns = [
       const _LeadColumnConfig('Lead Name', 18),
       const _LeadColumnConfig('Phone Number', 14),
-      const _LeadColumnConfig('Location', 12),
-      const _LeadColumnConfig('Last Activity', 11),
-      if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 12),
+      const _LeadColumnConfig('Location', 14),
+      const _LeadColumnConfig('Last Activity', 12),
+      if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 14),
       const _LeadColumnConfig('Source', 10, isCenter: true),
-      const _LeadColumnConfig('Actions', 13, isCenter: true),
+      const _LeadColumnConfig('Actions', 22, isCenter: true),
     ];
 
     Widget tableHeader = Container(
@@ -1932,27 +2360,42 @@ class _LeadsTableState extends State<_LeadsTable> {
         ),
         color: Color(0xFFF9FAFB),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 40,
-            child: Center(
-              child: _CustomCheckbox(
-                isSelected: isAllSelected,
-                onTap: _toggleAll,
+          if (widget.isSubmitting)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
               ),
             ),
+          Row(
+            children: [
+              if (AuthService().isAdmin)
+                SizedBox(
+                  width: 40,
+                  child: Center(
+                    child: _CustomCheckbox(
+                      isSelected: isAllSelected,
+                      onTap: _toggleAll,
+                    ),
+                  ),
+                ),
+              ...columns.map((col) {
+                final Widget child = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _HeaderText(col.title),
+                );
+                return Expanded(
+                  flex: col.flex,
+                  child: col.isCenter ? Center(child: child) : child,
+                );
+              }),
+            ],
           ),
-          ...columns.map((col) {
-            final Widget child = Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _HeaderText(col.title),
-            );
-            return Expanded(
-              flex: col.flex,
-              child: col.isCenter ? Center(child: child) : child,
-            );
-          }),
         ],
       ),
     );
@@ -1960,8 +2403,8 @@ class _LeadsTableState extends State<_LeadsTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double minTableWidth = widget.isMobile
-            ? 1100.0
-            : (AuthService().isAdmin ? 900.0 : 800.0);
+            ? 1200.0
+            : (AuthService().isAdmin ? 1100.0 : 900.0);
         // Guard against infinite constraints which occur on first layout
         // when this LayoutBuilder sits inside a horizontal SingleChildScrollView.
         // In that case, fall back to minTableWidth so rows have a known width.
@@ -1972,49 +2415,52 @@ class _LeadsTableState extends State<_LeadsTable> {
             ? safeMaxWidth
             : minTableWidth;
 
-        return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            scrollbars: false,
-            dragDevices: {
-              ui.PointerDeviceKind.touch,
-              ui.PointerDeviceKind.trackpad,
-            },
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: SizedBox(
-              width: tableWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  tableHeader,
-                  ...widget.leads.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final lead = entry.value;
-                    final bool isAlternate = index % 2 == 1;
-                    final String leadId = lead['id'] ?? '';
-                    return _LeadRow(
-                      lead: lead,
-                      isAlternate: isAlternate,
-                      isMobile: widget.isMobile,
-                      isHovered: hoveredRowIndex == index,
-                      isSelected: widget.selectedLeadIds.contains(leadId),
-                      isAllSelected: isAllSelected,
-                      onToggleSelection: () => _toggleSelection(leadId),
-                      onTap: () => Navigator.pushNamed(
-                        context,
-                        '/leads/profile',
-                        arguments: lead,
-                      ),
-                      onHover: () => setState(() => hoveredRowIndex = index),
-                      onExit: () => setState(() => hoveredRowIndex = null),
-                      salesAgents: widget.salesAgents,
-                      onAssignAgent: widget.onAssignAgent,
-                      onDelete: widget.onDeleteLead,
-                    );
-                  }),
-                ],
+        return SelectionArea(
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              scrollbars: false,
+              dragDevices: {
+                ui.PointerDeviceKind.touch,
+                ui.PointerDeviceKind.trackpad,
+              },
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: SizedBox(
+                width: tableWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tableHeader,
+                    ...widget.leads.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final lead = entry.value;
+                      final bool isAlternate = index % 2 == 1;
+                      final String leadId = lead['id'] ?? '';
+                      return _LeadRow(
+                        lead: lead,
+                        isAlternate: isAlternate,
+                        isMobile: widget.isMobile,
+                        isHovered: hoveredRowIndex == index,
+                        isSelected: widget.selectedLeadIds.contains(leadId),
+                        isAllSelected: isAllSelected,
+                        onToggleSelection: () => _toggleSelection(leadId),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/leads/profile',
+                          arguments: lead,
+                        ),
+                        onHover: () => setState(() => hoveredRowIndex = index),
+                        onExit: () => setState(() => hoveredRowIndex = null),
+                        salesAgents: widget.salesAgents,
+                        onAssignAgent: widget.onAssignAgent,
+                        onEdit: widget.onEditLead,
+                        onDelete: widget.onDeleteLead,
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2037,6 +2483,7 @@ class _LeadRow extends StatelessWidget {
   final VoidCallback onExit;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
+  final Function(Map<String, dynamic> lead) onEdit;
   final Function(String userId, String name) onDelete;
 
   const _LeadRow({
@@ -2052,8 +2499,69 @@ class _LeadRow extends StatelessWidget {
     required this.onExit,
     required this.salesAgents,
     required this.onAssignAgent,
+    required this.onEdit,
     required this.onDelete,
   });
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2064,188 +2572,236 @@ class _LeadRow extends StatelessWidget {
     return MouseRegion(
       onEnter: (_) => onHover(),
       onExit: (_) => onExit(),
-      cursor: SystemMouseCursors.basic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          border: const Border(
-            bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            border: const Border(
+              bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+            ),
+            color: rowBgColor,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
-          color: rowBgColor,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Stack(
-          children: [
-            // Animated Left Accent Strip
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              left: 0,
-              top: isHovered ? 0 : 12,
-              bottom: isHovered ? 0 : 12,
-              width: isHovered ? 4 : 0,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 160),
-                opacity: isHovered ? 1 : 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor,
-                    borderRadius: const BorderRadius.horizontal(
-                      right: Radius.circular(4),
+          child: Stack(
+            children: [
+              // Animated Left Accent Strip
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                left: 0,
+                top: isHovered ? 0 : 12,
+                bottom: isHovered ? 0 : 12,
+                width: isHovered ? 4 : 0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 160),
+                  opacity: isHovered ? 1 : 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(4),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Center(
-                    child: (isHovered || isSelected)
-                        ? _CustomCheckbox(
-                            isSelected: isSelected,
-                            onTap: onToggleSelection,
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-                _cell(lead['name'], flex: 1.8, isBold: true),
-                _cell(lead['phone'], flex: 1.4, isSecondary: true),
-                _cell(
-                  (lead['city'] != null &&
-                          lead['city'].toString().trim().isNotEmpty &&
-                          lead['state'] != null &&
-                          lead['state'].toString().trim().isNotEmpty)
-                      ? '${lead['city']}, ${lead['state']}'
-                      : ((lead['city'] ?? '').toString().trim().isNotEmpty
-                            ? lead['city']
-                            : (lead['state'] ?? '')),
-                  flex: 1.2,
-                  isSecondary: true,
-                ),
-                _cell(lead['activity'], flex: 1.1, isSecondary: true),
-                if (AuthService().isAdmin)
+              Row(
+                children: [
+                  if (AuthService().isAdmin)
+                    SizedBox(
+                      width: 40,
+                      child: Center(
+                        child: (isHovered || isSelected)
+                            ? _CustomCheckbox(
+                                isSelected: isSelected,
+                                onTap: onToggleSelection,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
                   Expanded(
-                    flex: 12,
+                    flex: 18,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
+                        vertical: 12,
                         horizontal: 12,
-                        vertical: 8,
                       ),
-                      child: !AuthService().isAdmin
-                          ? Text(
-                              lead['agent'] ?? '-',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            lead['name'],
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (lead['shopName'] != null &&
+                              lead['shopName'].toString().isNotEmpty &&
+                              lead['shopName'].toString().toLowerCase() !=
+                                  'my store')
+                            Text(
+                              lead['shopName'],
                               style: GoogleFonts.outfit(
-                                fontSize: 12.5,
-                                color: AppTheme.textPrimary,
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
                                 fontWeight: FontWeight.w500,
                               ),
-                            )
-                          : Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF9FAFB),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: const Color(0xFFE5E7EB),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  _cell(lead['phone'], flex: 1.4, isSecondary: true),
+                  _cell(
+                    (lead['city'] != null &&
+                            lead['city'].toString().trim().isNotEmpty &&
+                            lead['state'] != null &&
+                            lead['state'].toString().trim().isNotEmpty)
+                        ? '${lead['city']}, ${lead['state']}'
+                        : ((lead['city'] ?? '').toString().trim().isNotEmpty
+                              ? lead['city']
+                              : (lead['state'] ?? '')),
+                    flex: 1.4,
+                    isSecondary: true,
+                  ),
+                  _cell(lead['activity'], flex: 1.2, isSecondary: true),
+                  if (AuthService().isAdmin)
+                    Expanded(
+                      flex: 14,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: !AuthService().isAdmin
+                            ? Text(
+                                lead['agent'] ?? '-',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value:
-                                      salesAgents.any(
-                                        (agent) =>
-                                            agent['_id'] == lead['agentId'],
-                                      )
-                                      ? lead['agentId']
-                                      : null,
-                                  isExpanded: true,
-                                  isDense: true,
-                                  icon: const Icon(
-                                    Icons.arrow_drop_down,
-                                    size: 16,
-                                    color: AppTheme.textSecondary,
+                              )
+                            : GestureDetector(
+                                onTap: () {}, // Stop propagation for dropdown
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
                                   ),
-                                  hint: Text(
-                                    '-',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12.5,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9FAFB),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFE5E7EB),
                                     ),
                                   ),
-                                  onChanged: (String? newAgentId) {
-                                    onAssignAgent(lead['id'], newAgentId);
-                                  },
-                                  items: [
-                                    DropdownMenuItem<String>(
-                                      value: null,
-                                      child: Text(
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value:
+                                          salesAgents.any(
+                                            (agent) =>
+                                                agent['_id'] == lead['agentId'],
+                                          )
+                                          ? lead['agentId']
+                                          : null,
+                                      isExpanded: true,
+                                      isDense: true,
+                                      icon: const Icon(
+                                        Icons.arrow_drop_down,
+                                        size: 16,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      hint: Text(
                                         '-',
                                         style: GoogleFonts.outfit(
                                           fontSize: 12.5,
                                           color: AppTheme.textSecondary,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    ),
-                                    ...salesAgents.map((agent) {
-                                      final agentName =
-                                          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                              .trim();
-                                      return DropdownMenuItem<String>(
-                                        value: agent['_id'],
-                                        child: Text(
-                                          agentName.isNotEmpty
-                                              ? agentName
-                                              : (agent['phoneNumber'] ?? ''),
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 12.5,
-                                            color: AppTheme.textPrimary,
-                                            fontWeight: FontWeight.w600,
+                                      onChanged: (String? newAgentId) {
+                                        onAssignAgent(lead['id'], newAgentId);
+                                      },
+                                      items: [
+                                        DropdownMenuItem<String>(
+                                          value: null,
+                                          child: Text(
+                                            '-',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 12.5,
+                                              color: AppTheme.textSecondary,
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    }),
-                                  ],
+                                        ...salesAgents.map((agent) {
+                                          final agentName =
+                                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                                  .trim();
+                                          return DropdownMenuItem<String>(
+                                            value: agent['_id'],
+                                            child: Text(
+                                              agentName.isNotEmpty
+                                                  ? agentName
+                                                  : (agent['phoneNumber'] ?? ''),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12.5,
+                                                color: AppTheme.textPrimary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                      ),
+                    ),
+                  Expanded(
+                    flex: 10,
+                    child: Center(
+                      child: _SourceBadge(source: lead['source'] ?? 'App'),
                     ),
                   ),
-                Expanded(
-                  flex: 10,
-                  child: Center(
-                    child: _SourceBadge(source: lead['source'] ?? 'App'),
-                  ),
-                ),
-                Expanded(
-                  flex: 13,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: _ConnectedActionButtons(
-                        onView: onTap,
-                        onDelete: () => onDelete(lead['id'], lead['name']),
+                  Expanded(
+                    flex: 22,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: GestureDetector(
+                          onTap: () {}, // Stop propagation for buttons
+                          child: _ConnectedActionButtons(
+                            onEdit: () => onEdit(lead),
+                            onDelete: () => onDelete(lead['id'], lead['name']),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2281,10 +2837,13 @@ class _LeadRow extends StatelessWidget {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
-  final VoidCallback onView;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({required this.onView, required this.onDelete});
+  const _ConnectedActionButtons({
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -2292,8 +2851,68 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
-  bool isViewHovered = false;
+  bool isEditHovered = false;
   bool isDeleteHovered = false;
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2304,19 +2923,19 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
           width: 70,
           height: 32,
           child: MouseRegion(
-            onEnter: (_) => setState(() => isViewHovered = true),
-            onExit: (_) => setState(() => isViewHovered = false),
+            onEnter: (_) => setState(() => isEditHovered = true),
+            onExit: (_) => setState(() => isEditHovered = false),
             child: GestureDetector(
-              onTap: widget.onView,
+              onTap: widget.onEdit,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
-                  color: isViewHovered ? AppTheme.primaryColor : Colors.white,
+                  color: isEditHovered ? AppTheme.info : Colors.white,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: isViewHovered
-                        ? AppTheme.primaryColor
+                    color: isEditHovered
+                        ? AppTheme.info
                         : AppTheme.borderColor.withValues(alpha: 0.6),
                   ),
                 ),
@@ -2325,17 +2944,17 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.visibility_outlined,
+                        Icons.edit_outlined,
                         size: 14,
-                        color: isViewHovered ? Colors.white : AppTheme.primaryColor,
+                        color: isEditHovered ? Colors.white : AppTheme.info,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'View',
+                        'Edit',
                         style: GoogleFonts.outfit(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isViewHovered
+                          color: isEditHovered
                               ? Colors.white
                               : AppTheme.textPrimary,
                         ),
@@ -2389,6 +3008,66 @@ class _HeaderText extends StatelessWidget {
 
   const _HeaderText(this.text);
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Text(
@@ -2415,6 +3094,66 @@ class _LeadsStatsGrid extends StatelessWidget {
     required this.verifiedDealersCount,
   });
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final unassignedCount = leads.where((l) => l['agentId'] == null).length;
@@ -2430,7 +3169,7 @@ class _LeadsStatsGrid extends StatelessWidget {
         final double spacing = AppTheme.spacingSmall;
         final int columns;
         if (constraints.maxWidth >= 1200) {
-          columns = 3;
+          columns = 4;
         } else if (constraints.maxWidth >= 768) {
           columns = 2;
         } else {
@@ -2495,6 +3234,23 @@ class _LeadsStatsGrid extends StatelessWidget {
                 );
               },
             ),
+            StatCardWidget(
+              width: width,
+              title: 'Verified Dealer',
+              value: '$verifiedDealersCount',
+              icon: Icons.verified_user_outlined,
+              color: AppTheme.success,
+              isCompact: true,
+              onTap: () {
+                context.read<LeadsBloc>().add(
+                  const UpdateLeadsFilterEvent(
+                    selectedFilterChip: 'KYC Confirm',
+                    currentPage: 1,
+                    searchQuery: '',
+                  ),
+                );
+              },
+            ),
           ],
         );
       },
@@ -2519,6 +3275,66 @@ class _PageNumberButton extends StatefulWidget {
 
 class _PageNumberButtonState extends State<_PageNumberButton> {
   bool isHovered = false;
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2578,6 +3394,66 @@ class _PaginationButton extends StatefulWidget {
 class _PaginationButtonState extends State<_PaginationButton> {
   bool isHovered = false;
 
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -2624,6 +3500,66 @@ class _CustomCheckbox extends StatefulWidget {
 
 class _CustomCheckboxState extends State<_CustomCheckbox> {
   bool isHovered = false;
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2677,6 +3613,66 @@ class _SourceBadge extends StatelessWidget {
   final String source;
 
   const _SourceBadge({required this.source});
+
+  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 40,
+              width: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(
+                isDesktop ? 4 : 2,
+                (index) => Expanded(
+                  child: Container(
+                    height: 100,
+                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              height: 500,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

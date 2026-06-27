@@ -6,6 +6,7 @@ class NavigationService {
   static final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   static bool _isRedirectingToLogin = false;
+  static bool get isRedirectingToLogin => _isRedirectingToLogin;
 
   static void navigateToLogin({bool showSessionExpiredMessage = true}) {
     if (_isRedirectingToLogin) return;

@@ -90,6 +90,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -153,20 +155,234 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
+  Future<void> _editLead() async {
+    if (_lead == null) return;
+    final nameController = TextEditingController(text: _lead!['name']);
+    final shopNameController =
+        TextEditingController(text: _lead!['shopName'] ?? '');
+    final phoneController = TextEditingController(text: _lead!['phone']);
+    final villageAreaController =
+        TextEditingController(text: _lead!['villageArea'] ?? '');
+    final addressLine2Controller =
+        TextEditingController(text: _lead!['addressLine2'] ?? '');
+    final cityController = TextEditingController(text: _lead!['city']);
+    final stateController = TextEditingController(text: _lead!['state']);
+    final pincodeController =
+        TextEditingController(text: _lead!['pincode'] ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Details',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditField('Name', nameController),
+              const SizedBox(height: 12),
+              _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField(
+                'Phone (Not Editable)',
+                phoneController,
+                readOnly: true,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField('Village/Area (Address 1)', villageAreaController),
+              const SizedBox(height: 12),
+              _buildEditField('Address Line 2 (Optional)', addressLine2Controller),
+              const SizedBox(height: 12),
+              _buildEditField('City/Tehsil', cityController),
+              const SizedBox(height: 12),
+              _buildEditField('State', stateController),
+              const SizedBox(height: 12),
+              _buildEditField('Pincode', pincodeController),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final String fullName = nameController.text.trim();
+      final names = fullName.split(' ');
+      final firstName = names.isNotEmpty ? names[0] : '';
+      final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+
+      context.read<LeadsBloc>().add(
+        UpdateLeadDetailsEvent(
+          userId: _lead!['id'],
+          updateData: {
+            'firstName': firstName,
+            'lastName': lastName,
+            'shopName': shopNameController.text.trim(),
+            'phoneNumber': phoneController.text.trim(),
+            'address': {
+              'villageArea': villageAreaController.text.trim(),
+              'addressLine2': addressLine2Controller.text.trim(),
+              'address2': addressLine2Controller.text.trim(),
+              'cityTehsil': cityController.text.trim(),
+              'state': stateController.text.trim(),
+              'pincode': pincodeController.text.trim(),
+            },
+          },
+        ),
+      );
+      // Wait for update and refresh
+      await Future.delayed(const Duration(milliseconds: 500));
+      _refreshLeadDetails();
+    }
+  }
+
+  Widget _buildEditField(
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: readOnly ? AppTheme.textSecondary : AppTheme.textPrimary,
+          ),
+          decoration: InputDecoration(
+            fillColor: readOnly ? const Color(0xFFF9FAFB) : Colors.white,
+            filled: readOnly,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppTheme.primaryColor,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteLead() async {
+    if (_lead == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              'Delete Record',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete lead "${_lead!['name']}"? This action cannot be undone and all associated data will be removed.',
+          style: GoogleFonts.outfit(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: Text(
+              'Confirm Delete',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      context.read<LeadsBloc>().add(DeleteLeadEvent(_lead!['id']));
+      Navigator.pop(context); // Go back after deletion
+    }
+  }
+
   Map<String, dynamic> _mapUserToLead(Map<String, dynamic> u) {
+    final String personName = (u['firstName'] != null || u['lastName'] != null)
+        ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
+        : '';
     return {
       'id': u['_id'],
-      'name':
-          (u['firstName'] != null &&
-              u['firstName'].toString().trim().isNotEmpty)
-          ? '${u['firstName']} ${u['lastName'] ?? ''}'.trim()
-          : (u['shopName'] != null &&
-                u['shopName'].toString().trim().isNotEmpty)
-          ? u['shopName']
-          : (u['phoneNumber'] ?? 'Unnamed Lead'),
+      'name': personName.isNotEmpty ? personName : (u['phoneNumber'] ?? 'Unnamed Lead'),
       'phone': u['phoneNumber'] ?? '',
+      'shopName': u['shopName'] ?? '',
+      'villageArea': u['address']?['villageArea'] ?? '',
+      'addressLine2': u['address']?['addressLine2'] ?? '',
       'city': u['address']?['cityTehsil'] ?? '',
       'state': u['address']?['state'] ?? '',
+      'pincode': u['address']?['pincode'] ?? '',
       'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
       'agent': u['assignedAgent'] != null
           ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
@@ -190,11 +406,20 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   void _showConvertDealerDialog() {
     String? errorMessage;
 
-    final stateText =
-        _lead!['state'] != null && _lead!['state'].toString().isNotEmpty
-        ? ', ${_lead!['state']}'
-        : '';
-    final locationText = '${_lead!['city'] ?? ''}$stateText';
+    final List<String> locationParts = [];
+    if (_lead!['villageArea']?.toString().isNotEmpty ?? false) {
+      locationParts.add(_lead!['villageArea']);
+    }
+    if (_lead!['city']?.toString().isNotEmpty ?? false) {
+      locationParts.add(_lead!['city']);
+    }
+    if (_lead!['state']?.toString().isNotEmpty ?? false) {
+      locationParts.add(_lead!['state']);
+    }
+    if (_lead!['pincode']?.toString().isNotEmpty ?? false) {
+      locationParts.add(_lead!['pincode']);
+    }
+    final locationText = locationParts.join(', ');
 
     showDialog(
       context: context,
@@ -1252,6 +1477,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                           onConvertDealer: _showConvertDealerDialog,
                           onRejectKyc: _showRejectDialog,
                           onToggleBlock: _toggleBlockLead,
+                          onEdit: _editLead,
+                          onDelete: _deleteLead,
                         ),
                         const SizedBox(height: 28),
 
@@ -1309,6 +1536,8 @@ class _FlatHeaderSection extends StatelessWidget {
   final VoidCallback onConvertDealer;
   final VoidCallback onRejectKyc;
   final VoidCallback onToggleBlock;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _FlatHeaderSection({
     required this.lead,
@@ -1316,6 +1545,8 @@ class _FlatHeaderSection extends StatelessWidget {
     required this.onConvertDealer,
     required this.onRejectKyc,
     required this.onToggleBlock,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -1323,10 +1554,24 @@ class _FlatHeaderSection extends StatelessWidget {
     final isMobile = Responsive.isMobile(context);
     final isTablet = Responsive.isTablet(context);
 
-    final stateText = lead['state'].toString().isNotEmpty
-        ? ', ${lead['state']}'
-        : '';
-    final locationText = '${lead['city']}$stateText';
+    final List<String> locationParts = [];
+    if (lead['villageArea']?.toString().isNotEmpty ?? false) {
+      locationParts.add(lead['villageArea']);
+    }
+    if (lead['addressLine2']?.toString().isNotEmpty ?? false) {
+      locationParts.add(lead['addressLine2']);
+    }
+    if (lead['city']?.toString().isNotEmpty ?? false) {
+      locationParts.add(lead['city']);
+    }
+    if (lead['state']?.toString().isNotEmpty ?? false) {
+      locationParts.add(lead['state']);
+    }
+    if (lead['pincode']?.toString().isNotEmpty ?? false) {
+      locationParts.add(lead['pincode']);
+    }
+
+    final locationText = locationParts.join(', ');
     final String kycStatus = lead['kycStatus'] ?? 'pending';
     final Color statusColor = kycStatus.toLowerCase() == 'verified'
         ? const Color(0xFF10B981)
@@ -1524,6 +1769,13 @@ class _FlatHeaderSection extends StatelessWidget {
       runSpacing: 8,
       children: [
         _ActionButton(
+          icon: Icons.edit_outlined,
+          label: 'Edit',
+          color: AppTheme.info,
+          isSolid: true,
+          onTap: onEdit,
+        ),
+        _ActionButton(
           icon: Icons.message,
           label: 'WhatsApp',
           color: const Color(0xFF25D366),
@@ -1575,6 +1827,13 @@ class _FlatHeaderSection extends StatelessWidget {
             color: (lead['isBlocked'] ?? false) ? Colors.blue : AppTheme.error,
             isSolid: true,
             onTap: onToggleBlock,
+          ),
+          _ActionButton(
+            icon: Icons.delete_outline_rounded,
+            label: 'Delete',
+            color: AppTheme.error,
+            isSolid: true,
+            onTap: onDelete,
           ),
         ],
       ],
@@ -1734,6 +1993,20 @@ class _LeadInformationCard extends StatelessWidget {
           ),
           _buildDividerRow(),
           _buildInfoRow(
+            Icons.store_outlined,
+            'Shop Name',
+            lead['shopName'].toString().isNotEmpty ? lead['shopName'] : '-',
+            Colors.indigo,
+          ),
+          _buildDividerRow(),
+          _buildInfoRow(
+            Icons.home_outlined,
+            'Village/Area',
+            lead['villageArea'].toString().isNotEmpty ? lead['villageArea'] : '-',
+            Colors.brown,
+          ),
+          _buildDividerRow(),
+          _buildInfoRow(
             Icons.location_city_outlined,
             'City',
             lead['city'].toString().isNotEmpty ? lead['city'] : '-',
@@ -1745,6 +2018,13 @@ class _LeadInformationCard extends StatelessWidget {
             'State',
             lead['state'].toString().isNotEmpty ? lead['state'] : '-',
             Colors.purple,
+          ),
+          _buildDividerRow(),
+          _buildInfoRow(
+            Icons.pin_drop_outlined,
+            'Pincode',
+            lead['pincode'].toString().isNotEmpty ? lead['pincode'] : '-',
+            Colors.redAccent,
           ),
           _buildDividerRow(),
           _buildInfoRow(

@@ -23,6 +23,38 @@ class WebSocketService {
   Stream<void> get dealersUpdates => _dealersUpdateController.stream;
   Stream<void> get notificationUpdates => _notificationUpdateController.stream;
 
+  // Debounce timers for updates
+  Timer? _leadsDebounce;
+  Timer? _dealersDebounce;
+  Timer? _notificationDebounce;
+
+  void _triggerLeadsUpdate() {
+    _leadsDebounce?.cancel();
+    _leadsDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (!_leadsUpdateController.isClosed) {
+        _leadsUpdateController.add(null);
+      }
+    });
+  }
+
+  void _triggerDealersUpdate() {
+    _dealersDebounce?.cancel();
+    _dealersDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (!_dealersUpdateController.isClosed) {
+        _dealersUpdateController.add(null);
+      }
+    });
+  }
+
+  void _triggerNotificationUpdate() {
+    _notificationDebounce?.cancel();
+    _notificationDebounce = Timer(const Duration(milliseconds: 800), () {
+      if (!_notificationUpdateController.isClosed) {
+        _notificationUpdateController.add(null);
+      }
+    });
+  }
+
   void connect() {
     if (_isConnected) return;
 
@@ -72,13 +104,13 @@ class WebSocketService {
     try {
       final String msgStr = rawMessage.toString();
       if (msgStr.contains('LEADS_UPDATE')) {
-        _leadsUpdateController.add(null);
+        _triggerLeadsUpdate();
       }
       if (msgStr.contains('DEALERS_UPDATE')) {
-        _dealersUpdateController.add(null);
+        _triggerDealersUpdate();
       }
       if (msgStr.contains('NOTIFICATION_RECEIVED')) {
-        _notificationUpdateController.add(null);
+        _triggerNotificationUpdate();
       }
       if (msgStr.contains('FORCE_LOGOUT')) {
         NavigationService.navigateToLogin(showSessionExpiredMessage: true);
@@ -99,6 +131,9 @@ class WebSocketService {
   }
 
   void disconnect() {
+    _leadsDebounce?.cancel();
+    _dealersDebounce?.cancel();
+    _notificationDebounce?.cancel();
     _reconnectTimer?.cancel();
     _subscription?.cancel();
     _channel?.sink.close();

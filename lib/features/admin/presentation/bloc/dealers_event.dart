@@ -28,6 +28,19 @@ class AssignAgentToDealerEvent extends DealersEvent {
   List<Object?> get props => [userId, agentId];
 }
 
+class BulkAssignAgentToDealersEvent extends DealersEvent {
+  final List<String> userIds;
+  final String? agentId;
+
+  const BulkAssignAgentToDealersEvent({
+    required this.userIds,
+    required this.agentId,
+  });
+
+  @override
+  List<Object?> get props => [userIds, agentId];
+}
+
 class CreateSalesAgentEvent extends DealersEvent {
   final String firstName;
   final String lastName;
@@ -108,4 +121,17 @@ class DeleteDealerEvent extends DealersEvent {
 
   @override
   List<Object?> get props => [userId];
+}
+
+class UpdateDealerDetailsEvent extends DealersEvent {
+  final String userId;
+  final Map<String, dynamic> updateData;
+
+  const UpdateDealerDetailsEvent({
+    required this.userId,
+    required this.updateData,
+  });
+
+  @override
+  List<Object?> get props => [userId, updateData];
 }

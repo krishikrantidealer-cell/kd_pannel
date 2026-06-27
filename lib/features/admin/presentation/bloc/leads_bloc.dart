@@ -16,6 +16,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<ClearLeadsMessageEvent>(_onClearLeadsMessage);
     on<ToggleBlockLeadEvent>(_onToggleBlockLead);
     on<DeleteLeadEvent>(_onDeleteLead);
+    on<UpdateLeadDetailsEvent>(_onUpdateLeadDetails);
   }
 
   Future<void> _onFetchLeadsData(
@@ -75,7 +76,25 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     AssignAgentToLeadEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        final agent = state.salesAgents.firstWhere(
+          (a) => a['_id'] == event.agentId,
+          orElse: () => <String, dynamic>{},
+        );
+        updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().put('/users/${event.userId}/assign-agent', {
         'agentId': event.agentId,
@@ -100,6 +119,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         status: LeadsStatus.success,
         errorMessage: e.toString(),
       ));
+      add(const FetchLeadsDataEvent(forceRefresh: true));
     }
   }
 
@@ -347,7 +367,17 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     DeleteLeadEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers =
+        state.allRawUsers
+            .where((u) => u['_id'] != event.userId && u['id'] != event.userId)
+            .toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().delete('/users/${event.userId}');
 
@@ -371,6 +401,60 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         status: LeadsStatus.success,
         errorMessage: e.toString(),
       ));
+      add(const FetchLeadsDataEvent(forceRefresh: true));
+    }
+  }
+
+  Future<void> _onUpdateLeadDetails(
+    UpdateLeadDetailsEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    // Optimistic Update: Change the local state immediately for instant feedback
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        updatedUser['firstName'] = event.updateData['firstName'];
+        updatedUser['lastName'] = event.updateData['lastName'];
+        updatedUser['shopName'] = event.updateData['shopName'];
+        if (event.updateData.containsKey('address')) {
+          final existingAddress = Map<String, dynamic>.from(updatedUser['address'] ?? {});
+          updatedUser['address'] = {...existingAddress, ...event.updateData['address']};
+        }
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
+    try {
+      final res = await ApiClient().put('/users/${event.userId}', event.updateData);
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWith(
+            status: LeadsStatus.success,
+            actionSuccessMessage: 'Lead updated successfully',
+          ));
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to update lead');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Server error');
+      }
+    } catch (e) {
+      emit(state.copyWithKeepMessages(
+        status: LeadsStatus.success,
+        errorMessage: e.toString(),
+      ));
+      // Trigger a refresh to revert to server state on failure
+      add(const FetchLeadsDataEvent(forceRefresh: true));
     }
   }
 }
