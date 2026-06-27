@@ -356,11 +356,15 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         if (event.updateData.containsKey('gstNumber')) {
           updatedUser['gstNumber'] = event.updateData['gstNumber'];
         }
-        if (event.updateData.containsKey('leadStatus')) {
-          updatedUser['leadStatus'] = event.updateData['leadStatus'];
+        if (event.updateData.containsKey('status') || event.updateData.containsKey('leadStatus')) {
+          final val = event.updateData['status'] ?? event.updateData['leadStatus'];
+          updatedUser['status'] = val;
+          updatedUser['leadStatus'] = val;
         }
-        if (event.updateData.containsKey('leadNotes')) {
-          updatedUser['leadNotes'] = event.updateData['leadNotes'];
+        if (event.updateData.containsKey('notes') || event.updateData.containsKey('leadNotes')) {
+          final val = event.updateData['notes'] ?? event.updateData['leadNotes'];
+          updatedUser['notes'] = val;
+          updatedUser['leadNotes'] = val;
         }
         if (event.updateData.containsKey('address')) {
           final existingAddress =

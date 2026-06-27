@@ -426,7 +426,7 @@ class _LeadsPageState extends State<LeadsPage> {
                 : '-',
             'agentId': u['assignedAgent']?['_id'],
             'source': u['source'] ?? 'App',
-            'status':
+            'processingStatus':
                 u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
                 ? 'KYC Pending'
                 : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
@@ -435,8 +435,11 @@ class _LeadsPageState extends State<LeadsPage> {
             'userType': u['userType'] ?? '',
             'licenceImage': u['licenceImage'] ?? '',
             'shopImage': u['shopImage'] ?? '',
-            'leadStatus': u['leadStatus'] ?? 'prospect',
-            'leadNotes': u['leadNotes'] ?? '',
+            'status': u['status'] ?? u['leadStatus'] ?? 'prospect',
+            'notes': u['notes'] ?? u['leadNotes'] ?? '',
+            'createdAt': u['createdAt'],
+            'updatedAt': u['updatedAt'],
+            'notesHistory': u['notesHistory'] ?? [],
           };
         })
         .toList();
@@ -469,45 +472,90 @@ class _LeadsPageState extends State<LeadsPage> {
     final state = context.read<LeadsBloc>().state;
     return _getFilteredLeads(
       allLeads,
-      state.selectedFilterChip,
-      state.searchQuery,
+      state,
     );
   }
 
   List<Map<String, dynamic>> _getFilteredLeads(
     List<Map<String, dynamic>> leads,
-    String selectedFilterChip,
-    String searchQuery,
+    LeadsState state,
   ) {
     List<Map<String, dynamic>> result = leads;
 
-    if (selectedFilterChip != 'All') {
-      if (selectedFilterChip == 'Unassigned') {
+    // 1. Date Filtering
+    DateTime? startDate;
+    DateTime? endDate;
+
+    if (state.selectedRange != null && state.selectedRange!.startDate != null) {
+      startDate = state.selectedRange!.startDate;
+      endDate = state.selectedRange!.endDate ?? state.selectedRange!.startDate;
+      // Normalize to end of day
+      endDate = DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
+    } else if (state.selectedTimeframe.isNotEmpty) {
+      final now = DateTime.now();
+      endDate = now;
+      switch (state.selectedTimeframe) {
+        case 'Last 1 Week':
+          startDate = now.subtract(const Duration(days: 7));
+          break;
+        case 'Last 2 Weeks':
+          startDate = now.subtract(const Duration(days: 14));
+          break;
+        case 'Last 3 Weeks':
+          startDate = now.subtract(const Duration(days: 21));
+          break;
+        case 'Last 1 Month':
+          startDate = DateTime(now.year, now.month - 1, now.day);
+          break;
+        case 'Last 3 Months':
+          startDate = DateTime(now.year, now.month - 3, now.day);
+          break;
+        case 'Last 6 Months':
+          startDate = DateTime(now.year, now.month - 6, now.day);
+          break;
+        case 'This Month':
+          startDate = DateTime(now.year, now.month, 1);
+          break;
+      }
+    }
+
+    if (startDate != null && endDate != null) {
+      result = result.where((l) {
+        final dateStr = l['createdAt'] ?? l['updatedAt'];
+        if (dateStr == null) return false;
+        try {
+          final date = DateTime.parse(dateStr).toLocal();
+          return date.isAfter(startDate!) && date.isBefore(endDate!);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+
+    // 2. Chip Filtering
+    if (state.selectedFilterChip != 'All') {
+      if (state.selectedFilterChip == 'Unassigned') {
         result = result
             .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
             .toList();
-      } else if (selectedFilterChip == 'Assigned') {
+      } else if (state.selectedFilterChip == 'Assigned') {
         result = result
             .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
             .toList();
-      } else if (selectedFilterChip == 'KYC Pending') {
+      } else if (state.selectedFilterChip == 'KYC Pending') {
         result = result
             .where(
               (l) =>
                   l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
             )
             .toList();
-      } else if (selectedFilterChip == 'KYC Confirm') {
+      } else if (state.selectedFilterChip == 'KYC Confirm') {
         result = result.where((l) => l['kycStatus'] == 'verified').toList();
       }
-    } else {
-      // For 'All', show everything except verified dealers unless specifically filtered?
-      // Actually, if it's "Leads Management", usually we want to see leads by default.
-      // But user said "leads and the dealer".
-      // Let's just show everything in 'All'.
     }
 
-    final query = searchQuery.toLowerCase();
+    // 3. Search Query
+    final query = state.searchQuery.toLowerCase();
     if (query.isNotEmpty) {
       result = result.where((l) {
         return l['name'].toString().toLowerCase().contains(query) ||
@@ -1735,7 +1783,93 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
-    final total = widget.leads.length;
+
+    // 1. Local Filtering for Table Controls
+    List<Map<String, dynamic>> tableLeads = widget.leads;
+
+    // Filter by Source
+    if (selectedSource != 'Lead Source' && selectedSource != 'All') {
+      tableLeads = tableLeads.where((l) {
+        return l['source'].toString().toLowerCase() ==
+            selectedSource.toLowerCase();
+      }).toList();
+    }
+
+    // Filter by Assigned Agent (only for admin)
+    if (AuthService().isAdmin &&
+        selectedAssign != 'Assign' &&
+        selectedAssign != 'All') {
+      tableLeads = tableLeads.where((l) {
+        if (selectedAssign == 'Unassigned') return l['agentId'] == null;
+        return l['agent'].toString().toLowerCase().contains(
+          selectedAssign.toLowerCase(),
+        );
+      }).toList();
+    }
+
+    // Filter by Table Date Section
+    DateTime? tableStartDate;
+    DateTime? tableEndDate;
+    if (_selectedTableRange != null && _selectedTableRange!.startDate != null) {
+      tableStartDate = _selectedTableRange!.startDate;
+      tableEndDate =
+          _selectedTableRange!.endDate ?? _selectedTableRange!.startDate;
+      tableEndDate = DateTime(
+        tableEndDate!.year,
+        tableEndDate.month,
+        tableEndDate.day,
+        23,
+        59,
+        59,
+      );
+    } else {
+      final now = DateTime.now();
+      switch (selectedTableDropdown) {
+        case 'Today':
+          tableStartDate = DateTime(now.year, now.month, now.day);
+          tableEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+          break;
+        case 'Yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          tableStartDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+          );
+          tableEndDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+          );
+          break;
+        case 'Last 7 Days':
+          tableStartDate = now.subtract(const Duration(days: 7));
+          tableEndDate = now;
+          break;
+        case 'Last 30 Days':
+          tableStartDate = now.subtract(const Duration(days: 30));
+          tableEndDate = now;
+          break;
+      }
+    }
+
+    if (tableStartDate != null && tableEndDate != null) {
+      tableLeads = tableLeads.where((l) {
+        final dateStr = l['createdAt'] ?? l['updatedAt'];
+        if (dateStr == null) return false;
+        try {
+          final date = DateTime.parse(dateStr).toLocal();
+          return date.isAfter(tableStartDate!) && date.isBefore(tableEndDate!);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+
+    final total = tableLeads.length;
     final totalPages = (total / _pageSize).ceil();
     final currentPage = _currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
     final startIndex = (currentPage - 1) * _pageSize;
@@ -1744,7 +1878,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
         : (startIndex + _pageSize);
     final paginatedLeads = total == 0
         ? <Map<String, dynamic>>[]
-        : widget.leads.sublist(startIndex, endIndex);
+        : tableLeads.sublist(startIndex, endIndex);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -1816,7 +1950,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
               setState(() {});
             },
           ),
-          _buildTableFooter(widget.isMobile, currentPage),
+          _buildTableFooter(widget.isMobile, currentPage, total),
         ],
       ),
     );
@@ -2064,8 +2198,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     );
   }
 
-  Widget _buildTableFooter(bool isMobile, int currentPage) {
-    final total = widget.leads.length;
+  Widget _buildTableFooter(bool isMobile, int currentPage, int total) {
     final start = total == 0 ? 0 : (currentPage - 1) * _pageSize + 1;
     final end = (currentPage * _pageSize) > total
         ? total
@@ -2105,7 +2238,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildPaginationControls(currentPage),
+                _buildPaginationControls(currentPage, total),
               ],
             )
           : Row(
@@ -2126,14 +2259,14 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                     _buildPageSizeSelector(),
                   ],
                 ),
-                _buildPaginationControls(currentPage),
+                _buildPaginationControls(currentPage, total),
               ],
             ),
     );
   }
 
-  Widget _buildPaginationControls(int currentPage) {
-    final int totalPages = (widget.leads.length / _pageSize).ceil();
+  Widget _buildPaginationControls(int currentPage, int total) {
+    final int totalPages = (total / _pageSize).ceil();
     final int displayPages = totalPages > 0 ? totalPages : 1;
 
     List<Widget> pageButtons = [];
@@ -2393,7 +2526,7 @@ class _LeadsTableState extends State<_LeadsTable> {
       const _LeadColumnConfig('Location', 14),
       const _LeadColumnConfig('Last Activity', 12),
       if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 14),
-      const _LeadColumnConfig('Lead Status', 14),
+      const _LeadColumnConfig('Status', 14),
       const _LeadColumnConfig('Source', 10, isCenter: true),
       const _LeadColumnConfig('Actions', 22, isCenter: true),
     ];
@@ -2828,7 +2961,7 @@ class _LeadRow extends StatelessWidget {
                               ),
                       ),
                     ),
-                  _statusCell(lead['leadStatus'] ?? 'prospect', flex: 1.4),
+                  _statusCell(lead['status'] ?? 'prospect', flex: 1.4),
                   Expanded(
                     flex: 10,
                     child: Center(

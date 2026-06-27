@@ -288,8 +288,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         address: u['address'] != null
             ? Map<String, dynamic>.from(u['address'])
             : null,
-        leadStatus: u['leadStatus'] ?? 'prospect',
-        leadNotes: u['leadNotes'] ?? '',
+        status: u['status'] ?? u['leadStatus'] ?? 'prospect',
+        notes: u['notes'] ?? u['leadNotes'] ?? '',
+        createdAt: u['createdAt'],
+        updatedAt: u['updatedAt'],
+        notesHistory: u['notesHistory'] != null ? List<Map<String, dynamic>>.from(u['notesHistory']) : [],
       );
     }).toList();
   }
@@ -308,6 +311,70 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   List<Dealer> _getFilteredDealers(DealersState state) {
     return _getallCalculatedDealers(state).where((dealer) {
+      // Date Filtering
+      DateTime? startDate;
+      DateTime? endDate;
+
+      if (state.selectedTimeframe == 'Custom Range' &&
+          state.customStartDate != null) {
+        startDate = state.customStartDate;
+        endDate = state.customEndDate ?? state.customStartDate;
+        endDate =
+            DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
+      } else if (state.selectedTimeframe != 'Custom Range' &&
+          state.selectedTimeframe.isNotEmpty) {
+        final now = DateTime.now();
+        endDate = now;
+        switch (state.selectedTimeframe) {
+          case 'Today':
+            startDate = DateTime(now.year, now.month, now.day);
+            break;
+          case 'Yesterday':
+            final yesterday = now.subtract(const Duration(days: 1));
+            startDate = DateTime(
+              yesterday.year,
+              yesterday.month,
+              yesterday.day,
+            );
+            endDate = DateTime(
+              yesterday.year,
+              yesterday.month,
+              yesterday.day,
+              23,
+              59,
+              59,
+            );
+            break;
+          case 'This Week':
+            startDate = now.subtract(Duration(days: now.weekday - 1));
+            startDate = DateTime(startDate.year, startDate.month, startDate.day);
+            break;
+          case 'Last Week':
+            startDate = now.subtract(Duration(days: now.weekday + 6));
+            startDate = DateTime(startDate.year, startDate.month, startDate.day);
+            endDate = startDate.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+            break;
+          case 'This Month':
+            startDate = DateTime(now.year, now.month, 1);
+            break;
+          case 'Last Month':
+            startDate = DateTime(now.year, now.month - 1, 1);
+            endDate = DateTime(now.year, now.month, 0, 23, 59, 59);
+            break;
+        }
+      }
+
+      if (startDate != null && endDate != null) {
+        final dateStr = dealer.createdAt ?? dealer.updatedAt;
+        if (dateStr == null) return false;
+        try {
+          final date = DateTime.parse(dateStr).toLocal();
+          if (date.isBefore(startDate) || date.isAfter(endDate)) return false;
+        } catch (e) {
+          return false;
+        }
+      }
+
       final query = state.searchQuery.toLowerCase();
       bool matchesSearch =
           dealer.name.toLowerCase().contains(query) ||
@@ -1983,6 +2050,7 @@ class _DealerTableState extends State<_DealerTable> {
       if (AuthService().isAdmin)
         const _DealerColumnConfig('Assigned Agent', 20),
       const _DealerColumnConfig('Source', 12, isCenter: true),
+      const _DealerColumnConfig('Status', 16),
       const _DealerColumnConfig('Orders', 12, isCenter: true),
       const _DealerColumnConfig('Purchase Value', 20, isCenter: true),
       const _DealerColumnConfig('Actions', 30, isCenter: true),
@@ -2411,6 +2479,7 @@ class _DealerRow extends StatelessWidget {
                       flex: 12,
                       child: Center(child: _SourceBadge(source: dealer.source)),
                     ),
+                    _statusCell(dealer.status ?? 'prospect', flex: 16),
                     _cell(
                       dealer.totalOrders.toString(),
                       flex: 12,

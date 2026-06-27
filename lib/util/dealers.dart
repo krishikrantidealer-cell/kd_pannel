@@ -22,8 +22,11 @@ class Dealer {
   final String? shopName;
   final Map<String, dynamic>? address;
   final bool isBlocked;
-  final String? leadStatus;
-  final String? leadNotes;
+  final String? status;
+  final String? notes;
+  final String? createdAt;
+  final String? updatedAt;
+  final List<Map<String, dynamic>> notesHistory;
 
   Dealer({
     required this.name,
@@ -49,8 +52,11 @@ class Dealer {
     this.shopName,
     this.address,
     this.isBlocked = false,
-    this.leadStatus = 'prospect',
-    this.leadNotes = '',
+    this.status = 'prospect',
+    this.notes = '',
+    this.createdAt,
+    this.updatedAt,
+    this.notesHistory = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -78,8 +84,11 @@ class Dealer {
       'shopName': shopName,
       'address': address,
       'isBlocked': isBlocked,
-      'leadStatus': leadStatus,
-      'leadNotes': leadNotes,
+      'status': status,
+      'notes': notes,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'notesHistory': notesHistory,
     };
   }
 
@@ -108,8 +117,11 @@ class Dealer {
       shopName: map['shopName'],
       address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
       isBlocked: map['isBlocked'] ?? false,
-      leadStatus: map['leadStatus'] ?? 'prospect',
-      leadNotes: map['leadNotes'] ?? '',
+      status: map['status'] ?? map['leadStatus'] ?? 'prospect',
+      notes: map['notes'] ?? map['leadNotes'] ?? '',
+      createdAt: map['createdAt'],
+      updatedAt: map['updatedAt'],
+      notesHistory: map['notesHistory'] != null ? List<Map<String, dynamic>>.from(map['notesHistory']) : [],
     );
   }
 }
