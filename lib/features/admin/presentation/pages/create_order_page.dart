@@ -73,17 +73,21 @@ double? _parseRateValue(String? rateStr) {
 }
 
 double _getVariantPrice(Map<String, dynamic> variant, int quantity) {
-  final double defaultPrice =
+  final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+  final double defaultPriceVal =
       ((variant['dealerPrice'] ?? variant['price'] ?? 0) as num).toDouble();
+  final double fallbackPrice = variant['dealerPrice'] != null
+      ? defaultPriceVal
+      : defaultPriceVal * packVolume;
+
   final priceTiers = variant['priceTiers'] as List?;
   final rates = variant['rates'] as Map?;
-  final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
 
   if (priceTiers == null ||
       priceTiers.isEmpty ||
       rates == null ||
       rates.isEmpty) {
-    return defaultPrice;
+    return fallbackPrice;
   }
 
   final double totalVolume = packVolume * quantity;
@@ -116,43 +120,24 @@ double _getVariantPrice(Map<String, dynamic> variant, int quantity) {
   }
 
   if (parsedTiers.isEmpty) {
-    return defaultPrice;
+    return fallbackPrice;
   }
 
+  // Sort by min descending (highest volume requirement first) to match backend logic
   parsedTiers.sort((a, b) {
     final aMin = a.min ?? 0.0;
     final bMin = b.min ?? 0.0;
-    return aMin.compareTo(bMin);
+    return bMin.compareTo(aMin);
   });
 
-  for (int i = 0; i < parsedTiers.length; i++) {
-    final tier = parsedTiers[i];
+  for (var tier in parsedTiers) {
     final min = tier.min;
-    final max = tier.max;
-
-    if (i == 0 && min != null && totalVolume < min) {
-      return defaultPrice;
-    }
-
-    if (min != null) {
-      if (max != null) {
-        if (totalVolume >= min && totalVolume < max) {
-          return tier.rate * packVolume;
-        }
-      } else {
-        if (totalVolume >= min) {
-          return tier.rate * packVolume;
-        }
-      }
+    if (min != null && totalVolume >= min) {
+      return tier.rate * packVolume;
     }
   }
 
-  final lastTier = parsedTiers.last;
-  if (lastTier.min != null && totalVolume >= lastTier.min!) {
-    return lastTier.rate * packVolume;
-  }
-
-  return defaultPrice;
+  return fallbackPrice;
 }
 
 class _CartItem {
