@@ -116,9 +116,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
     _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
       if (mounted && _leadsBloc != null) {
-        _leadsBloc!.add(
-          const FetchLeadsDataEvent(forceRefresh: true),
-        );
+        _leadsBloc!.add(const FetchLeadsDataEvent(forceRefresh: true));
       }
     });
   }
@@ -142,14 +140,22 @@ class _LeadsPageState extends State<LeadsPage> {
 
   Future<void> _editLead(Map<String, dynamic> lead) async {
     final nameController = TextEditingController(text: lead['name']);
-    final shopNameController = TextEditingController(text: lead['shopName'] ?? '');
+    final shopNameController = TextEditingController(
+      text: lead['shopName'] ?? '',
+    );
     final gstController = TextEditingController(text: lead['gstNumber'] ?? '');
     final phoneController = TextEditingController(text: lead['phone']);
-    final villageAreaController = TextEditingController(text: lead['villageArea'] ?? '');
-    final addressLine2Controller = TextEditingController(text: lead['addressLine2'] ?? '');
+    final villageAreaController = TextEditingController(
+      text: lead['villageArea'] ?? '',
+    );
+    final addressLine2Controller = TextEditingController(
+      text: lead['addressLine2'] ?? '',
+    );
     final cityController = TextEditingController(text: lead['city']);
     final stateController = TextEditingController(text: lead['state']);
-    final pincodeController = TextEditingController(text: lead['pincode'] ?? '');
+    final pincodeController = TextEditingController(
+      text: lead['pincode'] ?? '',
+    );
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -171,11 +177,21 @@ class _LeadsPageState extends State<LeadsPage> {
               const SizedBox(height: 12),
               _buildEditField('GST Number', gstController),
               const SizedBox(height: 12),
-              _buildEditField('Phone (Not Editable)', phoneController, readOnly: true),
+              _buildEditField(
+                'Phone (Not Editable)',
+                phoneController,
+                readOnly: true,
+              ),
               const SizedBox(height: 12),
-              _buildEditField('Village/Area (Address 1)', villageAreaController),
+              _buildEditField(
+                'Village/Area (Address 1)',
+                villageAreaController,
+              ),
               const SizedBox(height: 12),
-              _buildEditField('Address Line 2 (Optional)', addressLine2Controller),
+              _buildEditField(
+                'Address Line 2 (Optional)',
+                addressLine2Controller,
+              ),
               const SizedBox(height: 12),
               _buildEditField('City/Tehsil', cityController),
               const SizedBox(height: 12),
@@ -231,7 +247,11 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
-  Widget _buildEditField(String label, TextEditingController controller, {bool readOnly = false}) {
+  Widget _buildEditField(
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -288,7 +308,11 @@ class _LeadsPageState extends State<LeadsPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 28),
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.error,
+              size: 28,
+            ),
             const SizedBox(width: 12),
             Text(
               'Delete Record',
@@ -323,7 +347,9 @@ class _LeadsPageState extends State<LeadsPage> {
               backgroundColor: AppTheme.error,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
             child: Text(
@@ -375,12 +401,15 @@ class _LeadsPageState extends State<LeadsPage> {
           return true;
         })
         .map((u) {
-          final String personName = (u['firstName'] != null || u['lastName'] != null)
+          final String personName =
+              (u['firstName'] != null || u['lastName'] != null)
               ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
               : '';
           return {
             'id': u['_id'],
-            'name': personName.isNotEmpty ? personName : (u['phoneNumber'] ?? 'Unnamed Lead'),
+            'name': personName.isNotEmpty
+                ? personName
+                : (u['phoneNumber'] ?? 'Unnamed Lead'),
             'phone': u['phoneNumber'] ?? '',
             'shopName': u['shopName'] ?? '',
             'villageArea': u['address']?['villageArea'] ?? '',
@@ -585,7 +614,9 @@ class _LeadsPageState extends State<LeadsPage> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1220,7 +1251,9 @@ class _FilterChipItemState extends State<_FilterChipItem> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1662,7 +1695,9 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1772,7 +1807,9 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
             onEditLead: widget.onEditLead,
             onDeleteLead: widget.onDeleteLead,
             selectedLeadIds: _selectedLeadIds,
-            isSubmitting: context.read<LeadsBloc>().state.status == LeadsStatus.submitting,
+            isSubmitting:
+                context.read<LeadsBloc>().state.status ==
+                LeadsStatus.submitting,
             onSelectionChanged: () {
               setState(() {});
             },
@@ -1996,7 +2033,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                 fontWeight: FontWeight.w700,
               ),
               dropdownColor: Colors.white,
-              items: [10, 20, 30, 40, 50]
+              items: [10, 50, 100, 150, 200]
                   .map<DropdownMenuItem<int>>(
                     (int val) =>
                         DropdownMenuItem<int>(value: val, child: Text('$val')),
@@ -2311,7 +2348,9 @@ class _LeadsTableState extends State<_LeadsTable> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -2373,7 +2412,9 @@ class _LeadsTableState extends State<_LeadsTable> {
               child: LinearProgressIndicator(
                 minHeight: 2,
                 backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppTheme.primaryColor,
+                ),
               ),
             ),
           Row(
@@ -2534,7 +2575,9 @@ class _LeadRow extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -2765,7 +2808,8 @@ class _LeadRow extends StatelessWidget {
                                             child: Text(
                                               agentName.isNotEmpty
                                                   ? agentName
-                                                  : (agent['phoneNumber'] ?? ''),
+                                                  : (agent['phoneNumber'] ??
+                                                        ''),
                                               style: GoogleFonts.outfit(
                                                 fontSize: 12.5,
                                                 color: AppTheme.textPrimary,
@@ -2844,10 +2888,7 @@ class _ConnectedActionButtons extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({
-    required this.onEdit,
-    required this.onDelete,
-  });
+  const _ConnectedActionButtons({required this.onEdit, required this.onDelete});
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -2885,7 +2926,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3039,7 +3082,9 @@ class _HeaderText extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3125,7 +3170,9 @@ class _LeadsStatsGrid extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3307,7 +3354,9 @@ class _PageNumberButtonState extends State<_PageNumberButton> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3425,7 +3474,9 @@ class _PaginationButtonState extends State<_PaginationButton> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3532,7 +3583,9 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -3645,7 +3698,9 @@ class _SourceBadge extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),

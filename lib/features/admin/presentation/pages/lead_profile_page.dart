@@ -12,6 +12,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 
 class LeadProfilePage extends StatefulWidget {
   const LeadProfilePage({super.key});
@@ -1534,7 +1535,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      NavigationService.messengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text('Could not open link: $urlString'),
           backgroundColor: AppTheme.error,
@@ -1548,7 +1549,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     return BlocConsumer<LeadsBloc, LeadsState>(
       listener: (context, state) {
         if (state.errorMessage != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          NavigationService.messengerKey.currentState?.showSnackBar(
             SnackBar(
               content: Text(state.errorMessage!),
               backgroundColor: AppTheme.error,
@@ -1557,7 +1558,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
         }
         if (state.actionSuccessMessage != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          NavigationService.messengerKey.currentState?.showSnackBar(
             SnackBar(
               content: Text(state.actionSuccessMessage!),
               backgroundColor: AppTheme.success,
@@ -1964,7 +1965,7 @@ class _FlatHeaderSection extends StatelessWidget {
             final Uri url = Uri.parse(whatsappUrl);
             if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              NavigationService.messengerKey.currentState?.showSnackBar(
                 SnackBar(
                   content: Text(
                     'Could not open WhatsApp for number: ${lead['phone']}',

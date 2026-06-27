@@ -253,7 +253,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 .trim()
           : '-';
 
-      final String personName = (u['firstName'] != null || u['lastName'] != null)
+      final String personName =
+          (u['firstName'] != null || u['lastName'] != null)
           ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
           : '';
 
@@ -261,7 +262,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       final isInactiveDealer = totalOrdersCount == 0;
 
       return Dealer(
-        name: personName.isNotEmpty ? personName : (u['phoneNumber'] ?? 'Unnamed Dealer'),
+        name: personName.isNotEmpty
+            ? personName
+            : (u['phoneNumber'] ?? 'Unnamed Dealer'),
         phone: u['phoneNumber'] ?? '',
         city: u['address']?['cityTehsil'] ?? '',
         state: u['address']?['state'] ?? '',
@@ -453,17 +456,22 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   Future<void> _editDealer(Dealer dealer) async {
     final nameController = TextEditingController(text: dealer.name);
-    final shopNameController = TextEditingController(text: dealer.shopName ?? '');
+    final shopNameController = TextEditingController(
+      text: dealer.shopName ?? '',
+    );
     final gstController = TextEditingController(text: dealer.gstNumber ?? '');
     final phoneController = TextEditingController(text: dealer.phone);
-    final villageAreaController =
-        TextEditingController(text: dealer.address?['villageArea'] ?? '');
-    final addressLine2Controller =
-        TextEditingController(text: dealer.address?['addressLine2'] ?? '');
+    final villageAreaController = TextEditingController(
+      text: dealer.address?['villageArea'] ?? '',
+    );
+    final addressLine2Controller = TextEditingController(
+      text: dealer.address?['addressLine2'] ?? '',
+    );
     final cityController = TextEditingController(text: dealer.city);
     final stateController = TextEditingController(text: dealer.state);
-    final pincodeController =
-        TextEditingController(text: dealer.address?['pincode'] ?? '');
+    final pincodeController = TextEditingController(
+      text: dealer.address?['pincode'] ?? '',
+    );
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -634,7 +642,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1411,20 +1421,35 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         ? <Dealer>[]
         : filtered.sublist(startIndex, endIndex);
 
-    return _DealerTable(
-      dealers: dealersToShow,
-      isMobile: isMobile,
-      salesAgents: state.salesAgents,
-      onAssignAgent: (userId, agentId) {
-        _dealersBloc?.add(
-          AssignAgentToDealerEvent(userId: userId, agentId: agentId),
-        );
-      },
-      onEditDealer: _editDealer,
-      onDeleteDealer: _deleteDealer,
-      selectedDealerIds: _selectedDealerIds,
-      isSubmitting: state.status == DealersStatus.submitting,
-      onSelectionChanged: () => setState(() {}),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DealerTable(
+            dealers: dealersToShow,
+            isMobile: isMobile,
+            salesAgents: state.salesAgents,
+            onAssignAgent: (userId, agentId) {
+              _dealersBloc?.add(
+                AssignAgentToDealerEvent(userId: userId, agentId: agentId),
+              );
+            },
+            onEditDealer: _editDealer,
+            onDeleteDealer: _deleteDealer,
+            selectedDealerIds: _selectedDealerIds,
+            isSubmitting: state.status == DealersStatus.submitting,
+            onSelectionChanged: () => setState(() {}),
+          ),
+          _buildTableFooter(context, state, isMobile),
+        ],
+      ),
     );
   }
 
@@ -1523,7 +1548,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 fontWeight: FontWeight.w700,
               ),
               dropdownColor: Colors.white,
-              items: [10, 20, 30, 40, 50]
+              items: [10, 50, 100, 150, 200]
                   .map<DropdownMenuItem<int>>(
                     (int val) =>
                         DropdownMenuItem<int>(value: val, child: Text('$val')),
@@ -1912,7 +1937,9 @@ class _DealerTableState extends State<_DealerTable> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -1951,7 +1978,8 @@ class _DealerTableState extends State<_DealerTable> {
       const _DealerColumnConfig('Dealer Name', 20),
       const _DealerColumnConfig('Phone Number', 20),
       const _DealerColumnConfig('Location', 20),
-      if (AuthService().isAdmin) const _DealerColumnConfig('Assigned Agent', 20),
+      if (AuthService().isAdmin)
+        const _DealerColumnConfig('Assigned Agent', 20),
       const _DealerColumnConfig('Source', 12, isCenter: true),
       const _DealerColumnConfig('Orders', 12, isCenter: true),
       const _DealerColumnConfig('Purchase Value', 20, isCenter: true),
@@ -1975,7 +2003,9 @@ class _DealerTableState extends State<_DealerTable> {
               child: LinearProgressIndicator(
                 minHeight: 2,
                 backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppTheme.primaryColor,
+                ),
               ),
             ),
           Row(
@@ -2071,7 +2101,8 @@ class _DealerTableState extends State<_DealerTable> {
                           }
                         },
                         onEdit: () => widget.onEditDealer(dealer),
-                        onDelete: () => widget.onDeleteDealer(dealerId, dealer.name),
+                        onDelete: () =>
+                            widget.onDeleteDealer(dealerId, dealer.name),
                       );
                     }),
                   ],
@@ -2145,7 +2176,9 @@ class _DealerRow extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -2280,8 +2313,8 @@ class _DealerRow extends StatelessWidget {
                       (dealer.city.isNotEmpty && dealer.state.isNotEmpty)
                           ? '${dealer.city}, ${dealer.state}'
                           : (dealer.city.isNotEmpty
-                              ? dealer.city
-                              : dealer.state),
+                                ? dealer.city
+                                : dealer.state),
                       flex: 20,
                       isSecondary: true,
                     ),
@@ -2309,9 +2342,11 @@ class _DealerRow extends StatelessWidget {
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  value: salesAgents.any(
-                                    (agent) => agent['_id'] == dealer.agentId,
-                                  )
+                                  value:
+                                      salesAgents.any(
+                                        (agent) =>
+                                            agent['_id'] == dealer.agentId,
+                                      )
                                       ? dealer.agentId
                                       : null,
                                   isExpanded: true,
@@ -2372,9 +2407,7 @@ class _DealerRow extends StatelessWidget {
                       ),
                     Expanded(
                       flex: 12,
-                      child: Center(
-                        child: _SourceBadge(source: dealer.source),
-                      ),
+                      child: Center(child: _SourceBadge(source: dealer.source)),
                     ),
                     _cell(
                       dealer.totalOrders.toString(),
@@ -2545,7 +2578,9 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -2597,15 +2632,15 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
             color: widget.isSelected
                 ? AppTheme.primaryColor
                 : (isHovered
-                    ? AppTheme.primaryColor.withValues(alpha: 0.05)
-                    : Colors.white),
+                      ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                      : Colors.white),
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
               color: widget.isSelected
                   ? AppTheme.primaryColor
                   : (isHovered
-                      ? AppTheme.primaryColor.withValues(alpha: 0.5)
-                      : AppTheme.borderColor),
+                        ? AppTheme.primaryColor.withValues(alpha: 0.5)
+                        : AppTheme.borderColor),
               width: 1.5,
             ),
           ),
@@ -2622,10 +2657,7 @@ class _ConnectedActionButtons extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({
-    required this.onEdit,
-    required this.onDelete,
-  });
+  const _ConnectedActionButtons({required this.onEdit, required this.onDelete});
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -2663,7 +2695,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -2736,8 +2770,9 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
                         style: GoogleFonts.outfit(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color:
-                              isEditHovered ? Colors.white : AppTheme.textPrimary,
+                          color: isEditHovered
+                              ? Colors.white
+                              : AppTheme.textPrimary,
                         ),
                       ),
                     ],
@@ -2816,7 +2851,9 @@ class _SourceBadge extends StatelessWidget {
                 (index) => Expanded(
                   child: Container(
                     height: 100,
-                    margin: EdgeInsets.only(right: index == (isDesktop ? 3 : 1) ? 0 : 12),
+                    margin: EdgeInsets.only(
+                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
