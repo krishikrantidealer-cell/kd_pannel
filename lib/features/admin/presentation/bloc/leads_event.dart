@@ -132,3 +132,35 @@ class UpdateLeadDetailsEvent extends LeadsEvent {
   @override
   List<Object?> get props => [userId, updateData];
 }
+
+class AdminSubmitKycEvent extends LeadsEvent {
+  final String userId;
+  final String userType;
+  final String shopName;
+  final String? gstNumber;
+  final List<int> licenceImageBytes;
+  final String licenceFileName;
+  final List<int> shopImageBytes;
+  final String shopFileName;
+
+  const AdminSubmitKycEvent({
+    required this.userId,
+    required this.userType,
+    required this.shopName,
+    this.gstNumber,
+    required this.licenceImageBytes,
+    required this.licenceFileName,
+    required this.shopImageBytes,
+    required this.shopFileName,
+  });
+
+  @override
+  List<Object?> get props => [
+        userId,
+        userType,
+        shopName,
+        gstNumber,
+        licenceFileName,
+        shopFileName,
+      ];
+}

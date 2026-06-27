@@ -432,6 +432,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     final nameController = TextEditingController(text: _dealer!.name);
     final shopNameController =
         TextEditingController(text: _dealer!.shopName ?? '');
+    final gstController = TextEditingController(text: _dealer!.gstNumber ?? '');
     final phoneController = TextEditingController(text: _dealer!.phone);
     final villageAreaController =
         TextEditingController(text: _dealer!.address?['villageArea'] ?? '');
@@ -459,6 +460,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               _buildEditField('Name', nameController),
               const SizedBox(height: 12),
               _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField('GST Number', gstController),
               const SizedBox(height: 12),
               _buildEditField(
                 'Phone (Not Editable)',
@@ -514,6 +517,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             'firstName': firstName,
             'lastName': lastName,
             'shopName': shopNameController.text.trim(),
+            'gstNumber': gstController.text.trim(),
             'phoneNumber': phoneController.text.trim(),
             'address': {
               'villageArea': villageAreaController.text.trim(),

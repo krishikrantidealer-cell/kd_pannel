@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'leads_event.dart';
 import 'leads_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   LeadsBloc() : super(const LeadsState()) {
@@ -17,6 +19,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<ToggleBlockLeadEvent>(_onToggleBlockLead);
     on<DeleteLeadEvent>(_onDeleteLead);
     on<UpdateLeadDetailsEvent>(_onUpdateLeadDetails);
+    on<AdminSubmitKycEvent>(_onAdminSubmitKyc);
   }
 
   Future<void> _onFetchLeadsData(
@@ -416,6 +419,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         updatedUser['firstName'] = event.updateData['firstName'];
         updatedUser['lastName'] = event.updateData['lastName'];
         updatedUser['shopName'] = event.updateData['shopName'];
+        updatedUser['gstNumber'] = event.updateData['gstNumber'];
         if (event.updateData.containsKey('address')) {
           final existingAddress = Map<String, dynamic>.from(updatedUser['address'] ?? {});
           updatedUser['address'] = {...existingAddress, ...event.updateData['address']};
@@ -455,6 +459,79 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       ));
       // Trigger a refresh to revert to server state on failure
       add(const FetchLeadsDataEvent(forceRefresh: true));
+    }
+  }
+
+  Future<void> _onAdminSubmitKyc(
+    AdminSubmitKycEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(status: LeadsStatus.submitting));
+    try {
+      final client = ApiClient();
+      final res = await client.multipartRequest(
+        method: 'POST',
+        endpoint: '/users/${event.userId}/kyc',
+        fields: {
+          'userType': event.userType,
+          'shopName': event.shopName,
+          'gstNumber': event.gstNumber ?? '',
+        },
+        filesBuilder: () => [
+          http.MultipartFile.fromBytes(
+            'licenceImage',
+            event.licenceImageBytes,
+            filename: event.licenceFileName,
+            contentType: _getMediaType(event.licenceFileName),
+          ),
+          http.MultipartFile.fromBytes(
+            'shopImage',
+            event.shopImageBytes,
+            filename: event.shopFileName,
+            contentType: _getMediaType(event.shopFileName),
+          ),
+        ],
+      );
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWith(
+            status: LeadsStatus.success,
+            actionSuccessMessage: 'KYC documents uploaded successfully',
+          ));
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to upload KYC');
+        }
+      } else {
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Server error: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWithKeepMessages(
+        status: LeadsStatus.success,
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  MediaType _getMediaType(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'png':
+        return MediaType('image', 'png');
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'webp':
+        return MediaType('image', 'webp');
+      case 'pdf':
+        return MediaType('application', 'pdf');
+      default:
+        return MediaType('application', 'octet-stream');
     }
   }
 }

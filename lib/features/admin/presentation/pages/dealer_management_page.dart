@@ -454,6 +454,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   Future<void> _editDealer(Dealer dealer) async {
     final nameController = TextEditingController(text: dealer.name);
     final shopNameController = TextEditingController(text: dealer.shopName ?? '');
+    final gstController = TextEditingController(text: dealer.gstNumber ?? '');
     final phoneController = TextEditingController(text: dealer.phone);
     final villageAreaController =
         TextEditingController(text: dealer.address?['villageArea'] ?? '');
@@ -481,6 +482,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
               _buildEditField('Name', nameController),
               const SizedBox(height: 12),
               _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField('GST Number', gstController),
               const SizedBox(height: 12),
               _buildEditField(
                 'Phone (Not Editable)',
@@ -536,6 +539,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             'firstName': firstName,
             'lastName': lastName,
             'shopName': shopNameController.text.trim(),
+            'gstNumber': gstController.text.trim(),
             'phoneNumber': phoneController.text.trim(),
             'address': {
               'villageArea': villageAreaController.text.trim(),

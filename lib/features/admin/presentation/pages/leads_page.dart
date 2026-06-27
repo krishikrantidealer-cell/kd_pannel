@@ -143,6 +143,7 @@ class _LeadsPageState extends State<LeadsPage> {
   Future<void> _editLead(Map<String, dynamic> lead) async {
     final nameController = TextEditingController(text: lead['name']);
     final shopNameController = TextEditingController(text: lead['shopName'] ?? '');
+    final gstController = TextEditingController(text: lead['gstNumber'] ?? '');
     final phoneController = TextEditingController(text: lead['phone']);
     final villageAreaController = TextEditingController(text: lead['villageArea'] ?? '');
     final addressLine2Controller = TextEditingController(text: lead['addressLine2'] ?? '');
@@ -167,6 +168,8 @@ class _LeadsPageState extends State<LeadsPage> {
               _buildEditField('Name', nameController),
               const SizedBox(height: 12),
               _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField('GST Number', gstController),
               const SizedBox(height: 12),
               _buildEditField('Phone (Not Editable)', phoneController, readOnly: true),
               const SizedBox(height: 12),
@@ -212,6 +215,7 @@ class _LeadsPageState extends State<LeadsPage> {
             'firstName': firstName,
             'lastName': lastName,
             'shopName': shopNameController.text.trim(),
+            'gstNumber': gstController.text.trim(),
             'phoneNumber': phoneController.text.trim(),
             'address': {
               'villageArea': villageAreaController.text.trim(),

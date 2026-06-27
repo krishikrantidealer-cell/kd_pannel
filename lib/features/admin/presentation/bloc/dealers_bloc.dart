@@ -347,6 +347,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         updatedUser['firstName'] = event.updateData['firstName'];
         updatedUser['lastName'] = event.updateData['lastName'];
         updatedUser['shopName'] = event.updateData['shopName'];
+        updatedUser['gstNumber'] = event.updateData['gstNumber'];
         if (event.updateData.containsKey('address')) {
           final existingAddress =
               Map<String, dynamic>.from(updatedUser['address'] ?? {});

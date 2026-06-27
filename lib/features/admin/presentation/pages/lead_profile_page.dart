@@ -5,6 +5,7 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
@@ -160,6 +161,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     final nameController = TextEditingController(text: _lead!['name']);
     final shopNameController =
         TextEditingController(text: _lead!['shopName'] ?? '');
+    final gstController = TextEditingController(text: _lead!['gstNumber'] ?? '');
     final phoneController = TextEditingController(text: _lead!['phone']);
     final villageAreaController =
         TextEditingController(text: _lead!['villageArea'] ?? '');
@@ -187,6 +189,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
               _buildEditField('Name', nameController),
               const SizedBox(height: 12),
               _buildEditField('Shop Name', shopNameController),
+              const SizedBox(height: 12),
+              _buildEditField('GST Number', gstController),
               const SizedBox(height: 12),
               _buildEditField(
                 'Phone (Not Editable)',
@@ -236,6 +240,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
             'firstName': firstName,
             'lastName': lastName,
             'shopName': shopNameController.text.trim(),
+            'gstNumber': gstController.text.trim(),
             'phoneNumber': phoneController.text.trim(),
             'address': {
               'villageArea': villageAreaController.text.trim(),
@@ -1353,6 +1358,178 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     }
   }
 
+  void _showUploadKycDialog() {
+    final shopNameController = TextEditingController(text: _lead!['shopName'] ?? '');
+    final gstController = TextEditingController(text: _lead!['gstNumber'] ?? '');
+    String selectedUserType = 'Retailer and Distributor';
+    
+    PlatformFile? licenceFile;
+    PlatformFile? shopFile;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          title: Text(
+            'Upload KYC Documents',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildEditField('Shop Name', shopNameController),
+                const SizedBox(height: 12),
+                _buildEditField('GST Number (Optional)', gstController),
+                const SizedBox(height: 12),
+                Text(
+                  'User Type',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: selectedUserType,
+                      items: ['Retailer and Distributor']
+                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (val) => setStateDialog(() => selectedUserType = val!),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildFilePicker(
+                  'GST Certificate / Licence',
+                  licenceFile,
+                  () async {
+                    final res = await FilePicker.pickFiles(
+                      type: FileType.image,
+                      withData: true,
+                    );
+                    if (res != null) {
+                      setStateDialog(() => licenceFile = res.files.first);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildFilePicker(
+                  'Shop Exterior Image',
+                  shopFile,
+                  () async {
+                    final res = await FilePicker.pickFiles(
+                      type: FileType.image,
+                      withData: true,
+                    );
+                    if (res != null) {
+                      setStateDialog(() => shopFile = res.files.first);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: (licenceFile == null || shopFile == null || shopNameController.text.trim().isEmpty)
+                  ? null
+                  : () {
+                      context.read<LeadsBloc>().add(
+                            AdminSubmitKycEvent(
+                              userId: _lead!['id'] ?? _lead!['_id'],
+                              userType: selectedUserType,
+                              shopName: shopNameController.text.trim(),
+                              gstNumber: gstController.text.trim(),
+                              licenceImageBytes: licenceFile!.bytes!.toList(),
+                              licenceFileName: licenceFile!.name,
+                              shopImageBytes: shopFile!.bytes!.toList(),
+                              shopFileName: shopFile!.name,
+                            ),
+                          );
+                      Navigator.pop(context);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Submit KYC'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilePicker(String label, PlatformFile? file, VoidCallback onTap) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: file != null ? AppTheme.success : AppTheme.borderColor,
+                style: file != null ? BorderStyle.solid : BorderStyle.solid,
+              ),
+              color: file != null ? AppTheme.success.withOpacity(0.05) : Colors.white,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  file != null ? Icons.check_circle_outline : Icons.upload_file,
+                  size: 20,
+                  color: file != null ? AppTheme.success : AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    file?.name ?? 'Click to select image',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: file != null ? AppTheme.success : AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -1502,6 +1679,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                   child: _DealerKycDocumentsCard(
                                     lead: currentLead,
                                     onViewDocument: _launchUrl,
+                                    onUpload: _showUploadKycDialog,
                                     isVertical: true,
                                   ),
                                 ),
@@ -1518,6 +1696,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                           _DealerKycDocumentsCard(
                             lead: currentLead,
                             onViewDocument: _launchUrl,
+                            onUpload: _showUploadKycDialog,
                           ),
                         ],
                       ],
@@ -2237,11 +2416,13 @@ Widget _buildDividerRow() => const Divider(height: 1, color: Color(0xFFF1F5F9));
 class _DealerKycDocumentsCard extends StatelessWidget {
   final Map<String, dynamic> lead;
   final Function(String url) onViewDocument;
+  final VoidCallback onUpload;
   final bool isVertical;
 
   const _DealerKycDocumentsCard({
     required this.lead,
     required this.onViewDocument,
+    required this.onUpload,
     this.isVertical = false,
   });
 
@@ -2253,6 +2434,7 @@ class _DealerKycDocumentsCard extends StatelessWidget {
         lead['licenceImage'].toString().isNotEmpty;
     final hasShopImage =
         lead['shopImage'] != null && lead['shopImage'].toString().isNotEmpty;
+    final hasBoth = hasLicence && hasShopImage;
 
     return Container(
       padding: EdgeInsets.all(isMobile ? 16 : 20),
@@ -2264,13 +2446,28 @@ class _DealerKycDocumentsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'KYC Documents',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF111827),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'KYC Documents',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+              if (!hasBoth)
+                TextButton.icon(
+                  onPressed: onUpload,
+                  icon: const Icon(Icons.upload_rounded, size: 16),
+                  label: const Text('Upload Documents'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           if (isMobile || isVertical)
