@@ -155,7 +155,15 @@ class _CartItem {
 
   double get lineTotal => price * quantity;
 
-  double get price => priceOverride ?? _getVariantPrice(variant, quantity);
+  double get price {
+    if (priceOverride != null) {
+      final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+      return variant['dealerPrice'] != null
+          ? priceOverride!
+          : priceOverride! * packVolume;
+    }
+    return _getVariantPrice(variant, quantity);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,8 @@ class Dealer {
   final String? shopName;
   final Map<String, dynamic>? address;
   final bool isBlocked;
+  final String? leadStatus;
+  final String? leadNotes;
 
   Dealer({
     required this.name,
@@ -47,6 +49,8 @@ class Dealer {
     this.shopName,
     this.address,
     this.isBlocked = false,
+    this.leadStatus = 'prospect',
+    this.leadNotes = '',
   });
 
   Map<String, dynamic> toMap() {
@@ -74,6 +78,8 @@ class Dealer {
       'shopName': shopName,
       'address': address,
       'isBlocked': isBlocked,
+      'leadStatus': leadStatus,
+      'leadNotes': leadNotes,
     };
   }
 
@@ -102,6 +108,8 @@ class Dealer {
       shopName: map['shopName'],
       address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
       isBlocked: map['isBlocked'] ?? false,
+      leadStatus: map['leadStatus'] ?? 'prospect',
+      leadNotes: map['leadNotes'] ?? '',
     );
   }
 }

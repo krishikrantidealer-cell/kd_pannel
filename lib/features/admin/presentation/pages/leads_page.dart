@@ -435,6 +435,8 @@ class _LeadsPageState extends State<LeadsPage> {
             'userType': u['userType'] ?? '',
             'licenceImage': u['licenceImage'] ?? '',
             'shopImage': u['shopImage'] ?? '',
+            'leadStatus': u['leadStatus'] ?? 'prospect',
+            'leadNotes': u['leadNotes'] ?? '',
           };
         })
         .toList();
@@ -2391,6 +2393,7 @@ class _LeadsTableState extends State<_LeadsTable> {
       const _LeadColumnConfig('Location', 14),
       const _LeadColumnConfig('Last Activity', 12),
       if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 14),
+      const _LeadColumnConfig('Lead Status', 14),
       const _LeadColumnConfig('Source', 10, isCenter: true),
       const _LeadColumnConfig('Actions', 22, isCenter: true),
     ];
@@ -2448,8 +2451,8 @@ class _LeadsTableState extends State<_LeadsTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double minTableWidth = widget.isMobile
-            ? 1200.0
-            : (AuthService().isAdmin ? 1100.0 : 900.0);
+            ? 1500.0
+            : (AuthService().isAdmin ? 1360.0 : 1160.0);
         // Guard against infinite constraints which occur on first layout
         // when this LayoutBuilder sits inside a horizontal SingleChildScrollView.
         // In that case, fall back to minTableWidth so rows have a known width.
@@ -2825,6 +2828,7 @@ class _LeadRow extends StatelessWidget {
                               ),
                       ),
                     ),
+                  _statusCell(lead['leadStatus'] ?? 'prospect', flex: 1.4),
                   Expanded(
                     flex: 10,
                     child: Center(
@@ -2849,6 +2853,73 @@ class _LeadRow extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusCell(String status, {double flex = 1.0}) {
+    Color color = Colors.grey;
+    switch (status.toLowerCase()) {
+      case 'kyc pending':
+        color = Colors.amber;
+        break;
+      case 'call not picked':
+        color = Colors.orange;
+        break;
+      case 'connected but not intrested':
+        color = Colors.blueGrey;
+        break;
+      case 'quotation sent':
+        color = Colors.blue;
+        break;
+      case 'negotiation':
+        color = Colors.indigo;
+        break;
+      case 'follow-up':
+        color = Colors.deepPurple;
+        break;
+      case 'lost':
+        color = Colors.red;
+        break;
+      case 'intrested':
+        color = Colors.green;
+        break;
+      case 'customer busy':
+        color = Colors.teal;
+        break;
+      case 'call switch off':
+        color = Colors.redAccent;
+        break;
+      case 'prospect':
+        color = Colors.cyan;
+        break;
+    }
+
+    return Expanded(
+      flex: (flex * 10).toInt(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
+            ),
+            child: Text(
+              status.toUpperCase(),
+              style: GoogleFonts.outfit(
+                fontSize: 10.5,
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
       ),

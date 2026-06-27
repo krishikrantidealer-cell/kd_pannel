@@ -288,6 +288,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         address: u['address'] != null
             ? Map<String, dynamic>.from(u['address'])
             : null,
+        leadStatus: u['leadStatus'] ?? 'prospect',
+        leadNotes: u['leadNotes'] ?? '',
       );
     }).toList();
   }
@@ -2039,8 +2041,8 @@ class _DealerTableState extends State<_DealerTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double minTableWidth = widget.isMobile
-            ? 1200.0
-            : (AuthService().isAdmin ? 1100.0 : 900.0);
+            ? 1300.0
+            : (AuthService().isAdmin ? 1220.0 : 1020.0);
         final double safeMaxWidth = constraints.maxWidth.isInfinite
             ? minTableWidth
             : constraints.maxWidth;
@@ -2524,6 +2526,73 @@ class _DealerRow extends StatelessWidget {
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _statusCell(String status, {int flex = 1}) {
+    Color color = Colors.grey;
+    switch (status.toLowerCase()) {
+      case 'kyc pending':
+        color = Colors.amber;
+        break;
+      case 'call not picked':
+        color = Colors.orange;
+        break;
+      case 'connected but not intrested':
+        color = Colors.blueGrey;
+        break;
+      case 'quotation sent':
+        color = Colors.blue;
+        break;
+      case 'negotiation':
+        color = Colors.indigo;
+        break;
+      case 'follow-up':
+        color = Colors.deepPurple;
+        break;
+      case 'lost':
+        color = Colors.red;
+        break;
+      case 'intrested':
+        color = Colors.green;
+        break;
+      case 'customer busy':
+        color = Colors.teal;
+        break;
+      case 'call switch off':
+        color = Colors.redAccent;
+        break;
+      case 'prospect':
+        color = Colors.cyan;
+        break;
+    }
+
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
+            ),
+            child: Text(
+              status.toUpperCase(),
+              style: GoogleFonts.outfit(
+                fontSize: 10.5,
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
       ),
     );

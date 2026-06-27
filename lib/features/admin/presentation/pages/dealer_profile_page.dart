@@ -7,6 +7,7 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/create_order_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/util/dealers.dart';
@@ -128,6 +129,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   ? Map<String, dynamic>.from(freshUser['address'])
                   : null,
               isBlocked: freshUser['isBlocked'] ?? false,
+              leadStatus: freshUser['leadStatus'] ?? 'prospect',
+              leadNotes: freshUser['leadNotes'] ?? '',
             );
 
             if (mounted) {
@@ -637,6 +640,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       kycStatus: _dealer!.kycStatus,
       address: _dealer!.address,
       isBlocked: _dealer!.isBlocked,
+      leadStatus: _dealer!.leadStatus,
+      leadNotes: _dealer!.leadNotes,
     );
 
     return SelectionArea(
@@ -684,7 +689,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   const SizedBox(height: 24),
 
                   // 4. INFORMATION & DOCUMENTS ROW
-                  if (!isMobile)
+                  if (!isMobile) ...[
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -708,8 +713,15 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                           ),
                         ],
                       ),
-                    )
-                  else ...[
+                    ),
+                    const SizedBox(height: 24),
+                    _DealerStatusAndNotesCard(
+                      dealerId: currentDealer.id!,
+                      initialStatus: currentDealer.leadStatus ?? 'prospect',
+                      initialNotes: currentDealer.leadNotes ?? '',
+                      isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
+                    ),
+                  ] else ...[
                     _DealerInformationCard(
                       dealer: currentDealer,
                       salesAgents: _salesAgents,
@@ -720,6 +732,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                     _DealerKycDocumentsCard(
                       dealer: currentDealer,
                       onViewDocument: _launchUrl,
+                    ),
+                    const SizedBox(height: 24),
+                    _DealerStatusAndNotesCard(
+                      dealerId: currentDealer.id!,
+                      initialStatus: currentDealer.leadStatus ?? 'prospect',
+                      initialNotes: currentDealer.leadNotes ?? '',
+                      isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -2305,6 +2324,259 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
           fontWeight: FontWeight.w700,
           color: color,
         ),
+      ),
+    );
+  }
+}
+
+class _DealerStatusAndNotesCard extends StatefulWidget {
+  final String dealerId;
+  final String initialStatus;
+  final String initialNotes;
+  final bool isSubmitting;
+
+  const _DealerStatusAndNotesCard({
+    required this.dealerId,
+    required this.initialStatus,
+    required this.initialNotes,
+    required this.isSubmitting,
+  });
+
+  @override
+  State<_DealerStatusAndNotesCard> createState() => _DealerStatusAndNotesCardState();
+}
+
+class _DealerStatusAndNotesCardState extends State<_DealerStatusAndNotesCard> {
+  late String _selectedStatus;
+  late TextEditingController _notesController;
+  final FocusNode _notesFocusNode = FocusNode();
+  bool _hasChanges = false;
+
+  final List<String> _statusOptions = [
+    'kyc pending',
+    'call not picked',
+    'connected but not intrested',
+    'quotation sent',
+    'negotiation',
+    'follow-up',
+    'lost',
+    'intrested',
+    'customer busy',
+    'call switch off',
+    'prospect'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedStatus = widget.initialStatus.toLowerCase();
+    if (!_statusOptions.contains(_selectedStatus)) {
+      _selectedStatus = 'prospect';
+    }
+    _notesController = TextEditingController(text: widget.initialNotes);
+    _notesController.addListener(_checkForChanges);
+  }
+
+  @override
+  void didUpdateWidget(_DealerStatusAndNotesCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dealerId != widget.dealerId) {
+      _selectedStatus = widget.initialStatus.toLowerCase();
+      if (!_statusOptions.contains(_selectedStatus)) {
+        _selectedStatus = 'prospect';
+      }
+      _notesController.text = widget.initialNotes;
+      _hasChanges = false;
+    } else {
+      if (oldWidget.initialStatus != widget.initialStatus && !_notesFocusNode.hasFocus) {
+        _selectedStatus = widget.initialStatus.toLowerCase();
+        if (!_statusOptions.contains(_selectedStatus)) {
+          _selectedStatus = 'prospect';
+        }
+      }
+      if (oldWidget.initialNotes != widget.initialNotes && !_notesFocusNode.hasFocus) {
+        _notesController.text = widget.initialNotes;
+        _hasChanges = false;
+      }
+    }
+  }
+
+  void _checkForChanges() {
+    final bool changed = _selectedStatus != widget.initialStatus.toLowerCase() ||
+        _notesController.text != widget.initialNotes;
+    if (changed != _hasChanges) {
+      setState(() {
+        _hasChanges = changed;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    _notesFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    _notesFocusNode.unfocus();
+    context.read<DealersBloc>().add(
+      UpdateDealerDetailsEvent(
+        userId: widget.dealerId,
+        updateData: {
+          'leadStatus': _selectedStatus,
+          'leadNotes': _notesController.text.trim(),
+        },
+      ),
+    );
+    setState(() {
+      _hasChanges = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Lead Status & Notes',
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+              if (_hasChanges)
+                ElevatedButton.icon(
+                  onPressed: widget.isSubmitting ? null : _save,
+                  icon: widget.isSubmitting
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined, size: 14),
+                  label: const Text('Save'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    textStyle: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Lead Status',
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedStatus,
+                isExpanded: true,
+                icon: const Icon(Icons.arrow_drop_down, color: AppTheme.textSecondary),
+                items: _statusOptions.map((status) {
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Text(
+                      status.toUpperCase(),
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  );
+                }).toList(),
+                onChanged: widget.isSubmitting
+                    ? null
+                    : (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedStatus = val;
+                            _checkForChanges();
+                          });
+                        }
+                      },
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Detailed Notes',
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _notesController,
+            focusNode: _notesFocusNode,
+            maxLines: 4,
+            minLines: 2,
+            enabled: !widget.isSubmitting,
+            style: GoogleFonts.outfit(
+              fontSize: 13.5,
+              color: AppTheme.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Enter detailed follow-up notes here...',
+              hintStyle: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textSecondary.withOpacity(0.7),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppTheme.borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppTheme.borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

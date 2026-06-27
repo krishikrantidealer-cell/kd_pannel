@@ -344,10 +344,24 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     final updatedUsers = state.allRawUsers.map((u) {
       if (u['_id'] == event.userId || u['id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
-        updatedUser['firstName'] = event.updateData['firstName'];
-        updatedUser['lastName'] = event.updateData['lastName'];
-        updatedUser['shopName'] = event.updateData['shopName'];
-        updatedUser['gstNumber'] = event.updateData['gstNumber'];
+        if (event.updateData.containsKey('firstName')) {
+          updatedUser['firstName'] = event.updateData['firstName'];
+        }
+        if (event.updateData.containsKey('lastName')) {
+          updatedUser['lastName'] = event.updateData['lastName'];
+        }
+        if (event.updateData.containsKey('shopName')) {
+          updatedUser['shopName'] = event.updateData['shopName'];
+        }
+        if (event.updateData.containsKey('gstNumber')) {
+          updatedUser['gstNumber'] = event.updateData['gstNumber'];
+        }
+        if (event.updateData.containsKey('leadStatus')) {
+          updatedUser['leadStatus'] = event.updateData['leadStatus'];
+        }
+        if (event.updateData.containsKey('leadNotes')) {
+          updatedUser['leadNotes'] = event.updateData['leadNotes'];
+        }
         if (event.updateData.containsKey('address')) {
           final existingAddress =
               Map<String, dynamic>.from(updatedUser['address'] ?? {});
