@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 enum UserRole { admin, sales }
 
@@ -82,6 +83,14 @@ class AuthService {
             print('[AuthService] Login failed: $_lastError');
             return false;
           }
+
+          // Log success to DB event tracking
+          AnalyticsService().logEvent('login_success', properties: {
+            'email': userEmailStr,
+            'role': userRoleStr,
+            'details': 'User authenticated successfully',
+          });
+
           return true;
         }
       }

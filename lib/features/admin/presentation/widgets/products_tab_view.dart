@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/create_product_page.dart';
@@ -12,6 +11,7 @@ import 'package:animations/animations.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class ProductsTabView extends StatefulWidget {
   final List<Map<String, dynamic>> products;
@@ -102,6 +102,16 @@ class _ProductsTabViewState extends State<ProductsTabView> {
         _lastSubCategory == _selectedSubCategory &&
         _lastAvailability == _selectedAvailability) {
       return _cachedFilteredProducts;
+    }
+
+    // Track search event if query has changed
+    if (_searchQuery.isNotEmpty && _lastSearchQuery != _searchQuery) {
+      AnalyticsService().logEvent('product_search', properties: {
+        'query': _searchQuery,
+        'category': _selectedCategory,
+        'subCategory': _selectedSubCategory,
+        'details': 'Searched products for "${_searchQuery}"',
+      });
     }
 
     _lastProducts = widget.products;

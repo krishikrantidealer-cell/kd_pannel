@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 // ---------------------------------------------------------------------------
 // Sales Agent – My Price-Override Coupons Page
@@ -676,6 +677,14 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
       final data = jsonDecode(res.body);
       
       if ((res.statusCode == 200 || res.statusCode == 201) && data['success'] == true) {
+        // Track coupon created
+        final couponData = data['coupon'] ?? {};
+        AnalyticsService().logEvent('coupon_created', properties: {
+          'couponCode': couponData['code'] ?? '',
+          'overrideCount': _draftOverrides.length,
+          'details': 'Created price coupon: ${couponData['code'] ?? ''}',
+        });
+
         widget.onCreated();
         return;
       }

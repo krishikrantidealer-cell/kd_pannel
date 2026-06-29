@@ -25,7 +25,7 @@ class LeadsState extends Equatable {
     this.allRawUsers = const [],
     this.salesAgents = const [],
     this.searchQuery = '',
-    this.selectedTimeframe = 'This Month',
+    this.selectedTimeframe = 'All Time',
     this.selectedRange,
     this.selectedFilterChip = 'All',
     this.currentPage = 1,

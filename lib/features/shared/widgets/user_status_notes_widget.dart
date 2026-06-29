@@ -127,6 +127,35 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
     });
   }
 
+  String _formatStatusName(String status) {
+    switch (status.toLowerCase()) {
+      case 'kyc pending':
+        return 'KYC Pending';
+      case 'call not picked':
+        return 'Call Not Picked';
+      case 'connected but not intrested':
+        return 'Connected but not Interested';
+      case 'quotation sent':
+        return 'Quotation Sent';
+      case 'negotiation':
+        return 'Negotiation';
+      case 'follow-up':
+        return 'Follow-up';
+      case 'lost':
+        return 'Lost';
+      case 'intrested':
+        return 'Interested';
+      case 'customer busy':
+        return 'Customer Busy';
+      case 'call switch off':
+        return 'Call Switch Off';
+      case 'prospect':
+        return 'Prospect';
+      default:
+        return status;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
@@ -137,6 +166,13 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,8 +237,10 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
           ),
           const SizedBox(height: 6),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppTheme.borderColor),
             ),
@@ -210,13 +248,17 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
               child: DropdownButton<String>(
                 value: _selectedStatus,
                 isExpanded: true,
-                icon: const Icon(Icons.arrow_drop_down,
-                    color: AppTheme.textSecondary),
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppTheme.textSecondary,
+                  size: 20,
+                ),
+                dropdownColor: Colors.white,
                 items: _statusOptions.map((status) {
                   return DropdownMenuItem<String>(
                     value: status,
                     child: Text(
-                      status.toUpperCase(),
+                      _formatStatusName(status),
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -257,12 +299,14 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
             style: GoogleFonts.outfit(
               fontSize: 13.5,
               color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: 'Enter detailed follow-up notes here...',
               hintStyle: GoogleFonts.outfit(
                 fontSize: 13,
-                color: AppTheme.textSecondary.withOpacity(0.7),
+                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w500,
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -318,44 +362,69 @@ class _UserStatusNotesWidgetState extends State<UserStatusNotesWidget> {
                   } catch (_) {
                     formattedDate = dateStr;
                   }
-
+ 
                   return Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF9FAFB),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.015),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    child: Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              adminName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                            Text(
-                              formattedDate,
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ],
+                        Container(
+                          width: 3.5,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          note,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12.5,
-                            color: AppTheme.textPrimary,
-                            height: 1.4,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    adminName,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                  Text(
+                                    formattedDate,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                note,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: AppTheme.textBody,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],

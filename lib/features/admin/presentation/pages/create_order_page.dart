@@ -6,6 +6,7 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/dealers.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 // ---------------------------------------------------------------------------
 // Data Helpers
@@ -299,7 +300,17 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     }
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSubmitting = true);
+    final double total = _cart.fold(0, (sum, c) => sum + c.lineTotal);
+    final double finalTotal = (total - _discountAmount).clamp(0, double.infinity);
+
+    // Track checkout started
+    AnalyticsService().logEvent('checkout_started', properties: {
+      'dealerId': widget.dealer.id,
+      'dealerName': widget.dealer.name,
+      'itemCount': _cart.length,
+      'totalAmount': finalTotal,
+      'details': 'Checkout started for dealer ${widget.dealer.name}',
+    });
 
     try {
       final items = _cart
@@ -318,9 +329,6 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
             },
           )
           .toList();
-
-      final double total = _cart.fold(0, (sum, c) => sum + c.lineTotal);
-      final double finalTotal = (total - _discountAmount).clamp(0, double.infinity);
 
       final body = {
         'userId': widget.dealer.id,
@@ -350,19 +358,57 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       if (res.statusCode == 200 || res.statusCode == 201) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Track payment success
+          AnalyticsService().logEvent('payment_success', properties: {
+            'dealerId': widget.dealer.id,
+            'dealerName': widget.dealer.name,
+            'amount': finalTotal,
+            'paymentMethod': _paymentMethod,
+            'couponUsed': _appliedCoupon != null ? _appliedCoupon!['code'] : 'None',
+            'details': 'Completed payment of ₹${finalTotal} via $_paymentMethod',
+          });
+
           _showSnack('Order created successfully!');
           if (mounted) Navigator.of(context).pop(true);
           return;
         }
         final msg = data['message'] ?? 'Order creation failed.';
+        
+        // Track payment failed
+        AnalyticsService().logEvent('payment_failed', properties: {
+          'dealerId': widget.dealer.id,
+          'dealerName': widget.dealer.name,
+          'amount': finalTotal,
+          'reason': msg,
+          'details': 'Failed payment of ₹${finalTotal}: $msg',
+        });
+
         _showSnack(msg, isError: true);
       } else {
+        final msg = 'Server error: ${res.statusCode}';
+        // Track payment failed
+        AnalyticsService().logEvent('payment_failed', properties: {
+          'dealerId': widget.dealer.id,
+          'dealerName': widget.dealer.name,
+          'amount': finalTotal,
+          'reason': msg,
+          'details': 'Failed payment of ₹${finalTotal}: $msg',
+        });
+
         _showSnack(
           'Server error: ${res.statusCode}. Please try again.',
           isError: true,
         );
       }
     } catch (e) {
+      // Track payment failed
+      AnalyticsService().logEvent('payment_failed', properties: {
+        'dealerId': widget.dealer.id,
+        'dealerName': widget.dealer.name,
+        'amount': finalTotal,
+        'reason': e.toString(),
+        'details': 'Failed payment of ₹${finalTotal} with error: $e',
+      });
       _showSnack('Error: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -1941,6 +1987,17 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   _discountAmount = discount;
                   _freeProductName = freeProduct;
                 });
+
+                // Track coupon application
+                AnalyticsService().logEvent('apply_coupon', properties: {
+                  'couponCode': coupon['code'],
+                  'discountType': coupon['discountType'],
+                  'discountValue': coupon['discountValue'],
+                  'dealerId': widget.dealer.id,
+                  'dealerName': widget.dealer.name,
+                  'details': 'Coupon ${coupon['code']} applied successfully for dealer ${widget.dealer.name}',
+                });
+
                 Navigator.of(ctx).pop();
               }
 

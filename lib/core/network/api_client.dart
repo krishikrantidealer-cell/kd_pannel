@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
@@ -10,7 +11,15 @@ import 'package:http_parser/http_parser.dart';
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
-  ApiClient._internal();
+  ApiClient._internal() {
+    // Workaround for Dart compiler tree-shaking bug on Web (NoSuchMethodError on Map.containsKey)
+    try {
+      final map = UnmodifiableMapView<String, String>({});
+      map.containsKey('');
+      final mediaType = MediaType('application', 'json');
+      mediaType.parameters.containsKey('charset');
+    } catch (_) {}
+  }
 
   // The local Node.js server runs on port 5000 by default.
   // Using localhost is correct for Web.

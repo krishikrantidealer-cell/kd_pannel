@@ -144,9 +144,7 @@ class MyApp extends StatelessWidget {
         '/orders/details': (context) =>
             const MainLayout(child: OrderDetailsPage()),
         '/products': (context) => const MainLayout(),
-        '/marketing': (context) => const MainLayout(
-          child: Scaffold(body: Center(child: Text('Marketing'))),
-        ),
+        '/marketing': (context) => const MainLayout(),
         '/support': (context) => const MainLayout(),
         '/team': (context) => const MainLayout(),
         '/reports': (context) => const MainLayout(

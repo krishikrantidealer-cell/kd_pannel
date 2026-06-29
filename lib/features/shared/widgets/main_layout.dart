@@ -7,6 +7,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -36,6 +37,7 @@ class _MainLayoutState extends State<MainLayout> {
     const DealerManagementPage(),
     const SalesCouponPage(),
     const TeamManagementPage(),
+    const UserEventsPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -73,6 +75,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 4;
         } else if (routeName == '/team' || routeName.startsWith('/team/')) {
           _currentIdx = 5;
+        } else if (routeName == '/marketing') {
+          _currentIdx = 6;
         } else {
           _currentIdx = 0;
         }
@@ -99,6 +103,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 3) route = '/dealers';
       if (index == 4) route = '/sales/coupons';
       if (index == 5) route = '/team';
+      if (index == 6) route = '/marketing';
     } else {
       if (index == 0) route = '/leads';
       if (index == 1) route = '/dealers';

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/dealers.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class UserEventsPage extends StatefulWidget {
   const UserEventsPage({super.key});
@@ -20,16 +21,84 @@ class _UserEventsPageState extends State<UserEventsPage> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _dealerSearchController = TextEditingController();
 
+  // Database event state variables
+  bool _isLoading = true;
+  bool _isFallbackMode = false;
+  Map<String, List<Map<String, dynamic>>> _eventsLogs = {};
+
   @override
   void initState() {
     super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _isFallbackMode = false;
+    });
+
+    try {
+      final flatEvents = await AnalyticsService().fetchEvents();
+      if (flatEvents.isNotEmpty) {
+        final Map<String, List<Map<String, dynamic>>> grouped = {};
+        for (var event in flatEvents) {
+          final eventType = event['eventType']?.toString() ?? 'unknown';
+          if (!grouped.containsKey(eventType)) {
+            grouped[eventType] = [];
+          }
+          grouped[eventType]!.add({
+            'user': event['user']?.toString() ?? 'Unknown User',
+            'time': _formatTimestamp(event['timestamp']?.toString()),
+            'device': event['device']?.toString() ?? 'Unknown Device',
+            'details': event['details']?.toString() ?? '',
+            'payload': Map<String, dynamic>.from(event['payload'] ?? {}),
+          });
+        }
+        _eventsLogs = grouped;
+      } else {
+        _eventsLogs = {};
+        _isFallbackMode = false;
+      }
+    } catch (e) {
+      debugPrint('[UserEventsPage] Failed to fetch events: $e');
+      _eventsLogs = {};
+      _isFallbackMode = true;
+    }
+
     final dealers = _dealersWithEvents;
     if (dealers.isNotEmpty) {
       _selectedDealer = dealers.first;
       final grouped = _getDealerEventsGrouped(dealers.first);
       if (grouped.isNotEmpty) {
         _selectedEventType = grouped.keys.first;
+      } else {
+        _selectedEventType = null;
       }
+    } else {
+      _selectedDealer = null;
+      _selectedEventType = null;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTimestamp(String? timestampStr) {
+    if (timestampStr == null) return 'Just now';
+    try {
+      final dt = DateTime.parse(timestampStr);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inSeconds < 60) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+      if (diff.inHours < 24) return '${diff.inHours} hours ago';
+      return '${diff.inDays} days ago';
+    } catch (_) {
+      return 'Just now';
     }
   }
 
@@ -42,7 +111,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   List<String> get _dealersWithEvents {
     final Set<String> users = {};
-    _mockEventsLogs.forEach((_, logs) {
+    _eventsLogs.forEach((_, logs) {
       for (final log in logs) {
         final String? user = log['user'] as String?;
         if (user != null && user.isNotEmpty) {
@@ -67,7 +136,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
     String dealerName,
   ) {
     final Map<String, List<Map<String, dynamic>>> grouped = {};
-    _mockEventsLogs.forEach((category, logs) {
+    _eventsLogs.forEach((category, logs) {
       final dealerLogs = logs
           .where((log) => log['user'] == dealerName)
           .toList();
@@ -407,10 +476,129 @@ class _UserEventsPageState extends State<UserEventsPage> {
     ],
   };
 
+  Widget _buildFallbackBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7), // Light amber
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFBBF24)), // Amber border
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Offline Telemetry Mode',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: const Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Backend events DB returned no records or is unreachable. Displaying cached local telemetry.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: const Color(0xFFB45309),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _loadEvents,
+            child: Text(
+              'Retry',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: const Color(0xFFD97706),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+        boxShadow: AppTheme.cardShadow,
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.analytics_outlined,
+                size: 40,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'No Events Logged Yet',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Real-time user actions and audit logs will automatically populate here once dealers use the mobile app.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadEvents,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: Text(
+                'Refresh Feed',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
-    final double gap = isDesktop ? 20.0 : 14.0;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -425,19 +613,51 @@ class _UserEventsPageState extends State<UserEventsPage> {
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadEvents,
+            tooltip: 'Refresh Feed',
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppTheme.lightBorderColor),
         ),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.symmetric(
-          horizontal: isDesktop ? 28 : 16,
-          vertical: isDesktop ? 20 : 12,
-        ),
-        child: _buildDealersList(isDesktop),
-      ),
+      body: _isLoading
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(40.0),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadEvents,
+              color: AppTheme.primaryColor,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 28 : 16,
+                  vertical: isDesktop ? 20 : 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_isFallbackMode) _buildFallbackBanner(),
+                    if (!_isFallbackMode && _eventsLogs.isEmpty)
+                      _buildEmptyState()
+                    else
+                      _buildDealersList(isDesktop),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -1075,11 +1295,7 @@ class _EventLogCardState extends State<_EventLogCard> {
             isHighValue: false,
             isInactive: false,
           );
-      Navigator.pushNamed(
-        context,
-        '/dealers/profile',
-        arguments: dealer,
-      );
+      Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
     }
   }
 

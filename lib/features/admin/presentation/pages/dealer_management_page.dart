@@ -33,7 +33,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   bool _isExporting = false;
   DealersBloc? _dealersBloc;
   StreamSubscription? _wsSubscription;
-  final Set<String> _selectedDealerIds = {};
 
   @override
   void initState() {
@@ -138,6 +137,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   }
 
   final List<String> timeframeOptions = [
+    'All Time',
     'Today',
     'Yesterday',
     'This Week',
@@ -212,89 +212,96 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     final isSales = AuthService().isSales;
     final agentId = AuthService().currentUserId;
 
-    final verifiedUsers = state.allRawUsers.where((u) {
-      final role = u['role'] ?? 'user';
-      final kycStatus = u['kycStatus'] ?? 'pending';
-      final isDealer = role == 'user' && kycStatus == 'verified';
-      if (!isDealer) return false;
-
-      if (isSales) {
-        final assignedAgentId = u['assignedAgent']?['_id'];
-        return assignedAgentId == agentId;
+    // Optimization: Group orders by user ID once
+    final Map<String, List<Map<String, dynamic>>> ordersByUserId = {};
+    for (final order in state.allRawOrders) {
+      if (order['orderStatus'] == 'Cancelled') continue;
+      final userId = order['user']?['_id'];
+      if (userId != null) {
+        ordersByUserId.putIfAbsent(userId, () => []).add(order);
       }
-      return true;
-    }).toList();
+    }
 
-    return verifiedUsers.map((u) {
-      final userId = u['_id'];
+    return state.allRawUsers
+        .where((u) {
+          final role = u['role'] ?? 'user';
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          final isDealer = role == 'user' && kycStatus == 'verified';
+          if (!isDealer) return false;
 
-      final dealerOrders = state.allRawOrders
-          .where(
-            (o) =>
-                o['user']?['_id'] == userId && o['orderStatus'] != 'Cancelled',
-          )
-          .toList();
-      final totalOrdersCount = dealerOrders.length;
-
-      double purchaseSum = 0.0;
-      for (final order in dealerOrders) {
-        final amount = order['totalAmount'];
-        if (amount != null) {
-          if (amount is num) {
-            purchaseSum += amount.toDouble();
-          } else {
-            purchaseSum += double.tryParse(amount.toString()) ?? 0.0;
+          if (isSales) {
+            final assignedAgentId = u['assignedAgent']?['_id'];
+            return assignedAgentId == agentId;
           }
-        }
-      }
+          return true;
+        })
+        .map((u) {
+          final userId = u['_id'];
+          final dealerOrders = ordersByUserId[userId] ?? [];
+          final totalOrdersCount = dealerOrders.length;
 
-      final agentName = u['assignedAgent'] != null
-          ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                .trim()
-          : '-';
+          double purchaseSum = 0.0;
+          for (final order in dealerOrders) {
+            final amount = order['totalAmount'];
+            if (amount != null) {
+              if (amount is num) {
+                purchaseSum += amount.toDouble();
+              } else {
+                purchaseSum += double.tryParse(amount.toString()) ?? 0.0;
+              }
+            }
+          }
 
-      final String personName =
-          (u['firstName'] != null || u['lastName'] != null)
-          ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
-          : '';
+          final agentName = u['assignedAgent'] != null
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                    .trim()
+              : '-';
 
-      final isHighVal = purchaseSum >= 500000;
-      final isInactiveDealer = totalOrdersCount == 0;
+          final String personName =
+              (u['firstName'] != null || u['lastName'] != null)
+              ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
+              : '';
 
-      return Dealer(
-        name: personName.isNotEmpty
-            ? personName
-            : (u['phoneNumber'] ?? 'Unnamed Dealer'),
-        phone: u['phoneNumber'] ?? '',
-        city: u['address']?['cityTehsil'] ?? '',
-        state: u['address']?['state'] ?? '',
-        agent: agentName.isNotEmpty ? agentName : '-',
-        gstStatus: 'Verified',
-        totalOrders: totalOrdersCount,
-        purchaseValue: _formatCurrency(purchaseSum),
-        isHighValue: isHighVal,
-        isInactive: isInactiveDealer,
-        source: u['source'] ?? 'App',
-        deepLinkUrl: u['deepLinkUrl'],
-        id: u['_id'],
-        agentId: u['assignedAgent']?['_id'],
-        licenceImage: u['licenceImage'],
-        shopImage: u['shopImage'],
-        gstNumber: u['gstNumber'],
-        email: u['email'],
-        userType: u['userType'],
-        kycStatus: u['kycStatus'],
-        shopName: u['shopName'],
-        address: u['address'] != null
-            ? Map<String, dynamic>.from(u['address'])
-            : null,
-        status: u['status'] ?? u['leadStatus'] ?? 'prospect',
-        notes: u['notes'] ?? u['leadNotes'] ?? '',
-        createdAt: u['createdAt'],
-        updatedAt: u['updatedAt'],
-        notesHistory: u['notesHistory'] != null ? List<Map<String, dynamic>>.from(u['notesHistory']) : [],
-      );
-    }).toList();
+          final isHighVal = purchaseSum >= 500000;
+          final isInactiveDealer = totalOrdersCount == 0;
+
+          return Dealer(
+            name: personName.isNotEmpty
+                ? personName
+                : (u['phoneNumber'] ?? 'Unnamed Dealer'),
+            phone: u['phoneNumber'] ?? '',
+            city: u['address']?['cityTehsil'] ?? '',
+            state: u['address']?['state'] ?? '',
+            agent: agentName.isNotEmpty ? agentName : '-',
+            gstStatus: 'Verified',
+            totalOrders: totalOrdersCount,
+            purchaseValue: _formatCurrency(purchaseSum),
+            isHighValue: isHighVal,
+            isInactive: isInactiveDealer,
+            source: u['source'] ?? 'App',
+            deepLinkUrl: u['deepLinkUrl'],
+            id: u['_id'],
+            agentId: u['assignedAgent']?['_id'],
+            licenceImage: u['licenceImage'],
+            shopImage: u['shopImage'],
+            gstNumber: u['gstNumber'],
+            email: u['email'],
+            userType: u['userType'],
+            kycStatus: u['kycStatus'],
+            shopName: u['shopName'],
+            address: u['address'] != null
+                ? Map<String, dynamic>.from(u['address'])
+                : null,
+            status: u['status'] ?? u['leadStatus'] ?? 'prospect',
+            notes: u['notes'] ?? u['leadNotes'] ?? '',
+            createdAt: u['createdAt'],
+            updatedAt: u['updatedAt'],
+            notesHistory: u['notesHistory'] != null
+                ? List<Map<String, dynamic>>.from(u['notesHistory'])
+                : [],
+          );
+        })
+        .toList();
   }
 
   List<String> _getAgentOptions(DealersState state) {
@@ -309,72 +316,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return list;
   }
 
-  List<Dealer> _getFilteredDealers(DealersState state) {
-    return _getallCalculatedDealers(state).where((dealer) {
-      // Date Filtering
-      DateTime? startDate;
-      DateTime? endDate;
-
-      if (state.selectedTimeframe == 'Custom Range' &&
-          state.customStartDate != null) {
-        startDate = state.customStartDate;
-        endDate = state.customEndDate ?? state.customStartDate;
-        endDate =
-            DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
-      } else if (state.selectedTimeframe != 'Custom Range' &&
-          state.selectedTimeframe.isNotEmpty) {
-        final now = DateTime.now();
-        endDate = now;
-        switch (state.selectedTimeframe) {
-          case 'Today':
-            startDate = DateTime(now.year, now.month, now.day);
-            break;
-          case 'Yesterday':
-            final yesterday = now.subtract(const Duration(days: 1));
-            startDate = DateTime(
-              yesterday.year,
-              yesterday.month,
-              yesterday.day,
-            );
-            endDate = DateTime(
-              yesterday.year,
-              yesterday.month,
-              yesterday.day,
-              23,
-              59,
-              59,
-            );
-            break;
-          case 'This Week':
-            startDate = now.subtract(Duration(days: now.weekday - 1));
-            startDate = DateTime(startDate.year, startDate.month, startDate.day);
-            break;
-          case 'Last Week':
-            startDate = now.subtract(Duration(days: now.weekday + 6));
-            startDate = DateTime(startDate.year, startDate.month, startDate.day);
-            endDate = startDate.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
-            break;
-          case 'This Month':
-            startDate = DateTime(now.year, now.month, 1);
-            break;
-          case 'Last Month':
-            startDate = DateTime(now.year, now.month - 1, 1);
-            endDate = DateTime(now.year, now.month, 0, 23, 59, 59);
-            break;
-        }
-      }
-
-      if (startDate != null && endDate != null) {
-        final dateStr = dealer.createdAt ?? dealer.updatedAt;
-        if (dateStr == null) return false;
-        try {
-          final date = DateTime.parse(dateStr).toLocal();
-          if (date.isBefore(startDate) || date.isAfter(endDate)) return false;
-        } catch (e) {
-          return false;
-        }
-      }
-
+  List<Dealer> _getFilteredDealersInternal(
+    List<Dealer> calculatedDealers,
+    DealersState state,
+  ) {
+    return calculatedDealers.where((dealer) {
       final query = state.searchQuery.toLowerCase();
       bool matchesSearch =
           dealer.name.toLowerCase().contains(query) ||
@@ -396,6 +342,10 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           matchesHighValue &&
           matchesInactive;
     }).toList();
+  }
+
+  List<Dealer> _getFilteredDealers(DealersState state) {
+    return _getFilteredDealersInternal(_getallCalculatedDealers(state), state);
   }
 
   void _showDatePicker(BuildContext context) {
@@ -445,15 +395,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         ),
       ),
     );
-  }
-
-  void _bulkAssignAgent(List<String> userIds, String? agentId) {
-    context.read<DealersBloc>().add(
-      BulkAssignAgentToDealersEvent(userIds: userIds, agentId: agentId),
-    );
-    setState(() {
-      _selectedDealerIds.clear();
-    });
   }
 
   Future<void> _deleteDealer(String userId, String name) async {
@@ -782,51 +723,68 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
           final bool isLoaderShowing = state.status == DealersStatus.loading;
 
-          final Widget body = Builder(
-            builder: (context) => isLoaderShowing && state.allRawUsers.isEmpty
-                ? _buildSkeletonLoading(isDesktop, isMobile)
-                : state.status == DealersStatus.failure &&
-                      state.allRawUsers.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Text(
-                        'Error: ${state.errorMessage ?? "Failed to load"}',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  )
-                : ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(
-                      context,
-                    ).copyWith(scrollbars: false),
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isDesktop ? 28 : 16,
-                          vertical: isDesktop ? 20 : 12,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildHeader(context, state, isMobile),
-                            const SizedBox(height: 16),
-                            _buildStatsCards(state, context),
-                            const SizedBox(height: 24),
-                            _buildFiltersRow(
-                              context,
-                              state,
-                              isMobile,
-                              isDesktop,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildDealerTable(context, state, isMobile),
-                            const SizedBox(height: 12),
-                          ],
-                        ),
-                      ),
-                    ),
+          final allCalculated = _getallCalculatedDealers(state);
+          final filteredDealers = _getFilteredDealersInternal(
+            allCalculated,
+            state,
+          );
+
+          final double minTableWidth = isMobile
+              ? 1300.0
+              : (AuthService().isAdmin ? 1220.0 : 1020.0);
+
+          final Widget body = CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 28 : 16,
+                  vertical: isDesktop ? 20 : 12,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context, state, isMobile),
+                      const SizedBox(height: 16),
+                      _buildStatsCardsInternal(allCalculated, state, context),
+                      const SizedBox(height: 24),
+                      _buildFiltersRow(context, state, isMobile, isDesktop),
+                      const SizedBox(height: 16),
+                    ],
                   ),
+                ),
+              ),
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                sliver: SliverToBoxAdapter(
+                  child: _DealerTableCard(
+                    dealers: filteredDealers,
+                    isMobile: isMobile,
+                    salesAgents: state.salesAgents,
+                    onAssignAgent: (userId, agentId) {
+                      _dealersBloc?.add(
+                        AssignAgentToDealerEvent(
+                          userId: userId,
+                          agentId: agentId,
+                        ),
+                      );
+                    },
+                    onBulkAssignAgent: (userIds, agentId) {
+                      _dealersBloc?.add(
+                        BulkAssignAgentToDealersEvent(
+                          userIds: userIds,
+                          agentId: agentId,
+                        ),
+                      );
+                    },
+                    onEditDealer: _editDealer,
+                    onDeleteDealer: _deleteDealer,
+                    isSubmitting: state.status == DealersStatus.submitting,
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+            ],
           );
 
           if (widget.isStandalone) {
@@ -1124,13 +1082,82 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
-  Widget _buildStatsCards(DealersState state, BuildContext context) {
+  Widget _buildStatsCardsInternal(
+    List<Dealer> calculated,
+    DealersState state,
+    BuildContext context,
+  ) {
     final isDesktop = Responsive.isDesktop(context);
-    final calculated = _getallCalculatedDealers(state);
-    final totalDealers = calculated.length;
-    final activeDealers = calculated.where((d) => !d.isInactive).length;
-    final highValueDealers = calculated.where((d) => d.isHighValue).length;
-    final inactiveDealers = calculated.where((d) => d.isInactive).length;
+    var filtered = calculated;
+
+    // Apply page-level Date Filtering for stats cards
+    DateTime? startDate;
+    DateTime? endDate;
+
+    if (state.selectedTimeframe == 'Custom Range' &&
+        state.customStartDate != null) {
+      startDate = state.customStartDate;
+      endDate = state.customEndDate ?? state.customStartDate;
+      endDate = DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
+    } else if (state.selectedTimeframe != 'Custom Range' &&
+        state.selectedTimeframe.isNotEmpty &&
+        state.selectedTimeframe != 'All Time') {
+      final now = DateTime.now();
+      endDate = now;
+      switch (state.selectedTimeframe) {
+        case 'Today':
+          startDate = DateTime(now.year, now.month, now.day);
+          break;
+        case 'Yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
+          endDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+          );
+          break;
+        case 'This Week':
+          startDate = now.subtract(Duration(days: now.weekday - 1));
+          startDate = DateTime(startDate.year, startDate.month, startDate.day);
+          break;
+        case 'Last Week':
+          startDate = now.subtract(Duration(days: now.weekday + 6));
+          startDate = DateTime(startDate.year, startDate.month, startDate.day);
+          endDate = startDate.add(
+            const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
+          );
+          break;
+        case 'This Month':
+          startDate = DateTime(now.year, now.month, 1);
+          break;
+        case 'Last Month':
+          startDate = DateTime(now.year, now.month - 1, 1);
+          endDate = DateTime(now.year, now.month, 0, 23, 59, 59);
+          break;
+      }
+    }
+
+    if (startDate != null && endDate != null) {
+      filtered = filtered.where((dealer) {
+        final dateStr = dealer.createdAt ?? dealer.updatedAt;
+        if (dateStr == null) return false;
+        try {
+          final date = DateTime.parse(dateStr).toLocal();
+          return !date.isBefore(startDate!) && !date.isAfter(endDate!);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+
+    final totalDealers = filtered.length;
+    final activeDealers = filtered.where((d) => !d.isInactive).length;
+    final highValueDealers = filtered.where((d) => d.isHighValue).length;
+    final inactiveDealers = filtered.where((d) => d.isInactive).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1468,121 +1495,474 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       ),
     );
   }
+}
 
-  Widget _buildDealerTable(
-    BuildContext context,
-    DealersState state,
-    bool isMobile,
-  ) {
-    final filtered = _getFilteredDealers(state);
-    final int total = filtered.length;
-    final int totalPages = (total / state.pageSize).ceil();
-    final safePage = state.currentPage.clamp(
-      1,
-      totalPages > 0 ? totalPages : 1,
-    );
+class _DealerTableCard extends StatefulWidget {
+  final List<Dealer> dealers;
+  final bool isMobile;
+  final List<Map<String, dynamic>> salesAgents;
+  final Function(String userId, String? agentId) onAssignAgent;
+  final Function(List<String> userIds, String? agentId) onBulkAssignAgent;
+  final Function(Dealer dealer) onEditDealer;
+  final Function(String userId, String name) onDeleteDealer;
+  final bool isSubmitting;
 
-    final int startIndex = (safePage - 1) * state.pageSize;
-    final int endIndex = (startIndex + state.pageSize) > total
-        ? total
-        : (startIndex + state.pageSize);
-    final dealersToShow = total == 0
-        ? <Dealer>[]
-        : filtered.sublist(startIndex, endIndex);
+  const _DealerTableCard({
+    super.key,
+    required this.dealers,
+    required this.isMobile,
+    required this.salesAgents,
+    required this.onAssignAgent,
+    required this.onBulkAssignAgent,
+    required this.onEditDealer,
+    required this.onDeleteDealer,
+    required this.isSubmitting,
+  });
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
-        boxShadow: AppTheme.softShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _DealerTable(
-            dealers: dealersToShow,
-            isMobile: isMobile,
-            salesAgents: state.salesAgents,
-            onAssignAgent: (userId, agentId) {
-              _dealersBloc?.add(
-                AssignAgentToDealerEvent(userId: userId, agentId: agentId),
-              );
-            },
-            onEditDealer: _editDealer,
-            onDeleteDealer: _deleteDealer,
-            selectedDealerIds: _selectedDealerIds,
-            isSubmitting: state.status == DealersStatus.submitting,
-            onSelectionChanged: () => setState(() {}),
+  @override
+  State<_DealerTableCard> createState() => _DealerTableCardState();
+}
+
+class _DealerTableCardState extends State<_DealerTableCard> {
+  String selectedAssign = 'Assign';
+  String selectedStatus = 'Status';
+  PickerDateRange? _selectedTableRange;
+  String selectedTableDropdown = 'All Time';
+  final Set<String> _selectedDealerIds = {};
+
+  int get _currentPage => context.read<DealersBloc>().state.currentPage;
+  int get _pageSize => context.read<DealersBloc>().state.pageSize;
+
+  Future<void> _handleBulkAssign(String? agentId) async {
+    final agentName = agentId == null
+        ? 'None'
+        : widget.salesAgents.firstWhere(
+                (a) => a['_id'] == agentId,
+                orElse: () => <String, dynamic>{},
+              )['firstName'] ??
+              'Agent';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Confirm Bulk Assignment',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
           ),
-          _buildTableFooter(context, state, isMobile),
+        ),
+        content: Text(
+          'Are you sure you want to assign ${agentId == null ? "no agent" : "sales agent \\\"$agentName\\\""} to ${_selectedDealerIds.length} selected dealers?',
+          style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              'Confirm',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      final ids = _selectedDealerIds.toList();
+      await widget.onBulkAssignAgent(ids, agentId);
+      setState(() {
+        _selectedDealerIds.clear();
+      });
+    }
   }
 
-  Widget _buildBulkActionDropdown(BuildContext context, DealersState state) {
-    if (!AuthService().isAdmin) return const SizedBox.shrink();
+  Widget _buildBulkActionsControls() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${_selectedDealerIds.length} selected',
+          style: GoogleFonts.outfit(
+            fontSize: widget.isMobile ? 12 : 13,
+            color: AppTheme.primaryColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          height: widget.isMobile ? 32 : 36,
+          padding: const EdgeInsets.only(left: 12, right: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppTheme.primaryColor.withValues(alpha: 0.5),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              padding: EdgeInsets.zero,
+              isExpanded: false,
+              isDense: true,
+              hint: Text(
+                'Bulk Action',
+                style: GoogleFonts.outfit(
+                  fontSize: widget.isMobile ? 11 : 12,
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              value: null,
+              icon: Padding(
+                padding: const EdgeInsets.only(left: 4, right: 4),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: widget.isMobile ? 14 : 16,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: 'unassign',
+                  child: Text(
+                    'Unassign Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: widget.isMobile ? 11 : 12,
+                      color: AppTheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ...widget.salesAgents.map((agent) {
+                  final name =
+                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                          .trim();
+                  return DropdownMenuItem<String>(
+                    value: agent['_id'],
+                    child: Text(
+                      name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
+                      style: GoogleFonts.outfit(
+                        fontSize: widget.isMobile ? 11 : 12,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }),
+              ],
+              onChanged: (val) {
+                if (val == 'unassign') {
+                  _handleBulkAssign(null);
+                } else if (val != null) {
+                  _handleBulkAssign(val);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _selectedDealerIds.clear();
+            });
+          },
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: Size(0, widget.isMobile ? 32 : 36),
+          ),
+          child: Text(
+            'Clear',
+            style: GoogleFonts.outfit(
+              fontSize: widget.isMobile ? 11 : 12,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildCombinedControls() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (AuthService().isAdmin) ...[
+          _buildTableDropdown('Assign', selectedAssign, [
+            'All',
+            'Unassigned',
+            ...widget.salesAgents.map(
+              (agent) =>
+                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                      .trim(),
+            ),
+          ], (val) => setState(() => selectedAssign = val!)),
+          const SizedBox(width: 12),
+        ],
+        const SizedBox(width: 12),
+        _buildTableDropdown('Status', selectedStatus, [
+          'All',
+          'KYC Pending',
+          'Call Not Picked',
+          'Connected But Not Interested',
+          'Quotation Sent',
+          'Negotiation',
+          'Follow-up',
+          'Lost',
+          'Interested',
+          'Customer Busy',
+          'Call Switch Off',
+          'Prospect',
+        ], (val) => setState(() => selectedStatus = val!)),
+        const SizedBox(width: 12),
+        _buildTableDateSection(),
+      ],
+    );
+  }
+
+  Widget _buildTableDropdown(
+    String hint,
+    String current,
+    List<String> options,
+    ValueChanged<String?> onChanged,
+  ) {
     return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: widget.isMobile ? 32 : 36,
+      padding: const EdgeInsets.only(left: 12, right: 6),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.05),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+        border: Border.all(color: AppTheme.borderColor),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          padding: EdgeInsets.zero,
+          isExpanded: false,
+          isDense: true,
           hint: Text(
-            'Bulk Assign Agent',
+            hint,
             style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.primaryColor,
+              fontSize: widget.isMobile ? 11 : 12,
+              color: AppTheme.textPrimary.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w600,
             ),
           ),
-          icon: const Icon(
-            Icons.arrow_drop_down,
-            size: 18,
-            color: AppTheme.primaryColor,
+          value: options.contains(current) ? current : null,
+          icon: Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4),
+            child: Icon(
+              Icons.keyboard_arrow_down,
+              size: widget.isMobile ? 14 : 16,
+              color: AppTheme.textSecondary,
+            ),
           ),
-          onChanged: (String? agentId) {
-            if (agentId != null) {
-              _bulkAssignAgent(_selectedDealerIds.toList(), agentId);
-            }
-          },
-          items: state.salesAgents.map((agent) {
-            final name =
-                '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-            return DropdownMenuItem<String>(
-              value: agent['_id'],
-              child: Text(
-                name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
-                style: GoogleFonts.outfit(fontSize: 12),
-              ),
-            );
-          }).toList(),
+          items: options
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(
+                    e,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: GoogleFonts.outfit(
+                      fontSize: widget.isMobile ? 11 : 12,
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
         ),
       ),
     );
   }
 
-  Widget _buildTableHeader(List<Dealer> visibleDealers) {
-    return const SizedBox.shrink(); // Handled in _DealerTable now
+  String get _tableRangeDisplay {
+    if (_selectedTableRange != null &&
+        _selectedTableRange!.startDate != null &&
+        _selectedTableRange!.endDate != null) {
+      final start = _selectedTableRange!.startDate!;
+      final end = _selectedTableRange!.endDate!;
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${start.day.toString().padLeft(2, '0')} ${months[start.month - 1]} - ${end.day.toString().padLeft(2, '0')} ${months[end.month - 1]}';
+    }
+    return selectedTableDropdown;
   }
 
-  Widget _buildDealerRow(
-    BuildContext context,
-    DealersState state,
-    Dealer dealer,
-    bool isAlternate,
-  ) {
-    return const SizedBox.shrink(); // Handled in _DealerTable now
+  void _showTableDatePicker() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        content: SizedBox(
+          height: 400,
+          width: 350,
+          child: SfDateRangePicker(
+            backgroundColor: Colors.white,
+            selectionMode: DateRangePickerSelectionMode.range,
+            showActionButtons: true,
+            confirmText: 'Apply',
+            cancelText: 'Cancel',
+            selectionShape: DateRangePickerSelectionShape.rectangle,
+            rangeSelectionColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+            startRangeSelectionColor: AppTheme.primaryColor,
+            endRangeSelectionColor: AppTheme.primaryColor,
+            initialSelectedRange: _selectedTableRange,
+            onSubmit: (Object? val) {
+              if (val is PickerDateRange &&
+                  val.startDate != null &&
+                  val.endDate != null) {
+                setState(() => _selectedTableRange = val);
+                Navigator.pop(context);
+              }
+            },
+            onCancel: () => Navigator.pop(context),
+          ),
+        ),
+      ),
+    );
   }
 
-  Widget _buildPageSizeSelector(BuildContext context, DealersState state) {
+  Widget _buildTableDateSection() {
+    return Container(
+      height: widget.isMobile ? 32 : 36,
+      padding: const EdgeInsets.only(left: 10, right: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: _showTableDatePicker,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Icon(
+                  Icons.calendar_month_outlined,
+                  size: widget.isMobile ? 14 : 16,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 16,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            color: AppTheme.borderColor.withValues(alpha: 0.6),
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: null,
+              isExpanded: false,
+              isDense: true,
+              padding: EdgeInsets.zero,
+              hint: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Text(
+                      _tableRangeDisplay,
+                      style: GoogleFonts.outfit(
+                        fontSize: widget.isMobile ? 11 : 12,
+                        color: AppTheme.textPrimary.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, right: 2),
+                    child: Icon(
+                      Icons.keyboard_arrow_down,
+                      size: widget.isMobile ? 14 : 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              icon: const SizedBox.shrink(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    selectedTableDropdown = newValue;
+                    _selectedTableRange = null;
+                  });
+                }
+              },
+              items:
+                  [
+                    'All Time',
+                    'Today',
+                    'Yesterday',
+                    'Last 7 Days',
+                    'Last 30 Days',
+                  ].map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(
+                        value,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageSizeSelector() {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1605,7 +1985,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
-              value: state.pageSize,
+              value: _pageSize,
               icon: const Icon(
                 Icons.arrow_drop_down,
                 size: 18,
@@ -1649,29 +2029,15 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
-  Widget _buildTableFooter(
-    BuildContext context,
-    DealersState state,
-    bool isMobile,
-  ) {
+  Widget _buildTableFooter(bool isMobile, int currentPage, int total) {
+    final start = total == 0 ? 0 : (currentPage - 1) * _pageSize + 1;
+    final end = (currentPage * _pageSize) > total
+        ? total
+        : (currentPage * _pageSize);
+
     final footerPadding = isMobile
-        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
-        : const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-
-    final filtered = _getFilteredDealers(state);
-    final totalCount = filtered.length;
-    final int totalPages = (totalCount / state.pageSize).ceil();
-    final safePage = state.currentPage.clamp(
-      1,
-      totalPages > 0 ? totalPages : 1,
-    );
-
-    final startCount = totalCount == 0
-        ? 0
-        : (safePage - 1) * state.pageSize + 1;
-    final endCount = (safePage * state.pageSize) > totalCount
-        ? totalCount
-        : (safePage * state.pageSize);
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+        : const EdgeInsets.symmetric(horizontal: 12, vertical: 12);
 
     return Container(
       padding: footerPadding,
@@ -1692,18 +2058,18 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                   runSpacing: 8,
                   children: [
                     Text(
-                      'Showing $startCount to $endCount of $totalCount entries',
+                      'Showing $start to $end of $total entries',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    _buildPageSizeSelector(context, state),
+                    _buildPageSizeSelector(),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildPaginationRow(context, state, totalCount),
+                _buildPaginationControls(currentPage, total),
               ],
             )
           : Row(
@@ -1713,7 +2079,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Showing $startCount to $endCount of $totalCount entries',
+                      'Showing $start to $end of $total entries',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         color: AppTheme.textSecondary,
@@ -1721,46 +2087,96 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                       ),
                     ),
                     const SizedBox(width: 20),
-                    _buildPageSizeSelector(context, state),
+                    _buildPageSizeSelector(),
                   ],
                 ),
-                _buildPaginationRow(context, state, totalCount),
+                _buildPaginationControls(currentPage, total),
               ],
             ),
     );
   }
 
-  Widget _buildPaginationRow(
-    BuildContext context,
-    DealersState state,
-    int totalCount,
-  ) {
-    final int totalPages = (totalCount / state.pageSize).ceil();
+  Widget _buildPaginationControls(int currentPage, int total) {
+    final int totalPages = (total / _pageSize).ceil();
     final int displayPages = totalPages > 0 ? totalPages : 1;
-    final safePage = state.currentPage.clamp(1, displayPages);
 
     List<Widget> pageButtons = [];
 
+    Widget buildPageButton(int page, bool isActive) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () {
+            context.read<DealersBloc>().add(
+              UpdateDealersFilterEvent(currentPage: page),
+            );
+          },
+          child: Container(
+            width: 32,
+            height: 32,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isActive ? AppTheme.primaryColor : Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isActive ? AppTheme.primaryColor : AppTheme.borderColor,
+              ),
+            ),
+            child: Text(
+              page.toString(),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: isActive ? Colors.white : AppTheme.textBody,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildChevronButton(
+      IconData icon,
+      bool isEnabled,
+      VoidCallback onTap,
+    ) {
+      return MouseRegion(
+        cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          onTap: isEnabled ? onTap : null,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isEnabled
+                  ? AppTheme.textSecondary
+                  : const Color(0xFFD1D5DB),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (displayPages <= 5) {
       for (int i = 1; i <= displayPages; i++) {
-        pageButtons.add(
-          _buildPaginationPage(i, safePage == i, () {
-            context.read<DealersBloc>().add(
-              UpdateDealersFilterEvent(currentPage: i),
-            );
-          }),
-        );
+        pageButtons.add(buildPageButton(i, currentPage == i));
+        if (i < displayPages) {
+          pageButtons.add(const SizedBox(width: 8));
+        }
       }
     } else {
-      pageButtons.add(
-        _buildPaginationPage(1, safePage == 1, () {
-          context.read<DealersBloc>().add(
-            const UpdateDealersFilterEvent(currentPage: 1),
-          );
-        }),
-      );
+      pageButtons.add(buildPageButton(1, currentPage == 1));
+      pageButtons.add(const SizedBox(width: 8));
 
-      if (safePage > 3) {
+      if (currentPage > 3) {
         pageButtons.add(
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1773,24 +2189,20 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             ),
           ),
         );
+        pageButtons.add(const SizedBox(width: 8));
       }
 
-      final start = (safePage - 1).clamp(2, displayPages - 1);
-      final end = (safePage + 1).clamp(2, displayPages - 1);
+      final start = (currentPage - 1).clamp(2, displayPages - 1);
+      final end = (currentPage + 1).clamp(2, displayPages - 1);
 
       for (int i = start; i <= end; i++) {
         if (i > 1 && i < displayPages) {
-          pageButtons.add(
-            _buildPaginationPage(i, safePage == i, () {
-              context.read<DealersBloc>().add(
-                UpdateDealersFilterEvent(currentPage: i),
-              );
-            }),
-          );
+          pageButtons.add(buildPageButton(i, currentPage == i));
+          pageButtons.add(const SizedBox(width: 8));
         }
       }
 
-      if (safePage < displayPages - 2) {
+      if (currentPage < displayPages - 2) {
         pageButtons.add(
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1803,98 +2215,228 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             ),
           ),
         );
+        pageButtons.add(const SizedBox(width: 8));
       }
 
       pageButtons.add(
-        _buildPaginationPage(displayPages, safePage == displayPages, () {
-          context.read<DealersBloc>().add(
-            UpdateDealersFilterEvent(currentPage: displayPages),
-          );
-        }),
+        buildPageButton(displayPages, currentPage == displayPages),
       );
     }
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPaginationButton(Icons.chevron_left, safePage > 1, () {
+        buildChevronButton(Icons.chevron_left, currentPage > 1, () {
           context.read<DealersBloc>().add(
-            UpdateDealersFilterEvent(currentPage: safePage - 1),
+            UpdateDealersFilterEvent(currentPage: currentPage - 1),
           );
         }),
         const SizedBox(width: 8),
         ...pageButtons,
         const SizedBox(width: 8),
-        _buildPaginationButton(
-          Icons.chevron_right,
-          safePage < displayPages,
-          () {
-            context.read<DealersBloc>().add(
-              UpdateDealersFilterEvent(currentPage: safePage + 1),
-            );
-          },
-        ),
+        buildChevronButton(Icons.chevron_right, currentPage < displayPages, () {
+          context.read<DealersBloc>().add(
+            UpdateDealersFilterEvent(currentPage: currentPage + 1),
+          );
+        }),
       ],
     );
   }
 
-  Widget _buildPaginationButton(
-    IconData icon,
-    bool isEnabled,
-    VoidCallback? onTap,
-  ) {
-    return MouseRegion(
-      cursor: isEnabled && onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: isEnabled ? onTap : null,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppTheme.borderColor),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: isEnabled ? AppTheme.textSecondary : const Color(0xFFD1D5DB),
-          ),
-        ),
-      ),
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    final bool isDesktop = Responsive.isDesktop(context);
 
-  Widget _buildPaginationPage(int page, bool isActive, VoidCallback? onTap) {
-    return MouseRegion(
-      cursor: onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isActive ? AppTheme.primaryColor : Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isActive ? AppTheme.primaryColor : AppTheme.borderColor,
-            ),
+    // 1. Local Filtering for Table Controls
+    List<Dealer> tableDealers = widget.dealers;
+
+    // Filter by Status
+    if (selectedStatus != 'Status' && selectedStatus != 'All') {
+      tableDealers = tableDealers.where((d) {
+        final status = d.status ?? 'prospect';
+        String dbStatus = status.toLowerCase();
+        String filterStatus = selectedStatus.toLowerCase();
+        if (filterStatus == 'interested') filterStatus = 'intrested';
+        if (filterStatus == 'connected but not interested')
+          filterStatus = 'connected but not intrested';
+        return dbStatus == filterStatus;
+      }).toList();
+    }
+
+    // Filter by Assigned Agent (only for admin)
+    if (AuthService().isAdmin &&
+        selectedAssign != 'Assign' &&
+        selectedAssign != 'All') {
+      tableDealers = tableDealers.where((d) {
+        if (selectedAssign == 'Unassigned') return d.agentId == null;
+        return d.agent.toLowerCase().contains(selectedAssign.toLowerCase());
+      }).toList();
+    }
+
+    // Filter by Table Date Section
+    DateTime? tableStartDate;
+    DateTime? tableEndDate;
+    if (_selectedTableRange != null && _selectedTableRange!.startDate != null) {
+      tableStartDate = _selectedTableRange!.startDate;
+      tableEndDate =
+          _selectedTableRange!.endDate ?? _selectedTableRange!.startDate;
+      tableEndDate = DateTime(
+        tableEndDate!.year,
+        tableEndDate.month,
+        tableEndDate.day,
+        23,
+        59,
+        59,
+      );
+    } else {
+      final now = DateTime.now();
+      switch (selectedTableDropdown) {
+        case 'Today':
+          tableStartDate = DateTime(now.year, now.month, now.day);
+          tableEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+          break;
+        case 'Yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          tableStartDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+          );
+          tableEndDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+          );
+          break;
+        case 'Last 7 Days':
+          tableStartDate = now.subtract(const Duration(days: 7));
+          tableEndDate = now;
+          break;
+        case 'Last 30 Days':
+          tableStartDate = now.subtract(const Duration(days: 30));
+          tableEndDate = now;
+          break;
+      }
+    }
+
+    if (tableStartDate != null && tableEndDate != null) {
+      tableDealers = tableDealers.where((d) {
+        final dateStr = d.createdAt ?? d.updatedAt;
+        if (dateStr == null) return false;
+        try {
+          final date = DateTime.parse(dateStr).toLocal();
+          return date.isAfter(tableStartDate!) && date.isBefore(tableEndDate!);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+
+    final total = tableDealers.length;
+    final totalPages = (total / _pageSize).ceil();
+    final currentPage = _currentPage.clamp(1, totalPages > 0 ? totalPages : 1);
+    final startIndex = (currentPage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize) > total
+        ? total
+        : (startIndex + _pageSize);
+    final paginatedDealers = total == 0
+        ? <Dealer>[]
+        : tableDealers.sublist(startIndex, endIndex);
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: widget.isMobile
+                ? const EdgeInsets.all(16)
+                : const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            child: isDesktop
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Dealer Records',
+                        style: AppTheme.headingMD.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      _selectedDealerIds.isNotEmpty
+                          ? _buildBulkActionsControls()
+                          : _buildCombinedControls(),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dealer Records',
+                        style: GoogleFonts.outfit(
+                          fontSize: widget.isMobile ? 15 : 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: widget.isMobile ? 0.2 : 0.0,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _selectedDealerIds.isNotEmpty
+                            ? _buildBulkActionsControls()
+                            : _buildCombinedControls(),
+                      ),
+                    ],
+                  ),
           ),
-          child: Text(
-            page.toString(),
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: isActive ? Colors.white : AppTheme.textBody,
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double minTableWidth = widget.isMobile
+                  ? 1300.0
+                  : (AuthService().isAdmin ? 1220.0 : 1020.0);
+              final double width = constraints.maxWidth > minTableWidth
+                  ? constraints.maxWidth
+                  : minTableWidth;
+              return ScrollConfiguration(
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: true),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: width,
+                    child: _DealerTable(
+                      dealers: paginatedDealers,
+                      isMobile: widget.isMobile,
+                      salesAgents: widget.salesAgents,
+                      onAssignAgent: widget.onAssignAgent,
+                      onEditDealer: widget.onEditDealer,
+                      onDeleteDealer: widget.onDeleteDealer,
+                      selectedDealerIds: _selectedDealerIds,
+                      isSubmitting: widget.isSubmitting,
+                      onSelectionChanged: () {
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-        ),
+          _buildTableFooter(widget.isMobile, currentPage, total),
+        ],
       ),
     );
   }
@@ -1945,7 +2487,7 @@ class _DealerTable extends StatefulWidget {
 }
 
 class _DealerTableState extends State<_DealerTable> {
-  int? hoveredRowIndex;
+  // Removed hoveredRowIndex from parent to prevent full table rebuilds on hover
 
   bool get isAllSelected =>
       widget.dealers.isNotEmpty &&
@@ -2044,16 +2586,15 @@ class _DealerTableState extends State<_DealerTable> {
   @override
   Widget build(BuildContext context) {
     final columns = [
-      const _DealerColumnConfig('Dealer Name', 20),
+      const _DealerColumnConfig('Dealer Name', 32),
       const _DealerColumnConfig('Phone Number', 20),
       const _DealerColumnConfig('Location', 20),
       if (AuthService().isAdmin)
         const _DealerColumnConfig('Assigned Agent', 20),
-      const _DealerColumnConfig('Source', 12, isCenter: true),
       const _DealerColumnConfig('Status', 16),
       const _DealerColumnConfig('Orders', 12, isCenter: true),
       const _DealerColumnConfig('Purchase Value', 20, isCenter: true),
-      const _DealerColumnConfig('Actions', 30, isCenter: true),
+      const _DealerColumnConfig('Actions', 18, isCenter: true),
     ];
 
     Widget tableHeader = Container(
@@ -2091,8 +2632,11 @@ class _DealerTableState extends State<_DealerTable> {
                   ),
                 ),
               ...columns.map((col) {
+                final rightPadding = col.title == 'Assigned Agent'
+                    ? 36.0
+                    : 12.0;
                 final Widget child = Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.only(left: 12, right: rightPadding),
                   child: _HeaderText(col.title),
                 );
                 return Expanded(
@@ -2106,96 +2650,63 @@ class _DealerTableState extends State<_DealerTable> {
       ),
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double minTableWidth = widget.isMobile
-            ? 1300.0
-            : (AuthService().isAdmin ? 1220.0 : 1020.0);
-        final double safeMaxWidth = constraints.maxWidth.isInfinite
-            ? minTableWidth
-            : constraints.maxWidth;
-        final double tableWidth = safeMaxWidth > minTableWidth
-            ? safeMaxWidth
-            : minTableWidth;
-
-        return SelectionArea(
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              scrollbars: false,
-              dragDevices: {
-                ui.PointerDeviceKind.touch,
-                ui.PointerDeviceKind.trackpad,
-              },
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: SizedBox(
-                width: tableWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    tableHeader,
-                    ...widget.dealers.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final dealer = entry.value;
-                      final bool isAlternate = index % 2 == 1;
-                      final String dealerId = dealer.id ?? '';
-                      return _DealerRow(
-                        dealer: dealer,
-                        isAlternate: isAlternate,
-                        isMobile: widget.isMobile,
-                        isHovered: hoveredRowIndex == index,
-                        isSelected: widget.selectedDealerIds.contains(dealerId),
-                        onToggleSelection: () => _toggleSelection(dealerId),
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          '/dealers/profile',
-                          arguments: dealer,
-                        ),
-                        onHover: () => setState(() => hoveredRowIndex = index),
-                        onExit: () => setState(() => hoveredRowIndex = null),
-                        salesAgents: widget.salesAgents,
-                        onAssignAgent: widget.onAssignAgent,
-                        onCreateOrder: () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CreateOrderPage(dealer: dealer),
-                            ),
-                          );
-                          if (result == true && context.mounted) {
-                            context.read<DealersBloc>().add(
-                              const FetchDealersDataEvent(forceRefresh: true),
-                            );
-                          }
-                        },
-                        onEdit: () => widget.onEditDealer(dealer),
-                        onDelete: () =>
-                            widget.onDeleteDealer(dealerId, dealer.name),
-                      );
-                    }),
-                  ],
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        tableHeader,
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: widget.dealers.length,
+          itemExtent: 68,
+          addRepaintBoundaries: true,
+          itemBuilder: (context, index) {
+            final dealer = widget.dealers[index];
+            final bool isAlternate = index % 2 == 1;
+            final String dealerId = dealer.id ?? '';
+            return _DealerRow(
+              dealer: dealer,
+              isAlternate: isAlternate,
+              isMobile: widget.isMobile,
+              isSelected: widget.selectedDealerIds.contains(dealerId),
+              onToggleSelection: () => _toggleSelection(dealerId),
+              onTap: () => Navigator.pushNamed(
+                context,
+                '/dealers/profile',
+                arguments: dealer,
               ),
-            ),
-          ),
-        );
-      },
+              salesAgents: widget.salesAgents,
+              onAssignAgent: widget.onAssignAgent,
+              onCreateOrder: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateOrderPage(dealer: dealer),
+                  ),
+                );
+                if (result == true && context.mounted) {
+                  context.read<DealersBloc>().add(
+                    const FetchDealersDataEvent(forceRefresh: true),
+                  );
+                }
+              },
+              onEdit: () => widget.onEditDealer(dealer),
+              onDelete: () => widget.onDeleteDealer(dealerId, dealer.name),
+            );
+          },
+        ),
+      ],
     );
   }
 }
 
-class _DealerRow extends StatelessWidget {
+class _DealerRow extends StatefulWidget {
   final Dealer dealer;
   final bool isAlternate;
   final bool isMobile;
-  final bool isHovered;
   final bool isSelected;
   final VoidCallback onToggleSelection;
   final VoidCallback onTap;
-  final VoidCallback onHover;
-  final VoidCallback onExit;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
   final VoidCallback? onCreateOrder;
@@ -2206,12 +2717,9 @@ class _DealerRow extends StatelessWidget {
     required this.dealer,
     required this.isAlternate,
     required this.isMobile,
-    required this.isHovered,
     required this.isSelected,
     required this.onToggleSelection,
     required this.onTap,
-    required this.onHover,
-    required this.onExit,
     required this.salesAgents,
     required this.onAssignAgent,
     this.onCreateOrder,
@@ -2219,353 +2727,265 @@ class _DealerRow extends StatelessWidget {
     required this.onDelete,
   });
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 250,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  @override
+  State<_DealerRow> createState() => _DealerRowState();
+}
+
+class _DealerRowState extends State<_DealerRow> {
+  bool isHovered = false;
+
+  // Optimized static styles to avoid repeated GoogleFonts calls
+  static final TextStyle _shopNameStyle = GoogleFonts.outfit(
+    fontSize: 13,
+    color: AppTheme.textPrimary,
+    fontWeight: FontWeight.w700,
+  );
+  static final TextStyle _dealerNameStyle = GoogleFonts.outfit(
+    fontSize: 11,
+    color: AppTheme.textSecondary,
+    fontWeight: FontWeight.w500,
+  );
+  static final TextStyle _cellTextStyle = GoogleFonts.outfit(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+  );
+  static final TextStyle _cellBoldTextStyle = GoogleFonts.outfit(
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+    color: AppTheme.textPrimary,
+  );
+  static final TextStyle _statusTextStyle = GoogleFonts.outfit(
+    fontSize: 10.5,
+    fontWeight: FontWeight.bold,
+  );
 
   @override
   Widget build(BuildContext context) {
-    Color rowBgColor = isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
-    if (isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
-    if (isHovered) rowBgColor = const Color(0xFFF1F9F3);
+    // Simplified background logic
+    final Color rowBgColor = isHovered
+        ? const Color(0xFFF1F9F3)
+        : (widget.isSelected
+              ? AppTheme.primaryColor.withValues(alpha: 0.04)
+              : (widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white));
 
-    return MouseRegion(
-      onEnter: (_) => onHover(),
-      onExit: (_) => onExit(),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          decoration: BoxDecoration(
-            border: const Border(
-              bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+    return RepaintBoundary(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => isHovered = true),
+        onExit: (_) => setState(() => isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            decoration: BoxDecoration(
+              border: const Border(
+                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+              ),
+              color: rowBgColor,
             ),
-            color: rowBgColor,
-          ),
-          child: Stack(
-            children: [
-              // Animated Left Accent Strip
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                left: 0,
-                top: isHovered ? 0 : 12,
-                bottom: isHovered ? 0 : 12,
-                width: isHovered ? 4 : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 160),
-                  opacity: isHovered ? 1 : 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor,
-                      borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  if (AuthService().isAdmin)
+                    SizedBox(
+                      width: 40,
+                      child: Center(
+                        child: (isHovered || widget.isSelected)
+                            ? _CustomCheckbox(
+                                isSelected: widget.isSelected,
+                                onTap: widget.onToggleSelection,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                  Expanded(
+                    flex: 32,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.dealer.shopName != null &&
+                                    widget.dealer.shopName!.isNotEmpty
+                                ? widget.dealer.shopName!
+                                : 'Unnamed Shop',
+                            style: _shopNameStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            widget.dealer.name,
+                            style: _dealerNameStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    if (AuthService().isAdmin)
-                      SizedBox(
-                        width: 40,
-                        child: Center(
-                          child: (isHovered || isSelected)
-                              ? _CustomCheckbox(
-                                  isSelected: isSelected,
-                                  onTap: onToggleSelection,
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ),
+                  _cell(widget.dealer.phone, flex: 20, isSecondary: true),
+                  _cell(
+                    (widget.dealer.city.isNotEmpty &&
+                            widget.dealer.state.isNotEmpty)
+                        ? '${widget.dealer.city}, ${widget.dealer.state}'
+                        : (widget.dealer.city.isNotEmpty
+                              ? widget.dealer.city
+                              : widget.dealer.state),
+                    flex: 20,
+                    isSecondary: true,
+                  ),
+                  if (AuthService().isAdmin)
                     Expanded(
                       flex: 20,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 12,
+                        padding: const EdgeInsets.only(
+                          left: 12,
+                          right: 36,
+                          top: 8,
+                          bottom: 8,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              dealer.shopName != null &&
-                                      dealer.shopName!.isNotEmpty
-                                  ? dealer.shopName!
-                                  : 'Unnamed Shop',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: AppTheme.textPrimary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        child: GestureDetector(
+                          onTap: () {}, // Stop propagation for dropdown
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
                             ),
-                            Text(
-                              dealer.name,
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w500,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value:
+                                    widget.salesAgents.any(
+                                      (agent) =>
+                                          agent['_id'] == widget.dealer.agentId,
+                                    )
+                                    ? widget.dealer.agentId
+                                    : null,
+                                isExpanded: true,
+                                isDense: true,
+                                icon: const Icon(
+                                  Icons.arrow_drop_down,
+                                  size: 16,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                hint: Text('-', style: _dealerNameStyle),
+                                onChanged: (String? newAgentId) {
+                                  if (widget.dealer.id != null) {
+                                    widget.onAssignAgent(
+                                      widget.dealer.id!,
+                                      newAgentId,
+                                    );
+                                  }
+                                },
+                                items: [
+                                  DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('-', style: _dealerNameStyle),
+                                  ),
+                                  ...widget.salesAgents.map((agent) {
+                                    final agentName =
+                                        '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                            .trim();
+                                    return DropdownMenuItem<String>(
+                                      value: agent['_id'],
+                                      child: Text(
+                                        agentName.isNotEmpty
+                                            ? agentName
+                                            : (agent['phoneNumber'] ?? ''),
+                                        style: _cellBoldTextStyle.copyWith(
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  _statusCell(widget.dealer.status ?? 'prospect', flex: 16),
+                  _cell(
+                    widget.dealer.totalOrders.toString(),
+                    flex: 12,
+                    isBold: true,
+                    textAlign: TextAlign.center,
+                  ),
+                  _cell(
+                    widget.dealer.purchaseValue,
+                    flex: 20,
+                    isBold: true,
+                    textAlign: TextAlign.center,
+                  ),
+                  Expanded(
+                    flex: 18,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: () {}, // Stop propagation for buttons
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.onCreateOrder != null) ...[
+                              GestureDetector(
+                                onTap: widget.onCreateOrder,
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.add_shopping_cart_rounded,
+                                          size: 13,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Order',
+                                          style: _statusTextStyle.copyWith(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            _ConnectedActionButtons(
+                              onEdit: widget.onEdit,
+                              onDelete: widget.onDelete,
                             ),
                           ],
                         ),
                       ),
                     ),
-                    _cell(dealer.phone, flex: 20, isSecondary: true),
-                    _cell(
-                      (dealer.city.isNotEmpty && dealer.state.isNotEmpty)
-                          ? '${dealer.city}, ${dealer.state}'
-                          : (dealer.city.isNotEmpty
-                                ? dealer.city
-                                : dealer.state),
-                      flex: 20,
-                      isSecondary: true,
-                    ),
-                    if (AuthService().isAdmin)
-                      Expanded(
-                        flex: 20,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          child: GestureDetector(
-                            onTap: () {}, // Stop propagation for dropdown
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF9FAFB),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: const Color(0xFFE5E7EB),
-                                ),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value:
-                                      salesAgents.any(
-                                        (agent) =>
-                                            agent['_id'] == dealer.agentId,
-                                      )
-                                      ? dealer.agentId
-                                      : null,
-                                  isExpanded: true,
-                                  isDense: true,
-                                  icon: const Icon(
-                                    Icons.arrow_drop_down,
-                                    size: 16,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                  hint: Text(
-                                    '-',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12.5,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  onChanged: (String? newAgentId) {
-                                    if (dealer.id != null) {
-                                      onAssignAgent(dealer.id!, newAgentId);
-                                    }
-                                  },
-                                  items: [
-                                    DropdownMenuItem<String>(
-                                      value: null,
-                                      child: Text(
-                                        '-',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12.5,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                    ...salesAgents.map((agent) {
-                                      final agentName =
-                                          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                              .trim();
-                                      return DropdownMenuItem<String>(
-                                        value: agent['_id'],
-                                        child: Text(
-                                          agentName.isNotEmpty
-                                              ? agentName
-                                              : (agent['phoneNumber'] ?? ''),
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 12.5,
-                                            color: AppTheme.textPrimary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      );
-                                    }),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      flex: 12,
-                      child: Center(child: _SourceBadge(source: dealer.source)),
-                    ),
-                    _statusCell(dealer.status ?? 'prospect', flex: 16),
-                    _cell(
-                      dealer.totalOrders.toString(),
-                      flex: 12,
-                      isBold: true,
-                      textAlign: TextAlign.center,
-                    ),
-                    _cell(
-                      dealer.purchaseValue,
-                      flex: 20,
-                      isBold: true,
-                      textAlign: TextAlign.center,
-                    ),
-                    Expanded(
-                      flex: 30,
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {}, // Stop propagation for buttons
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (onCreateOrder != null) ...[
-                                GestureDetector(
-                                  onTap: onCreateOrder,
-                                  child: MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            AppTheme.primaryColor.withValues(
-                                              alpha: 0.85,
-                                            ),
-                                            AppTheme.primaryColor,
-                                          ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppTheme.primaryColor
-                                                .withValues(alpha: 0.25),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.add_shopping_cart_rounded,
-                                            size: 13,
-                                            color: Colors.white,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Order',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              _ConnectedActionButtons(
-                                onEdit: onEdit,
-                                onDelete: onDelete,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2586,18 +3006,47 @@ class _DealerRow extends StatelessWidget {
         child: Text(
           text,
           textAlign: textAlign,
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            color: isBold
-                ? AppTheme.textPrimary
-                : (isSecondary ? AppTheme.textSecondary : AppTheme.textBody),
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-          ),
+          style: isBold
+              ? _cellBoldTextStyle
+              : _cellTextStyle.copyWith(
+                  color: isSecondary
+                      ? AppTheme.textSecondary
+                      : AppTheme.textBody,
+                ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
       ),
     );
+  }
+
+  String _formatStatusName(String status) {
+    switch (status.toLowerCase()) {
+      case 'kyc pending':
+        return 'KYC Pending';
+      case 'call not picked':
+        return 'Call Not Picked';
+      case 'connected but not intrested':
+        return 'Connected But Not Interested';
+      case 'quotation sent':
+        return 'Quotation Sent';
+      case 'negotiation':
+        return 'Negotiation';
+      case 'follow-up':
+        return 'Follow-up';
+      case 'lost':
+        return 'Lost';
+      case 'intrested':
+        return 'Interested';
+      case 'customer busy':
+        return 'Customer Busy';
+      case 'call switch off':
+        return 'Call Switch Off';
+      case 'prospect':
+        return 'Prospect';
+      default:
+        return status;
+    }
   }
 
   Widget _statusCell(String status, {int flex = 1}) {
@@ -2647,17 +3096,13 @@ class _DealerRow extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withOpacity(0.3), width: 1),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
             ),
             child: Text(
-              status.toUpperCase(),
-              style: GoogleFonts.outfit(
-                fontSize: 10.5,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
+              _formatStatusName(status).toUpperCase(),
+              style: _statusTextStyle.copyWith(color: color),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

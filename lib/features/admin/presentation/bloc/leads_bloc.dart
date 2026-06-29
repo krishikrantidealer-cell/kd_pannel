@@ -88,6 +88,14 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           orElse: () => <String, dynamic>{},
         );
         updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
+
+        // Optimistically update status to 'new' if it was 'prospect'
+        final currentStatus = (updatedUser['status'] ?? updatedUser['leadStatus'] ?? 'prospect').toString().toLowerCase();
+        if (event.agentId != null && currentStatus == 'prospect') {
+          updatedUser['status'] = 'new';
+          updatedUser['leadStatus'] = 'new';
+        }
+
         return updatedUser;
       }
       return u;
@@ -130,7 +138,32 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     BulkAssignAgentToLeadsEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (event.userIds.contains(u['_id']) || event.userIds.contains(u['id'])) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        final agent = state.salesAgents.firstWhere(
+          (a) => a['_id'] == event.agentId,
+          orElse: () => <String, dynamic>{},
+        );
+        updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
+
+        // Optimistically update status to 'new' if it was 'prospect'
+        final currentStatus = (updatedUser['status'] ?? updatedUser['leadStatus'] ?? 'prospect').toString().toLowerCase();
+        if (event.agentId != null && currentStatus == 'prospect') {
+          updatedUser['status'] = 'new';
+          updatedUser['leadStatus'] = 'new';
+        }
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final client = ApiClient();
       final futures = event.userIds.map((userId) {
@@ -168,6 +201,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     Emitter<LeadsState> emit,
   ) async {
     emit(state.copyWith(status: LeadsStatus.submitting));
+
     try {
       final res = await ApiClient().post('/users/sales', {
         'firstName': event.firstName.trim(),
@@ -204,7 +238,21 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     VerifyKYCEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        updatedUser['kycStatus'] = 'verified';
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().put(
         '/users/${event.userId}/kyc',
@@ -249,7 +297,21 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     RejectKYCEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        updatedUser['kycStatus'] = 'rejected';
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().put(
         '/users/${event.userId}/kyc',
@@ -328,7 +390,22 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     ToggleBlockLeadEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.submitting));
+    // Optimistic Update
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (u['_id'] == event.userId || u['id'] == event.userId) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        final bool currentBlocked = updatedUser['isBlocked'] ?? false;
+        updatedUser['isBlocked'] = !currentBlocked;
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: LeadsStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
       final res = await ApiClient().put('/users/${event.userId}/block', {});
 
@@ -485,6 +562,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     Emitter<LeadsState> emit,
   ) async {
     emit(state.copyWith(status: LeadsStatus.submitting));
+
     try {
       final client = ApiClient();
       final res = await client.multipartRequest(

@@ -446,6 +446,7 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   final List<String> dropdownOptions = [
+    'All Time',
     'Last 1 Week',
     'Last 2 Weeks',
     'Last 3 Weeks',
@@ -470,10 +471,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
   List<Map<String, dynamic>> get filteredLeads {
     final state = context.read<LeadsBloc>().state;
-    return _getFilteredLeads(
-      allLeads,
-      state,
-    );
+    return _getFilteredLeads(allLeads, state);
   }
 
   List<Map<String, dynamic>> _getFilteredLeads(
@@ -481,56 +479,6 @@ class _LeadsPageState extends State<LeadsPage> {
     LeadsState state,
   ) {
     List<Map<String, dynamic>> result = leads;
-
-    // 1. Date Filtering
-    DateTime? startDate;
-    DateTime? endDate;
-
-    if (state.selectedRange != null && state.selectedRange!.startDate != null) {
-      startDate = state.selectedRange!.startDate;
-      endDate = state.selectedRange!.endDate ?? state.selectedRange!.startDate;
-      // Normalize to end of day
-      endDate = DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
-    } else if (state.selectedTimeframe.isNotEmpty) {
-      final now = DateTime.now();
-      endDate = now;
-      switch (state.selectedTimeframe) {
-        case 'Last 1 Week':
-          startDate = now.subtract(const Duration(days: 7));
-          break;
-        case 'Last 2 Weeks':
-          startDate = now.subtract(const Duration(days: 14));
-          break;
-        case 'Last 3 Weeks':
-          startDate = now.subtract(const Duration(days: 21));
-          break;
-        case 'Last 1 Month':
-          startDate = DateTime(now.year, now.month - 1, now.day);
-          break;
-        case 'Last 3 Months':
-          startDate = DateTime(now.year, now.month - 3, now.day);
-          break;
-        case 'Last 6 Months':
-          startDate = DateTime(now.year, now.month - 6, now.day);
-          break;
-        case 'This Month':
-          startDate = DateTime(now.year, now.month, 1);
-          break;
-      }
-    }
-
-    if (startDate != null && endDate != null) {
-      result = result.where((l) {
-        final dateStr = l['createdAt'] ?? l['updatedAt'];
-        if (dateStr == null) return false;
-        try {
-          final date = DateTime.parse(dateStr).toLocal();
-          return date.isAfter(startDate!) && date.isBefore(endDate!);
-        } catch (e) {
-          return false;
-        }
-      }).toList();
-    }
 
     // 2. Chip Filtering
     if (state.selectedFilterChip != 'All') {
@@ -726,6 +674,10 @@ class _LeadsPageState extends State<LeadsPage> {
         }
       },
       builder: (context, state) {
+        // Optimization: Calculate leads once per build
+        final allLeadsData = _getAllLeads(state.allRawUsers);
+        final filteredLeadsData = _getFilteredLeads(allLeadsData, state);
+
         final verifiedDealersCount = state.allRawUsers.where((u) {
           final role = u['role'] ?? 'user';
           final kycStatus = u['kycStatus'] ?? 'pending';
@@ -739,175 +691,239 @@ class _LeadsPageState extends State<LeadsPage> {
           return true;
         }).length;
 
+        // Date Filtering for leads stats grid
+        DateTime? statsStartDate;
+        DateTime? statsEndDate;
+
+        if (state.selectedRange != null &&
+            state.selectedRange!.startDate != null) {
+          statsStartDate = state.selectedRange!.startDate;
+          statsEndDate =
+              state.selectedRange!.endDate ?? state.selectedRange!.startDate;
+          statsEndDate = DateTime(
+            statsEndDate!.year,
+            statsEndDate.month,
+            statsEndDate.day,
+            23,
+            59,
+            59,
+          );
+        } else if (state.selectedTimeframe.isNotEmpty &&
+            state.selectedTimeframe != 'All Time') {
+          final now = DateTime.now();
+          statsEndDate = now;
+          switch (state.selectedTimeframe) {
+            case 'Last 1 Week':
+              statsStartDate = now.subtract(const Duration(days: 7));
+              break;
+            case 'Last 2 Weeks':
+              statsStartDate = now.subtract(const Duration(days: 14));
+              break;
+            case 'Last 3 Weeks':
+              statsStartDate = now.subtract(const Duration(days: 21));
+              break;
+            case 'Last 1 Month':
+              statsStartDate = DateTime(now.year, now.month - 1, now.day);
+              break;
+            case 'Last 3 Months':
+              statsStartDate = DateTime(now.year, now.month - 3, now.day);
+              break;
+            case 'Last 6 Months':
+              statsStartDate = DateTime(now.year, now.month - 6, now.day);
+              break;
+            case 'This Month':
+              statsStartDate = DateTime(now.year, now.month, 1);
+              break;
+          }
+        }
+
+        var statsLeads = allLeadsData;
+        if (statsStartDate != null && statsEndDate != null) {
+          statsLeads = statsLeads.where((l) {
+            final dateStr = l['createdAt'] ?? l['updatedAt'];
+            if (dateStr == null) return false;
+            try {
+              final date = DateTime.parse(dateStr).toLocal();
+              return date.isAfter(statsStartDate!) &&
+                  date.isBefore(statsEndDate!);
+            } catch (e) {
+              return false;
+            }
+          }).toList();
+        }
+
         final Widget body = Builder(
-          builder: (context) =>
-              (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+          builder: (context) => (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
               ? _buildSkeletonLoading(isDesktop, isMobile)
-              : ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 28 : 16,
-                        vertical: isDesktop ? 20 : 12,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          if (isMobile)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (!widget.isStandalone) ...[
-                                  Text(
-                                    'Leads',
-                                    style: AppTheme.headingXL.copyWith(
-                                      letterSpacing: -0.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _buildTimeframeRow(
-                                        isMobile,
-                                        state,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      height: 38,
-                                      width: 38,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: AppTheme.borderColor,
-                                        ),
-                                      ),
-                                      child: IconButton(
-                                        padding: EdgeInsets.zero,
-                                        onPressed: _isExporting
-                                            ? null
-                                            : _exportLeadsToCSV,
-                                        icon: _isExporting
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color:
-                                                          AppTheme.primaryColor,
-                                                    ),
-                                              )
-                                            : const Icon(
-                                                Icons.download_rounded,
-                                                size: 18,
-                                                color: AppTheme.primaryColor,
-                                              ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            )
-                          else
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                if (!widget.isStandalone)
-                                  Text(
-                                    AuthService().isSales
-                                        ? 'My Assigned Leads'
-                                        : 'Leads Management',
-                                    style: AppTheme.headingXL.copyWith(
-                                      letterSpacing: -0.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  )
-                                else
-                                  const SizedBox.shrink(),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: _isExporting
-                                          ? null
-                                          : _exportLeadsToCSV,
-                                      icon: _isExporting
-                                          ? const SizedBox(
-                                              width: 14,
-                                              height: 14,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: AppTheme.primaryColor,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.download,
-                                              size: 16,
-                                            ),
-                                      label: Text(
-                                        _isExporting
-                                            ? 'Exporting...'
-                                            : 'Export CSV',
-                                        style: GoogleFonts.outfit(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        side: const BorderSide(
-                                          color: AppTheme.primaryColor,
-                                          width: 1.5,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    _buildTimeframeRow(isMobile, state),
-                                  ],
-                                ),
-                              ],
+              : CustomScrollView(
+                  slivers: [
+                          SliverPadding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isDesktop ? 28 : 16,
+                              vertical: isDesktop ? 20 : 12,
                             ),
-                          const SizedBox(height: 16),
-                          _LeadsStatsGrid(
-                            leads: allLeads,
-                            verifiedDealersCount: verifiedDealersCount,
+                            sliver: SliverToBoxAdapter(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  if (isMobile)
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (!widget.isStandalone) ...[
+                                          Text(
+                                            'Leads',
+                                            style: AppTheme.headingXL.copyWith(
+                                              letterSpacing: -0.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                        ],
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildTimeframeRow(
+                                                isMobile,
+                                                state,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 38,
+                                              width: 38,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(10),
+                                                border: Border.all(
+                                                  color: AppTheme.borderColor,
+                                                ),
+                                              ),
+                                              child: IconButton(
+                                                padding: EdgeInsets.zero,
+                                                onPressed: _isExporting
+                                                    ? null
+                                                    : _exportLeadsToCSV,
+                                                icon: _isExporting
+                                                    ? const SizedBox(
+                                                        width: 16,
+                                                        height: 16,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color:
+                                                                  AppTheme.primaryColor,
+                                                            ),
+                                                      )
+                                                    : const Icon(
+                                                        Icons.download_rounded,
+                                                        size: 18,
+                                                        color: AppTheme.primaryColor,
+                                                      ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        if (!widget.isStandalone)
+                                          Text(
+                                            AuthService().isSales
+                                                ? 'My Assigned Leads'
+                                                : 'Leads Management',
+                                            style: AppTheme.headingXL.copyWith(
+                                              letterSpacing: -0.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          )
+                                        else
+                                          const SizedBox.shrink(),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: _isExporting
+                                                  ? null
+                                                  : _exportLeadsToCSV,
+                                              icon: _isExporting
+                                                  ? const SizedBox(
+                                                      width: 14,
+                                                      height: 14,
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: AppTheme.primaryColor,
+                                                      ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.download,
+                                                      size: 16,
+                                                    ),
+                                              label: Text(
+                                                _isExporting
+                                                    ? 'Exporting...'
+                                                    : 'Export CSV',
+                                                style: GoogleFonts.outfit(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppTheme.primaryColor,
+                                                ),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                side: const BorderSide(
+                                                  color: AppTheme.primaryColor,
+                                                  width: 1.5,
+                                                ),
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 16,
+                                                  vertical: 12,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(
+                                                    12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            _buildTimeframeRow(isMobile, state),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  const SizedBox(height: 16),
+                                  _LeadsStatsGrid(
+                                    leads: statsLeads,
+                                    verifiedDealersCount: verifiedDealersCount,
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildFilterChips(isMobile, state),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 24),
-                          _buildFilterChips(isMobile, state),
-                          const SizedBox(height: 16),
-                          _LeadsTableCard(
-                            leads: filteredLeads,
-                            totalEntries: filteredLeads.length,
-                            isMobile: isMobile,
-                            salesAgents: state.salesAgents,
-                            onAssignAgent: _assignAgent,
-                            onBulkAssignAgent: _bulkAssignAgent,
-                            onEditLead: _editLead,
-                            onDeleteLead: _deleteLead,
+                          SliverPadding(
+                            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                            sliver: SliverToBoxAdapter(
+                              child: _LeadsTableCard(
+                                leads: filteredLeadsData,
+                                totalEntries: filteredLeadsData.length,
+                                isMobile: isMobile,
+                                salesAgents: state.salesAgents,
+                                onAssignAgent: _assignAgent,
+                                onBulkAssignAgent: _bulkAssignAgent,
+                                onEditLead: _editLead,
+                                onDeleteLead: _deleteLead,
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 12),
+                          const SliverToBoxAdapter(child: SizedBox(height: 40)),
                         ],
                       ),
-                    ),
-                  ),
-                ),
         );
 
         if (widget.isStandalone) {
@@ -1468,10 +1484,10 @@ class _LeadsTableCard extends StatefulWidget {
 }
 
 class _LeadsTableCardState extends State<_LeadsTableCard> {
-  String selectedSource = 'Lead Source';
   String selectedAssign = 'Assign';
+  String selectedStatus = 'Status';
   PickerDateRange? _selectedTableRange;
-  String selectedTableDropdown = 'Today';
+  String selectedTableDropdown = 'All Time';
   final Set<String> _selectedLeadIds = {};
   int get _currentPage => context.read<LeadsBloc>().state.currentPage;
   int get _pageSize => context.read<LeadsBloc>().state.pageSize;
@@ -1711,11 +1727,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   @override
   void didUpdateWidget(_LeadsTableCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.leads.length != widget.leads.length) {
-      context.read<LeadsBloc>().add(
-        const UpdateLeadsFilterEvent(currentPage: 1),
-      );
-    }
+    // Removed automatic jump to page 1 on length change as it causes UX issues during edits/refreshes.
   }
 
   Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
@@ -1787,14 +1799,6 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     // 1. Local Filtering for Table Controls
     List<Map<String, dynamic>> tableLeads = widget.leads;
 
-    // Filter by Source
-    if (selectedSource != 'Lead Source' && selectedSource != 'All') {
-      tableLeads = tableLeads.where((l) {
-        return l['source'].toString().toLowerCase() ==
-            selectedSource.toLowerCase();
-      }).toList();
-    }
-
     // Filter by Assigned Agent (only for admin)
     if (AuthService().isAdmin &&
         selectedAssign != 'Assign' &&
@@ -1804,6 +1808,19 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
         return l['agent'].toString().toLowerCase().contains(
           selectedAssign.toLowerCase(),
         );
+      }).toList();
+    }
+
+    // Filter by Status
+    if (selectedStatus != 'Status' && selectedStatus != 'All') {
+      tableLeads = tableLeads.where((l) {
+        final status = l['status'] ?? 'prospect';
+        String dbStatus = status.toString().toLowerCase();
+        String filterStatus = selectedStatus.toLowerCase();
+        if (filterStatus == 'interested') filterStatus = 'intrested';
+        if (filterStatus == 'connected but not interested')
+          filterStatus = 'connected but not intrested';
+        return dbStatus == filterStatus;
       }).toList();
     }
 
@@ -1935,19 +1952,34 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                     ],
                   ),
           ),
-          _LeadsTable(
-            leads: paginatedLeads,
-            isMobile: widget.isMobile,
-            salesAgents: widget.salesAgents,
-            onAssignAgent: widget.onAssignAgent,
-            onEditLead: widget.onEditLead,
-            onDeleteLead: widget.onDeleteLead,
-            selectedLeadIds: _selectedLeadIds,
-            isSubmitting:
-                context.read<LeadsBloc>().state.status ==
-                LeadsStatus.submitting,
-            onSelectionChanged: () {
-              setState(() {});
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double minTableWidth = widget.isMobile ? 1200.0 : (AuthService().isAdmin ? 1200.0 : 1000.0);
+              final double width = constraints.maxWidth > minTableWidth ? constraints.maxWidth : minTableWidth;
+              return ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: true),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: width,
+                    child: _LeadsTable(
+                      leads: paginatedLeads,
+                      isMobile: widget.isMobile,
+                      salesAgents: widget.salesAgents,
+                      onAssignAgent: widget.onAssignAgent,
+                      onEditLead: widget.onEditLead,
+                      onDeleteLead: widget.onDeleteLead,
+                      selectedLeadIds: _selectedLeadIds,
+                      isSubmitting:
+                          context.read<LeadsBloc>().state.status ==
+                          LeadsStatus.submitting,
+                      onSelectionChanged: () {
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+              );
             },
           ),
           _buildTableFooter(widget.isMobile, currentPage, total),
@@ -1960,21 +1992,31 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildTableDropdown(
-          'Lead Source',
-          selectedSource,
-          ['All', 'Facebook', 'Google', 'Website', 'Direct'],
-          (val) => setState(() => selectedSource = val!),
-        ),
-        if (AuthService().isAdmin) ...[
-          const SizedBox(width: 12),
+        if (AuthService().isAdmin)
           _buildTableDropdown('Assign', selectedAssign, [
             'All',
-            'Amit Patel',
-            'Priya Singh',
             'Unassigned',
+            ...widget.salesAgents.map(
+              (agent) =>
+                  '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                      .trim(),
+            ),
           ], (val) => setState(() => selectedAssign = val!)),
-        ],
+        if (AuthService().isAdmin) const SizedBox(width: 12),
+        _buildTableDropdown('Status', selectedStatus, [
+          'All',
+          'KYC Pending',
+          'Call Not Picked',
+          'Connected But Not Interested',
+          'Quotation Sent',
+          'Negotiation',
+          'Follow-up',
+          'Lost',
+          'Interested',
+          'Customer Busy',
+          'Call Switch Off',
+          'Prospect',
+        ], (val) => setState(() => selectedStatus = val!)),
         const SizedBox(width: 12),
         _buildTableDateSection(),
       ],
@@ -2052,8 +2094,14 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                   });
                 }
               },
-              items: ['Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days']
-                  .map<DropdownMenuItem<String>>((String value) {
+              items:
+                  [
+                    'All Time',
+                    'Today',
+                    'Yesterday',
+                    'Last 7 Days',
+                    'Last 30 Days',
+                  ].map<DropdownMenuItem<String>>((String value) {
                     return DropdownMenuItem<String>(
                       value: value,
                       child: Text(
@@ -2066,8 +2114,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                         ),
                       ),
                     );
-                  })
-                  .toList(),
+                  }).toList(),
             ),
           ),
         ],
@@ -2422,7 +2469,7 @@ class _LeadsTable extends StatefulWidget {
 }
 
 class _LeadsTableState extends State<_LeadsTable> {
-  int? hoveredRowIndex;
+  // Removed hoveredRowIndex to prevent full table rebuilds on hover
 
   bool get isAllSelected =>
       widget.leads.isNotEmpty &&
@@ -2521,14 +2568,13 @@ class _LeadsTableState extends State<_LeadsTable> {
   @override
   Widget build(BuildContext context) {
     final columns = [
-      const _LeadColumnConfig('Lead Name', 18),
+      const _LeadColumnConfig('Lead Name', 28),
       const _LeadColumnConfig('Phone Number', 14),
       const _LeadColumnConfig('Location', 14),
       const _LeadColumnConfig('Last Activity', 12),
       if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 14),
       const _LeadColumnConfig('Status', 14),
-      const _LeadColumnConfig('Source', 10, isCenter: true),
-      const _LeadColumnConfig('Actions', 22, isCenter: true),
+      const _LeadColumnConfig('Actions', 12),
     ];
 
     Widget tableHeader = Container(
@@ -2566,8 +2612,9 @@ class _LeadsTableState extends State<_LeadsTable> {
                   ),
                 ),
               ...columns.map((col) {
+                final rightPadding = col.title == 'Assigned Agent' ? 36.0 : 12.0;
                 final Widget child = Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.only(left: 12, right: rightPadding),
                   child: _HeaderText(col.title),
                 );
                 return Expanded(
@@ -2581,87 +2628,52 @@ class _LeadsTableState extends State<_LeadsTable> {
       ),
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double minTableWidth = widget.isMobile
-            ? 1500.0
-            : (AuthService().isAdmin ? 1360.0 : 1160.0);
-        // Guard against infinite constraints which occur on first layout
-        // when this LayoutBuilder sits inside a horizontal SingleChildScrollView.
-        // In that case, fall back to minTableWidth so rows have a known width.
-        final double safeMaxWidth = constraints.maxWidth.isInfinite
-            ? minTableWidth
-            : constraints.maxWidth;
-        final double tableWidth = safeMaxWidth > minTableWidth
-            ? safeMaxWidth
-            : minTableWidth;
-
-        return SelectionArea(
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              scrollbars: false,
-              dragDevices: {
-                ui.PointerDeviceKind.touch,
-                ui.PointerDeviceKind.trackpad,
-              },
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: SizedBox(
-                width: tableWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    tableHeader,
-                    ...widget.leads.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final lead = entry.value;
-                      final bool isAlternate = index % 2 == 1;
-                      final String leadId = lead['id'] ?? '';
-                      return _LeadRow(
-                        lead: lead,
-                        isAlternate: isAlternate,
-                        isMobile: widget.isMobile,
-                        isHovered: hoveredRowIndex == index,
-                        isSelected: widget.selectedLeadIds.contains(leadId),
-                        isAllSelected: isAllSelected,
-                        onToggleSelection: () => _toggleSelection(leadId),
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          '/leads/profile',
-                          arguments: lead,
-                        ),
-                        onHover: () => setState(() => hoveredRowIndex = index),
-                        onExit: () => setState(() => hoveredRowIndex = null),
-                        salesAgents: widget.salesAgents,
-                        onAssignAgent: widget.onAssignAgent,
-                        onEdit: widget.onEditLead,
-                        onDelete: widget.onDeleteLead,
-                      );
-                    }),
-                  ],
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        tableHeader,
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: widget.leads.length,
+          itemExtent: 68, // Massive optimization: bypass height calculation
+          addRepaintBoundaries: true,
+          itemBuilder: (context, index) {
+            final lead = widget.leads[index];
+            final bool isAlternate = index % 2 == 1;
+            final String leadId = lead['id'] ?? '';
+            return _LeadRow(
+              lead: lead,
+              isAlternate: isAlternate,
+              isMobile: widget.isMobile,
+              isSelected: widget.selectedLeadIds.contains(leadId),
+              isAllSelected: isAllSelected,
+              onToggleSelection: () => _toggleSelection(leadId),
+              onTap: () => Navigator.pushNamed(
+                context,
+                '/leads/profile',
+                arguments: lead,
               ),
-            ),
-          ),
-        );
-      },
+              salesAgents: widget.salesAgents,
+              onAssignAgent: widget.onAssignAgent,
+              onEdit: widget.onEditLead,
+              onDelete: widget.onDeleteLead,
+            );
+          },
+        ),
+      ],
     );
   }
 }
 
-class _LeadRow extends StatelessWidget {
+class _LeadRow extends StatefulWidget {
   final Map<String, dynamic> lead;
   final bool isAlternate;
   final bool isMobile;
-  final bool isHovered;
   final bool isSelected;
   final bool isAllSelected;
   final VoidCallback onToggleSelection;
   final VoidCallback onTap;
-  final VoidCallback onHover;
-  final VoidCallback onExit;
   final List<Map<String, dynamic>> salesAgents;
   final Function(String userId, String? agentId) onAssignAgent;
   final Function(Map<String, dynamic> lead) onEdit;
@@ -2671,392 +2683,239 @@ class _LeadRow extends StatelessWidget {
     required this.lead,
     required this.isAlternate,
     required this.isMobile,
-    required this.isHovered,
     required this.isSelected,
     required this.isAllSelected,
     required this.onToggleSelection,
     required this.onTap,
-    required this.onHover,
-    required this.onExit,
     required this.salesAgents,
     required this.onAssignAgent,
     required this.onEdit,
     required this.onDelete,
   });
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  @override
+  State<_LeadRow> createState() => _LeadRowState();
+}
+
+class _LeadRowState extends State<_LeadRow> {
+  bool isHovered = false;
+
+  static final TextStyle _nameStyle = GoogleFonts.outfit(
+    fontSize: 13,
+    color: AppTheme.textPrimary,
+    fontWeight: FontWeight.w700,
+  );
+  static final TextStyle _subStyle = GoogleFonts.outfit(
+    fontSize: 11,
+    color: AppTheme.textSecondary,
+    fontWeight: FontWeight.w500,
+  );
+  static final TextStyle _cellStyleText = GoogleFonts.outfit(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+  );
+  static final TextStyle _statusTextStyle = GoogleFonts.outfit(
+    fontSize: 10.5,
+    fontWeight: FontWeight.bold,
+  );
 
   @override
   Widget build(BuildContext context) {
-    Color rowBgColor = isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
-    if (isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
+    Color rowBgColor = widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
+    if (widget.isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
     if (isHovered) rowBgColor = const Color(0xFFF1F9F3);
 
-    return MouseRegion(
-      onEnter: (_) => onHover(),
-      onExit: (_) => onExit(),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            border: const Border(
-              bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+    return RepaintBoundary(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => isHovered = true),
+        onExit: (_) => setState(() => isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            decoration: BoxDecoration(
+              border: const Border(
+                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+              ),
+              color: rowBgColor,
             ),
-            color: rowBgColor,
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+            child: Row(
+              children: [
+                if (AuthService().isAdmin)
+                  SizedBox(
+                    width: 40,
+                    child: Center(
+                      child: (isHovered || widget.isSelected)
+                          ? _CustomCheckbox(
+                              isSelected: widget.isSelected,
+                              onTap: widget.onToggleSelection,
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                  ]
-                : null,
-          ),
-          child: Stack(
-            children: [
-              // Animated Left Accent Strip
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                left: 0,
-                top: isHovered ? 0 : 12,
-                bottom: isHovered ? 0 : 12,
-                width: isHovered ? 4 : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 160),
-                  opacity: isHovered ? 1 : 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor,
-                      borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(4),
+                  ),
+                Expanded(
+                  flex: 28,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.lead['name'],
+                          style: _nameStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.lead['shopName'] != null &&
+                            widget.lead['shopName'].toString().isNotEmpty &&
+                            widget.lead['shopName'].toString().toLowerCase() !=
+                                'my store')
+                          Text(
+                            widget.lead['shopName'],
+                            style: _subStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                _cell(widget.lead['phone'], flex: 1.4, isSecondary: true),
+                _cell(
+                  (widget.lead['city'] != null &&
+                          widget.lead['city'].toString().trim().isNotEmpty &&
+                          widget.lead['state'] != null &&
+                          widget.lead['state'].toString().trim().isNotEmpty)
+                      ? '${widget.lead['city']}, ${widget.lead['state']}'
+                      : ((widget.lead['city'] ?? '').toString().trim().isNotEmpty
+                            ? widget.lead['city']
+                            : (widget.lead['state'] ?? '')),
+                  flex: 1.4,
+                  isSecondary: true,
+                ),
+                _cell(widget.lead['activity'], flex: 1.2, isSecondary: true),
+                if (AuthService().isAdmin)
+                  Expanded(
+                    flex: 14,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 12,
+                        right: 36,
+                        top: 8,
+                        bottom: 8,
+                      ),
+                      child: GestureDetector(
+                        onTap: () async {
+                          final agentId = await showDialog<String>(
+                            context: context,
+                            builder: (context) => SimpleDialog(
+                              title: const Text('Assign Sales Agent'),
+                              children: [
+                                SimpleDialogOption(
+                                  onPressed: () => Navigator.pop(context, 'unassign'),
+                                  child: const Text('None'),
+                                ),
+                                ...widget.salesAgents.map((agent) {
+                                  final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                                  return SimpleDialogOption(
+                                    onPressed: () => Navigator.pop(context, agent['_id']),
+                                    child: Text(name.isNotEmpty ? name : (agent['phoneNumber'] ?? '')),
+                                  );
+                                }),
+                              ],
+                            ),
+                          );
+                          if (agentId != null) {
+                            widget.onAssignAgent(widget.lead['id'], agentId == 'unassign' ? null : agentId);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.salesAgents.firstWhere(
+                                    (a) => a['_id'] == widget.lead['agentId'],
+                                    orElse: () => <String, dynamic>{},
+                                  )['firstName'] ?? '-',
+                                  style: _cellStyleText,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                _statusCell(widget.lead['status'] ?? 'prospect', flex: 1.4),
+                Expanded(
+                  flex: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 12,
+                        top: 10,
+                        bottom: 10,
+                      ),
+                      child: GestureDetector(
+                        onTap: () {}, // Stop propagation for buttons
+                        child: _ConnectedActionButtons(
+                          onEdit: () => widget.onEdit(widget.lead),
+                          onDelete: () => widget.onDelete(widget.lead['id'], widget.lead['name']),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Row(
-                children: [
-                  if (AuthService().isAdmin)
-                    SizedBox(
-                      width: 40,
-                      child: Center(
-                        child: (isHovered || isSelected)
-                            ? _CustomCheckbox(
-                                isSelected: isSelected,
-                                onTap: onToggleSelection,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  Expanded(
-                    flex: 18,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 12,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lead['name'],
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              color: AppTheme.textPrimary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (lead['shopName'] != null &&
-                              lead['shopName'].toString().isNotEmpty &&
-                              lead['shopName'].toString().toLowerCase() !=
-                                  'my store')
-                            Text(
-                              lead['shopName'],
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  _cell(lead['phone'], flex: 1.4, isSecondary: true),
-                  _cell(
-                    (lead['city'] != null &&
-                            lead['city'].toString().trim().isNotEmpty &&
-                            lead['state'] != null &&
-                            lead['state'].toString().trim().isNotEmpty)
-                        ? '${lead['city']}, ${lead['state']}'
-                        : ((lead['city'] ?? '').toString().trim().isNotEmpty
-                              ? lead['city']
-                              : (lead['state'] ?? '')),
-                    flex: 1.4,
-                    isSecondary: true,
-                  ),
-                  _cell(lead['activity'], flex: 1.2, isSecondary: true),
-                  if (AuthService().isAdmin)
-                    Expanded(
-                      flex: 14,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: !AuthService().isAdmin
-                            ? Text(
-                                lead['agent'] ?? '-',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12.5,
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              )
-                            : GestureDetector(
-                                onTap: () {}, // Stop propagation for dropdown
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF9FAFB),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: const Color(0xFFE5E7EB),
-                                    ),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value:
-                                          salesAgents.any(
-                                            (agent) =>
-                                                agent['_id'] == lead['agentId'],
-                                          )
-                                          ? lead['agentId']
-                                          : null,
-                                      isExpanded: true,
-                                      isDense: true,
-                                      icon: const Icon(
-                                        Icons.arrow_drop_down,
-                                        size: 16,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      hint: Text(
-                                        '-',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12.5,
-                                          color: AppTheme.textSecondary,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      onChanged: (String? newAgentId) {
-                                        onAssignAgent(lead['id'], newAgentId);
-                                      },
-                                      items: [
-                                        DropdownMenuItem<String>(
-                                          value: null,
-                                          child: Text(
-                                            '-',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 12.5,
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                          ),
-                                        ),
-                                        ...salesAgents.map((agent) {
-                                          final agentName =
-                                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                                  .trim();
-                                          return DropdownMenuItem<String>(
-                                            value: agent['_id'],
-                                            child: Text(
-                                              agentName.isNotEmpty
-                                                  ? agentName
-                                                  : (agent['phoneNumber'] ??
-                                                        ''),
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 12.5,
-                                                color: AppTheme.textPrimary,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          );
-                                        }),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ),
-                  _statusCell(lead['status'] ?? 'prospect', flex: 1.4),
-                  Expanded(
-                    flex: 10,
-                    child: Center(
-                      child: _SourceBadge(source: lead['source'] ?? 'App'),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 22,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: GestureDetector(
-                          onTap: () {}, // Stop propagation for buttons
-                          child: _ConnectedActionButtons(
-                            onEdit: () => onEdit(lead),
-                            onDelete: () => onDelete(lead['id'], lead['name']),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _statusCell(String status, {double flex = 1.0}) {
-    Color color = Colors.grey;
+  String _formatStatusName(String status) {
     switch (status.toLowerCase()) {
       case 'kyc pending':
-        color = Colors.amber;
-        break;
+        return 'KYC Pending';
       case 'call not picked':
-        color = Colors.orange;
-        break;
+        return 'Call Not Picked';
       case 'connected but not intrested':
-        color = Colors.blueGrey;
-        break;
+        return 'Connected But Not Interested';
       case 'quotation sent':
-        color = Colors.blue;
-        break;
+        return 'Quotation Sent';
       case 'negotiation':
-        color = Colors.indigo;
-        break;
+        return 'Negotiation';
       case 'follow-up':
-        color = Colors.deepPurple;
-        break;
+        return 'Follow-up';
       case 'lost':
-        color = Colors.red;
-        break;
+        return 'Lost';
       case 'intrested':
-        color = Colors.green;
-        break;
+        return 'Interested';
       case 'customer busy':
-        color = Colors.teal;
-        break;
+        return 'Customer Busy';
       case 'call switch off':
-        color = Colors.redAccent;
-        break;
+        return 'Call Switch Off';
       case 'prospect':
-        color = Colors.cyan;
-        break;
+        return 'Prospect';
+      default:
+        return status;
     }
-
-    return Expanded(
-      flex: (flex * 10).toInt(),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withOpacity(0.3), width: 1),
-            ),
-            child: Text(
-              status.toUpperCase(),
-              style: GoogleFonts.outfit(
-                fontSize: 10.5,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _cell(
@@ -3073,15 +2932,52 @@ class _LeadRow extends StatelessWidget {
         child: Text(
           text,
           textAlign: textAlign,
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            color: isBold
-                ? AppTheme.textPrimary
-                : (isSecondary ? AppTheme.textSecondary : AppTheme.textBody),
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-          ),
+          style: isBold 
+              ? _nameStyle 
+              : _cellStyleText.copyWith(color: isSecondary ? AppTheme.textSecondary : AppTheme.textBody),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _statusCell(String status, {double flex = 1.0}) {
+    Color color = Colors.grey;
+    switch (status.toLowerCase()) {
+      case 'kyc pending': color = Colors.amber; break;
+      case 'call not picked': color = Colors.orange; break;
+      case 'connected but not intrested': color = Colors.blueGrey; break;
+      case 'quotation sent': color = Colors.blue; break;
+      case 'negotiation': color = Colors.indigo; break;
+      case 'follow-up': color = Colors.deepPurple; break;
+      case 'lost': color = Colors.red; break;
+      case 'intrested': color = Colors.green; break;
+      case 'customer busy': color = Colors.teal; break;
+      case 'call switch off': color = Colors.redAccent; break;
+      case 'prospect': color = Colors.cyan; break;
+    }
+
+    return Expanded(
+      flex: (flex * 10).toInt(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+            ),
+            child: Text(
+              _formatStatusName(status).toUpperCase(),
+              style: _statusTextStyle.copyWith(color: color),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
       ),
     );
@@ -3411,8 +3307,12 @@ class _LeadsStatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unassignedCount = leads.where((l) => l['agentId'] == null).length;
-    final assignedCount = leads.where((l) => l['agentId'] != null).length;
+    final unassignedCount = leads
+        .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
+        .length;
+    final assignedCount = leads
+        .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
+        .length;
     final kycPendingCount = leads
         .where(
           (l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',

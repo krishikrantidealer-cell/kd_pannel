@@ -33,7 +33,7 @@ class DealersState extends Equatable {
     this.searchQuery = '',
     this.selectedAgent = 'All Sales Agents',
     this.selectedState = 'All States',
-    this.selectedTimeframe = 'This Week',
+    this.selectedTimeframe = 'All Time',
     this.customStartDate,
     this.customEndDate,
     this.showHighValueOnly = false,
