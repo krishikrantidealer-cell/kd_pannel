@@ -15,13 +15,16 @@ class AuthService {
   String? _currentUserId;
   String? _currentUserEmail;
   String? _lastError;
+  String? _sessionId;
 
   UserRole? get currentUserRole => _currentUserRole;
   String? get currentUserId => _currentUserId;
   String? get currentUserEmail => _currentUserEmail;
   String? get lastError => _lastError;
+  String? get sessionId => _sessionId;
 
   Future<void> init() async {
+    _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
     try {
       final prefs = await SharedPreferences.getInstance();
       final roleStr = prefs.getString('kd_user_role');

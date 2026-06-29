@@ -314,40 +314,43 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(dialogContext);
-                context.read<DealersBloc>().add(
-                  ToggleBlockDealerEvent(_dealer!.id!),
-                );
-                setState(() {
-                  _dealer = Dealer(
-                    name: _dealer!.name,
-                    phone: _dealer!.phone,
-                    city: _dealer!.city,
-                    state: _dealer!.state,
-                    agent: _dealer!.agent,
-                    gstStatus: _dealer!.gstStatus,
-                    totalOrders: _dealer!.totalOrders,
-                    purchaseValue: _dealer!.purchaseValue,
-                    isHighValue: _dealer!.isHighValue,
-                    isInactive: _dealer!.isInactive,
-                    source: _dealer!.source,
-                    deepLinkUrl: _dealer!.deepLinkUrl,
-                    id: _dealer!.id,
-                    agentId: _dealer!.agentId,
-                    licenceImage: _dealer!.licenceImage,
-                    shopImage: _dealer!.shopImage,
-                    gstNumber: _dealer!.gstNumber,
-                    email: _dealer!.email,
-                    userType: _dealer!.userType,
-                    kycStatus: _dealer!.kycStatus,
-                    shopName: _dealer!.shopName,
-                    address: _dealer!.address,
-                    isBlocked: !isBlocked,
-                    status: _dealer!.status,
-                    notes: _dealer!.notes,
-                    notesHistory: _dealer!.notesHistory,
+                final userId = _dealer?.id;
+                if (userId != null) {
+                  Navigator.pop(dialogContext);
+                  context.read<DealersBloc>().add(
+                    ToggleBlockDealerEvent(userId),
                   );
-                });
+                  setState(() {
+                    _dealer = Dealer(
+                      name: _dealer!.name,
+                      phone: _dealer!.phone,
+                      city: _dealer!.city,
+                      state: _dealer!.state,
+                      agent: _dealer!.agent,
+                      gstStatus: _dealer!.gstStatus,
+                      totalOrders: _dealer!.totalOrders,
+                      purchaseValue: _dealer!.purchaseValue,
+                      isHighValue: _dealer!.isHighValue,
+                      isInactive: _dealer!.isInactive,
+                      source: _dealer!.source,
+                      deepLinkUrl: _dealer!.deepLinkUrl,
+                      id: _dealer!.id,
+                      agentId: _dealer!.agentId,
+                      licenceImage: _dealer!.licenceImage,
+                      shopImage: _dealer!.shopImage,
+                      gstNumber: _dealer!.gstNumber,
+                      email: _dealer!.email,
+                      userType: _dealer!.userType,
+                      kycStatus: _dealer!.kycStatus,
+                      shopName: _dealer!.shopName,
+                      address: _dealer!.address,
+                      isBlocked: !isBlocked,
+                      status: _dealer!.status,
+                      notes: _dealer!.notes,
+                      notesHistory: _dealer!.notesHistory,
+                    );
+                  });
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: isBlocked ? Colors.blue : AppTheme.error,
@@ -433,8 +436,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     );
 
     if (confirmed == true && mounted) {
-      context.read<DealersBloc>().add(DeleteDealerEvent(_dealer!.id!));
-      Navigator.pop(context); // Go back to management list after deletion
+      final userId = _dealer?.id;
+      if (userId != null) {
+        context.read<DealersBloc>().add(DeleteDealerEvent(userId));
+        Navigator.pop(context); // Go back to management list after deletion
+      }
     }
   }
 
@@ -520,30 +526,33 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       final names = fullName.split(' ');
       final firstName = names.isNotEmpty ? names[0] : '';
       final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+      final userId = _dealer?.id;
 
-      context.read<DealersBloc>().add(
-        UpdateDealerDetailsEvent(
-          userId: _dealer!.id!,
-          updateData: {
-            'firstName': firstName,
-            'lastName': lastName,
-            'shopName': shopNameController.text.trim(),
-            'gstNumber': gstController.text.trim(),
-            'phoneNumber': phoneController.text.trim(),
-            'address': {
-              'villageArea': villageAreaController.text.trim(),
-              'addressLine2': addressLine2Controller.text.trim(),
-              'address2': addressLine2Controller.text.trim(),
-              'cityTehsil': cityController.text.trim(),
-              'state': stateController.text.trim(),
-              'pincode': pincodeController.text.trim(),
+      if (userId != null) {
+        context.read<DealersBloc>().add(
+          UpdateDealerDetailsEvent(
+            userId: userId,
+            updateData: {
+              'firstName': firstName,
+              'lastName': lastName,
+              'shopName': shopNameController.text.trim(),
+              'gstNumber': gstController.text.trim(),
+              'phoneNumber': phoneController.text.trim(),
+              'address': {
+                'villageArea': villageAreaController.text.trim(),
+                'addressLine2': addressLine2Controller.text.trim(),
+                'address2': addressLine2Controller.text.trim(),
+                'cityTehsil': cityController.text.trim(),
+                'state': stateController.text.trim(),
+                'pincode': pincodeController.text.trim(),
+              },
             },
-          },
-        ),
-      );
-      // Wait for bloc to finish and refresh locally
-      await Future.delayed(const Duration(milliseconds: 500));
-      _refreshDealerDetails();
+          ),
+        );
+        // Wait for bloc to finish and refresh locally
+        await Future.delayed(const Duration(milliseconds: 500));
+        _refreshDealerDetails();
+      }
     }
   }
 
@@ -759,24 +768,25 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    UserStatusNotesWidget(
-                      userId: currentDealer.id!,
-                      initialStatus: currentDealer.status ?? 'prospect',
-                      initialNotes: currentDealer.notes ?? '',
-                      notesHistory: currentDealer.notesHistory,
-                      isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
-                      onSave: (status, notes) {
-                        context.read<DealersBloc>().add(
-                          UpdateDealerDetailsEvent(
-                            userId: currentDealer.id!,
-                            updateData: {
-                              'leadStatus': status,
-                              'leadNotes': notes,
-                            },
-                          ),
-                        );
-                      },
-                    ),
+                    if (currentDealer.id != null)
+                      UserStatusNotesWidget(
+                        userId: currentDealer.id!,
+                        initialStatus: currentDealer.status ?? 'prospect',
+                        initialNotes: currentDealer.notes ?? '',
+                        notesHistory: currentDealer.notesHistory,
+                        isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
+                        onSave: (status, notes) {
+                          context.read<DealersBloc>().add(
+                            UpdateDealerDetailsEvent(
+                              userId: currentDealer.id!,
+                              updateData: {
+                                'leadStatus': status,
+                                'leadNotes': notes,
+                              },
+                            ),
+                          );
+                        },
+                      ),
                   ] else ...[
                     _DealerInformationCard(
                       dealer: currentDealer,
@@ -790,24 +800,25 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       onViewDocument: _launchUrl,
                     ),
                     const SizedBox(height: 24),
-                    UserStatusNotesWidget(
-                      userId: currentDealer.id!,
-                      initialStatus: currentDealer.status ?? 'prospect',
-                      initialNotes: currentDealer.notes ?? '',
-                      notesHistory: currentDealer.notesHistory,
-                      isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
-                      onSave: (status, notes) {
-                        context.read<DealersBloc>().add(
-                          UpdateDealerDetailsEvent(
-                            userId: currentDealer.id!,
-                            updateData: {
-                              'leadStatus': status,
-                              'leadNotes': notes,
-                            },
-                          ),
-                        );
-                      },
-                    ),
+                    if (currentDealer.id != null)
+                      UserStatusNotesWidget(
+                        userId: currentDealer.id!,
+                        initialStatus: currentDealer.status ?? 'prospect',
+                        initialNotes: currentDealer.notes ?? '',
+                        notesHistory: currentDealer.notesHistory,
+                        isSubmitting: context.watch<DealersBloc>().state.status == DealersStatus.submitting,
+                        onSave: (status, notes) {
+                          context.read<DealersBloc>().add(
+                            UpdateDealerDetailsEvent(
+                              userId: currentDealer.id!,
+                              updateData: {
+                                'leadStatus': status,
+                                'leadNotes': notes,
+                              },
+                            ),
+                          );
+                        },
+                      ),
                   ],
                   const SizedBox(height: 24),
 

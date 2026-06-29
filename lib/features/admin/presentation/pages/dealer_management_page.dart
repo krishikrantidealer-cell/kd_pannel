@@ -691,129 +691,131 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   Widget build(BuildContext context) {
     if (_dealersBloc == null) return const SizedBox.shrink();
 
-    return BlocProvider.value(
-      value: _dealersBloc!,
-      child: BlocConsumer<DealersBloc, DealersState>(
-        listener: (context, state) {
-          if (_searchController.text != state.searchQuery) {
-            _searchController.text = state.searchQuery;
-          }
-          if (state.errorMessage != null) {
-            NavigationService.messengerKey.currentState?.showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppTheme.error,
-              ),
-            );
-            _dealersBloc?.add(const ClearDealersMessageEvent());
-          }
-          if (state.actionSuccessMessage != null) {
-            NavigationService.messengerKey.currentState?.showSnackBar(
-              SnackBar(
-                content: Text(state.actionSuccessMessage!),
-                backgroundColor: AppTheme.success,
-              ),
-            );
-            _dealersBloc?.add(const ClearDealersMessageEvent());
-          }
-        },
-        builder: (context, state) {
-          final isDesktop = Responsive.isDesktop(context);
-          final isMobile = Responsive.isMobile(context);
-
-          final bool isLoaderShowing = state.status == DealersStatus.loading;
-
-          final allCalculated = _getallCalculatedDealers(state);
-          final filteredDealers = _getFilteredDealersInternal(
-            allCalculated,
-            state,
-          );
-
-          final double minTableWidth = isMobile
-              ? 1300.0
-              : (AuthService().isAdmin ? 1220.0 : 1020.0);
-
-          final Widget body = CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 28 : 16,
-                  vertical: isDesktop ? 20 : 12,
+    return SelectionArea(
+      child: BlocProvider.value(
+        value: _dealersBloc!,
+        child: BlocConsumer<DealersBloc, DealersState>(
+          listener: (context, state) {
+            if (_searchController.text != state.searchQuery) {
+              _searchController.text = state.searchQuery;
+            }
+            if (state.errorMessage != null) {
+              NavigationService.messengerKey.currentState?.showSnackBar(
+                SnackBar(
+                  content: Text(state.errorMessage!),
+                  backgroundColor: AppTheme.error,
                 ),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(context, state, isMobile),
-                      const SizedBox(height: 16),
-                      _buildStatsCardsInternal(allCalculated, state, context),
-                      const SizedBox(height: 24),
-                      _buildFiltersRow(context, state, isMobile, isDesktop),
-                      const SizedBox(height: 16),
-                    ],
+              );
+              _dealersBloc?.add(const ClearDealersMessageEvent());
+            }
+            if (state.actionSuccessMessage != null) {
+              NavigationService.messengerKey.currentState?.showSnackBar(
+                SnackBar(
+                  content: Text(state.actionSuccessMessage!),
+                  backgroundColor: AppTheme.success,
+                ),
+              );
+              _dealersBloc?.add(const ClearDealersMessageEvent());
+            }
+          },
+          builder: (context, state) {
+            final isDesktop = Responsive.isDesktop(context);
+            final isMobile = Responsive.isMobile(context);
+
+            final bool isLoaderShowing = state.status == DealersStatus.loading;
+
+            final allCalculated = _getallCalculatedDealers(state);
+            final filteredDealers = _getFilteredDealersInternal(
+              allCalculated,
+              state,
+            );
+
+            final double minTableWidth = isMobile
+                ? 1300.0
+                : (AuthService().isAdmin ? 1220.0 : 1020.0);
+
+            final Widget body = CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 28 : 16,
+                    vertical: isDesktop ? 20 : 12,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(context, state, isMobile),
+                        const SizedBox(height: 16),
+                        _buildStatsCardsInternal(allCalculated, state, context),
+                        const SizedBox(height: 24),
+                        _buildFiltersRow(context, state, isMobile, isDesktop),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
-                sliver: SliverToBoxAdapter(
-                  child: _DealerTableCard(
-                    dealers: filteredDealers,
-                    isMobile: isMobile,
-                    salesAgents: state.salesAgents,
-                    onAssignAgent: (userId, agentId) {
-                      _dealersBloc?.add(
-                        AssignAgentToDealerEvent(
-                          userId: userId,
-                          agentId: agentId,
-                        ),
-                      );
-                    },
-                    onBulkAssignAgent: (userIds, agentId) {
-                      _dealersBloc?.add(
-                        BulkAssignAgentToDealersEvent(
-                          userIds: userIds,
-                          agentId: agentId,
-                        ),
-                      );
-                    },
-                    onEditDealer: _editDealer,
-                    onDeleteDealer: _deleteDealer,
-                    isSubmitting: state.status == DealersStatus.submitting,
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                  sliver: SliverToBoxAdapter(
+                    child: _DealerTableCard(
+                      dealers: filteredDealers,
+                      isMobile: isMobile,
+                      salesAgents: state.salesAgents,
+                      onAssignAgent: (userId, agentId) {
+                        _dealersBloc?.add(
+                          AssignAgentToDealerEvent(
+                            userId: userId,
+                            agentId: agentId,
+                          ),
+                        );
+                      },
+                      onBulkAssignAgent: (userIds, agentId) {
+                        _dealersBloc?.add(
+                          BulkAssignAgentToDealersEvent(
+                            userIds: userIds,
+                            agentId: agentId,
+                          ),
+                        );
+                      },
+                      onEditDealer: _editDealer,
+                      onDeleteDealer: _deleteDealer,
+                      isSubmitting: state.status == DealersStatus.submitting,
+                    ),
                   ),
                 ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
-          );
-
-          if (widget.isStandalone) {
-            return Scaffold(
-              backgroundColor: AppTheme.backgroundColor,
-              appBar: AppBar(
-                title: Text(
-                  AuthService().isSales
-                      ? 'My Assigned Dealers'
-                      : 'Dealer Management',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                backgroundColor: Colors.white,
-                foregroundColor: AppTheme.textPrimary,
-                elevation: 0,
-                bottom: const PreferredSize(
-                  preferredSize: Size.fromHeight(1),
-                  child: Divider(height: 1, color: AppTheme.lightBorderColor),
-                ),
-              ),
-              body: body,
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              ],
             );
-          }
 
-          return body;
-        },
+            if (widget.isStandalone) {
+              return Scaffold(
+                backgroundColor: AppTheme.backgroundColor,
+                appBar: AppBar(
+                  title: Text(
+                    AuthService().isSales
+                        ? 'My Assigned Dealers'
+                        : 'Dealer Management',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.textPrimary,
+                  elevation: 0,
+                  bottom: const PreferredSize(
+                    preferredSize: Size.fromHeight(1),
+                    child: Divider(height: 1, color: AppTheme.lightBorderColor),
+                  ),
+                ),
+                body: body,
+              );
+            }
+
+            return body;
+          },
+        ),
       ),
     );
   }

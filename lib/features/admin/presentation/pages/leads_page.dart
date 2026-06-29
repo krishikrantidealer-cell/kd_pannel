@@ -652,305 +652,307 @@ class _LeadsPageState extends State<LeadsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
 
-    return BlocConsumer<LeadsBloc, LeadsState>(
-      listener: (context, state) {
-        if (state.errorMessage != null) {
-          NavigationService.messengerKey.currentState?.showSnackBar(
-            SnackBar(
-              content: Text(state.errorMessage!),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-          _leadsBloc?.add(const ClearLeadsMessageEvent());
-        }
-        if (state.actionSuccessMessage != null) {
-          NavigationService.messengerKey.currentState?.showSnackBar(
-            SnackBar(
-              content: Text(state.actionSuccessMessage!),
-              backgroundColor: AppTheme.success,
-            ),
-          );
-          _leadsBloc?.add(const ClearLeadsMessageEvent());
-        }
-      },
-      builder: (context, state) {
-        // Optimization: Calculate leads once per build
-        final allLeadsData = _getAllLeads(state.allRawUsers);
-        final filteredLeadsData = _getFilteredLeads(allLeadsData, state);
-
-        final verifiedDealersCount = state.allRawUsers.where((u) {
-          final role = u['role'] ?? 'user';
-          final kycStatus = u['kycStatus'] ?? 'pending';
-          final isVerifiedDealer = role == 'user' && kycStatus == 'verified';
-          if (!isVerifiedDealer) return false;
-
-          if (AuthService().isSales) {
-            final assignedAgentId = u['assignedAgent']?['_id'];
-            return assignedAgentId == AuthService().currentUserId;
+    return SelectionArea(
+      child: BlocConsumer<LeadsBloc, LeadsState>(
+        listener: (context, state) {
+          if (state.errorMessage != null) {
+            NavigationService.messengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text(state.errorMessage!),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+            _leadsBloc?.add(const ClearLeadsMessageEvent());
           }
-          return true;
-        }).length;
-
-        // Date Filtering for leads stats grid
-        DateTime? statsStartDate;
-        DateTime? statsEndDate;
-
-        if (state.selectedRange != null &&
-            state.selectedRange!.startDate != null) {
-          statsStartDate = state.selectedRange!.startDate;
-          statsEndDate =
-              state.selectedRange!.endDate ?? state.selectedRange!.startDate;
-          statsEndDate = DateTime(
-            statsEndDate!.year,
-            statsEndDate.month,
-            statsEndDate.day,
-            23,
-            59,
-            59,
-          );
-        } else if (state.selectedTimeframe.isNotEmpty &&
-            state.selectedTimeframe != 'All Time') {
-          final now = DateTime.now();
-          statsEndDate = now;
-          switch (state.selectedTimeframe) {
-            case 'Last 1 Week':
-              statsStartDate = now.subtract(const Duration(days: 7));
-              break;
-            case 'Last 2 Weeks':
-              statsStartDate = now.subtract(const Duration(days: 14));
-              break;
-            case 'Last 3 Weeks':
-              statsStartDate = now.subtract(const Duration(days: 21));
-              break;
-            case 'Last 1 Month':
-              statsStartDate = DateTime(now.year, now.month - 1, now.day);
-              break;
-            case 'Last 3 Months':
-              statsStartDate = DateTime(now.year, now.month - 3, now.day);
-              break;
-            case 'Last 6 Months':
-              statsStartDate = DateTime(now.year, now.month - 6, now.day);
-              break;
-            case 'This Month':
-              statsStartDate = DateTime(now.year, now.month, 1);
-              break;
+          if (state.actionSuccessMessage != null) {
+            NavigationService.messengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text(state.actionSuccessMessage!),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+            _leadsBloc?.add(const ClearLeadsMessageEvent());
           }
-        }
+        },
+        builder: (context, state) {
+          // Optimization: Calculate leads once per build
+          final allLeadsData = _getAllLeads(state.allRawUsers);
+          final filteredLeadsData = _getFilteredLeads(allLeadsData, state);
 
-        var statsLeads = allLeadsData;
-        if (statsStartDate != null && statsEndDate != null) {
-          statsLeads = statsLeads.where((l) {
-            final dateStr = l['createdAt'] ?? l['updatedAt'];
-            if (dateStr == null) return false;
-            try {
-              final date = DateTime.parse(dateStr).toLocal();
-              return date.isAfter(statsStartDate!) &&
-                  date.isBefore(statsEndDate!);
-            } catch (e) {
-              return false;
+          final verifiedDealersCount = state.allRawUsers.where((u) {
+            final role = u['role'] ?? 'user';
+            final kycStatus = u['kycStatus'] ?? 'pending';
+            final isVerifiedDealer = role == 'user' && kycStatus == 'verified';
+            if (!isVerifiedDealer) return false;
+
+            if (AuthService().isSales) {
+              final assignedAgentId = u['assignedAgent']?['_id'];
+              return assignedAgentId == AuthService().currentUserId;
             }
-          }).toList();
-        }
+            return true;
+          }).length;
 
-        final Widget body = Builder(
-          builder: (context) => (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
-              ? _buildSkeletonLoading(isDesktop, isMobile)
-              : CustomScrollView(
-                  slivers: [
-                          SliverPadding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isDesktop ? 28 : 16,
-                              vertical: isDesktop ? 20 : 12,
-                            ),
-                            sliver: SliverToBoxAdapter(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  if (isMobile)
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (!widget.isStandalone) ...[
-                                          Text(
-                                            'Leads',
-                                            style: AppTheme.headingXL.copyWith(
-                                              letterSpacing: -0.5,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                        ],
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _buildTimeframeRow(
-                                                isMobile,
-                                                state,
+          // Date Filtering for leads stats grid
+          DateTime? statsStartDate;
+          DateTime? statsEndDate;
+
+          if (state.selectedRange != null &&
+              state.selectedRange!.startDate != null) {
+            statsStartDate = state.selectedRange!.startDate;
+            statsEndDate =
+                state.selectedRange!.endDate ?? state.selectedRange!.startDate;
+            statsEndDate = DateTime(
+              statsEndDate!.year,
+              statsEndDate.month,
+              statsEndDate.day,
+              23,
+              59,
+              59,
+            );
+          } else if (state.selectedTimeframe.isNotEmpty &&
+              state.selectedTimeframe != 'All Time') {
+            final now = DateTime.now();
+            statsEndDate = now;
+            switch (state.selectedTimeframe) {
+              case 'Last 1 Week':
+                statsStartDate = now.subtract(const Duration(days: 7));
+                break;
+              case 'Last 2 Weeks':
+                statsStartDate = now.subtract(const Duration(days: 14));
+                break;
+              case 'Last 3 Weeks':
+                statsStartDate = now.subtract(const Duration(days: 21));
+                break;
+              case 'Last 1 Month':
+                statsStartDate = DateTime(now.year, now.month - 1, now.day);
+                break;
+              case 'Last 3 Months':
+                statsStartDate = DateTime(now.year, now.month - 3, now.day);
+                break;
+              case 'Last 6 Months':
+                statsStartDate = DateTime(now.year, now.month - 6, now.day);
+                break;
+              case 'This Month':
+                statsStartDate = DateTime(now.year, now.month, 1);
+                break;
+            }
+          }
+
+          var statsLeads = allLeadsData;
+          if (statsStartDate != null && statsEndDate != null) {
+            statsLeads = statsLeads.where((l) {
+              final dateStr = l['createdAt'] ?? l['updatedAt'];
+              if (dateStr == null) return false;
+              try {
+                final date = DateTime.parse(dateStr).toLocal();
+                return date.isAfter(statsStartDate!) &&
+                    date.isBefore(statsEndDate!);
+              } catch (e) {
+                return false;
+              }
+            }).toList();
+          }
+
+          final Widget body = Builder(
+            builder: (context) => (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+                ? _buildSkeletonLoading(isDesktop, isMobile)
+                : CustomScrollView(
+                    slivers: [
+                            SliverPadding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isDesktop ? 28 : 16,
+                                vertical: isDesktop ? 20 : 12,
+                              ),
+                              sliver: SliverToBoxAdapter(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    if (isMobile)
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          if (!widget.isStandalone) ...[
+                                            Text(
+                                              'Leads',
+                                              style: AppTheme.headingXL.copyWith(
+                                                letterSpacing: -0.5,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              height: 38,
-                                              width: 38,
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(10),
-                                                border: Border.all(
-                                                  color: AppTheme.borderColor,
+                                            const SizedBox(height: 12),
+                                          ],
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: _buildTimeframeRow(
+                                                  isMobile,
+                                                  state,
                                                 ),
                                               ),
-                                              child: IconButton(
-                                                padding: EdgeInsets.zero,
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                height: 38,
+                                                width: 38,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  border: Border.all(
+                                                    color: AppTheme.borderColor,
+                                                  ),
+                                                ),
+                                                child: IconButton(
+                                                  padding: EdgeInsets.zero,
+                                                  onPressed: _isExporting
+                                                      ? null
+                                                      : _exportLeadsToCSV,
+                                                  icon: _isExporting
+                                                      ? const SizedBox(
+                                                          width: 16,
+                                                          height: 16,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                                color:
+                                                                    AppTheme.primaryColor,
+                                                              ),
+                                                        )
+                                                      : const Icon(
+                                                          Icons.download_rounded,
+                                                          size: 18,
+                                                          color: AppTheme.primaryColor,
+                                                        ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          if (!widget.isStandalone)
+                                            Text(
+                                              AuthService().isSales
+                                                  ? 'My Assigned Leads'
+                                                  : 'Leads Management',
+                                              style: AppTheme.headingXL.copyWith(
+                                                letterSpacing: -0.5,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            )
+                                          else
+                                            const SizedBox.shrink(),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              OutlinedButton.icon(
                                                 onPressed: _isExporting
                                                     ? null
                                                     : _exportLeadsToCSV,
                                                 icon: _isExporting
                                                     ? const SizedBox(
-                                                        width: 16,
-                                                        height: 16,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                              color:
-                                                                  AppTheme.primaryColor,
-                                                            ),
+                                                        width: 14,
+                                                        height: 14,
+                                                        child: CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: AppTheme.primaryColor,
+                                                        ),
                                                       )
                                                     : const Icon(
-                                                        Icons.download_rounded,
-                                                        size: 18,
-                                                        color: AppTheme.primaryColor,
+                                                        Icons.download,
+                                                        size: 16,
                                                       ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    )
-                                  else
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        if (!widget.isStandalone)
-                                          Text(
-                                            AuthService().isSales
-                                                ? 'My Assigned Leads'
-                                                : 'Leads Management',
-                                            style: AppTheme.headingXL.copyWith(
-                                              letterSpacing: -0.5,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          )
-                                        else
-                                          const SizedBox.shrink(),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            OutlinedButton.icon(
-                                              onPressed: _isExporting
-                                                  ? null
-                                                  : _exportLeadsToCSV,
-                                              icon: _isExporting
-                                                  ? const SizedBox(
-                                                      width: 14,
-                                                      height: 14,
-                                                      child: CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: AppTheme.primaryColor,
-                                                      ),
-                                                    )
-                                                  : const Icon(
-                                                      Icons.download,
-                                                      size: 16,
+                                                label: Text(
+                                                  _isExporting
+                                                      ? 'Exporting...'
+                                                      : 'Export CSV',
+                                                  style: GoogleFonts.outfit(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.primaryColor,
+                                                  ),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  side: const BorderSide(
+                                                    color: AppTheme.primaryColor,
+                                                    width: 1.5,
+                                                  ),
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(
+                                                      12,
                                                     ),
-                                              label: Text(
-                                                _isExporting
-                                                    ? 'Exporting...'
-                                                    : 'Export CSV',
-                                                style: GoogleFonts.outfit(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppTheme.primaryColor,
-                                                ),
-                                              ),
-                                              style: OutlinedButton.styleFrom(
-                                                side: const BorderSide(
-                                                  color: AppTheme.primaryColor,
-                                                  width: 1.5,
-                                                ),
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 16,
-                                                  vertical: 12,
-                                                ),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(
-                                                    12,
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            _buildTimeframeRow(isMobile, state),
-                                          ],
-                                        ),
-                                      ],
+                                              const SizedBox(width: 12),
+                                              _buildTimeframeRow(isMobile, state),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    const SizedBox(height: 16),
+                                    _LeadsStatsGrid(
+                                      leads: statsLeads,
+                                      verifiedDealersCount: verifiedDealersCount,
                                     ),
-                                  const SizedBox(height: 16),
-                                  _LeadsStatsGrid(
-                                    leads: statsLeads,
-                                    verifiedDealersCount: verifiedDealersCount,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  _buildFilterChips(isMobile, state),
-                                  const SizedBox(height: 16),
-                                ],
+                                    const SizedBox(height: 24),
+                                    _buildFilterChips(isMobile, state),
+                                    const SizedBox(height: 16),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          SliverPadding(
-                            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
-                            sliver: SliverToBoxAdapter(
-                              child: _LeadsTableCard(
-                                leads: filteredLeadsData,
-                                totalEntries: filteredLeadsData.length,
-                                isMobile: isMobile,
-                                salesAgents: state.salesAgents,
-                                onAssignAgent: _assignAgent,
-                                onBulkAssignAgent: _bulkAssignAgent,
-                                onEditLead: _editLead,
-                                onDeleteLead: _deleteLead,
+                            SliverPadding(
+                              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                              sliver: SliverToBoxAdapter(
+                                child: _LeadsTableCard(
+                                  leads: filteredLeadsData,
+                                  totalEntries: filteredLeadsData.length,
+                                  isMobile: isMobile,
+                                  salesAgents: state.salesAgents,
+                                  onAssignAgent: _assignAgent,
+                                  onBulkAssignAgent: _bulkAssignAgent,
+                                  onEditLead: _editLead,
+                                  onDeleteLead: _deleteLead,
+                                ),
                               ),
                             ),
-                          ),
-                          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                        ],
-                      ),
-        );
+                            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                          ],
+                        ),
+          );
 
-        if (widget.isStandalone) {
-          return Scaffold(
-            backgroundColor: AppTheme.backgroundColor,
-            appBar: AppBar(
-              title: Text(
-                'Leads Management',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
+          if (widget.isStandalone) {
+            return Scaffold(
+              backgroundColor: AppTheme.backgroundColor,
+              appBar: AppBar(
+                title: Text(
+                  'Leads Management',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.textPrimary,
+                elevation: 0,
+                bottom: const PreferredSize(
+                  preferredSize: Size.fromHeight(1),
+                  child: Divider(height: 1, color: AppTheme.lightBorderColor),
                 ),
               ),
-              backgroundColor: Colors.white,
-              foregroundColor: AppTheme.textPrimary,
-              elevation: 0,
-              bottom: const PreferredSize(
-                preferredSize: Size.fromHeight(1),
-                child: Divider(height: 1, color: AppTheme.lightBorderColor),
-              ),
-            ),
-            body: body,
-          );
-        }
+              body: body,
+            );
+          }
 
-        return body;
-      },
+          return body;
+        },
+      ),
     );
   }
 

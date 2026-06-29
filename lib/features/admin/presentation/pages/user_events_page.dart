@@ -1,10 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
+
+import '../../../../core/auth/auth_service.dart';
 
 class UserEventsPage extends StatefulWidget {
   const UserEventsPage({super.key});
@@ -25,11 +32,93 @@ class _UserEventsPageState extends State<UserEventsPage> {
   bool _isLoading = true;
   bool _isFallbackMode = false;
   Map<String, List<Map<String, dynamic>>> _eventsLogs = {};
+  Map<String, String> _nameToId = {};
+  List<Map<String, dynamic>> _realTimeUsers = [];
+  Timer? _realTimeTimer;
+  StreamSubscription? _presenceSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadEvents();
+    _startRealTimePoll();
+    _listenToLivePresence();
+  }
+
+  void _listenToLivePresence() {
+    _presenceSubscription = WebSocketService().presenceUpdates.listen((update) {
+      if (mounted) {
+        setState(() {
+          // Normalize the update to ensure it has the enriched fields
+          final enrichedUpdate = Map<String, dynamic>.from(update);
+          final userId = enrichedUpdate['user'];
+          
+          // Skip if it's the current admin or another admin
+          if (userId == AuthService().currentUserEmail || enrichedUpdate['role'] == 'admin') return;
+
+          enrichedUpdate['_localLastSeen'] = DateTime.now().millisecondsSinceEpoch;
+          
+          // Check if user already in list
+          final index = _realTimeUsers.indexWhere((u) => u['user'] == userId);
+          if (index != -1) {
+            // Merge existing data with new update to preserve names if update is partial
+            _realTimeUsers[index] = {
+              ..._realTimeUsers[index],
+              ...enrichedUpdate,
+            };
+          } else {
+            // Add new live user to the front
+            _realTimeUsers.insert(0, enrichedUpdate);
+          }
+        });
+      }
+    });
+  }
+
+  void _startRealTimePoll() {
+    _realTimeTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _loadRealTimeUsers();
+    });
+    _loadRealTimeUsers();
+  }
+
+  Future<void> _loadRealTimeUsers() async {
+    final users = await AnalyticsService().fetchRealTimeUsers();
+    if (mounted) {
+      setState(() {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final Map<String, Map<String, dynamic>> merged = {};
+
+        // 1. Keep currently tracked users if seen within last 2.5 minutes
+        for (var u in _realTimeUsers) {
+          final lastSeen = u['_localLastSeen'] ?? 0;
+          if (now - lastSeen < 150000) {
+            merged[u['user']] = Map<String, dynamic>.from(u);
+          }
+        }
+
+        // 2. Overlay with fresh data from server poll
+        final currentUserEmail = AuthService().currentUserEmail;
+        for (var u in users) {
+          final userId = u['user'];
+          
+          // Skip if it's the current admin or another admin
+          if (userId == currentUserEmail || u['role'] == 'admin') continue;
+
+          final freshData = Map<String, dynamic>.from(u);
+          freshData['_localLastSeen'] = now;
+
+          if (merged.containsKey(userId)) {
+            merged[userId] = {...merged[userId]!, ...freshData};
+          } else {
+            merged[userId] = freshData;
+          }
+        }
+
+        _realTimeUsers = merged.values.toList()
+          ..sort((a, b) => (b['_localLastSeen'] ?? 0).compareTo(a['_localLastSeen'] ?? 0));
+      });
+    }
   }
 
   Future<void> _loadEvents() async {
@@ -43,13 +132,44 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final flatEvents = await AnalyticsService().fetchEvents();
       if (flatEvents.isNotEmpty) {
         final Map<String, List<Map<String, dynamic>>> grouped = {};
+        final Map<String, String> nameToId = {};
+
         for (var event in flatEvents) {
           final eventType = event['eventType']?.toString() ?? 'unknown';
           if (!grouped.containsKey(eventType)) {
             grouped[eventType] = [];
           }
+          
+          final userDetails = event['userDetails'] as Map<String, dynamic>?;
+          String displayName = event['user']?.toString() ?? 'Unknown User';
+          String? displayPhone;
+          final rawUser = event['user']?.toString();
+          
+          if (userDetails != null) {
+            final firstName = userDetails['firstName'] ?? '';
+            final lastName = userDetails['lastName'] ?? '';
+            final shopName = userDetails['shopName'] ?? '';
+            final phone = userDetails['phoneNumber'] ?? '';
+            
+            if (firstName.isNotEmpty || lastName.isNotEmpty) {
+              displayName = '$firstName $lastName'.trim();
+            } else if (shopName.isNotEmpty) {
+              displayName = shopName;
+            }
+            
+            if (phone.isNotEmpty) {
+              displayPhone = phone;
+            }
+          }
+
+          if (rawUser != null) {
+            nameToId[displayName] = rawUser;
+          }
+
           grouped[eventType]!.add({
-            'user': event['user']?.toString() ?? 'Unknown User',
+            'user': displayName,
+            'userPhone': displayPhone,
+            'rawUser': rawUser, // Keep ID/Email for navigation
             'time': _formatTimestamp(event['timestamp']?.toString()),
             'device': event['device']?.toString() ?? 'Unknown Device',
             'details': event['details']?.toString() ?? '',
@@ -57,8 +177,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
           });
         }
         _eventsLogs = grouped;
+        _nameToId = nameToId;
       } else {
         _eventsLogs = {};
+        _nameToId = {};
         _isFallbackMode = false;
       }
     } catch (e) {
@@ -104,6 +226,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   @override
   void dispose() {
+    _realTimeTimer?.cancel();
+    _presenceSubscription?.cancel();
     _searchController.dispose();
     _dealerSearchController.dispose();
     super.dispose();
@@ -601,64 +725,203 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Text(
-          'Live Telemetry & Events',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
+        backgroundColor: AppTheme.backgroundColor,
+          appBar: AppBar(
+          title: Text(
+            'Live Telemetry & Events',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          foregroundColor: AppTheme.textPrimary,
+          elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _loadEvents,
+              tooltip: 'Refresh Feed',
+            ),
+            const SizedBox(width: 8),
+          ],
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: AppTheme.lightBorderColor),
           ),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.textPrimary,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadEvents,
-            tooltip: 'Refresh Feed',
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppTheme.lightBorderColor),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(40.0),
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    AppTheme.primaryColor,
+        body: _isLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40.0),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor,
+                    ),
+                  ),
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: _loadEvents,
+                color: AppTheme.primaryColor,
+                child: SelectionArea(
+                  child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 28 : 16,
+                    vertical: isDesktop ? 20 : 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_isFallbackMode) _buildFallbackBanner(),
+                      _buildRealTimeStats(),
+                      const SizedBox(height: 20),
+                      if (!_isFallbackMode && _eventsLogs.isEmpty)
+                        _buildEmptyState()
+                      else
+                        _buildDealersList(isDesktop),
+                    ],
                   ),
                 ),
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadEvents,
-              color: AppTheme.primaryColor,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 28 : 16,
-                  vertical: isDesktop ? 20 : 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_isFallbackMode) _buildFallbackBanner(),
-                    if (!_isFallbackMode && _eventsLogs.isEmpty)
-                      _buildEmptyState()
-                    else
-                      _buildDealersList(isDesktop),
-                  ],
+      ),
+    );
+  }
+
+  Widget _buildRealTimeStats() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const _LivePulsingBadge(color: Color(0xFF10B981)),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Live Users Presence',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '${_realTimeUsers.length} Active Now',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF10B981),
                 ),
               ),
+            ],
+          ),
+          if (_realTimeUsers.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 100,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _realTimeUsers.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final user = _realTimeUsers[index];
+                  return Container(
+                    width: 180,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user['userName'] ?? user['user'] ?? 'Unknown',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (user['userPhone'] != null)
+                          Text(
+                            user['userPhone'],
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.touch_app_outlined, size: 12, color: AppTheme.primaryColor),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                user['action'] ?? 'Browsing',
+                                style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              user['currentScreen'] ?? 'Home',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                            if (user['_localLastSeen'] != null)
+                              Text(
+                                _getRelativeLastSeen(user['_localLastSeen']),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 9,
+                                  color: AppTheme.textSecondary.withOpacity(0.6),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
+          ],
+        ],
+      ),
     );
+  }
+
+  String _getRelativeLastSeen(int timestamp) {
+    final diff = DateTime.now().millisecondsSinceEpoch - timestamp;
+    if (diff < 15000) return 'Live';
+    if (diff < 60000) return '${(diff / 1000).floor()}s ago';
+    return '${(diff / 60000).floor()}m ago';
   }
 
   Widget _buildDealersList(bool isDesktop) {
@@ -693,7 +956,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${filtered.length} active',
+                  '${filtered.length} tracked',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -787,8 +1050,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 final isSelected = _selectedDealer == dealerName;
                 final grouped = _getDealerEventsGrouped(dealerName);
 
+                // Identify if this dealer is currently online
+                final dealerId = _nameToId[dealerName];
+                final isOnline = _realTimeUsers.any((u) {
+                  final uName = u['userName'] ?? u['user'] ?? '';
+                  return uName == dealerName || (dealerId != null && u['user'] == dealerId);
+                });
+
                 return _DealerCard(
                   name: dealerName,
+                  isOnline: isOnline,
                   groupedEvents: grouped,
                   isSelected: isSelected,
                   selectedEventType: _selectedEventType,
@@ -903,6 +1174,7 @@ class _DealerCard extends StatefulWidget {
   final List<Map<String, dynamic>> eventTypes;
   final Function(String categoryId) onCategorySelected;
   final VoidCallback onTap;
+  final bool isOnline;
 
   const _DealerCard({
     required this.name,
@@ -912,6 +1184,7 @@ class _DealerCard extends StatefulWidget {
     required this.eventTypes,
     required this.onTap,
     required this.onCategorySelected,
+    this.isOnline = false,
   });
 
   @override
@@ -984,25 +1257,35 @@ class _DealerCardState extends State<_DealerCard>
             children: [
               Row(
                 children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: avatarBg,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      initials,
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected
-                            ? AppTheme.primaryColor
-                            : AppTheme.textPrimary,
+                  Stack(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: avatarBg,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initials,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : AppTheme.textPrimary,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (widget.isOnline)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: const _LivePulsingBadge(color: Color(0xFF10B981)),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1219,6 +1502,8 @@ class _DealerCardState extends State<_DealerCard>
             final log = logs[index];
             return _EventLogCard(
               user: log['user'] as String,
+              userPhone: log['userPhone'] as String?,
+              rawUser: log['rawUser'] as String?,
               time: log['time'] as String,
               device: log['device'] as String,
               details: log['details'] as String,
@@ -1234,6 +1519,8 @@ class _DealerCardState extends State<_DealerCard>
 
 class _EventLogCard extends StatefulWidget {
   final String user;
+  final String? userPhone;
+  final String? rawUser;
   final String time;
   final String device;
   final String details;
@@ -1242,6 +1529,8 @@ class _EventLogCard extends StatefulWidget {
 
   const _EventLogCard({
     required this.user,
+    this.userPhone,
+    this.rawUser,
     required this.time,
     required this.device,
     required this.details,
@@ -1261,40 +1550,115 @@ class _EventLogCardState extends State<_EventLogCard> {
   void _navigateToProfile(BuildContext context, String user) {
     final nameLower = user.toLowerCase();
 
-    // Determine whether this user is a lead or a dealer.
-    // Known leads: Choudhary Krishi, Greenway Agro, Sompal Patel.
-    final bool isLead =
-        nameLower.contains('choudhary') ||
-        nameLower.contains('greenway') ||
-        nameLower.contains('sompal');
+    // 1. Try to find in Dealers first (Real database records)
+    final dealersState = context.read<DealersBloc>().state;
+    final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere(
+      (u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        return fullName == nameLower || phone == user || shopName == nameLower ||
+               fullName.contains(nameLower) || nameLower.contains(fullName);
+      },
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (dealerData != null && dealerData.isNotEmpty) {
+      final agentName = dealerData['assignedAgent'] != null
+          ? '${dealerData['assignedAgent']['firstName'] ?? ''} ${dealerData['assignedAgent']['lastName'] ?? ''}'.trim()
+          : '-';
+
+      final String personName = (dealerData['firstName'] != null || dealerData['lastName'] != null)
+          ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'.trim()
+          : '';
+
+      final dealer = Dealer(
+        name: personName.isNotEmpty ? personName : (dealerData['phoneNumber'] ?? user),
+        phone: dealerData['phoneNumber'] ?? '',
+        city: dealerData['address']?['cityTehsil'] ?? '',
+        state: dealerData['address']?['state'] ?? '',
+        agent: agentName,
+        gstStatus: 'Verified',
+        totalOrders: 0,
+        purchaseValue: '₹0',
+        isHighValue: false,
+        isInactive: false,
+        id: dealerData['_id'],
+        agentId: dealerData['assignedAgent']?['_id'],
+        kycStatus: dealerData['kycStatus'],
+        shopName: dealerData['shopName'],
+        address: dealerData['address'],
+        status: dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
+        notes: dealerData['notes'] ?? dealerData['leadNotes'] ?? '',
+        notesHistory: dealerData['notesHistory'] != null ? List<Map<String, dynamic>>.from(dealerData['notesHistory']) : [],
+      );
+
+      Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
+      return;
+    }
+
+    // 2. Try to find in Leads
+    final leadsState = context.read<LeadsBloc>().state;
+    final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere(
+      (u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        return fullName == nameLower || phone == user || fullName.contains(nameLower);
+      },
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (leadData != null && leadData.isNotEmpty) {
+      // Map raw user to lead map format expected by LeadProfilePage
+      final String personName = (leadData['firstName'] != null || leadData['lastName'] != null)
+          ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'.trim()
+          : '';
+
+      final leadMap = {
+        'id': leadData['_id'],
+        'name': personName.isNotEmpty ? personName : (leadData['phoneNumber'] ?? user),
+        'phone': leadData['phoneNumber'] ?? '',
+        'shopName': leadData['shopName'] ?? '',
+        'villageArea': leadData['address']?['villageArea'] ?? '',
+        'city': leadData['address']?['cityTehsil'] ?? '',
+        'state': leadData['address']?['state'] ?? '',
+        'pincode': leadData['address']?['pincode'] ?? '',
+        'source': leadData['source'] ?? 'App',
+        'kycStatus': leadData['kycStatus'] ?? 'pending',
+        'status': leadData['status'] ?? leadData['leadStatus'] ?? 'prospect',
+        'notes': leadData['notes'] ?? leadData['leadNotes'] ?? '',
+        'notesHistory': leadData['notesHistory'] ?? [],
+      };
+
+      Navigator.pushNamed(context, '/leads/profile', arguments: leadMap);
+      return;
+    }
+
+    // 3. Fallback logic if user not found in BLoC states
+    final bool isLead = nameLower.contains('choudhary') || nameLower.contains('greenway') || nameLower.contains('sompal');
 
     if (isLead) {
       Navigator.pushNamed(context, '/leads/profile');
     } else {
-      // Try to find a matching dealer from the list
       Dealer? matched;
       for (final d in allDealers) {
-        if (d.name.toLowerCase().contains(nameLower) ||
-            nameLower.contains(d.name.toLowerCase().split(' ').first)) {
+        if (d.name.toLowerCase().contains(nameLower) || nameLower.contains(d.name.toLowerCase().split(' ').first)) {
           matched = d;
           break;
         }
       }
-      // Fallback: create a synthetic Dealer from the event user name
-      final dealer =
-          matched ??
-          Dealer(
-            name: user,
-            phone: '+91 00000 00000',
-            city: 'Unknown',
-            state: 'Unknown',
-            agent: 'Unassigned',
-            gstStatus: 'Pending',
-            totalOrders: 0,
-            purchaseValue: '₹0',
-            isHighValue: false,
-            isInactive: false,
-          );
+      final dealer = matched ?? Dealer(
+        name: user,
+        phone: '+91 00000 00000',
+        city: 'Unknown',
+        state: 'Unknown',
+        agent: 'Unassigned',
+        gstStatus: 'Pending',
+        totalOrders: 0,
+        purchaseValue: '₹0',
+        isHighValue: false,
+        isInactive: false,
+      );
       Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
     }
   }
@@ -1785,28 +2149,43 @@ class _EventLogCardState extends State<_EventLogCard> {
                               cursor: SystemMouseCursors.click,
                               child: GestureDetector(
                                 onTap: () =>
-                                    _navigateToProfile(context, widget.user),
-                                child: Row(
+                                    _navigateToProfile(context, widget.rawUser ?? widget.user),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Flexible(
-                                      child: Text(
-                                        widget.user,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 15.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppTheme.textPrimary,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            widget.user,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 15.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 11,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ],
+                                    ),
+                                    if (widget.userPhone != null)
+                                      Text(
+                                        widget.userPhone!,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.open_in_new_rounded,
-                                      size: 11,
-                                      color: AppTheme.textSecondary,
-                                    ),
                                   ],
                                 ),
                               ),

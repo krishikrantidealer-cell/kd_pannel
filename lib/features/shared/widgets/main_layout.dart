@@ -11,6 +11,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dar
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 
@@ -64,6 +65,7 @@ class _MainLayoutState extends State<MainLayout> {
 
     if (routeName != null && routeName != _lastProcessedRoute) {
       _lastProcessedRoute = routeName;
+      AnalyticsService().updateContext(screen: routeName);
       if (role == UserRole.admin) {
         if (routeName.startsWith('/orders')) {
           _currentIdx = 1;

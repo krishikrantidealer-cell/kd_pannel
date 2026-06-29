@@ -10,6 +10,7 @@ import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
@@ -52,42 +53,7 @@ class AppCache {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize AuthService and restore persisted session
-  await AuthService().init();
-
-  if (AuthService().currentUserId != null) {
-    WebSocketService().connect();
-  }
-
-  // Determine initial route based on session presence
-  String initialRoute = '/login';
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('kd_access_token');
-    final role = prefs.getString('kd_user_role');
-    final userId = prefs.getString('kd_user_id');
-    if (token != null && role != null && userId != null) {
-      initialRoute = role == 'sales' ? '/leads' : '/dashboard';
-    }
-  } catch (_) {}
-
-  // Pre-load Outfit fonts to prevent layout shift / font swap on restart
-  try {
-    await GoogleFonts.pendingFonts([
-      GoogleFonts.outfit(fontWeight: FontWeight.w300),
-      GoogleFonts.outfit(fontWeight: FontWeight.w400),
-      GoogleFonts.outfit(fontWeight: FontWeight.w500),
-      GoogleFonts.outfit(fontWeight: FontWeight.w600),
-      GoogleFonts.outfit(fontWeight: FontWeight.w700),
-      GoogleFonts.outfit(fontWeight: FontWeight.w800),
-      GoogleFonts.outfit(fontWeight: FontWeight.w900),
-      GoogleFonts.outfit(fontWeight: FontWeight.w900),
-    ]);
-  } catch (e) {
-    debugPrint('Google Fonts preloading bypassed: $e');
-  }
-
-  // Preload brand images synchronously into memory buffer before running the app
+  // Load brand images into memory buffer
   await AppCache.preload();
 
   runApp(
@@ -103,15 +69,58 @@ void main() async {
           create: (context) => LeadsBloc()..add(const FetchLeadsDataEvent()),
         ),
       ],
-      child: MyApp(initialRoute: initialRoute),
+      child: const MyAppWrapper(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  final String initialRoute;
+class MyAppWrapper extends StatefulWidget {
+  const MyAppWrapper({super.key});
 
-  const MyApp({super.key, required this.initialRoute});
+  @override
+  State<MyAppWrapper> createState() => _MyAppWrapperState();
+}
+
+class _MyAppWrapperState extends State<MyAppWrapper> {
+  bool _isInitialized = false;
+  String _initialRoute = '/login';
+
+  @override
+  void initState() {
+    super.initState();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    // 1. Core Services
+    await AuthService().init();
+    await AnalyticsService().init();
+
+    // 2. Session Recovery
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('kd_access_token');
+      final role = prefs.getString('kd_user_role');
+      final userId = prefs.getString('kd_user_id');
+      
+      if (token != null && role != null && userId != null) {
+        _initialRoute = role == 'sales' ? '/leads' : '/dashboard';
+        WebSocketService().connect();
+      }
+    } catch (_) {}
+
+    // 3. Fonts (Non-blocking)
+    GoogleFonts.pendingFonts([
+      GoogleFonts.outfit(fontWeight: FontWeight.w400),
+      GoogleFonts.outfit(fontWeight: FontWeight.w700),
+    ]).catchError((_) => []);
+
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,8 +137,24 @@ class MyApp extends StatelessWidget {
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en', '')],
-      initialRoute: initialRoute,
+      // We use a single entry point '/' to avoid null-check crashes during init
+      initialRoute: '/',
       routes: {
+        '/': (context) {
+          if (!_isInitialized) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+              ),
+            );
+          }
+          // Once initialized, we use the calculated initial route
+          // But since we are already at '/', we can just return the correct widget
+          final initialRoute = _initialRoute;
+          if (initialRoute == '/leads') return const MainLayout();
+          if (initialRoute == '/dashboard') return const MainLayout();
+          return const LoginPage();
+        },
         '/login': (context) => const LoginPage(),
 
         // Admin Routes
@@ -160,3 +185,5 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+// Remove the old MyApp class as it is now merged into MyAppWrapper

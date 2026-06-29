@@ -130,13 +130,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(dialogContext);
-                context.read<LeadsBloc>().add(
-                  ToggleBlockLeadEvent(_lead!['id']),
-                );
-                setState(() {
-                  _lead!['isBlocked'] = !isBlocked;
-                });
+                final userId = _lead!['id'] ?? _lead!['_id'];
+                if (userId != null) {
+                  Navigator.pop(dialogContext);
+                  context.read<LeadsBloc>().add(
+                    ToggleBlockLeadEvent(userId),
+                  );
+                  setState(() {
+                    _lead!['isBlocked'] = !isBlocked;
+                  });
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: isBlocked ? Colors.blue : AppTheme.error,
@@ -234,10 +237,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       final names = fullName.split(' ');
       final firstName = names.isNotEmpty ? names[0] : '';
       final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+      final userId = _lead!['id'] ?? _lead!['_id'];
 
-      context.read<LeadsBloc>().add(
-        UpdateLeadDetailsEvent(
-          userId: _lead!['id'],
+      if (userId != null) {
+        context.read<LeadsBloc>().add(UpdateLeadDetailsEvent(
+          userId: userId,
           updateData: {
             'firstName': firstName,
             'lastName': lastName,
@@ -253,11 +257,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
               'pincode': pincodeController.text.trim(),
             },
           },
-        ),
-      );
-      // Wait for update and refresh
-      await Future.delayed(const Duration(milliseconds: 500));
-      _refreshLeadDetails();
+        ));
+        // Wait for update and refresh
+        await Future.delayed(const Duration(milliseconds: 500));
+        _refreshLeadDetails();
+      }
     }
   }
 
@@ -371,8 +375,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
 
     if (confirmed == true && mounted) {
-      context.read<LeadsBloc>().add(DeleteLeadEvent(_lead!['id']));
-      Navigator.pop(context); // Go back after deletion
+      final userId = _lead!['id'] ?? _lead!['_id'];
+      if (userId != null) {
+        context.read<LeadsBloc>().add(DeleteLeadEvent(userId));
+        Navigator.pop(context); // Go back after deletion
+      }
     }
   }
 
@@ -1727,24 +1734,25 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          UserStatusNotesWidget(
-                            userId: leadId!,
-                            initialStatus: currentLead['status'] ?? 'prospect',
-                            initialNotes: currentLead['notes'] ?? '',
-                            notesHistory: currentLead['notesHistory'] != null ? List<Map<String, dynamic>>.from(currentLead['notesHistory']) : null,
-                            isSubmitting: isLoading,
-                            onSave: (status, notes) {
-                              context.read<LeadsBloc>().add(
-                                    UpdateLeadDetailsEvent(
-                                      userId: leadId,
-                                      updateData: {
-                                        'leadStatus': status,
-                                        'leadNotes': notes,
-                                      },
-                                    ),
-                                  );
-                            },
-                          ),
+                          if (leadId != null)
+                            UserStatusNotesWidget(
+                              userId: leadId,
+                              initialStatus: currentLead['status'] ?? 'prospect',
+                              initialNotes: currentLead['notes'] ?? '',
+                              notesHistory: currentLead['notesHistory'] != null ? List<Map<String, dynamic>>.from(currentLead['notesHistory']) : null,
+                              isSubmitting: isLoading,
+                              onSave: (status, notes) {
+                                context.read<LeadsBloc>().add(
+                                      UpdateLeadDetailsEvent(
+                                        userId: leadId,
+                                        updateData: {
+                                          'leadStatus': status,
+                                          'leadNotes': notes,
+                                        },
+                                      ),
+                                    );
+                              },
+                            ),
                         ] else ...[
                           _LeadInformationCard(
                             lead: currentLead,
@@ -1758,24 +1766,25 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                             onUpload: _showUploadKycDialog,
                           ),
                           const SizedBox(height: 24),
-                          UserStatusNotesWidget(
-                            userId: leadId!,
-                            initialStatus: currentLead['status'] ?? 'prospect',
-                            initialNotes: currentLead['notes'] ?? '',
-                            notesHistory: currentLead['notesHistory'] != null ? List<Map<String, dynamic>>.from(currentLead['notesHistory']) : null,
-                            isSubmitting: isLoading,
-                            onSave: (status, notes) {
-                              context.read<LeadsBloc>().add(
-                                    UpdateLeadDetailsEvent(
-                                      userId: leadId,
-                                      updateData: {
-                                        'leadStatus': status,
-                                        'leadNotes': notes,
-                                      },
-                                    ),
-                                  );
-                            },
-                          ),
+                          if (leadId != null)
+                            UserStatusNotesWidget(
+                              userId: leadId,
+                              initialStatus: currentLead['status'] ?? 'prospect',
+                              initialNotes: currentLead['notes'] ?? '',
+                              notesHistory: currentLead['notesHistory'] != null ? List<Map<String, dynamic>>.from(currentLead['notesHistory']) : null,
+                              isSubmitting: isLoading,
+                              onSave: (status, notes) {
+                                context.read<LeadsBloc>().add(
+                                      UpdateLeadDetailsEvent(
+                                        userId: leadId,
+                                        updateData: {
+                                          'leadStatus': status,
+                                          'leadNotes': notes,
+                                        },
+                                      ),
+                                    );
+                              },
+                            ),
                         ],
                       ],
                     ),
