@@ -14,10 +14,13 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -60,13 +63,16 @@ void main() async {
     MultiBlocProvider(
       providers: [
         BlocProvider<DealersBloc>(
-          create: (context) => DealersBloc(),
+          create: (context) => DealersBloc()..add(const FetchDealersDataEvent()),
         ),
         BlocProvider<OrdersBloc>(
           create: (context) => OrdersBloc()..add(const FetchOrdersEvent()),
         ),
         BlocProvider<LeadsBloc>(
           create: (context) => LeadsBloc()..add(const FetchLeadsDataEvent()),
+        ),
+        BlocProvider<ProductsBloc>(
+          create: (context) => ProductsBloc()..add(const LoadProductsEvent()),
         ),
       ],
       child: const MyAppWrapper(),

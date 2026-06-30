@@ -196,9 +196,10 @@ class AnalyticsService extends WidgetsBindingObserver {
 
   // --- Dashboard Data Fetching (Admin Use) ---
 
-  Future<List<Map<String, dynamic>>> fetchEvents() async {
+  Future<List<Map<String, dynamic>>> fetchEvents({String? userEmail}) async {
     try {
-      final response = await _apiClient.get('/events');
+      final path = userEmail != null ? '/events?user=${Uri.encodeComponent(userEmail)}' : '/events';
+      final response = await _apiClient.get(path);
       if (response.statusCode == 200) {
         final dynamic data = jsonDecode(response.body);
         if (data is Map && data['success'] == true) {
@@ -239,6 +240,29 @@ class AnalyticsService extends WidgetsBindingObserver {
     if (data != null) {
       try { _localQueue = List<Map<String, dynamic>>.from(jsonDecode(data)); } catch (_) {}
     }
+  }
+
+  /// Flush any pending events, cancel active timers, and clear tracking queues/context
+  Future<void> handleLogout() async {
+    // 1. Flush any pending events immediately
+    await flush();
+
+    // 2. Cancel timers to free up resources
+    _flushTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _flushTimer = null;
+    _heartbeatTimer = null;
+
+    // 3. Clear the queue and persist
+    _localQueue.clear();
+    await _saveToDisk();
+
+    // 4. Reset tracking screen contexts
+    _currentScreen = 'Home';
+    _lastAction = 'App Open';
+    _successCount = 0;
+    _failureCount = 0;
+    _totalDropped = 0;
   }
 
   void dispose() {

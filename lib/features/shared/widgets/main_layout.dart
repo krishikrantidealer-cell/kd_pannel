@@ -227,7 +227,7 @@ class _MainLayoutState extends State<MainLayout> {
 
         // Screen Content
         Expanded(
-          child: widget.child ?? IndexedStack(index: safeIdx, children: pages),
+          child: widget.child ?? pages[safeIdx],
         ),
       ],
     );

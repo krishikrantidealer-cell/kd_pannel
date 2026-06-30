@@ -464,6 +464,18 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         ));
       }
     });
+
+    // Track add to cart event
+    final double itemPrice = _getSalesOverride(variantId) ?? (variant['price'] as num?)?.toDouble() ?? 0.0;
+    AnalyticsService().logEvent('add_to_cart', properties: {
+      'productId': product['_id'] ?? '',
+      'productName': product['title'] ?? product['name'] ?? '',
+      'variantId': variantId,
+      'dealerId': widget.dealer.id,
+      'dealerName': widget.dealer.name,
+      'price': itemPrice,
+      'details': 'Added ${product['title'] ?? product['name'] ?? ''} to cart for dealer ${widget.dealer.name}',
+    });
   }
 
   void _removeFromCart(int index) {

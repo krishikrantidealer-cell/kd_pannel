@@ -37,7 +37,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   @override
   void initState() {
     super.initState();
-    _dealersBloc = DealersBloc()..add(const FetchDealersDataEvent());
+    _dealersBloc = context.read<DealersBloc>();
+    final bloc = _dealersBloc!;
+    if (bloc.state.status == DealersStatus.initial) {
+      bloc.add(const FetchDealersDataEvent());
+    }
 
     // Connect to WebSockets
     WebSocketService().connect();
@@ -53,7 +57,6 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   @override
   void dispose() {
     _wsSubscription?.cancel();
-    _dealersBloc?.close(); // Manually dispose since we created it
     _searchController.dispose();
     _tableHorizontalController.dispose();
     super.dispose();

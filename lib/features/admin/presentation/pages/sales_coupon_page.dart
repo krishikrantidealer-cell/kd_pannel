@@ -35,6 +35,7 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
     });
     try {
       final res = await ApiClient().get('/sales-coupons/mine');
+      if (!mounted) return;
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
@@ -48,7 +49,9 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
       }
       setState(() => _error = 'Failed to load coupons');
     } catch (e) {
-      setState(() => _error = 'Network error: $e');
+      if (mounted) {
+        setState(() => _error = 'Network error: $e');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -84,7 +87,13 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
 
     try {
       final res = await ApiClient().delete('/sales-coupons/$id');
+      if (!mounted) return;
       if (res.statusCode == 200) {
+        // Track coupon deleted
+        AnalyticsService().logEvent('coupon_deleted', properties: {
+          'couponId': id,
+          'details': 'Deleted price coupon: $id',
+        });
         _showSnack('Coupon deleted');
         _fetchCoupons();
       } else {
@@ -92,7 +101,9 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
         _showSnack(data['message'] ?? 'Delete failed', isError: true);
       }
     } catch (e) {
-      _showSnack('Error: $e', isError: true);
+      if (mounted) {
+        _showSnack('Error: $e', isError: true);
+      }
     }
   }
 
@@ -674,6 +685,7 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
       final res = await ApiClient().post('/sales-coupons/', body); // Added trailing slash
       debugPrint('Sales coupon response: ${res.statusCode} - ${res.body}');
       
+      if (!mounted) return;
       final data = jsonDecode(res.body);
       
       if ((res.statusCode == 200 || res.statusCode == 201) && data['success'] == true) {
@@ -694,9 +706,11 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
       });
     } catch (e) {
       debugPrint('Error creating sales coupon: $e');
-      setState(() {
-        _errorMsg = 'Network Error: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMsg = 'Network Error: $e';
+        });
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -906,7 +920,7 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 365)),
                   );
-                  if (picked != null) setState(() => _expiresAt = picked);
+                  if (picked != null && mounted) setState(() => _expiresAt = picked);
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

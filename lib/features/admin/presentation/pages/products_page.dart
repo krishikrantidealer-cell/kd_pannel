@@ -27,6 +27,15 @@ class _ProductsPageState extends State<ProductsPage> {
       'Products'; // 'Products', 'Collections', or 'Categories'
 
   @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<ProductsBloc>();
+    if (bloc.state.status == ProductsStatus.initial) {
+      bloc.add(const LoadProductsEvent());
+    }
+  }
+
+  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
@@ -96,9 +105,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final bool isMobile = Responsive.isMobile(context);
 
     return SelectionArea(
-      child: BlocProvider(
-        create: (context) => ProductsBloc()..add(const LoadProductsEvent()),
-        child: BlocBuilder<ProductsBloc, ProductsState>(
+      child: BlocBuilder<ProductsBloc, ProductsState>(
           builder: (context, state) {
             final products = state.allProducts;
             final collections = state.collections;
@@ -318,8 +325,7 @@ class _ProductsPageState extends State<ProductsPage> {
             );
           },
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSegmentButton({

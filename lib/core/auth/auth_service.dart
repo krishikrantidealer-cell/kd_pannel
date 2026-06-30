@@ -117,10 +117,15 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    clearLocalSessionState();
+    try {
+      await AnalyticsService().handleLogout();
+    } catch (e) {
+      print('[AuthService] Telemetry cleanup failed: $e');
+    }
+    await clearLocalSessionState();
   }
 
-  void clearLocalSessionState() async {
+  Future<void> clearLocalSessionState() async {
     _currentUserRole = null;
     _currentUserId = null;
     _currentUserEmail = null;
