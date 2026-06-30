@@ -137,7 +137,16 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en', '')],
-      // We use a single entry point '/' to avoid null-check crashes during init
+      builder: (context, child) {
+        if (!_isInitialized) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+            ),
+          );
+        }
+        return child!;
+      },
       initialRoute: '/',
       routes: {
         '/': (context) {

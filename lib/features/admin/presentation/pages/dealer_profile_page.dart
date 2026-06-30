@@ -31,6 +31,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   bool _isLoadingOrders = false;
   String? _agentId;
   String? _agentName;
+  bool _isCacheLoaded = false;
 
   @override
   void didChangeDependencies() {
@@ -41,6 +42,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         _dealer = args;
         _agentId = args.agentId;
         _agentName = args.agent;
+        _isCacheLoaded = true;
         _saveDealerToCache(_dealer!);
         _refreshDealerDetails();
       } else {
@@ -77,6 +79,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       }
     } catch (e) {
       debugPrint('Error loading dealer from cache: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCacheLoaded = true;
+        });
+      }
     }
   }
 
@@ -658,6 +666,44 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   @override
   Widget build(BuildContext context) {
     if (_dealer == null) {
+      if (_isCacheLoaded) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Dealer details not found or session expired.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/dealers'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Go to Dealers List',
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(color: AppTheme.primaryColor),

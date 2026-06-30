@@ -16,12 +16,14 @@ class AuthService {
   String? _currentUserEmail;
   String? _lastError;
   String? _sessionId;
+  bool _isInitialized = false;
 
   UserRole? get currentUserRole => _currentUserRole;
   String? get currentUserId => _currentUserId;
   String? get currentUserEmail => _currentUserEmail;
   String? get lastError => _lastError;
   String? get sessionId => _sessionId;
+  bool get isInitialized => _isInitialized;
 
   Future<void> init() async {
     _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -36,6 +38,7 @@ class AuthService {
       _currentUserId = prefs.getString('kd_user_id');
       _currentUserEmail = prefs.getString('kd_user_email');
     } catch (_) {}
+    _isInitialized = true;
   }
 
   Future<bool> login({

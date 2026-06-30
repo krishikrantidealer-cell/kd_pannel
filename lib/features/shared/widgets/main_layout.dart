@@ -53,12 +53,20 @@ class _MainLayoutState extends State<MainLayout> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     
-    // Connect to WebSockets
-    WebSocketService().connect();
+    if (AuthService().isInitialized) {
+      // Connect to WebSockets
+      WebSocketService().connect();
 
-    // Pre-cache core layout assets to prevent empty/flickering render on direct load or restart
-    precacheImage(const AssetImage('assets/images/logo.png'), context);
-    precacheImage(const AssetImage('assets/images/admin.png'), context);
+      // Pre-cache core layout assets to prevent empty/flickering render on direct load or restart
+      precacheImage(const AssetImage('assets/images/logo.png'), context);
+      precacheImage(const AssetImage('assets/images/admin.png'), context);
+      
+      _updateRouteIndex();
+    }
+  }
+
+  void _updateRouteIndex() {
+    if (!AuthService().isInitialized) return;
 
     final String? routeName = ModalRoute.of(context)?.settings.name;
     final role = AuthService().currentUserRole ?? UserRole.admin;
@@ -182,6 +190,25 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AuthService().isInitialized) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
+    if (AuthService().currentUserId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/login');
+      });
+      return const Scaffold();
+    }
+
+    // Connect WebSockets and ensure route index is calculated
+    WebSocketService().connect();
+    _updateRouteIndex();
+
     final bool isDesktop = Responsive.isDesktop(context);
     final role = AuthService().currentUserRole ?? UserRole.admin;
     final pages = role == UserRole.admin ? _adminPages : _salesPages;

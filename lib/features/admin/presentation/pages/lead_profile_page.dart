@@ -24,14 +24,16 @@ class LeadProfilePage extends StatefulWidget {
 
 class _LeadProfilePageState extends State<LeadProfilePage> {
   Map<String, dynamic>? _lead;
+  bool _isCacheLoaded = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_lead == null) {
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Map<String, dynamic>) {
+      if (args is Map) {
         _lead = Map<String, dynamic>.from(args);
+        _isCacheLoaded = true;
         _saveLeadToCache(_lead!);
         _refreshLeadDetails();
       } else {
@@ -63,6 +65,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       }
     } catch (e) {
       debugPrint('Error loading lead from cache: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCacheLoaded = true;
+        });
+      }
     }
   }
 
@@ -1633,6 +1641,44 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         }
 
         if (currentLead == null) {
+          if (_isCacheLoaded) {
+            return Scaffold(
+              backgroundColor: const Color(0xFFF8FAFC),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Lead details not found or session expired.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pushReplacementNamed(context, '/leads'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Go to Leads List',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(color: AppTheme.primaryColor),
