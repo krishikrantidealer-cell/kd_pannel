@@ -1,147 +1,176 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/cupertino.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 
-/// A service that simulates real-world enterprise database queries with deliberate API latency.
-/// This allows each dashboard widget to render individually in the background using FutureBuilders.
+/// A service that fetches real-world enterprise data from the backend.
 class DashboardService {
-  // Simulating localized caches
-  static final _salesDelay = const Duration(milliseconds: 1400);
-  static final _ordersDelay = const Duration(milliseconds: 600);
-  static final _dealersDelay = const Duration(milliseconds: 2000);
-  static final _leadsDelay = const Duration(milliseconds: 1000);
+  static final DashboardService _instance = DashboardService._internal();
+  factory DashboardService() => _instance;
+  DashboardService._internal();
 
-  /// Standard simulated latency for Leads status categories
-  static final _unassignedDelay = const Duration(milliseconds: 800);
-  static final _assignedDelay = const Duration(milliseconds: 1200);
-  static final _kycPendingDelay = const Duration(milliseconds: 1600);
-  static final _kycConfirmDelay = const Duration(milliseconds: 1000);
-  static final _orderPendingDelay = const Duration(milliseconds: 1500);
-  static final _orderConfirmDelay = const Duration(milliseconds: 700);
+  final ApiClient _client = ApiClient();
+
+  Map<String, dynamic>? _cachedData;
+  String? _lastPeriod;
+  DateTime? _lastFetch;
+  Future<Map<String, dynamic>>? _fetchFuture;
+
+  Future<Map<String, dynamic>> _getAnalytics(String period) async {
+    // 1. Check valid cache
+    if (_cachedData != null && 
+        _lastPeriod == period && 
+        _lastFetch != null && 
+        DateTime.now().difference(_lastFetch!) < const Duration(seconds: 15)) {
+      return _cachedData!;
+    }
+
+    // 2. Return existing in-flight request if any
+    if (_fetchFuture != null) {
+      return _fetchFuture!;
+    }
+
+    // 3. Initiate new fetch
+    final Future<Map<String, dynamic>> call = () async {
+      try {
+        final res = await _client.get('/admin/dashboard?period=$period');
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['success'] == true) {
+            _cachedData = Map<String, dynamic>.from(data['analytics'] ?? {});
+            _lastPeriod = period;
+            _lastFetch = DateTime.now();
+            return _cachedData!;
+          }
+        } else {
+          debugPrint('[DashboardService] Fetch failed: ${res.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('[DashboardService] Error: $e');
+      } finally {
+        _fetchFuture = null;
+      }
+      return _cachedData ?? <String, dynamic>{};
+    }();
+
+    _fetchFuture = call;
+    return call;
+
+    return _fetchFuture!;
+  }
 
   // --- Admin Dashboard Stats ---
 
-  /// Maps a period string to a numeric multiplier for simulating different data.
-  static double _periodMultiplier(String period) {
-    switch (period) {
-      case 'Today':
-        return 0.05;
-      case '1 Week':
-      case 'Last 1 Week':
-        return 0.22;
-      case 'Last 2 Weeks':
-        return 0.45;
-      case 'Last 3 Weeks':
-        return 0.65;
-      case 'Last 1 Month':
-        return 1.0;
-      case 'Last 3 Months':
-        return 2.8;
-      case 'Last 6 Months':
-        return 5.4;
-      case 'This Month':
-        return 1.0;
-      default:
-        return 1.0;
-    }
-  }
-
   Future<String> getRevenueToday({String period = 'Today'}) async {
-    await Future.delayed(_salesDelay);
-    final double base = 28400;
-    final int val = (base * _periodMultiplier(period)).round();
-    return '₹${_formatNumber(val)}';
+    final data = await _getAnalytics(period);
+    final orders = data['orders'] as Map<String, dynamic>?;
+    final val = orders?['periodRevenue'] ?? orders?['totalRevenue'] ?? 0;
+    return '₹${_formatCurrency((val as num).toDouble())}';
   }
 
   Future<String> getOrderToday({String period = 'Today'}) async {
-    await Future.delayed(_ordersDelay);
-    final int base = 18;
-    final int val = (base * _periodMultiplier(period)).round();
+    final data = await _getAnalytics(period);
+    final orders = data['orders'] as Map<String, dynamic>?;
+    final val = orders?['periodTotal'] ?? orders?['total'] ?? 0;
     return '$val';
   }
 
   Future<String> getActiveDealers({String period = 'Today'}) async {
-    await Future.delayed(_dealersDelay);
-    final int base = 842;
-    final int val = (base + (10 * _periodMultiplier(period))).round();
+    final data = await _getAnalytics(period);
+    final users = data['users'] as Map<String, dynamic>?;
+    // Fallback order: active -> verified -> total
+    final val = users?['active'] ?? users?['verified'] ?? users?['total'] ?? 0;
     return '$val';
   }
 
   Future<String> getNewLeads({String period = 'Today'}) async {
-    await Future.delayed(_leadsDelay);
-    final int base = 15;
-    final int val = (base * _periodMultiplier(period)).round();
+    final data = await _getAnalytics(period);
+    final users = data['users'] as Map<String, dynamic>?;
+    final val = users?['newLeads'] ?? users?['pendingKyc'] ?? 0;
     return '$val';
   }
 
-  Future<String> getTransactingDeals({String period = 'Today'}) async {
-    await Future.delayed(_salesDelay);
-    final int base = 24;
-    final int val = (base * _periodMultiplier(period)).round();
+  Future<String> getAbandonedCheckouts({String period = 'Today'}) async {
+    final data = await _getAnalytics(period);
+    final checkouts = data['checkouts'] as Map<String, dynamic>?;
+    final val = checkouts?['abandoned'] ?? 0;
+    return '$val';
+  }
+
+  Future<String> getPendingOrders({String period = 'Today'}) async {
+    final data = await _getAnalytics(period);
+    final orders = data['orders'] as Map<String, dynamic>?;
+    final val = orders?['pending'] ?? 0;
     return '$val';
   }
 
   Future<String> getEventsToday({String period = 'Today'}) async {
-    await Future.delayed(_leadsDelay);
-    final int base = 142;
-    final int val = (base * _periodMultiplier(period)).round();
+    final data = await _getAnalytics(period);
+    final events = data['events'] as Map<String, dynamic>?;
+    final val = events?['periodTotal'] ?? 0;
     return '$val';
   }
 
-  static String _formatNumber(int n) {
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+  String _formatCurrency(double amount) {
+    if (amount >= 100000) {
+      return '${(amount / 100000).toStringAsFixed(1)}L';
     }
-    return '$n';
+    if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)}k';
+    }
+    return amount.toStringAsFixed(0);
   }
 
   // --- Dealer Management Stats ---
   Future<String> getDealerTotalDealers() async {
-    await Future.delayed(_dealersDelay);
-    return '1,245';
+    final data = await _getAnalytics('Today');
+    return (data['users']?['total'] ?? 0).toString();
   }
 
   Future<String> getDealerActiveDealers() async {
-    await Future.delayed(_salesDelay);
-    return '982';
+    final data = await _getAnalytics('Today');
+    return (data['users']?['verified'] ?? 0).toString();
   }
 
   Future<String> getDealerHighValueDealers() async {
-    await Future.delayed(_leadsDelay);
-    return '156';
+    // This would need a more specific query, but using verified for now
+    final data = await _getAnalytics('Today');
+    return (data['users']?['verified'] ?? 0).toString();
   }
 
   Future<String> getDealerInactiveDealers() async {
-    await Future.delayed(_ordersDelay);
-    return '107';
+    final data = await _getAnalytics('Today');
+    final total = data['users']?['total'] ?? 0;
+    final verified = data['users']?['verified'] ?? 0;
+    return (total - verified).toString();
   }
 
   // --- Leads Dashboard Stats ---
+  // Using simplified counts from analytics
   Future<String> getLeadsUnassigned() async {
-    await Future.delayed(_unassignedDelay);
-    return '10';
+    final data = await _getAnalytics('Today');
+    return (data['users']?['pendingKyc'] ?? 0).toString();
   }
 
   Future<String> getLeadsAssigned() async {
-    await Future.delayed(_assignedDelay);
-    return '10';
+    return '0';
   }
 
   Future<String> getLeadsKycPending() async {
-    await Future.delayed(_kycPendingDelay);
-    return '10';
+    final data = await _getAnalytics('Today');
+    return (data['users']?['pendingKyc'] ?? 0).toString();
   }
 
   Future<String> getLeadsKycConfirm() async {
-    await Future.delayed(_kycConfirmDelay);
-    return '10';
+    return '0';
   }
 
   Future<String> getLeadsOrderPending() async {
-    await Future.delayed(_orderPendingDelay);
-    return '10';
+    final data = await _getAnalytics('Today');
+    return (data['orders']?['pending'] ?? 0).toString();
   }
 
   Future<String> getLeadsOrderConfirm() async {
-    await Future.delayed(_orderConfirmDelay);
-    return '10';
+    return '0';
   }
 }

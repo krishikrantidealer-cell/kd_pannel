@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,8 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
+import '../../../../core/network/websocket_service.dart';
+
 
 class LeadProfilePage extends StatefulWidget {
   const LeadProfilePage({super.key});
@@ -31,6 +34,28 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   List<Map<String, dynamic>> _events = [];
   bool _isLoadingEvents = false;
   int _activeTab = 0;
+  StreamSubscription? _presenceSubscription;
+
+  @override
+  void dispose() {
+    _presenceSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToRealTimeEvents() {
+    _presenceSubscription?.cancel();
+    _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
+      if (!mounted || _lead == null) return;
+      
+      final currentIdentifier = (_lead!['email'] ?? _lead!['phone'] ?? _lead!['phoneNumber'] ?? _lead!['id'] ?? _lead!['_id'])?.toString();
+      final incomingUser = data['user']?.toString() ?? data['userEmail']?.toString();
+      
+      if (currentIdentifier != null && incomingUser != null && currentIdentifier == incomingUser) {
+        // If it's a presence update for the current user, refresh the events feed to get the latest audit log
+        _fetchEvents();
+      }
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -42,7 +67,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         _isCacheLoaded = true;
         _saveLeadToCache(_lead!);
         _refreshLeadDetails();
-        _fetchEvents();
+        if (AuthService().isAdmin) {
+          _fetchEvents();
+          _listenToRealTimeEvents();
+        }
 
         // Track profile view event
         AnalyticsService().logEvent(
@@ -83,7 +111,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           });
         }
         _refreshLeadDetails();
-        _fetchEvents();
+        if (AuthService().isAdmin) {
+          _fetchEvents();
+          _listenToRealTimeEvents();
+        }
       }
     } catch (e) {
       debugPrint('Error loading lead from cache: $e');
@@ -116,19 +147,26 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
-  Future<void> _fetchEvents() async {
+  Future<void> _fetchEvents({bool silent = false}) async {
     if (_lead == null) return;
-    final identifier =
-        _lead!['email'] ??
-        _lead!['phone'] ??
-        _lead!['phoneNumber'] ??
-        _lead!['id'] ??
-        _lead!['_id'];
+    String? identifier;
+    final email = _lead!['email']?.toString();
+    final phone = (_lead!['phone'] ?? _lead!['phoneNumber'])?.toString();
+    final id = (_lead!['id'] ?? _lead!['_id'])?.toString();
+
+    if (email != null && email.trim().isNotEmpty) {
+      identifier = email.trim();
+    } else if (phone != null && phone.trim().isNotEmpty) {
+      identifier = phone.trim();
+    } else if (id != null && id.trim().isNotEmpty) {
+      identifier = id.trim();
+    }
+
     if (identifier == null) return;
-    if (mounted) setState(() => _isLoadingEvents = true);
+    if (mounted && !silent) setState(() => _isLoadingEvents = true);
     try {
       final filtered = await AnalyticsService().fetchEvents(
-        userEmail: identifier.toString(),
+        userEmail: identifier,
       );
       if (mounted) {
         setState(() {
@@ -138,7 +176,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     } catch (e) {
       debugPrint('Error loading lead events: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _isLoadingEvents = false;
         });
@@ -2042,6 +2080,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                             leadId,
                                         events: _events,
                                         isLoading: _isLoadingEvents,
+                                        onRefresh: () => _fetchEvents(),
                                       ),
                                   ],
                                 )
@@ -3786,12 +3825,14 @@ class _UserEventsCard extends StatefulWidget {
   final String userIdentifier;
   final List<Map<String, dynamic>> events;
   final bool isLoading;
+  final VoidCallback onRefresh;
 
   const _UserEventsCard({
     super.key,
     required this.userIdentifier,
     required this.events,
     required this.isLoading,
+    required this.onRefresh,
   });
 
   @override
@@ -4249,8 +4290,14 @@ class _UserEventsCardState extends State<_UserEventsCard> {
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
 
-    // Filter events by selected category
-    final filteredEvents = widget.events.where((e) {
+    final sortedEvents = List<Map<String, dynamic>>.from(widget.events)
+      ..sort((a, b) {
+        final aTs = a['timestamp']?.toString() ?? '';
+        final bTs = b['timestamp']?.toString() ?? '';
+        return bTs.compareTo(aTs);
+      });
+
+    final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
       return _matchesCategory(type, _selectedCategory);
     }).toList();
@@ -4279,18 +4326,34 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Live Activity & Events Feed',
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF111827),
-                ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Text(
+                    'Live Activity & Events Feed',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!widget.isLoading)
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded,
+                          size: 18, color: AppTheme.primaryColor),
+                      onPressed: widget.onRefresh,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Refresh Activity Feed',
+                    ),
+                ],
               ),
-              if (totalEvents > 0)
+            ),
+            if (totalEvents > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

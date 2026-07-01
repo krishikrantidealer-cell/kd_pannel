@@ -145,6 +145,7 @@ class ShippingAddress {
 class OrderModel {
   final String id;
   final String orderId;
+  final String? userId; // Added userId
   final String customerName;
   final String? shopName;
   final String customerPhone;
@@ -178,6 +179,7 @@ class OrderModel {
   OrderModel({
     required this.id,
     required this.orderId,
+    this.userId, // Added userId
     required this.customerName,
     this.shopName,
     required this.customerPhone,
@@ -214,7 +216,11 @@ class OrderModel {
     String? shopName;
     String customerPhone = '';
     String customerRole = 'Lead';
+    String? userId;
+    String? agentName;
+
     if (userJson != null) {
+      userId = userJson['_id']?.toString();
       final firstName = userJson['firstName'] ?? '';
       final lastName = userJson['lastName'] ?? '';
       shopName = userJson['shopName']?.toString();
@@ -229,6 +235,13 @@ class OrderModel {
           userJson['kycStatus'] == 'verified' ||
           (userJson['isKycComplete'] == true);
       customerRole = isKycVerified ? 'Dealer' : 'Lead';
+
+      final agentJson = userJson['assignedAgent'] as Map<String, dynamic>?;
+      if (agentJson != null) {
+        agentName =
+            '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
+                .trim();
+      }
     }
 
     final itemsList =
@@ -245,6 +258,7 @@ class OrderModel {
     return OrderModel(
       id: json['_id'] ?? '',
       orderId: json['orderId'] ?? '',
+      userId: userId,
       customerName: customerName,
       shopName: shopName,
       customerPhone: customerPhone,
@@ -284,7 +298,7 @@ class OrderModel {
           ? DateTime.parse(json['cancelledAt'])
           : null,
       rtoAt: json['rtoAt'] != null ? DateTime.parse(json['rtoAt']) : null,
-      assignedAgent: json['assignedAgent'],
+      assignedAgent: agentName ?? json['assignedAgent'],
     );
   }
 

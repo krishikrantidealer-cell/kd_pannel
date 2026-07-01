@@ -30,25 +30,25 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   bool _tempDisableHover = false;
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
+    {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
     {
       'icon': Icons.production_quantity_limits_rounded,
       'title': 'Products',
-      'index': 0,
+      'index': 1,
     },
-    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 1},
-    {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 2},
-    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 3},
-    {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 4},
-    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 5},
-    {'icon': Icons.insights_rounded, 'title': 'Marketing', 'index': 6},
+    {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 2},
+    {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 3},
+    {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 4},
+    {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 5},
+    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 6},
+    {'icon': Icons.insights_rounded, 'title': 'Marketing', 'index': 7},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
-    //latest
-    // {'icon': Icons.dashboard_rounded, 'title': 'Sales Dashboard', 'index': 0},
-    {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 0},
-    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 1},
-    {'icon': Icons.price_change_rounded, 'title': 'My Price Coupons', 'index': 2},
+    {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
+    {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 1},
+    {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 2},
+    {'icon': Icons.price_change_rounded, 'title': 'My Price Coupons', 'index': 3},
   ];
 
   @override

@@ -295,7 +295,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             address: u['address'] != null
                 ? Map<String, dynamic>.from(u['address'])
                 : null,
-            status: u['status'] ?? u['leadStatus'] ?? 'prospect',
+            status: u['status'] ?? u['leadStatus'] ?? 'Verified',
             notes: u['notes'] ?? u['leadNotes'] ?? '',
             createdAt: u['createdAt'],
             updatedAt: u['updatedAt'],
@@ -737,59 +737,61 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 ? 1300.0
                 : (AuthService().isAdmin ? 1220.0 : 1020.0);
 
-            final Widget body = CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isDesktop ? 28 : 16,
-                    vertical: isDesktop ? 20 : 12,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(context, state, isMobile),
-                        const SizedBox(height: 16),
-                        _buildStatsCardsInternal(allCalculated, state, context),
-                        const SizedBox(height: 24),
-                        _buildFiltersRow(context, state, isMobile, isDesktop),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
-                  sliver: SliverToBoxAdapter(
-                    child: _DealerTableCard(
-                      dealers: filteredDealers,
-                      isMobile: isMobile,
-                      salesAgents: state.salesAgents,
-                      onAssignAgent: (userId, agentId) {
-                        _dealersBloc?.add(
-                          AssignAgentToDealerEvent(
-                            userId: userId,
-                            agentId: agentId,
+            final Widget body = (state.status == DealersStatus.loading && state.allRawUsers.isEmpty)
+                ? _buildSkeletonLoading(isDesktop, isMobile)
+                : CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isDesktop ? 28 : 16,
+                          vertical: isDesktop ? 20 : 12,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildHeader(context, state, isMobile),
+                              const SizedBox(height: 16),
+                              _buildStatsCardsInternal(allCalculated, state, context),
+                              const SizedBox(height: 24),
+                              _buildFiltersRow(context, state, isMobile, isDesktop),
+                              const SizedBox(height: 16),
+                            ],
                           ),
-                        );
-                      },
-                      onBulkAssignAgent: (userIds, agentId) {
-                        _dealersBloc?.add(
-                          BulkAssignAgentToDealersEvent(
-                            userIds: userIds,
-                            agentId: agentId,
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                        sliver: SliverToBoxAdapter(
+                          child: _DealerTableCard(
+                            dealers: filteredDealers,
+                            isMobile: isMobile,
+                            salesAgents: state.salesAgents,
+                            onAssignAgent: (userId, agentId) {
+                              _dealersBloc?.add(
+                                AssignAgentToDealerEvent(
+                                  userId: userId,
+                                  agentId: agentId,
+                                ),
+                              );
+                            },
+                            onBulkAssignAgent: (userIds, agentId) {
+                              _dealersBloc?.add(
+                                BulkAssignAgentToDealersEvent(
+                                  userIds: userIds,
+                                  agentId: agentId,
+                                ),
+                              );
+                            },
+                            onEditDealer: _editDealer,
+                            onDeleteDealer: _deleteDealer,
+                            isSubmitting: state.status == DealersStatus.submitting,
                           ),
-                        );
-                      },
-                      onEditDealer: _editDealer,
-                      onDeleteDealer: _deleteDealer,
-                      isSubmitting: state.status == DealersStatus.submitting,
-                    ),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 40)),
-              ],
-            );
+                        ),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                    ],
+                  );
 
             if (widget.isStandalone) {
               return Scaffold(
@@ -3089,6 +3091,9 @@ class _DealerRowState extends State<_DealerRow> {
         break;
       case 'prospect':
         color = Colors.cyan;
+        break;
+      case 'verified':
+        color = AppTheme.success;
         break;
     }
 

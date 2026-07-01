@@ -9,6 +9,8 @@ import 'package:kd_pannel/features/admin/data/models/order_model.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
@@ -53,7 +55,7 @@ class _OrdersPageState extends State<OrdersPage> {
     OrdersState state,
   ) {
     return orders.where((order) {
-      final query = state.searchQuery.toLowerCase();
+      final query = state.searchQuery.toLowerCase().trim();
       final matchesSearch =
           order.orderId.toLowerCase().contains(query) ||
           order.customerName.toLowerCase().contains(query) ||
@@ -62,15 +64,15 @@ class _OrdersPageState extends State<OrdersPage> {
 
       final matchesOrderStatus =
           state.selectedOrderStatus == 'All Statuses' ||
-          order.orderStatus == state.selectedOrderStatus;
+          order.orderStatus.toLowerCase().trim() == state.selectedOrderStatus.toLowerCase().trim();
 
       final matchesPaymentStatus =
           state.selectedPaymentStatus == 'All Payments' ||
-          order.paymentStatus == state.selectedPaymentStatus;
+          order.paymentStatus.toLowerCase().trim() == state.selectedPaymentStatus.toLowerCase().trim();
 
       final matchesPaymentMethod =
           state.selectedPaymentMethod == 'All Methods' ||
-          order.paymentMethod == state.selectedPaymentMethod;
+          order.paymentMethod.toLowerCase().trim() == state.selectedPaymentMethod.toLowerCase().trim();
 
       return matchesSearch &&
           matchesOrderStatus &&
@@ -83,187 +85,195 @@ class _OrdersPageState extends State<OrdersPage> {
   @override
   Widget build(BuildContext context) {
     return SelectionArea(
-      child: BlocConsumer<OrdersBloc, OrdersState>(
-        listener: (context, state) {
-          if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppTheme.error,
-              ),
-            );
-            context.read<OrdersBloc>().add(const ClearOrdersMessageEvent());
-          }
-        },
-        builder: (context, state) {
-          final bool isMobile = Responsive.isMobile(context);
-          final filtered = _getFilteredOrders(state.orders, state);
-          final EdgeInsets screenPadding = AppTheme.getResponsivePadding(context);
+      child: BlocBuilder<DealersBloc, DealersState>(
+        builder: (context, dealersState) {
+          final allUsers = dealersState.allRawUsers;
 
-          final int total = filtered.length;
-          final int totalPages = (total / state.pageSize).ceil();
-          final int currentPage = state.currentPage.clamp(
-            1,
-            totalPages > 0 ? totalPages : 1,
-          );
+          return BlocConsumer<OrdersBloc, OrdersState>(
+            listener: (context, state) {
+              if (state.errorMessage != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.errorMessage!),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+                context.read<OrdersBloc>().add(const ClearOrdersMessageEvent());
+              }
+            },
+            builder: (context, state) {
+              final bool isMobile = Responsive.isMobile(context);
+              final filtered = _getFilteredOrders(state.orders, state);
+              final EdgeInsets screenPadding =
+                  AppTheme.getResponsivePadding(context);
 
-          final int startIndex = (currentPage - 1) * state.pageSize;
-          final int endIndex = (startIndex + state.pageSize) > total
-              ? total
-              : (startIndex + state.pageSize);
-          final paginatedOrders = total == 0
-              ? <OrderModel>[]
-              : filtered.sublist(startIndex, endIndex);
+              final int total = filtered.length;
+              final int totalPages = (total / state.pageSize).ceil();
+              final int currentPage = state.currentPage.clamp(
+                1,
+                totalPages > 0 ? totalPages : 1,
+              );
 
-          if (state.status == OrdersStatus.loading && state.orders.isEmpty) {
-            return const SizedBox.expand(
-              child: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryColor),
-              ),
-            );
-          }
+              final int startIndex = (currentPage - 1) * state.pageSize;
+              final int endIndex = (startIndex + state.pageSize) > total
+                  ? total
+                  : (startIndex + state.pageSize);
+              final paginatedOrders = total == 0
+                  ? <OrderModel>[]
+                  : filtered.sublist(startIndex, endIndex);
 
-          if (state.status == OrdersStatus.failure && state.orders.isEmpty) {
-            return SizedBox.expand(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      color: AppTheme.error,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      state.errorMessage ?? 'Failed to load orders.',
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () {
-                          context.read<OrdersBloc>().add(
-                            const FetchOrdersEvent(forceRefresh: true),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
+              if (state.status == OrdersStatus.loading && state.orders.isEmpty) {
+                return const SizedBox.expand(
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                  ),
+                );
+              }
+
+              if (state.status == OrdersStatus.failure && state.orders.isEmpty) {
+                return SizedBox.expand(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: AppTheme.error,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          state.errorMessage ?? 'Failed to load orders.',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
                           ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'Retry Connection',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () {
+                              context.read<OrdersBloc>().add(
+                                const FetchOrdersEvent(forceRefresh: true),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Retry Connection',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final Widget bodyContent = Builder(
+                builder: (context) => SizedBox.expand(
+                  child: RefreshIndicator(
+                    color: AppTheme.primaryColor,
+                    onRefresh: () async {
+                      context.read<OrdersBloc>().add(
+                        const FetchOrdersEvent(forceRefresh: true),
+                      );
+                    },
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.symmetric(vertical: screenPadding.top),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header
+                          if (!widget.isStandalone) ...[
+                            Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenPadding.left,
+                              ),
+                              child: _buildHeader(),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Statistics Grid
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenPadding.left,
+                            ),
+                            child: _buildStatsGrid(state),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Search & Filter controls
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenPadding.left,
+                            ),
+                            child: _buildFilterControls(isMobile, state),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Orders Table
+                          _buildOrdersTable(
+                            paginatedOrders,
+                            filtered.length,
+                            isMobile,
+                            screenPadding,
+                            state,
+                            currentPage,
+                            allUsers,
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final Widget bodyContent = Builder(
-            builder: (context) => SizedBox.expand(
-              child: RefreshIndicator(
-                color: AppTheme.primaryColor,
-                onRefresh: () async {
-                  context.read<OrdersBloc>().add(
-                    const FetchOrdersEvent(forceRefresh: true),
-                  );
-                },
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.symmetric(vertical: screenPadding.top),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      if (!widget.isStandalone) ...[
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: screenPadding.left,
-                          ),
-                          child: _buildHeader(),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-
-                      // Statistics Grid
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenPadding.left,
-                        ),
-                        child: _buildStatsGrid(state),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Search & Filter controls
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenPadding.left,
-                        ),
-                        child: _buildFilterControls(isMobile, state),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Orders Table
-                      _buildOrdersTable(
-                        paginatedOrders,
-                        filtered.length,
-                        isMobile,
-                        screenPadding,
-                        state,
-                        currentPage,
-                      ),
-                    ],
                   ),
                 ),
-              ),
-            ),
+              );
+
+              if (widget.isStandalone) {
+                return Scaffold(
+                  backgroundColor: AppTheme.backgroundColor,
+                  appBar: AppBar(
+                    title: Text(
+                      'Order Management',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppTheme.textPrimary,
+                    elevation: 0,
+                    bottom: const PreferredSize(
+                      preferredSize: Size.fromHeight(1),
+                      child: Divider(height: 1, color: AppTheme.lightBorderColor),
+                    ),
+                  ),
+                  body: bodyContent,
+                );
+              }
+
+              return bodyContent;
+            },
           );
-
-          if (widget.isStandalone) {
-            return Scaffold(
-              backgroundColor: AppTheme.backgroundColor,
-              appBar: AppBar(
-                title: Text(
-                  'Order Management',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                backgroundColor: Colors.white,
-                foregroundColor: AppTheme.textPrimary,
-                elevation: 0,
-                bottom: const PreferredSize(
-                  preferredSize: Size.fromHeight(1),
-                  child: Divider(height: 1, color: AppTheme.lightBorderColor),
-                ),
-              ),
-              body: bodyContent,
-            );
-          }
-
-          return bodyContent;
         },
       ),
     );
@@ -299,13 +309,13 @@ class _OrdersPageState extends State<OrdersPage> {
     // Dynamic counts from all orders
     final int totalOrders = state.orders.length;
     final int processingOrders = state.orders
-        .where((o) => o.orderStatus == 'Processing')
+        .where((o) => o.orderStatus.toLowerCase() == 'processing')
         .length;
     final int shippedOrders = state.orders
-        .where((o) => o.orderStatus == 'Shipped')
+        .where((o) => o.orderStatus.toLowerCase() == 'shipped')
         .length;
     final int deliveredOrders = state.orders
-        .where((o) => o.orderStatus == 'Delivered')
+        .where((o) => o.orderStatus.toLowerCase() == 'delivered')
         .length;
 
     // Today's orders
@@ -321,7 +331,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // Shipped / Out for delivery in transit
     final outForDeliveryOrders = state.orders
-        .where((o) => o.orderStatus == 'Out for Delivery')
+        .where((o) => o.orderStatus.toLowerCase() == 'out for delivery')
         .length;
     final totalInTransit = shippedOrders + outForDeliveryOrders;
 
@@ -521,6 +531,7 @@ class _OrdersPageState extends State<OrdersPage> {
       'Out for Delivery',
       'Delivered',
       'Cancelled',
+      'RTO',
     ];
 
     final List<String> paymentStatusOptions = [
@@ -548,7 +559,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   (val) {
                     context.read<OrdersBloc>().add(
                       UpdateOrdersFilterEvent(
-                        selectedOrderStatus: val,
+                        selectedOrderStatus: val!,
                         currentPage: 1,
                       ),
                     );
@@ -563,7 +574,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   (val) {
                     context.read<OrdersBloc>().add(
                       UpdateOrdersFilterEvent(
-                        selectedPaymentStatus: val,
+                        selectedPaymentStatus: val!,
                         currentPage: 1,
                       ),
                     );
@@ -578,7 +589,7 @@ class _OrdersPageState extends State<OrdersPage> {
           ) {
             context.read<OrdersBloc>().add(
               UpdateOrdersFilterEvent(
-                selectedPaymentMethod: val,
+                selectedPaymentMethod: val!,
                 currentPage: 1,
               ),
             );
@@ -593,7 +604,7 @@ class _OrdersPageState extends State<OrdersPage> {
         const SizedBox(width: 12),
         _buildDropdown(orderStatusOptions, state.selectedOrderStatus, (val) {
           context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedOrderStatus: val, currentPage: 1),
+            UpdateOrdersFilterEvent(selectedOrderStatus: val!, currentPage: 1),
           );
         }, width: 150),
         const SizedBox(width: 12),
@@ -601,7 +612,7 @@ class _OrdersPageState extends State<OrdersPage> {
           val,
         ) {
           context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedPaymentStatus: val, currentPage: 1),
+            UpdateOrdersFilterEvent(selectedPaymentStatus: val!, currentPage: 1),
           );
         }, width: 150),
         const SizedBox(width: 12),
@@ -609,7 +620,7 @@ class _OrdersPageState extends State<OrdersPage> {
           val,
         ) {
           context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedPaymentMethod: val, currentPage: 1),
+            UpdateOrdersFilterEvent(selectedPaymentMethod: val!, currentPage: 1),
           );
         }, width: 130),
       ],
@@ -670,6 +681,7 @@ class _OrdersPageState extends State<OrdersPage> {
     EdgeInsets screenPadding,
     OrdersState state,
     int currentPage,
+    List<Map<String, dynamic>> allUsers,
   ) {
     final header = Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -679,7 +691,7 @@ class _OrdersPageState extends State<OrdersPage> {
           Expanded(flex: 6, child: _TableHeaderText('ORDER ID')),
           Expanded(flex: 6, child: _TableHeaderText('DATE & TIME')),
           Expanded(flex: 12, child: _TableHeaderText('CUSTOMER')),
-          Expanded(flex: 6, child: _TableHeaderText('AGENT')),
+          Expanded(flex: 6, child: _TableHeaderText('ASSIGNED AGENT')),
           Expanded(flex: 6, child: _TableHeaderText('ORDER VALUE')),
           Expanded(flex: 8, child: _TableHeaderText('PAYMENT STATUS')),
           Expanded(flex: 10, child: _TableHeaderText('FULFILLMENT')),
@@ -707,6 +719,18 @@ class _OrdersPageState extends State<OrdersPage> {
         children: orders.asMap().entries.map((entry) {
           final isEven = entry.key % 2 == 0;
           final order = entry.value;
+
+          // Resolve LATEST assigned agent from current dealer state
+          final user = allUsers.firstWhere(
+            (u) => u['_id'] == order.userId,
+            orElse: () => {},
+          );
+          String? latestAgent;
+          if (user.isNotEmpty && user['assignedAgent'] != null) {
+            final a = user['assignedAgent'];
+            latestAgent =
+                '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
+          }
 
           return MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -826,7 +850,9 @@ class _OrdersPageState extends State<OrdersPage> {
                     Expanded(
                       flex: 6,
                       child: Text(
-                        'Admin',
+                        (latestAgent != null && latestAgent.isNotEmpty)
+                            ? latestAgent
+                            : (order.assignedAgent ?? '-'),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: AppTheme.textBody,

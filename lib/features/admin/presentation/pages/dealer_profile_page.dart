@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
+import '../../../../core/auth/auth_service.dart';
+import '../../../../core/network/websocket_service.dart';
+
 class DealerProfilePage extends StatefulWidget {
   const DealerProfilePage({super.key});
 
@@ -38,6 +42,39 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   String? _agentName;
   bool _isCacheLoaded = false;
   int _activeTab = 0;
+  StreamSubscription? _presenceSubscription;
+
+  @override
+  void dispose() {
+    _presenceSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToRealTimeEvents() {
+    _presenceSubscription?.cancel();
+    _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
+      if (!mounted || _dealer == null) return;
+
+      final incomingUser =
+          (data['user'] ?? data['userEmail'] ?? data['userId'])?.toString();
+      if (incomingUser == null) return;
+
+      final List<String> myIdentifiers = [
+        if (_dealer!.email != null) _dealer!.email!.toString(),
+        if (_dealer!.phone != null) _dealer!.phone!.toString(),
+        if (_dealer!.id != null) _dealer!.id!.toString(),
+      ];
+
+      bool isMatch = myIdentifiers.any(
+        (id) => id.toLowerCase() == incomingUser.toLowerCase(),
+      );
+
+      if (isMatch) {
+        // If it's a presence update for the current user, refresh the events feed silently
+        _fetchEvents(silent: true);
+      }
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -64,9 +101,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       } else {
         _loadDealerFromCache();
       }
-      _fetchSalesAgents();
       _fetchOrders();
-      _fetchEvents();
+      if (AuthService().isAdmin) {
+        _fetchSalesAgents();
+        _fetchEvents();
+        _listenToRealTimeEvents();
+      }
     }
   }
 
@@ -93,7 +133,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         }
         _refreshDealerDetails();
         _fetchOrders();
-        _fetchEvents();
+        if (AuthService().isAdmin) {
+          _fetchEvents();
+          _listenToRealTimeEvents();
+        }
       }
     } catch (e) {
       debugPrint('Error loading dealer from cache: $e');
@@ -205,24 +248,26 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     if (_dealer?.id == null) return;
     setState(() => _isLoadingOrders = true);
     try {
-      final res = await ApiClient().get('/orders/admin/all');
+      final String dealerId = _dealer!.id!;
+      // Passing both userId and user for maximum compatibility with backend changes
+      final res = await ApiClient().get('/orders/admin/all?userId=$dealerId&user=$dealerId');
+      
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
           final List rawOrders = data['orders'] ?? [];
-          final String userId = _dealer!.id!;
-
-          final List<Map<String, dynamic>> filtered = [];
-          for (final o in rawOrders) {
-            if (o is Map && o['user']?['_id'] == userId) {
-              filtered.add(Map<String, dynamic>.from(o));
-            }
-          }
-
+          
           if (mounted) {
             setState(() {
-              _orders = filtered;
+              // Local filtering as a second layer of safety
+              _orders = rawOrders
+                  .map((o) => Map<String, dynamic>.from(o))
+                  .where((o) => 
+                      (o['user'] is Map && o['user']['_id'] == dealerId) || 
+                      o['user'] == dealerId)
+                  .toList();
             });
+            debugPrint('Loaded ${_orders.length} filtered orders for dealer $dealerId (Total returned: ${rawOrders.length})');
           }
         }
       }
@@ -237,10 +282,22 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     }
   }
 
-  Future<void> _fetchEvents() async {
-    final identifier = _dealer?.email ?? _dealer?.phone ?? _dealer?.id;
+  Future<void> _fetchEvents({bool silent = false}) async {
+    String? identifier;
+    final email = _dealer?.email;
+    final phone = _dealer?.phone;
+    final id = _dealer?.id;
+
+    if (email != null && email.trim().isNotEmpty) {
+      identifier = email.trim();
+    } else if (phone != null && phone.trim().isNotEmpty) {
+      identifier = phone.trim();
+    } else if (id != null && id.trim().isNotEmpty) {
+      identifier = id.trim();
+    }
+
     if (identifier == null) return;
-    if (mounted) setState(() => _isLoadingEvents = true);
+    if (mounted && !silent) setState(() => _isLoadingEvents = true);
     try {
       final filtered = await AnalyticsService().fetchEvents(
         userEmail: identifier,
@@ -253,7 +310,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     } catch (e) {
       debugPrint('Error loading dealer events: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _isLoadingEvents = false;
         });
@@ -917,6 +974,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                   '',
                               events: _events,
                               isLoading: _isLoadingEvents,
+                              onRefresh: () => _fetchEvents(),
                             )
                           : Column(
                               key: const ValueKey(3),
@@ -3458,12 +3516,14 @@ class _UserEventsCard extends StatefulWidget {
   final String userIdentifier;
   final List<Map<String, dynamic>> events;
   final bool isLoading;
+  final VoidCallback onRefresh;
 
   const _UserEventsCard({
     super.key,
     required this.userIdentifier,
     required this.events,
     required this.isLoading,
+    required this.onRefresh,
   });
 
   @override
@@ -3921,7 +3981,14 @@ class _UserEventsCardState extends State<_UserEventsCard> {
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
 
-    final filteredEvents = widget.events.where((e) {
+    final sortedEvents = List<Map<String, dynamic>>.from(widget.events)
+      ..sort((a, b) {
+        final aTs = a['timestamp']?.toString() ?? '';
+        final bTs = b['timestamp']?.toString() ?? '';
+        return bTs.compareTo(aTs);
+      });
+
+    final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
       return _matchesCategory(type, _selectedCategory);
     }).toList();
@@ -3950,18 +4017,34 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Live Activity & Events Feed',
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF111827),
-                ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Text(
+                    'Live Activity & Events Feed',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!widget.isLoading)
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded,
+                          size: 18, color: AppTheme.primaryColor),
+                      onPressed: widget.onRefresh,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Refresh Activity Feed',
+                    ),
+                ],
               ),
-              if (totalEvents > 0)
+            ),
+            if (totalEvents > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

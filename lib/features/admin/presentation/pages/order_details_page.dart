@@ -10,6 +10,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -326,64 +328,82 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     final bool isMobile = Responsive.isMobile(context);
     final double gapHeight = isMobile ? 12.0 : 16.0;
 
-    return BlocConsumer<OrdersBloc, OrdersState>(
-      listener: (context, state) {
-        if (state.status == OrdersStatus.success) {
-          final freshOrder = state.orders.firstWhere(
-            (o) => o.id == _orderRaw?.id,
-            orElse: () => _orderRaw!,
-          );
-          if (freshOrder != _orderRaw) {
-            setState(() {
-              _orderRaw = freshOrder;
-            });
-            _saveOrderToCache(freshOrder);
-          }
+    return BlocBuilder<DealersBloc, DealersState>(
+      builder: (context, dealersState) {
+        final allUsers = dealersState.allRawUsers;
+        final user = allUsers.firstWhere(
+          (u) => u['_id'] == _order.userId,
+          orElse: () => {},
+        );
+        String? latestAgent;
+        if (user.isNotEmpty && user['assignedAgent'] != null) {
+          final a = user['assignedAgent'];
+          latestAgent = '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
         }
-      },
-      builder: (context, state) {
-        return SelectionArea(
-          child: Scaffold(
-            backgroundColor: AppTheme.backgroundColor,
-            body: SafeArea(
-              child: Column(
-                children: [
-                  // Premium Header Appbar
-                  _buildAppBar(),
-                  const Divider(height: 1, color: AppTheme.lightBorderColor),
 
-                  // Scrollable Layout
-                  Expanded(
-                    child: RefreshIndicator(
-                      color: AppTheme.primaryColor,
-                      onRefresh: () async {
-                        context.read<OrdersBloc>().add(
-                          const FetchOrdersEvent(forceRefresh: true),
-                        );
-                      },
-                      child: SingleChildScrollView(
-                        padding: AppTheme.getResponsivePadding(
-                          context,
-                        ).copyWith(top: gapHeight, bottom: gapHeight),
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: Column(
-                          children: [
-                            _buildOrderHeroCard(),
-                            SizedBox(height: gapHeight),
-                            _buildCustomerAndShippingCard(),
-                            SizedBox(height: gapHeight),
-                            _buildItemsOrderedCard(),
-                            SizedBox(height: gapHeight),
-                            _buildFinancialSummaryCard(),
-                          ],
+        return BlocConsumer<OrdersBloc, OrdersState>(
+          listener: (context, state) {
+            if (state.status == OrdersStatus.success) {
+              final freshOrder = state.orders.firstWhere(
+                (o) => o.id == _orderRaw?.id,
+                orElse: () => _orderRaw!,
+              );
+              if (freshOrder != _orderRaw) {
+                setState(() {
+                  _orderRaw = freshOrder;
+                });
+                _saveOrderToCache(freshOrder);
+              }
+            }
+          },
+          builder: (context, state) {
+            return SelectionArea(
+              child: Scaffold(
+                backgroundColor: AppTheme.backgroundColor,
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      // Premium Header Appbar
+                      _buildAppBar(),
+                      const Divider(
+                        height: 1,
+                        color: AppTheme.lightBorderColor,
+                      ),
+
+                      // Scrollable Layout
+                      Expanded(
+                        child: RefreshIndicator(
+                          color: AppTheme.primaryColor,
+                          onRefresh: () async {
+                            context.read<OrdersBloc>().add(
+                              const FetchOrdersEvent(forceRefresh: true),
+                            );
+                          },
+                          child: SingleChildScrollView(
+                            padding: AppTheme.getResponsivePadding(
+                              context,
+                            ).copyWith(top: gapHeight, bottom: gapHeight),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: Column(
+                              children: [
+                                _buildOrderHeroCard(),
+                                SizedBox(height: gapHeight),
+                                _buildCustomerAndShippingCard(latestAgent),
+                                SizedBox(height: gapHeight),
+                                _buildItemsOrderedCard(),
+                                SizedBox(height: gapHeight),
+                                _buildFinancialSummaryCard(),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -923,7 +943,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   // --- INTEGRATED CUSTOMER & SHIPPING CARD ---
-  Widget _buildCustomerAndShippingCard() {
+  Widget _buildCustomerAndShippingCard(String? latestAgent) {
     final bool isMobile = Responsive.isMobile(context);
     final hasAwb = _order.awbNumber != null && _order.awbNumber!.isNotEmpty;
     final hasCourier =
@@ -1010,8 +1030,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         const SizedBox(height: 10),
         _buildMetaRowWithIcon(
           icon: Icons.support_agent_rounded,
-          label: 'SALES AGENT',
-          value: 'Admin',
+          label: 'ASSIGNED AGENT',
+          value: (latestAgent != null && latestAgent.isNotEmpty)
+              ? latestAgent
+              : (_order.assignedAgent ?? '-'),
         ),
       ],
     );

@@ -212,6 +212,46 @@ class AnalyticsService extends WidgetsBindingObserver {
     }
   }
 
+  Future<Map<String, dynamic>> fetchEventsPaged({String? userEmail, int limit = 150, String? before}) async {
+    try {
+      String path = '/events?limit=$limit';
+      if (userEmail != null) {
+        path += '&user=${Uri.encodeComponent(userEmail)}';
+      }
+      if (before != null) {
+        path += '&before=${Uri.encodeComponent(before)}';
+      }
+      final response = await _apiClient.get(path);
+      if (response.statusCode == 200) {
+        final dynamic data = jsonDecode(response.body);
+        if (data is Map && data['success'] == true) {
+          return {
+            'events': List<Map<String, dynamic>>.from(data['data'] ?? []),
+            'nextCursor': data['nextCursor'],
+          };
+        }
+      }
+      return {'events': <Map<String, dynamic>>[], 'nextCursor': null};
+    } catch (e) {
+      return {'events': <Map<String, dynamic>>[], 'nextCursor': null};
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchSummaryMetrics() async {
+    try {
+      final response = await _apiClient.get('/events/summary-metrics');
+      if (response.statusCode == 200) {
+        final dynamic data = jsonDecode(response.body);
+        if (data is Map && data['success'] == true) {
+          return Map<String, dynamic>.from(data['data'] ?? {});
+        }
+      }
+      return {};
+    } catch (e) {
+      return {};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchRealTimeUsers() async {
     try {
       final response = await _apiClient.get('/events/realtime');

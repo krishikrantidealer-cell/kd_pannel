@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
+import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -32,6 +34,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Persistent static stack of Admin Pages (Preserves states!)
   final List<Widget> _adminPages = [
+    const DashboardPage(),
     const ProductsPage(),
     const OrdersPage(),
     const LeadsPage(),
@@ -43,7 +46,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = [
-    // const SalesDashboardPage(),
+    const SalesDashboardPage(),
     const LeadsPage(),
     const DealerManagementPage(),
     const SalesCouponPage(),
@@ -75,25 +78,37 @@ class _MainLayoutState extends State<MainLayout> {
       _lastProcessedRoute = routeName;
       AnalyticsService().updateContext(screen: routeName);
       if (role == UserRole.admin) {
-        if (routeName.startsWith('/orders')) {
+        if (routeName == '/dashboard') {
+          _currentIdx = 0;
+        } else if (routeName.startsWith('/products')) {
           _currentIdx = 1;
-        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
+        } else if (routeName.startsWith('/orders')) {
           _currentIdx = 2;
-        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
+        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
           _currentIdx = 3;
-        } else if (routeName == '/sales/coupons') {
+        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 4;
-        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
+        } else if (routeName == '/sales/coupons') {
           _currentIdx = 5;
-        } else if (routeName == '/marketing') {
+        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
           _currentIdx = 6;
+        } else if (routeName == '/marketing') {
+          _currentIdx = 7;
         } else {
           _currentIdx = 0;
         }
       } else {
-        if (routeName == '/leads' || routeName.startsWith('/leads/')) _currentIdx = 0;
-        if (routeName == '/dealers' || routeName.startsWith('/dealers/')) _currentIdx = 1;
-        if (routeName == '/sales/coupons') _currentIdx = 2;
+        if (routeName == '/dashboard' || routeName == '/sales/dashboard') {
+          _currentIdx = 0;
+        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
+          _currentIdx = 1;
+        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
+          _currentIdx = 2;
+        } else if (routeName == '/sales/coupons') {
+          _currentIdx = 3;
+        } else {
+          _currentIdx = 0;
+        }
       }
     }
   }
@@ -107,17 +122,19 @@ class _MainLayoutState extends State<MainLayout> {
     final role = AuthService().currentUserRole ?? UserRole.admin;
     String route = '/dashboard';
     if (role == UserRole.admin) {
-      if (index == 0) route = '/products';
-      if (index == 1) route = '/orders';
-      if (index == 2) route = '/leads';
-      if (index == 3) route = '/dealers';
-      if (index == 4) route = '/sales/coupons';
-      if (index == 5) route = '/team';
-      if (index == 6) route = '/marketing';
+      if (index == 0) route = '/dashboard';
+      if (index == 1) route = '/products';
+      if (index == 2) route = '/orders';
+      if (index == 3) route = '/leads';
+      if (index == 4) route = '/dealers';
+      if (index == 5) route = '/sales/coupons';
+      if (index == 6) route = '/team';
+      if (index == 7) route = '/marketing';
     } else {
-      if (index == 0) route = '/leads';
-      if (index == 1) route = '/dealers';
-      if (index == 2) route = '/sales/coupons';
+      if (index == 0) route = '/dashboard';
+      if (index == 1) route = '/leads';
+      if (index == 2) route = '/dealers';
+      if (index == 3) route = '/sales/coupons';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

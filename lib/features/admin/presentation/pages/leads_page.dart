@@ -421,7 +421,7 @@ class _LeadsPageState extends State<LeadsPage> {
                 ? _formatTimeAgo(u['updatedAt'])
                 : '-',
             'agent': u['assignedAgent'] != null
-                ? '${u['assignedAgent']['firstName']} ${u['assignedAgent']['lastName'] ?? ''}'
+                ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
                       .trim()
                 : '-',
             'agentId': u['assignedAgent']?['_id'],
@@ -2725,7 +2725,7 @@ class _LeadRowState extends State<_LeadRow> {
   Widget build(BuildContext context) {
     Color rowBgColor = widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
     if (widget.isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
-    if (isHovered) rowBgColor = const Color(0xFFF1F9F3);
+    if (isHovered) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.03);
 
     return RepaintBoundary(
       child: MouseRegion(
@@ -2733,7 +2733,13 @@ class _LeadRowState extends State<_LeadRow> {
         onExit: (_) => setState(() => isHovered = false),
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: widget.onTap,
+          onTap: () {
+             Navigator.pushNamed(
+                context,
+                '/leads/profile',
+                arguments: widget.lead,
+              );
+          },
           behavior: HitTestBehavior.opaque,
           child: Container(
             decoration: BoxDecoration(
@@ -2749,9 +2755,12 @@ class _LeadRowState extends State<_LeadRow> {
                     width: 40,
                     child: Center(
                       child: (isHovered || widget.isSelected)
-                          ? _CustomCheckbox(
-                              isSelected: widget.isSelected,
-                              onTap: widget.onToggleSelection,
+                          ? GestureDetector(
+                              onTap: () {}, // Prevent row tap
+                              child: _CustomCheckbox(
+                                isSelected: widget.isSelected,
+                                onTap: widget.onToggleSelection,
+                              ),
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -2811,52 +2820,68 @@ class _LeadRowState extends State<_LeadRow> {
                         bottom: 8,
                       ),
                       child: GestureDetector(
-                        onTap: () async {
-                          final agentId = await showDialog<String>(
-                            context: context,
-                            builder: (context) => SimpleDialog(
-                              title: const Text('Assign Sales Agent'),
-                              children: [
-                                SimpleDialogOption(
-                                  onPressed: () => Navigator.pop(context, 'unassign'),
-                                  child: const Text('None'),
+                        onTap: () {}, // Prevent row tap from triggering when clicking interactive element
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value:
+                                  widget.salesAgents.any(
+                                    (agent) =>
+                                        agent['_id'] == widget.lead['agentId'],
+                                  )
+                                  ? widget.lead['agentId']
+                                  : null,
+                              isExpanded: true,
+                              isDense: true,
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                size: 16,
+                                color: AppTheme.textSecondary,
+                              ),
+                              hint: Text('-', style: _subStyle),
+                              onChanged: (String? newAgentId) {
+                                if (widget.lead['id'] != null) {
+                                  widget.onAssignAgent(
+                                    widget.lead['id'],
+                                    newAgentId,
+                                  );
+                                }
+                              },
+                              items: [
+                                DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('-', style: _subStyle),
                                 ),
                                 ...widget.salesAgents.map((agent) {
-                                  final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-                                  return SimpleDialogOption(
-                                    onPressed: () => Navigator.pop(context, agent['_id']),
-                                    child: Text(name.isNotEmpty ? name : (agent['phoneNumber'] ?? '')),
+                                  final agentName =
+                                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                          .trim();
+                                  return DropdownMenuItem<String>(
+                                    value: agent['_id'],
+                                    child: Text(
+                                      agentName.isNotEmpty
+                                          ? agentName
+                                          : (agent['phoneNumber'] ?? ''),
+                                      style: _cellStyleText.copyWith(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   );
                                 }),
                               ],
                             ),
-                          );
-                          if (agentId != null) {
-                            widget.onAssignAgent(widget.lead['id'], agentId == 'unassign' ? null : agentId);
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.salesAgents.firstWhere(
-                                    (a) => a['_id'] == widget.lead['agentId'],
-                                    orElse: () => <String, dynamic>{},
-                                  )['firstName'] ?? '-',
-                                  style: _cellStyleText,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
-                            ],
                           ),
                         ),
                       ),

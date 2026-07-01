@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -25,6 +26,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
   String? _selectedEventType;
   String _searchQuery = '';
   String _userSearchQuery = '';
+  String _selectedUserType = 'All'; // 'All', 'Dealer', 'Lead', 'Guest'
+  String _selectedPriority = 'All'; // 'All', 'High Priority'
+  String _selectedMetricFilter =
+      'All'; // 'All', 'High Priority', 'Abandoned Carts', 'Failed Payments', 'Live Users'
+
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _userSearchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -32,12 +38,31 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   // Database event state variables
   bool _isLoading = true;
+  bool _isLoadingEvents = false;
+  bool _isBackgroundLoading = false;
+  bool _isLoadingRealTime = false;
   bool _isFallbackMode = false;
+  String? _nextCursor;
+  bool _isLoadingMore = false;
+  int _globalHighPriorityCount = 0;
+  int _globalFailedPaymentsCount = 0;
+  int _globalAbandonedCartsCount = 0;
   Map<String, List<Map<String, dynamic>>> _eventsLogs = {};
   Map<String, String> _nameToId = {};
   List<Map<String, dynamic>> _realTimeUsers = [];
   Timer? _realTimeTimer;
+  Timer? _eventsRefreshDebounce;
+  Timer? _searchDebounce;
   StreamSubscription? _presenceSubscription;
+
+  // Cached telemetry variables for optimal performance
+  List<String> _cachedUsersWithEvents = [];
+  Map<String, bool> _cachedHighPriority = {};
+  Map<String, String> _cachedPriorityReason = {};
+  Map<String, DateTime> _cachedMostRecentEventTimes = {};
+  Map<String, Map<String, List<Map<String, dynamic>>>> _cachedUserEventsGrouped = {};
+  Map<String, String> _cachedUserTypes = {};
+  final Set<String> _onlineUserKeys = {};
 
   @override
   void initState() {
@@ -48,24 +73,28 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   String? _getUserRole(String userIdentifier, String? currentRole) {
-    if (currentRole == 'admin' || currentRole == 'sales') return currentRole;
+    if (currentRole?.toLowerCase() == 'admin' || currentRole?.toLowerCase() == 'sales') return currentRole;
 
     final idLower = userIdentifier.toLowerCase();
-    
+
     // 1. Try to find in Dealers
     try {
       final dealersState = context.read<DealersBloc>().state;
-      final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere(
-        (u) {
-          final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-          final String phone = (u['phoneNumber'] ?? '').toString();
-          final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-          final String email = (u['email'] ?? '').toString().toLowerCase();
-          final String uid = (u['_id'] ?? '').toString().toLowerCase();
-          return fullName == idLower || phone == idLower || shopName == idLower || email == idLower || uid == idLower;
-        },
-        orElse: () => <String, dynamic>{},
-      );
+      final Map<String, dynamic>?
+      dealerData = dealersState.allRawUsers.firstWhere((u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == idLower ||
+            phone == idLower ||
+            shopName == idLower ||
+            email == idLower ||
+            uid == idLower;
+      }, orElse: () => <String, dynamic>{});
       if (dealerData != null && dealerData.isNotEmpty) {
         return dealerData['role']?.toString();
       }
@@ -74,22 +103,228 @@ class _UserEventsPageState extends State<UserEventsPage> {
     // 2. Try to find in Leads
     try {
       final leadsState = context.read<LeadsBloc>().state;
-      final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere(
-        (u) {
-          final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-          final String phone = (u['phoneNumber'] ?? '').toString();
-          final String email = (u['email'] ?? '').toString().toLowerCase();
-          final String uid = (u['_id'] ?? '').toString().toLowerCase();
-          return fullName == idLower || phone == idLower || email == idLower || uid == idLower;
-        },
-        orElse: () => <String, dynamic>{},
-      );
+      final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((
+        u,
+      ) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == idLower ||
+            phone == idLower ||
+            email == idLower ||
+            uid == idLower;
+      }, orElse: () => <String, dynamic>{});
       if (leadData != null && leadData.isNotEmpty) {
         return leadData['role']?.toString();
       }
     } catch (_) {}
 
     return currentRole;
+  }
+
+  String? _resolveSearchQueryToEmailOrPhone(String? searchQuery) {
+    if (searchQuery == null || searchQuery.trim().isEmpty) return null;
+    final queryLower = searchQuery.trim().toLowerCase();
+
+    // 1. Try to find in Dealers
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final matchingUser = dealersState.allRawUsers.firstWhere((u) {
+        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        final email = (u['email'] ?? '').toString().toLowerCase();
+        final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
+        final uid = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
+        return fullName.contains(queryLower) ||
+            shopName.contains(queryLower) ||
+            email.contains(queryLower) ||
+            phone.contains(queryLower) ||
+            uid.contains(queryLower);
+      });
+      return matchingUser['email'] ?? matchingUser['phoneNumber'] ?? matchingUser['phone'] ?? searchQuery;
+    } catch (_) {}
+
+    // 2. Try to find in Leads
+    try {
+      final leadsState = context.read<LeadsBloc>().state;
+      final matchingUser = leadsState.allRawUsers.firstWhere((u) {
+        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        final email = (u['email'] ?? '').toString().toLowerCase();
+        final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
+        final uid = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
+        return fullName.contains(queryLower) ||
+            shopName.contains(queryLower) ||
+            email.contains(queryLower) ||
+            phone.contains(queryLower) ||
+            uid.contains(queryLower);
+      });
+      return matchingUser['email'] ?? matchingUser['phoneNumber'] ?? matchingUser['phone'] ?? searchQuery;
+    } catch (_) {}
+
+    return searchQuery;
+  }
+
+  void _rebuildCache() {
+    final Map<String, Map<String, List<Map<String, dynamic>>>> userEventsGrouped = {};
+    final Set<String> usersSet = {};
+    
+    // 1. Group events by user and category
+    _eventsLogs.forEach((category, logs) {
+      for (final log in logs) {
+        final String? userName = log['user'] as String?;
+        if (userName != null && userName.isNotEmpty) {
+          usersSet.add(userName);
+          
+          final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
+          final categoryList = userMap.putIfAbsent(category, () => []);
+          categoryList.add(log);
+        }
+      }
+    });
+
+    // Sort logs inside each category by timestamp descending
+    userEventsGrouped.forEach((userName, categories) {
+      categories.forEach((category, logs) {
+        logs.sort((a, b) {
+          final aTs = a['rawTimestamp']?.toString() ?? '';
+          final bTs = b['rawTimestamp']?.toString() ?? '';
+          return bTs.compareTo(aTs);
+        });
+      });
+    });
+
+    _cachedUserEventsGrouped = userEventsGrouped;
+
+    // 2. Pre-calculate most recent event times, priority reasons, and user types
+    final Map<String, DateTime> mostRecentEventTimes = {};
+    final Map<String, bool> highPriority = {};
+    final Map<String, String> priorityReason = {};
+    final Map<String, String> userTypes = {};
+
+    // Populating online user keys for fast contains() lookups
+    _onlineUserKeys.clear();
+    for (var u in _realTimeUsers) {
+      final uName = u['userName'] ?? u['user'] ?? '';
+      _onlineUserKeys.add(uName);
+      final userId = u['user'];
+      if (userId != null) {
+        _onlineUserKeys.add(userId);
+      }
+    }
+
+    for (final userName in usersSet) {
+      // Most recent event time
+      DateTime mostRecent = DateTime.fromMillisecondsSinceEpoch(0);
+      final userGroups = userEventsGrouped[userName] ?? {};
+      userGroups.forEach((_, logs) {
+        for (final log in logs) {
+          final tsStr = log['rawTimestamp'] as String?;
+          if (tsStr != null) {
+            try {
+              final dt = DateTime.parse(tsStr);
+              if (dt.isAfter(mostRecent)) {
+                mostRecent = dt;
+              }
+            } catch (_) {}
+          }
+        }
+      });
+      mostRecentEventTimes[userName] = mostRecent;
+
+      // High priority logic
+      bool isHigh = false;
+      String reason = '';
+      if (userGroups.containsKey('payment_failed')) {
+        isHigh = true;
+        reason = 'Payment Failed';
+      } else if (userGroups.containsKey('checkout_started') && !userGroups.containsKey('payment_success')) {
+        isHigh = true;
+        reason = 'Abandoned Checkout';
+      } else if (userGroups.containsKey('add_to_cart') && !userGroups.containsKey('checkout_started')) {
+        isHigh = true;
+        reason = 'Abandoned Cart';
+      }
+      highPriority[userName] = isHigh;
+      priorityReason[userName] = reason;
+
+      // User Type logic
+      userTypes[userName] = _calculateUserType(userName);
+    }
+
+    _cachedMostRecentEventTimes = mostRecentEventTimes;
+    _cachedHighPriority = highPriority;
+    _cachedPriorityReason = priorityReason;
+    _cachedUserTypes = userTypes;
+
+    // 3. Sort users list
+    final sortedUsers = usersSet.toList();
+    sortedUsers.sort((a, b) {
+      final aOnline = _isUserOnline(a);
+      final bOnline = _isUserOnline(b);
+      if (aOnline && !bOnline) return -1;
+      if (!aOnline && bOnline) return 1;
+
+      final aTime = _cachedMostRecentEventTimes[a] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = _cachedMostRecentEventTimes[b] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      if (aTime != bTime) {
+        return bTime.compareTo(aTime);
+      }
+      
+      return a.compareTo(b);
+    });
+
+    _cachedUsersWithEvents = sortedUsers;
+  }
+
+  String _calculateUserType(String userName) {
+    final nameLower = userName.toLowerCase();
+    
+    // Check in Dealers database state
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final dealerIndex = dealersState.allRawUsers.indexWhere((u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == nameLower || phone == nameLower || shopName == nameLower || email == nameLower || uid == nameLower;
+      });
+      if (dealerIndex != -1) {
+        final u = dealersState.allRawUsers[dealerIndex];
+        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+        return kycStatus == 'verified' ? 'Dealer' : 'Lead';
+      }
+    } catch (_) {}
+
+    // Check in Leads database state
+    try {
+      final leadsState = context.read<LeadsBloc>().state;
+      final leadIndex = leadsState.allRawUsers.indexWhere((u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == nameLower || phone == nameLower || email == nameLower || uid == nameLower;
+      });
+      if (leadIndex != -1) {
+        final u = leadsState.allRawUsers[leadIndex];
+        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+        return kycStatus == 'verified' ? 'Dealer' : 'Lead';
+      }
+    } catch (_) {}
+
+    // Check in fallback static dealers list
+    final isStaticDealer = allDealers.any((d) {
+      return d.name.toLowerCase().contains(nameLower) || nameLower.contains(d.name.toLowerCase().split(' ').first);
+    });
+    if (isStaticDealer) return 'Dealer';
+
+    return 'Guest';
   }
 
   void _listenToLivePresence() {
@@ -106,14 +341,24 @@ class _UserEventsPageState extends State<UserEventsPage> {
               userIdStr.toLowerCase() == 'unknown user') {
             return;
           }
-          
-          final role = _getUserRole(userIdStr, enrichedUpdate['role']?.toString());
-          
-          // Skip if it's the current admin or has admin/sales role
-          if (userIdStr == AuthService().currentUserEmail || role == 'admin' || role == 'sales') return;
 
-          enrichedUpdate['_localLastSeen'] = DateTime.now().millisecondsSinceEpoch;
-          
+          final role = _getUserRole(
+            userIdStr,
+            enrichedUpdate['role']?.toString(),
+          );
+
+          // Skip if it's the current admin or has admin/sales role
+          final isNameOrEmailAdmin = userIdStr.toLowerCase().contains('admin') ||
+              (enrichedUpdate['userName']?.toString().toLowerCase().contains('admin') ?? false);
+          if (userIdStr == AuthService().currentUserEmail ||
+              role?.toLowerCase() == 'admin' ||
+              role?.toLowerCase() == 'sales' ||
+              isNameOrEmailAdmin)
+            return;
+
+          enrichedUpdate['_localLastSeen'] =
+              DateTime.now().millisecondsSinceEpoch;
+
           // Check if user already in list
           final index = _realTimeUsers.indexWhere((u) => u['user'] == userId);
           if (index != -1) {
@@ -126,6 +371,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
             // Add new live user to the front
             _realTimeUsers.insert(0, enrichedUpdate);
           }
+          _rebuildCache();
+        });
+
+        // Trigger a background refresh of historical events
+        _eventsRefreshDebounce?.cancel();
+        _eventsRefreshDebounce = Timer(const Duration(seconds: 2), () {
+          if (mounted) _loadEvents(silent: true, isBackground: true);
         });
       }
     });
@@ -139,123 +391,188 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   Future<void> _loadRealTimeUsers() async {
-    final users = await AnalyticsService().fetchRealTimeUsers();
-    if (mounted) {
-      setState(() {
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final Map<String, Map<String, dynamic>> merged = {};
+    if (_isLoadingRealTime) return;
+    _isLoadingRealTime = true;
+    try {
+      final users = await AnalyticsService().fetchRealTimeUsers();
+      if (mounted) {
+        setState(() {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final Map<String, Map<String, dynamic>> merged = {};
 
-        // 1. Keep currently tracked users if seen within last 2.5 minutes
-        for (var u in _realTimeUsers) {
-          final lastSeen = u['_localLastSeen'] ?? 0;
-          if (now - lastSeen < 150000) {
-            merged[u['user']] = Map<String, dynamic>.from(u);
+          // 1. Keep currently tracked users if seen within last 2.5 minutes
+          for (var u in _realTimeUsers) {
+            final lastSeen = u['_localLastSeen'] ?? 0;
+            if (now - lastSeen < 150000) {
+              merged[u['user']] = Map<String, dynamic>.from(u);
+            }
           }
+
+          // 2. Overlay with fresh data from server poll
+          final currentUserEmail = AuthService().currentUserEmail;
+          for (var u in users) {
+            final userId = u['user'];
+            final userIdStr = userId?.toString();
+            if (userIdStr == null ||
+                userIdStr.isEmpty ||
+                userIdStr.toLowerCase() == 'guest' ||
+                userIdStr.toLowerCase() == 'unknown user') {
+              continue;
+            }
+
+            final role = _getUserRole(userIdStr, u['role']?.toString());
+
+            // Skip if it's the current admin or has admin/sales role
+            final isNameOrEmailAdmin = userIdStr.toLowerCase().contains('admin') ||
+                (u['userName']?.toString().toLowerCase().contains('admin') ?? false);
+            if (userIdStr == currentUserEmail ||
+                role?.toLowerCase() == 'admin' ||
+                role?.toLowerCase() == 'sales' ||
+                isNameOrEmailAdmin)
+              continue;
+
+            final freshData = Map<String, dynamic>.from(u);
+            freshData['_localLastSeen'] = now;
+
+            if (merged.containsKey(userId)) {
+              merged[userId] = {...merged[userId]!, ...freshData};
+            } else {
+              merged[userId] = freshData;
+            }
+          }
+
+          _realTimeUsers = merged.values.toList()
+            ..sort(
+              (a, b) => (b['_localLastSeen'] ?? 0).compareTo(
+                a['_localLastSeen'] ?? 0,
+              ),
+            );
+          _rebuildCache();
+        });
+      }
+    } finally {
+      _isLoadingRealTime = false;
+    }
+  }
+
+  void _processEventsList(
+    List<Map<String, dynamic>> flatEvents,
+    Map<String, List<Map<String, dynamic>>> grouped,
+    Map<String, String> nameToId,
+  ) {
+    for (var event in flatEvents) {
+      final rawUser = event['user']?.toString();
+      if (rawUser == null ||
+          rawUser.isEmpty ||
+          rawUser.toLowerCase() == 'guest' ||
+          rawUser.toLowerCase() == 'unknown user') {
+        continue;
+      }
+
+      String displayName = event['user']?.toString() ?? 'Unknown User';
+      String? displayPhone;
+
+      final userDetails = event['userDetails'] as Map<String, dynamic>?;
+      if (userDetails != null) {
+        final firstName = userDetails['firstName'] ?? '';
+        final lastName = userDetails['lastName'] ?? '';
+        final shopName = userDetails['shopName'] ?? '';
+        final phone = userDetails['phoneNumber'] ?? '';
+
+        if (firstName.isNotEmpty || lastName.isNotEmpty) {
+          displayName = '$firstName $lastName'.trim();
+        } else if (shopName.isNotEmpty) {
+          displayName = shopName;
         }
 
-        // 2. Overlay with fresh data from server poll
-        final currentUserEmail = AuthService().currentUserEmail;
-        for (var u in users) {
-          final userId = u['user'];
-          final userIdStr = userId?.toString();
-          if (userIdStr == null ||
-              userIdStr.isEmpty ||
-              userIdStr.toLowerCase() == 'guest' ||
-              userIdStr.toLowerCase() == 'unknown user') {
-            continue;
-          }
-          
-          final role = _getUserRole(userIdStr, u['role']?.toString());
-          
-          // Skip if it's the current admin or has admin/sales role
-          if (userIdStr == currentUserEmail || role == 'admin' || role == 'sales') continue;
-
-          final freshData = Map<String, dynamic>.from(u);
-          freshData['_localLastSeen'] = now;
-
-          if (merged.containsKey(userId)) {
-            merged[userId] = {...merged[userId]!, ...freshData};
-          } else {
-            merged[userId] = freshData;
-          }
+        if (phone.isNotEmpty) {
+          displayPhone = phone;
         }
+      }
 
-        _realTimeUsers = merged.values.toList()
-          ..sort((a, b) => (b['_localLastSeen'] ?? 0).compareTo(a['_localLastSeen'] ?? 0));
+      // Skip if the user is current admin, has 'admin' / 'sales' role, or name/email contains 'admin'
+      final currentRole =
+          userDetails?['role']?.toString() ?? event['role']?.toString();
+      final role = _getUserRole(rawUser, currentRole);
+      final isNameOrEmailAdmin = rawUser.toLowerCase().contains('admin') ||
+          displayName.toLowerCase().contains('admin');
+
+      if (rawUser == AuthService().currentUserEmail ||
+          role?.toLowerCase() == 'admin' ||
+          role?.toLowerCase() == 'sales' ||
+          isNameOrEmailAdmin) {
+        continue;
+      }
+
+      final eventType = event['eventType']?.toString() ?? 'unknown';
+      if (!grouped.containsKey(eventType)) {
+        grouped[eventType] = [];
+      }
+
+      if (rawUser != null) {
+        nameToId[displayName] = rawUser;
+      }
+
+      grouped[eventType]!.add({
+        'user': displayName,
+        'userPhone': displayPhone,
+        'rawUser': rawUser, // Keep ID/Email for navigation
+        'time': _formatTimestamp(event['timestamp']?.toString()),
+        'rawTimestamp': event['timestamp']?.toString(),
+        'device': event['device']?.toString() ?? 'Unknown Device',
+        'details': event['details']?.toString() ?? '',
+        'payload': Map<String, dynamic>.from(event['payload'] ?? {}),
       });
     }
   }
 
-  Future<void> _loadEvents() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _isFallbackMode = false;
-    });
+  Future<void> _loadEvents({
+    bool silent = false,
+    String? searchQuery,
+    bool isBackground = false,
+  }) async {
+    if (!mounted || _isLoadingEvents) return;
+    _isLoadingEvents = true;
+    _isBackgroundLoading = isBackground;
+    if (!silent && _eventsLogs.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _isFallbackMode = false;
+      });
+    } else {
+      setState(() {});
+    }
 
+    String? backendQuery = _resolveSearchQueryToEmailOrPhone(searchQuery);
+
+    Map<String, dynamic> metrics = {};
     try {
-      final flatEvents = await AnalyticsService().fetchEvents();
+      final futures = await Future.wait([
+        AnalyticsService().fetchEventsPaged(
+          limit: 150,
+          userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+        ),
+        AnalyticsService().fetchSummaryMetrics(),
+      ]);
+
+      final res = futures[0] as Map<String, dynamic>;
+      metrics = futures[1] as Map<String, dynamic>;
+
+      if (metrics.isNotEmpty) {
+        _globalHighPriorityCount = metrics['highPriority'] as int? ?? 0;
+        _globalFailedPaymentsCount = metrics['failedPayments'] as int? ?? 0;
+        _globalAbandonedCartsCount = metrics['abandonedCarts'] as int? ?? 0;
+      }
+
+      final flatEvents = res['events'] as List<Map<String, dynamic>>;
+      _nextCursor = res['nextCursor'] as String?;
+
       if (flatEvents.isNotEmpty) {
         final Map<String, List<Map<String, dynamic>>> grouped = {};
         final Map<String, String> nameToId = {};
 
-        for (var event in flatEvents) {
-          final rawUser = event['user']?.toString();
-          if (rawUser == null ||
-              rawUser.isEmpty ||
-              rawUser.toLowerCase() == 'guest' ||
-              rawUser.toLowerCase() == 'unknown user') {
-            continue;
-          }
-          
-          // Skip if the user is current admin, or has 'admin' / 'sales' role
-          final userDetails = event['userDetails'] as Map<String, dynamic>?;
-          final currentRole = userDetails?['role']?.toString() ?? event['role']?.toString();
-          final role = _getUserRole(rawUser, currentRole);
-          if (rawUser == AuthService().currentUserEmail || role == 'admin' || role == 'sales') {
-            continue;
-          }
+        _processEventsList(flatEvents, grouped, nameToId);
 
-          final eventType = event['eventType']?.toString() ?? 'unknown';
-          if (!grouped.containsKey(eventType)) {
-            grouped[eventType] = [];
-          }
-          
-          String displayName = event['user']?.toString() ?? 'Unknown User';
-          String? displayPhone;
-          
-          if (userDetails != null) {
-            final firstName = userDetails['firstName'] ?? '';
-            final lastName = userDetails['lastName'] ?? '';
-            final shopName = userDetails['shopName'] ?? '';
-            final phone = userDetails['phoneNumber'] ?? '';
-            
-            if (firstName.isNotEmpty || lastName.isNotEmpty) {
-              displayName = '$firstName $lastName'.trim();
-            } else if (shopName.isNotEmpty) {
-              displayName = shopName;
-            }
-            
-            if (phone.isNotEmpty) {
-              displayPhone = phone;
-            }
-          }
-
-          if (rawUser != null) {
-            nameToId[displayName] = rawUser;
-          }
-
-          grouped[eventType]!.add({
-            'user': displayName,
-            'userPhone': displayPhone,
-            'rawUser': rawUser, // Keep ID/Email for navigation
-            'time': _formatTimestamp(event['timestamp']?.toString()),
-            'rawTimestamp': event['timestamp']?.toString(),
-            'device': event['device']?.toString() ?? 'Unknown Device',
-            'details': event['details']?.toString() ?? '',
-            'payload': Map<String, dynamic>.from(event['payload'] ?? {}),
-          });
-        }
         _eventsLogs = grouped;
         _nameToId = nameToId;
       } else {
@@ -269,25 +586,77 @@ class _UserEventsPageState extends State<UserEventsPage> {
       _isFallbackMode = true;
     }
 
-    final users = _usersWithEvents;
-    if (users.isNotEmpty) {
-      _selectedUser = users.first;
-      final grouped = _getUserEventsGrouped(users.first);
-      if (grouped.isNotEmpty) {
-        _selectedEventType = grouped.keys.first;
+    _rebuildCache();
+
+    if (metrics.isEmpty && (searchQuery == null || searchQuery.trim().isEmpty)) {
+      final users = _usersWithEvents;
+      _globalHighPriorityCount = users.where((u) => _isHighPriority(u)).length;
+      _globalFailedPaymentsCount = users.where((u) => _getPriorityReason(u) == 'Payment Failed').length;
+      _globalAbandonedCartsCount = users.where((u) {
+        final reason = _getPriorityReason(u);
+        return reason == 'Abandoned Cart' || reason == 'Abandoned Checkout';
+      }).length;
+    }
+
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      if (_cachedUsersWithEvents.isNotEmpty) {
+        _selectedUser = _cachedUsersWithEvents.first;
       } else {
-        _selectedEventType = null;
+        _selectedUser = null;
       }
     } else {
       _selectedUser = null;
-      _selectedEventType = null;
     }
+    _selectedEventType = null;
 
     if (mounted) {
       setState(() {
         _isLoading = false;
       });
     }
+    _isLoadingEvents = false;
+    _isBackgroundLoading = false;
+  }
+
+  Future<void> _loadMoreEvents() async {
+    if (!mounted || _isLoadingEvents || _nextCursor == null || _isLoadingMore) return;
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    String? backendQuery = _resolveSearchQueryToEmailOrPhone(_userSearchQuery);
+
+    try {
+      final res = await AnalyticsService().fetchEventsPaged(
+        limit: 150,
+        before: _nextCursor,
+        userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+      );
+      final flatEvents = res['events'] as List<Map<String, dynamic>>;
+      _nextCursor = res['nextCursor'] as String?;
+
+      if (flatEvents.isNotEmpty) {
+        final Map<String, List<Map<String, dynamic>>> grouped = Map.from(_eventsLogs);
+        final Map<String, String> nameToId = Map.from(_nameToId);
+
+        _processEventsList(flatEvents, grouped, nameToId);
+
+        setState(() {
+          _eventsLogs = grouped;
+          _nameToId = nameToId;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UserEventsPage] Failed to fetch more events: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    }
+
+    _rebuildCache();
   }
 
   String _formatTimestamp(String? timestampStr) {
@@ -307,6 +676,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   @override
   void dispose() {
     _realTimeTimer?.cancel();
+    _eventsRefreshDebounce?.cancel();
+    _searchDebounce?.cancel();
     _presenceSubscription?.cancel();
     _searchController.dispose();
     _userSearchController.dispose();
@@ -341,30 +712,43 @@ class _UserEventsPageState extends State<UserEventsPage> {
     });
   }
 
-  Map<String, String> _enrichUserPresence(String userIdentifier, String? currentName, String? currentPhone) {
+  Map<String, String> _enrichUserPresence(
+    String userIdentifier,
+    String? currentName,
+    String? currentPhone,
+  ) {
     final idLower = userIdentifier.toLowerCase();
-    
+
     // 1. Try to find in Dealers
     try {
       final dealersState = context.read<DealersBloc>().state;
-      final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere(
-        (u) {
-          final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-          final String phone = (u['phoneNumber'] ?? '').toString();
-          final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-          final String email = (u['email'] ?? '').toString().toLowerCase();
-          final String uid = (u['_id'] ?? '').toString().toLowerCase();
-          return fullName == idLower || phone == idLower || shopName == idLower || email == idLower || uid == idLower;
-        },
-        orElse: () => <String, dynamic>{},
-      );
+      final Map<String, dynamic>?
+      dealerData = dealersState.allRawUsers.firstWhere((u) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == idLower ||
+            phone == idLower ||
+            shopName == idLower ||
+            email == idLower ||
+            uid == idLower;
+      }, orElse: () => <String, dynamic>{});
       if (dealerData != null && dealerData.isNotEmpty) {
-        final String personName = (dealerData['firstName'] != null || dealerData['lastName'] != null)
-            ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'.trim()
+        final String personName =
+            (dealerData['firstName'] != null || dealerData['lastName'] != null)
+            ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
+                  .trim()
             : '';
         final String shopName = dealerData['shopName'] ?? '';
-        final String displayName = personName.isNotEmpty ? personName : (shopName.isNotEmpty ? shopName : userIdentifier);
-        final String displayPhone = dealerData['phoneNumber'] ?? currentPhone ?? '';
+        final String displayName = personName.isNotEmpty
+            ? personName
+            : (shopName.isNotEmpty ? shopName : userIdentifier);
+        final String displayPhone =
+            dealerData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
       }
     } catch (_) {}
@@ -372,98 +756,156 @@ class _UserEventsPageState extends State<UserEventsPage> {
     // 2. Try to find in Leads
     try {
       final leadsState = context.read<LeadsBloc>().state;
-      final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere(
-        (u) {
-          final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-          final String phone = (u['phoneNumber'] ?? '').toString();
-          final String email = (u['email'] ?? '').toString().toLowerCase();
-          final String uid = (u['_id'] ?? '').toString().toLowerCase();
-          return fullName == idLower || phone == idLower || email == idLower || uid == idLower;
-        },
-        orElse: () => <String, dynamic>{},
-      );
+      final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((
+        u,
+      ) {
+        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
+        final String phone = (u['phoneNumber'] ?? '').toString();
+        final String email = (u['email'] ?? '').toString().toLowerCase();
+        final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        return fullName == idLower ||
+            phone == idLower ||
+            email == idLower ||
+            uid == idLower;
+      }, orElse: () => <String, dynamic>{});
       if (leadData != null && leadData.isNotEmpty) {
-        final String personName = (leadData['firstName'] != null || leadData['lastName'] != null)
-            ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'.trim()
+        final String personName =
+            (leadData['firstName'] != null || leadData['lastName'] != null)
+            ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
+                  .trim()
             : '';
         final String shopName = leadData['shopName'] ?? '';
-        final String displayName = personName.isNotEmpty ? personName : (shopName.isNotEmpty ? shopName : userIdentifier);
-        final String displayPhone = leadData['phoneNumber'] ?? currentPhone ?? '';
+        final String displayName = personName.isNotEmpty
+            ? personName
+            : (shopName.isNotEmpty ? shopName : userIdentifier);
+        final String displayPhone =
+            leadData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
       }
     } catch (_) {}
 
-    final String fallbackName = (currentName != null && currentName.isNotEmpty) ? currentName : userIdentifier;
+    final String fallbackName = (currentName != null && currentName.isNotEmpty)
+        ? currentName
+        : userIdentifier;
     final String fallbackPhone = currentPhone ?? '';
     return {'name': fallbackName, 'phone': fallbackPhone};
   }
 
   bool _isUserOnline(String userName) {
     final userId = _nameToId[userName];
-    return _realTimeUsers.any((u) {
-      final uName = u['userName'] ?? u['user'] ?? '';
-      return uName == userName || (userId != null && u['user'] == userId);
-    });
+    return _onlineUserKeys.contains(userName) ||
+        (userId != null && _onlineUserKeys.contains(userId));
   }
 
   DateTime _getMostRecentEventTime(String userName) {
-    DateTime mostRecent = DateTime.fromMillisecondsSinceEpoch(0);
-    _eventsLogs.forEach((_, logs) {
-      for (final log in logs) {
-        if (log['user'] == userName) {
-          final tsStr = log['rawTimestamp'] as String?;
-          if (tsStr != null) {
-            try {
-              final dt = DateTime.parse(tsStr);
-              if (dt.isAfter(mostRecent)) {
-                mostRecent = dt;
-              }
-            } catch (_) {}
-          }
-        }
-      }
-    });
-    return mostRecent;
+    return _cachedMostRecentEventTimes[userName] ?? DateTime.fromMillisecondsSinceEpoch(0);
   }
 
-  List<String> get _usersWithEvents {
-    final Set<String> users = {};
-    _eventsLogs.forEach((_, logs) {
-      for (final log in logs) {
-        final String? user = log['user'] as String?;
-        if (user != null && user.isNotEmpty) {
-          users.add(user);
-        }
-      }
-    });
-    
-    final list = users.toList();
-    list.sort((a, b) {
-      final aOnline = _isUserOnline(a);
-      final bOnline = _isUserOnline(b);
-      if (aOnline && !bOnline) return -1;
-      if (!aOnline && bOnline) return 1;
-      
-      final aTime = _getMostRecentEventTime(a);
-      final bTime = _getMostRecentEventTime(b);
-      if (aTime != bTime) {
-        return bTime.compareTo(aTime);
-      }
-      
-      return a.compareTo(b);
-    });
-    
-    return list;
+  List<String> get _usersWithEvents => _cachedUsersWithEvents;
+
+  bool _isHighPriority(String userName) {
+    return _cachedHighPriority[userName] ?? false;
+  }
+
+  String _getPriorityReason(String userName) {
+    return _cachedPriorityReason[userName] ?? '';
   }
 
   List<String> get _filteredUsers {
-    final users = _usersWithEvents;
+    var users = _usersWithEvents;
+
+    // Filter by Metric Card Selection
+    if (_selectedMetricFilter == 'High Priority') {
+      users = users.where((u) => _isHighPriority(u)).toList();
+    } else if (_selectedMetricFilter == 'Abandoned Carts') {
+      users = users.where((u) {
+        final reason = _getPriorityReason(u);
+        return reason == 'Abandoned Cart' || reason == 'Abandoned Checkout';
+      }).toList();
+    } else if (_selectedMetricFilter == 'Failed Payments') {
+      users = users.where((u) {
+        final reason = _getPriorityReason(u);
+        return reason == 'Payment Failed';
+      }).toList();
+    } else if (_selectedMetricFilter == 'Live Users') {
+      users = users.where((u) => _isUserOnline(u)).toList();
+    }
+
+    // Filter by Priority Dropdown (syncs/coexists with card selection)
+    if (_selectedPriority == 'High Priority') {
+      users = users.where((u) => _isHighPriority(u)).toList();
+    }
+
+    // Filter by User Type
+    if (_selectedUserType != 'All') {
+      users = users.where((u) {
+        final type = _getUserType(u);
+        return type == _selectedUserType;
+      }).toList();
+    }
+
     if (_userSearchQuery.isEmpty) return users;
     final query = _userSearchQuery.toLowerCase();
+    final cleanQuery = query.replaceAll(RegExp(r'[^\d]'), '');
+
     return users.where((u) {
       if (u.toLowerCase().contains(query)) return true;
+      final rawUser = _nameToId[u];
+      if (rawUser != null && rawUser.toLowerCase().contains(query)) return true;
 
-      // Check if any event log for this user matches the phone number search query
+      // 1. Check if the user is in Dealers state and matches name, shopName, email or phone
+      try {
+        final dealersState = context.read<DealersBloc>().state;
+        final isMatch = dealersState.allRawUsers.any((dealer) {
+          final email = (dealer['email'] ?? '').toString().toLowerCase();
+          final phone = (dealer['phoneNumber'] ?? dealer['phone'] ?? '').toString().toLowerCase();
+          final shop = (dealer['shopName'] ?? '').toString().toLowerCase();
+          final name = '${dealer['firstName'] ?? ''} ${dealer['lastName'] ?? ''}'.trim().toLowerCase();
+          
+          final isUser = email == rawUser?.toLowerCase() || 
+              phone == rawUser?.toLowerCase() || 
+              dealer['_id']?.toString().toLowerCase() == rawUser?.toLowerCase();
+              
+          if (isUser) {
+            if (email.contains(query) || shop.contains(query) || name.contains(query)) return true;
+            if (cleanQuery.isNotEmpty) {
+              final cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+              if (cleanPhone.contains(cleanQuery)) return true;
+            }
+          }
+          return false;
+        });
+        if (isMatch) return true;
+      } catch (_) {}
+
+      // 2. Check if the user is in Leads state and matches name, shopName, email or phone
+      try {
+        final leadsState = context.read<LeadsBloc>().state;
+        final isMatch = leadsState.allRawUsers.any((lead) {
+          final email = (lead['email'] ?? '').toString().toLowerCase();
+          final phone = (lead['phoneNumber'] ?? lead['phone'] ?? '').toString().toLowerCase();
+          final shop = (lead['shopName'] ?? '').toString().toLowerCase();
+          final name = '${lead['firstName'] ?? ''} ${lead['lastName'] ?? ''}'.trim().toLowerCase();
+          
+          final isUser = email == rawUser?.toLowerCase() || 
+              phone == rawUser?.toLowerCase() || 
+              lead['_id']?.toString().toLowerCase() == rawUser?.toLowerCase();
+              
+          if (isUser) {
+            if (email.contains(query) || shop.contains(query) || name.contains(query)) return true;
+            if (cleanQuery.isNotEmpty) {
+              final cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+              if (cleanPhone.contains(cleanQuery)) return true;
+            }
+          }
+          return false;
+        });
+        if (isMatch) return true;
+      } catch (_) {}
+
+      // 3. Fallback: Check if any event log for this user matches the phone query
       bool phoneMatches = false;
       for (final logs in _eventsLogs.values) {
         for (final log in logs) {
@@ -471,7 +913,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
             final String? phone = log['userPhone'] as String?;
             if (phone != null) {
               final cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
-              final cleanQuery = query.replaceAll(RegExp(r'[^\d]'), '');
               if (cleanQuery.isNotEmpty && cleanPhone.contains(cleanQuery)) {
                 phoneMatches = true;
                 break;
@@ -491,16 +932,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   Map<String, List<Map<String, dynamic>>> _getUserEventsGrouped(
     String userName,
   ) {
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    _eventsLogs.forEach((category, logs) {
-      final userLogs = logs
-          .where((log) => log['user'] == userName)
-          .toList();
-      if (userLogs.isNotEmpty) {
-        grouped[category] = userLogs;
-      }
-    });
-    return grouped;
+    return _cachedUserEventsGrouped[userName] ?? {};
   }
 
   final List<Map<String, dynamic>> _eventTypes = [
@@ -665,7 +1097,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         'user': 'King Agro',
         'time': '2 mins ago',
         'device': 'Android 14 (Samsung S23)',
-        'details': 'Searched: "High flow drip nozzle" • 12 results',
+        'details': 'Searched: \"High flow drip nozzle\" • 12 results',
         'payload': {
           'action': 'search',
           'query': 'High flow drip nozzle',
@@ -678,7 +1110,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         'user': 'Patel Agro',
         'time': '15 mins ago',
         'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Searched: "NPK 19-19-19 Fertilizer" • 4 results',
+        'details': 'Searched: \"NPK 19-19-19 Fertilizer\" • 4 results',
         'payload': {
           'action': 'search',
           'query': 'NPK 19-19-19 Fertilizer',
@@ -776,7 +1208,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         'user': 'Patel Agro',
         'time': '5 mins ago',
         'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Code: "MONSOON10" • Discount: ₹2,250 (10%)',
+        'details': 'Code: \"MONSOON10\" • Discount: ₹2,250 (10%)',
         'payload': {
           'action': 'coupon_apply',
           'coupon_code': 'MONSOON10',
@@ -905,6 +1337,54 @@ class _UserEventsPageState extends State<UserEventsPage> {
     );
   }
 
+  Widget _buildFilterDropdown({
+    required String label,
+    required String value,
+    required List<String> options,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+              onChanged: onChanged,
+              items: options.map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Container(
       width: double.infinity,
@@ -955,13 +1435,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: Text(
                 'Refresh Feed',
-                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -978,67 +1464,69 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
-        backgroundColor: AppTheme.backgroundColor,
-          appBar: AppBar(
-          title: Text(
-            'Live Telemetry & Events',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          backgroundColor: Colors.white,
-          foregroundColor: AppTheme.textPrimary,
-          elevation: 0,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: _loadEvents,
-              tooltip: 'Refresh Feed',
-            ),
-            const SizedBox(width: 8),
-          ],
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: AppTheme.lightBorderColor),
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: Text(
+          'Live Telemetry & Events',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
           ),
         ),
-        body: _isLoading
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40.0),
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppTheme.primaryColor,
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.textPrimary,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadEvents,
+            tooltip: 'Refresh Feed',
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppTheme.lightBorderColor),
+        ),
+      ),
+      body: Column(
+        children: [
+          if (_isLoadingEvents && !_isLoading && !_isBackgroundLoading)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: AppTheme.primaryColor,
+              backgroundColor: Colors.transparent,
+            ),
+          Expanded(
+            child: _isLoading
+                ? _buildShimmerLoading(isDesktop)
+                : RefreshIndicator(
+                    onRefresh: _loadEvents,
+                    color: AppTheme.primaryColor,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isDesktop ? 28 : 16,
+                        vertical: isDesktop ? 20 : 12,
+                      ),
+                      child: SelectionArea(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_isFallbackMode) _buildFallbackBanner(),
+                            _buildSummaryCards(isDesktop),
+                            const SizedBox(height: 20),
+                            _buildRealTimeStats(),
+                            const SizedBox(height: 20),
+                            _buildUsersList(isDesktop),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: _loadEvents,
-                color: AppTheme.primaryColor,
-                child: SelectionArea(
-                  child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isDesktop ? 28 : 16,
-                    vertical: isDesktop ? 20 : 12,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_isFallbackMode) _buildFallbackBanner(),
-                      _buildRealTimeStats(),
-                      const SizedBox(height: 20),
-                      if (!_isFallbackMode && _eventsLogs.isEmpty)
-                        _buildEmptyState()
-                      else
-                        _buildUsersList(isDesktop),
-                    ],
-                  ),
-                ),
-              ),
+          ),
+        ],
       ),
     );
   }
@@ -1125,7 +1613,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (displayPhone.isNotEmpty && displayPhone != displayName)
+                            if (displayPhone.isNotEmpty &&
+                                displayPhone != displayName)
                               Text(
                                 displayPhone,
                                 style: GoogleFonts.outfit(
@@ -1137,12 +1626,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(Icons.touch_app_outlined, size: 12, color: AppTheme.primaryColor),
+                                const Icon(
+                                  Icons.touch_app_outlined,
+                                  size: 12,
+                                  color: AppTheme.primaryColor,
+                                ),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     user['action'] ?? 'Browsing',
-                                    style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -1163,10 +1659,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                 ),
                                 if (user['_localLastSeen'] != null)
                                   Text(
-                                    _getRelativeLastSeen(user['_localLastSeen']),
+                                    _getRelativeLastSeen(
+                                      user['_localLastSeen'],
+                                    ),
                                     style: GoogleFonts.outfit(
                                       fontSize: 9,
-                                      color: AppTheme.textSecondary.withOpacity(0.6),
+                                      color: AppTheme.textSecondary.withOpacity(
+                                        0.6,
+                                      ),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -1193,6 +1693,485 @@ class _UserEventsPageState extends State<UserEventsPage> {
     return '${(diff / 60000).floor()}m ago';
   }
 
+  Widget _buildSummaryCards(bool isDesktop) {
+    final int highPriorityCount = _globalHighPriorityCount;
+    final int failedPaymentsCount = _globalFailedPaymentsCount;
+    final int abandonedCartsCount = _globalAbandonedCartsCount;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double spacing = 12.0;
+        final int columns = isDesktop ? 4 : 2;
+        final double cardWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            _buildMetricCard(
+              'High Priority',
+              '$highPriorityCount',
+              'Users needing action',
+              Icons.priority_high_rounded,
+              Colors.redAccent,
+              cardWidth,
+              onTap: () {
+                setState(() {
+                  if (_selectedMetricFilter == 'High Priority') {
+                    _selectedMetricFilter = 'All';
+                    _selectedPriority = 'All';
+                  } else {
+                    _selectedMetricFilter = 'High Priority';
+                    _selectedPriority = 'High Priority';
+                  }
+                });
+              },
+              isSelected: _selectedMetricFilter == 'High Priority',
+            ),
+            _buildMetricCard(
+              'Abandoned Carts',
+              '$abandonedCartsCount',
+              'Incomplete purchases',
+              Icons.shopping_cart_checkout_rounded,
+              Colors.orange,
+              cardWidth,
+              onTap: () {
+                setState(() {
+                  if (_selectedMetricFilter == 'Abandoned Carts') {
+                    _selectedMetricFilter = 'All';
+                  } else {
+                    _selectedMetricFilter = 'Abandoned Carts';
+                    _selectedPriority = 'All';
+                  }
+                });
+              },
+              isSelected: _selectedMetricFilter == 'Abandoned Carts',
+            ),
+            _buildMetricCard(
+              'Failed Payments',
+              '$failedPaymentsCount',
+              'Checkout errors',
+              Icons.error_outline_rounded,
+              Colors.red,
+              cardWidth,
+              onTap: () {
+                setState(() {
+                  if (_selectedMetricFilter == 'Failed Payments') {
+                    _selectedMetricFilter = 'All';
+                  } else {
+                    _selectedMetricFilter = 'Failed Payments';
+                    _selectedPriority = 'All';
+                  }
+                });
+              },
+              isSelected: _selectedMetricFilter == 'Failed Payments',
+            ),
+            _buildMetricCard(
+              'Live Users',
+              '${_realTimeUsers.length}',
+              'Currently active',
+              Icons.bolt_rounded,
+              const Color(0xFF10B981),
+              cardWidth,
+              onTap: () {
+                setState(() {
+                  if (_selectedMetricFilter == 'Live Users') {
+                    _selectedMetricFilter = 'All';
+                  } else {
+                    _selectedMetricFilter = 'Live Users';
+                    _selectedPriority = 'All';
+                  }
+                });
+              },
+              isSelected: _selectedMetricFilter == 'Live Users',
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildShimmerLoading(bool isDesktop) {
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary Cards Shimmer
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double spacing = 12.0;
+              final int columns = isDesktop ? 4 : 2;
+              final double cardWidth =
+                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: List.generate(4, (index) {
+                  return Container(
+                    width: cardWidth,
+                    height: 120,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Shimmer.fromColors(
+                      baseColor: Colors.grey[200]!,
+                      highlightColor: Colors.white,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            width: 50,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            width: 100,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+
+          // Live Users Presence Shimmer
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 150,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    Container(
+                      width: 80,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 100,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 5,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      return Container(
+                        width: 180,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Shimmer.fromColors(
+                          baseColor: Colors.grey[200]!,
+                          highlightColor: Colors.white,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 14,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                width: 80,
+                                height: 12,
+                                color: Colors.white,
+                              ),
+                              const Spacer(),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    width: 50,
+                                    height: 10,
+                                    color: Colors.white,
+                                  ),
+                                  Container(
+                                    width: 30,
+                                    height: 10,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Users list shimmer
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+              border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    Container(
+                      width: 80,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Filters shimmer
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    Container(
+                      width: isDesktop ? 300 : double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    Container(
+                      width: 120,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    Container(
+                      width: 120,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // User cards shimmers
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: 3,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.borderColor.withOpacity(0.4),
+                        ),
+                      ),
+                      child: Shimmer.fromColors(
+                        baseColor: Colors.grey[200]!,
+                        highlightColor: Colors.white,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 150,
+                                    height: 16,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    width: 100,
+                                    height: 12,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    String subtitle,
+    IconData icon,
+    Color color,
+    double width, {
+    VoidCallback? onTap,
+    bool isSelected = false,
+  }) {
+    return MouseRegion(
+      cursor: onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: width,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.08) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? color : AppTheme.borderColor,
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 18, color: color),
+                  ),
+                  if (isSelected)
+                    Icon(Icons.check_circle_rounded, size: 16, color: color),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              Text(
+                title,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildUsersList(bool isDesktop) {
     final filtered = _filteredUsers;
 
@@ -1210,13 +2189,27 @@ class _UserEventsPageState extends State<UserEventsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Users',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Users',
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_isLoadingEvents && !_isBackgroundLoading)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1225,7 +2218,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${filtered.length} tracked',
+                  '${filtered.length} matching',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1235,79 +2228,138 @@ class _UserEventsPageState extends State<UserEventsPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // User Search Bar
-          Container(
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderColor.withOpacity(0.8)),
-            ),
-            child: TextField(
-              controller: _userSearchController,
-              onChanged: (val) {
-                setState(() {
-                  _userSearchQuery = val.trim();
-                });
-              },
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: AppTheme.textPrimary,
-              ),
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                hintText: 'Search user...',
-                hintStyle: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary,
+          const SizedBox(height: 16),
+          // Advanced Filters Row
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              // User Search Bar
+              Container(
+                height: 40,
+                width: isDesktop ? 300 : double.infinity,
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.borderColor.withOpacity(0.8),
+                  ),
                 ),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  size: 16,
-                  color: AppTheme.textSecondary,
+                child: TextField(
+                  controller: _userSearchController,
+                  onChanged: (val) {
+                    setState(() {
+                      _userSearchQuery = val.trim();
+                    });
+                    _searchDebounce?.cancel();
+                    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                      _loadEvents(silent: true, searchQuery: val.trim());
+                    });
+                  },
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: AppTheme.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    hintText: 'Search by name, shop, or phone (Global)...',
+                    hintStyle: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    suffixIcon: _userSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 16),
+                            onPressed: () {
+                              _userSearchController.clear();
+                              setState(() {
+                                _userSearchQuery = '';
+                              });
+                              _loadEvents(silent: true, searchQuery: '');
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                  ),
                 ),
-                suffixIcon: _userSearchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded, size: 16),
-                        onPressed: () {
-                          _userSearchController.clear();
-                          setState(() {
-                            _userSearchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
               ),
-            ),
+              // User Type Filter
+              _buildFilterDropdown(
+                label: 'User Type',
+                value: _selectedUserType,
+                options: ['All', 'Dealer', 'Lead', 'Guest'],
+                onChanged: (val) => setState(() => _selectedUserType = val!),
+              ),
+              // Priority Filter
+              _buildFilterDropdown(
+                label: 'Priority',
+                value: _selectedPriority,
+                options: ['All', 'High Priority'],
+                onChanged: (val) => setState(() => _selectedPriority = val!),
+              ),
+              if (_selectedUserType != 'All' ||
+                  _selectedPriority != 'All' ||
+                  _selectedMetricFilter != 'All' ||
+                  _userSearchQuery.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedUserType = 'All';
+                      _selectedPriority = 'All';
+                      _selectedMetricFilter = 'All';
+                      _userSearchQuery = '';
+                      _userSearchController.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.filter_list_off_rounded, size: 14),
+                  label: Text(
+                    'Reset',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
           if (filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.search_off_rounded,
-                      size: 28,
-                      color: AppTheme.textSecondary.withOpacity(0.4),
+            (_isLoadingEvents && !_isBackgroundLoading)
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: CircularProgressIndicator(color: AppTheme.primaryColor),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No users found',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
+                  )
+                : Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 28,
+                            color: AppTheme.textSecondary.withOpacity(0.4),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No users found',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            )
+                  )
           else
             ListView.separated(
               shrinkWrap: true,
@@ -1323,14 +2375,26 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 final userId = _nameToId[userName];
                 final isOnline = _realTimeUsers.any((u) {
                   final uName = u['userName'] ?? u['user'] ?? '';
-                  return uName == userName || (userId != null && u['user'] == userId);
+                  return uName == userName ||
+                      (userId != null && u['user'] == userId);
                 });
 
-                final cardKey = _userCardKeys.putIfAbsent(userName, () => GlobalKey());
+                final bool isHighPriority = _isHighPriority(userName);
+                final String priorityReason = isHighPriority
+                    ? _getPriorityReason(userName)
+                    : '';
+
+                final cardKey = _userCardKeys.putIfAbsent(
+                  userName,
+                  () => GlobalKey(),
+                );
                 return _UserCard(
                   key: cardKey,
                   name: userName,
+                  userType: _getUserType(userName),
                   isOnline: isOnline,
+                  isHighPriority: isHighPriority,
+                  priorityReason: priorityReason,
                   groupedEvents: grouped,
                   isSelected: isSelected,
                   selectedEventType: _selectedEventType,
@@ -1360,9 +2424,48 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 );
               },
             ),
+            if (_nextCursor != null) ...[
+              const SizedBox(height: 16),
+              Center(
+                child: _isLoadingMore
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppTheme.primaryColor,
+                          ),
+                        ),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _loadMoreEvents,
+                        icon: const Icon(Icons.arrow_downward_rounded, size: 14),
+                        label: Text(
+                          'Load More Events',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                          side: const BorderSide(color: AppTheme.primaryColor),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
+              ),
+            ],
         ],
       ),
     );
+  }
+
+  String _getUserType(String userName) {
+    return _cachedUserTypes[userName] ?? 'Guest';
   }
 }
 
@@ -1445,6 +2548,7 @@ class _LivePulsingBadgeState extends State<_LivePulsingBadge>
 
 class _UserCard extends StatefulWidget {
   final String name;
+  final String userType;
   final Map<String, List<Map<String, dynamic>>> groupedEvents;
   final bool isSelected;
   final String? selectedEventType;
@@ -1453,10 +2557,13 @@ class _UserCard extends StatefulWidget {
   final VoidCallback onTap;
   final Function(String user) onViewProfile;
   final bool isOnline;
+  final bool isHighPriority;
+  final String priorityReason;
 
   const _UserCard({
     super.key,
     required this.name,
+    required this.userType,
     required this.groupedEvents,
     required this.isSelected,
     required this.selectedEventType,
@@ -1465,6 +2572,8 @@ class _UserCard extends StatefulWidget {
     required this.onCategorySelected,
     required this.onViewProfile,
     this.isOnline = false,
+    this.isHighPriority = false,
+    this.priorityReason = '',
   });
 
   @override
@@ -1497,8 +2606,6 @@ class _UserCardState extends State<_UserCard>
       }
       if (userPhone != null) break;
     }
-
-    final String userType = _getUserType(widget.name);
 
     final String initials = widget.name.isNotEmpty
         ? widget.name
@@ -1577,7 +2684,9 @@ class _UserCardState extends State<_UserCard>
                         Positioned(
                           right: -2,
                           bottom: -2,
-                          child: const _LivePulsingBadge(color: Color(0xFF10B981)),
+                          child: const _LivePulsingBadge(
+                            color: Color(0xFF10B981),
+                          ),
                         ),
                     ],
                   ),
@@ -1601,7 +2710,52 @@ class _UserCardState extends State<_UserCard>
                               ),
                             ),
                             const SizedBox(width: 8),
-                            _buildUserTypeBadge(userType),
+                            _buildUserTypeBadge(context, widget.name),
+                            if (widget.isHighPriority) ...[
+                              const SizedBox(width: 8),
+                              Builder(
+                                builder: (context) {
+                                  final bool isCartIssue = widget.priorityReason == 'Abandoned Cart' || widget.priorityReason == 'Abandoned Checkout';
+                                  final Color badgeColor = isCartIssue ? Colors.orange : AppTheme.error;
+                                  final IconData badgeIcon = isCartIssue ? Icons.shopping_cart_outlined : Icons.priority_high_rounded;
+
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: badgeColor.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: badgeColor.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          badgeIcon,
+                                          size: 10,
+                                          color: badgeColor,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          widget.priorityReason.isNotEmpty
+                                              ? widget.priorityReason
+                                              : 'High Priority',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: badgeColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                              ),
+                            ],
                           ],
                         ),
                         if (userPhone != null && userPhone.isNotEmpty) ...[
@@ -1657,22 +2811,34 @@ class _UserCardState extends State<_UserCard>
                                   color: AppTheme.textSecondary,
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed: () => widget.onViewProfile(widget.name),
-                                icon: const Icon(Icons.launch_rounded, size: 13),
-                                label: Text(
-                                  'View Profile',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: () =>
+                                        widget.onViewProfile(widget.name),
+                                    icon: const Icon(
+                                      Icons.launch_rounded,
+                                      size: 13,
+                                    ),
+                                    label: Text(
+                                      'View Profile',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppTheme.primaryColor,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
                                   ),
-                                ),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.primaryColor,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
+                                ],
                               ),
                             ],
                           ),
@@ -1861,55 +3027,16 @@ class _UserCardState extends State<_UserCard>
     );
   }
 
-  String _getUserType(String userName) {
-    final nameLower = userName.toLowerCase();
-    
-    // Check in Dealers database state
-    final dealersState = context.read<DealersBloc>().state;
-    final dealerIndex = dealersState.allRawUsers.indexWhere((u) {
-      final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-      final String phone = (u['phoneNumber'] ?? '').toString();
-      final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-      return fullName == nameLower || phone == nameLower || shopName == nameLower;
-    });
-    if (dealerIndex != -1) {
-      final u = dealersState.allRawUsers[dealerIndex];
-      final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-      return kycStatus == 'verified' ? 'Dealer' : 'Lead';
-    }
-
-    // Check in Leads database state
-    final leadsState = context.read<LeadsBloc>().state;
-    final leadIndex = leadsState.allRawUsers.indexWhere((u) {
-      final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-      final String phone = (u['phoneNumber'] ?? '').toString();
-      final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-      return fullName == nameLower || phone == nameLower || shopName == nameLower;
-    });
-    if (leadIndex != -1) {
-      final u = leadsState.allRawUsers[leadIndex];
-      final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-      return kycStatus == 'verified' ? 'Dealer' : 'Lead';
-    }
-
-    // Check in fallback static dealers list
-    final isStaticDealer = allDealers.any((d) {
-      return d.name.toLowerCase().contains(nameLower) || nameLower.contains(d.name.toLowerCase().split(' ').first);
-    });
-    if (isStaticDealer) return 'Dealer';
-
-    return 'Guest';
-  }
-
-  Widget _buildUserTypeBadge(String type) {
+  Widget _buildUserTypeBadge(BuildContext context, String userName) {
+    final type = widget.userType;
     if (type == 'Guest') return const SizedBox.shrink();
-    
+
     final isDealer = type == 'Dealer';
-    final bgColor = isDealer 
-        ? const Color(0xFF10B981).withOpacity(0.08) 
+    final bgColor = isDealer
+        ? const Color(0xFF10B981).withOpacity(0.08)
         : const Color(0xFFF59E0B).withOpacity(0.08);
-    final textColor = isDealer 
-        ? const Color(0xFF10B981) 
+    final textColor = isDealer
+        ? const Color(0xFF10B981)
         : const Color(0xFFF59E0B);
     final icon = isDealer ? Icons.verified_rounded : Icons.info_outline_rounded;
 
@@ -1918,17 +3045,18 @@ class _UserCardState extends State<_UserCard>
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: textColor.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 10, color: textColor),
-          const SizedBox(width: 3),
+          const SizedBox(width: 2),
           Text(
             type,
             style: GoogleFonts.outfit(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
               color: textColor,
             ),
           ),
@@ -1943,32 +3071,42 @@ void _navigateToProfile(BuildContext context, String user) {
 
   // 1. Try to find in Dealers first (Real database records)
   final dealersState = context.read<DealersBloc>().state;
-  final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere(
-    (u) {
-      final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-      final String phone = (u['phoneNumber'] ?? '').toString();
-      final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-      return fullName == nameLower || phone == user || shopName == nameLower ||
-             fullName.contains(nameLower) || nameLower.contains(fullName);
-    },
-    orElse: () => <String, dynamic>{},
-  );
+  final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere((
+    u,
+  ) {
+    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+        .trim()
+        .toLowerCase();
+    final String phone = (u['phoneNumber'] ?? '').toString();
+    final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
+    return fullName == nameLower ||
+        phone == user ||
+        shopName == nameLower ||
+        fullName.contains(nameLower) ||
+        nameLower.contains(fullName);
+  }, orElse: () => <String, dynamic>{});
 
   if (dealerData != null && dealerData.isNotEmpty) {
-    final kycStatus = dealerData['kycStatus']?.toString().toLowerCase() ?? 'pending';
+    final kycStatus =
+        dealerData['kycStatus']?.toString().toLowerCase() ?? 'pending';
     final isDealer = kycStatus == 'verified';
 
     if (isDealer) {
       final agentName = dealerData['assignedAgent'] != null
-          ? '${dealerData['assignedAgent']['firstName'] ?? ''} ${dealerData['assignedAgent']['lastName'] ?? ''}'.trim()
+          ? '${dealerData['assignedAgent']['firstName'] ?? ''} ${dealerData['assignedAgent']['lastName'] ?? ''}'
+                .trim()
           : '-';
 
-      final String personName = (dealerData['firstName'] != null || dealerData['lastName'] != null)
-          ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'.trim()
+      final String personName =
+          (dealerData['firstName'] != null || dealerData['lastName'] != null)
+          ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
+                .trim()
           : '';
 
       final dealer = Dealer(
-        name: personName.isNotEmpty ? personName : (dealerData['phoneNumber'] ?? user),
+        name: personName.isNotEmpty
+            ? personName
+            : (dealerData['phoneNumber'] ?? user),
         phone: dealerData['phoneNumber'] ?? '',
         city: dealerData['address']?['cityTehsil'] ?? '',
         state: dealerData['address']?['state'] ?? '',
@@ -1985,20 +3123,26 @@ void _navigateToProfile(BuildContext context, String user) {
         address: dealerData['address'],
         status: dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
         notes: dealerData['notes'] ?? dealerData['leadNotes'] ?? '',
-        notesHistory: dealerData['notesHistory'] != null ? List<Map<String, dynamic>>.from(dealerData['notesHistory']) : [],
+        notesHistory: dealerData['notesHistory'] != null
+            ? List<Map<String, dynamic>>.from(dealerData['notesHistory'])
+            : [],
       );
 
       Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
       return;
     } else {
       // Treat as Lead
-      final String personName = (dealerData['firstName'] != null || dealerData['lastName'] != null)
-          ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'.trim()
+      final String personName =
+          (dealerData['firstName'] != null || dealerData['lastName'] != null)
+          ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
+                .trim()
           : '';
 
       final leadMap = {
         'id': dealerData['_id'],
-        'name': personName.isNotEmpty ? personName : (dealerData['phoneNumber'] ?? user),
+        'name': personName.isNotEmpty
+            ? personName
+            : (dealerData['phoneNumber'] ?? user),
         'phone': dealerData['phoneNumber'] ?? '',
         'shopName': dealerData['shopName'] ?? '',
         'villageArea': dealerData['address']?['villageArea'] ?? '',
@@ -2007,7 +3151,8 @@ void _navigateToProfile(BuildContext context, String user) {
         'pincode': dealerData['address']?['pincode'] ?? '',
         'source': dealerData['source'] ?? 'App',
         'kycStatus': dealerData['kycStatus'] ?? 'pending',
-        'status': dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
+        'status':
+            dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
         'notes': dealerData['notes'] ?? dealerData['leadNotes'] ?? '',
         'notesHistory': dealerData['notesHistory'] ?? [],
       };
@@ -2020,7 +3165,8 @@ void _navigateToProfile(BuildContext context, String user) {
   // 2. Try to find in fallback static dealers list (allDealers)
   Dealer? matchedDealer;
   for (final d in allDealers) {
-    if (d.name.toLowerCase().contains(nameLower) || nameLower.contains(d.name.toLowerCase().split(' ').first)) {
+    if (d.name.toLowerCase().contains(nameLower) ||
+        nameLower.contains(d.name.toLowerCase().split(' ').first)) {
       matchedDealer = d;
       break;
     }
@@ -2033,30 +3179,37 @@ void _navigateToProfile(BuildContext context, String user) {
 
   // 3. Not a dealer, so it must be a Lead! Let's find in Leads first.
   final leadsState = context.read<LeadsBloc>().state;
-  final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere(
-    (u) {
-      final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
-      final String phone = (u['phoneNumber'] ?? '').toString();
-      return fullName == nameLower || phone == user || fullName.contains(nameLower);
-    },
-    orElse: () => <String, dynamic>{},
-  );
+  final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((u) {
+    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+        .trim()
+        .toLowerCase();
+    final String phone = (u['phoneNumber'] ?? '').toString();
+    return fullName == nameLower ||
+        phone == user ||
+        fullName.contains(nameLower);
+  }, orElse: () => <String, dynamic>{});
 
   if (leadData != null && leadData.isNotEmpty) {
-    final kycStatus = leadData['kycStatus']?.toString().toLowerCase() ?? 'pending';
+    final kycStatus =
+        leadData['kycStatus']?.toString().toLowerCase() ?? 'pending';
     final isDealer = kycStatus == 'verified';
 
     if (isDealer) {
       final agentName = leadData['assignedAgent'] != null
-          ? '${leadData['assignedAgent']['firstName'] ?? ''} ${leadData['assignedAgent']['lastName'] ?? ''}'.trim()
+          ? '${leadData['assignedAgent']['firstName'] ?? ''} ${leadData['assignedAgent']['lastName'] ?? ''}'
+                .trim()
           : '-';
 
-      final String personName = (leadData['firstName'] != null || leadData['lastName'] != null)
-          ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'.trim()
+      final String personName =
+          (leadData['firstName'] != null || leadData['lastName'] != null)
+          ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
+                .trim()
           : '';
 
       final dealer = Dealer(
-        name: personName.isNotEmpty ? personName : (leadData['phoneNumber'] ?? user),
+        name: personName.isNotEmpty
+            ? personName
+            : (leadData['phoneNumber'] ?? user),
         phone: leadData['phoneNumber'] ?? '',
         city: (leadData['address'] as Map?)?['cityTehsil'] ?? '',
         state: (leadData['address'] as Map?)?['state'] ?? '',
@@ -2073,20 +3226,26 @@ void _navigateToProfile(BuildContext context, String user) {
         address: leadData['address'],
         status: leadData['status'] ?? leadData['leadStatus'] ?? 'prospect',
         notes: leadData['notes'] ?? leadData['leadNotes'] ?? '',
-        notesHistory: leadData['notesHistory'] != null ? List<Map<String, dynamic>>.from(leadData['notesHistory']) : [],
+        notesHistory: leadData['notesHistory'] != null
+            ? List<Map<String, dynamic>>.from(leadData['notesHistory'])
+            : [],
       );
 
       Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
       return;
     } else {
       // Map raw user to lead map format expected by LeadProfilePage
-      final String personName = (leadData['firstName'] != null || leadData['lastName'] != null)
-          ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'.trim()
+      final String personName =
+          (leadData['firstName'] != null || leadData['lastName'] != null)
+          ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
+                .trim()
           : '';
 
       final leadMap = {
         'id': leadData['_id'],
-        'name': personName.isNotEmpty ? personName : (leadData['phoneNumber'] ?? user),
+        'name': personName.isNotEmpty
+            ? personName
+            : (leadData['phoneNumber'] ?? user),
         'phone': leadData['phoneNumber'] ?? '',
         'shopName': leadData['shopName'] ?? '',
         'villageArea': leadData['address']?['villageArea'] ?? '',
@@ -2639,8 +3798,10 @@ class _EventLogCardState extends State<_EventLogCard> {
                             child: MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: GestureDetector(
-                                onTap: () =>
-                                    _navigateToProfile(context, widget.rawUser ?? widget.user),
+                                onTap: () => _navigateToProfile(
+                                  context,
+                                  widget.rawUser ?? widget.user,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,

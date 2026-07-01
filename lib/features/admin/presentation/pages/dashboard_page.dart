@@ -3,13 +3,26 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import '../../../../util/dealers.dart';
+import '../bloc/dealers_bloc.dart';
+import '../bloc/dealers_event.dart';
+import '../bloc/dealers_state.dart';
+import '../bloc/leads_bloc.dart';
+import '../bloc/leads_event.dart';
+import '../bloc/orders_bloc.dart';
+import '../bloc/orders_event.dart';
+import '../bloc/orders_state.dart';
 import 'user_events_page.dart';
 import 'orders_page.dart';
 import 'leads_page.dart';
@@ -23,7 +36,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  String selectedDropdown = 'Today';
+  String selectedDropdown = 'Total';
   PickerDateRange? _selectedRange;
 
   // Modern dashboard state variables
@@ -124,268 +137,7 @@ class _DashboardPageState extends State<DashboardPage> {
     },
   ];
 
-  static final Map<String, List<Map<String, dynamic>>> _mockEventsLogs = {
-    'login_success': [
-      {
-        'user': 'Vijay D. (King Agro)',
-        'time': 'Just now',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'IP: 157.45.12.8 • Method: OTP Verification',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'otp',
-          'phone': '+91 98765 43210',
-          'device_fingerprint': 'dev_samsung_s23_9fa1',
-          'location': 'Indore, Madhya Pradesh',
-        },
-      },
-      {
-        'user': 'Rajesh Kumar',
-        'time': '4 mins ago',
-        'device': 'Chrome 122 (Windows 11)',
-        'details': 'IP: 103.88.22.45 • Method: Google Auth',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'google_sso',
-          'email': 'rajesh.k@krishidealer.com',
-          'device_fingerprint': 'dev_win_chrome_e3f2',
-          'location': 'Bhopal, Madhya Pradesh',
-        },
-      },
-      {
-        'user': 'Suresh Patil',
-        'time': '12 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'IP: 223.187.9.11 • Method: Password',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'credentials',
-          'username': 'suresh_patel_agro',
-          'device_fingerprint': 'dev_iphone15_22b4',
-          'location': 'Ujjain, Madhya Pradesh',
-        },
-      },
-    ],
-    'profile_view': [
-      {
-        'user': 'Gupta Seeds',
-        'time': '1 min ago',
-        'device': 'Android 13 (Realme 9)',
-        'details': 'Visited: KYC & Documents page',
-        'payload': {
-          'action': 'profile_view',
-          'section': 'kyc_verification',
-          'view_duration_sec': 42,
-          'documents_uploaded': ['gst_cert.pdf', 'pan_card.jpg'],
-        },
-      },
-      {
-        'user': 'Shiva Enterprises',
-        'time': '8 mins ago',
-        'device': 'Chrome 122 (macOS 14)',
-        'details': 'Visited: Account Settings',
-        'payload': {
-          'action': 'profile_view',
-          'section': 'settings_billing',
-          'view_duration_sec': 15,
-        },
-      },
-    ],
-    'product_search': [
-      {
-        'user': 'King Agro',
-        'time': '2 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Searched: "High flow drip nozzle" • 12 results',
-        'payload': {
-          'action': 'search',
-          'query': 'High flow drip nozzle',
-          'category': 'Irrigation',
-          'results_count': 12,
-          'applied_filters': {'sort': 'price_asc', 'stock': 'in_stock_only'},
-        },
-      },
-      {
-        'user': 'Patel Agro',
-        'time': '15 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Searched: "NPK 19-19-19 Fertilizer" • 4 results',
-        'payload': {
-          'action': 'search',
-          'query': 'NPK 19-19-19 Fertilizer',
-          'category': 'Fertilizers',
-          'results_count': 4,
-          'applied_filters': {},
-        },
-      },
-    ],
-    'add_to_cart': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Added: 3 items to cart • Value: ₹48,000',
-        'payload': {
-          'action': 'cart_add',
-          'items': [
-            {
-              'product_id': 'prod_pump_5hp',
-              'product_name': 'Water Pump 5HP',
-              'variant_id': 'var_pump_5hp_single',
-              'variant_name': 'Single Phase',
-              'quantity': 2,
-              'price': 11250.00,
-            },
-            {
-              'product_id': 'prod_pump_5hp',
-              'product_name': 'Water Pump 5HP',
-              'variant_id': 'var_pump_5hp_three',
-              'variant_name': 'Three Phase',
-              'quantity': 1,
-              'price': 13500.00,
-            },
-            {
-              'product_id': 'prod_npk_19',
-              'product_name': 'NPK Fertilizer 19-19-19',
-              'variant_id': 'var_npk_50kg',
-              'variant_name': '50kg Bag',
-              'quantity': 10,
-              'price': 1200.00,
-            },
-          ],
-          'cart_total_after': 48000.00,
-        },
-      },
-      {
-        'user': 'King Agro',
-        'time': '18 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Added: 2 items to cart • Value: ₹21,000',
-        'payload': {
-          'action': 'cart_add',
-          'items': [
-            {
-              'product_id': 'prod_drip_kit_standard',
-              'product_name': 'Drip Irrigation Kit Standard',
-              'variant_id': 'var_drip_1acre',
-              'variant_name': '1 Acre',
-              'quantity': 5,
-              'price': 2400.00,
-            },
-            {
-              'product_id': 'prod_drip_kit_standard',
-              'product_name': 'Drip Irrigation Kit Standard',
-              'variant_id': 'var_drip_2acre',
-              'variant_name': '2 Acre',
-              'quantity': 2,
-              'price': 4500.00,
-            },
-          ],
-          'cart_total_after': 21000.00,
-        },
-      },
-    ],
-    'checkout_started': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Items: 1 • Cart Subtotal: ₹22,500',
-        'payload': {
-          'action': 'checkout_start',
-          'items_count': 1,
-          'subtotal': 22500.00,
-          'tax': 1125.00,
-          'shipping': 0.00,
-          'grand_total': 23625.00,
-          'selected_address_id': 'addr_patel_indore_01',
-        },
-      },
-    ],
-    'apply_coupon': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Code: "MONSOON10" • Discount: ₹2,250 (10%)',
-        'payload': {
-          'action': 'coupon_apply',
-          'coupon_code': 'MONSOON10',
-          'valid': true,
-          'discount_type': 'percentage',
-          'discount_value': 10,
-          'discount_amount': 2250.00,
-        },
-      },
-    ],
-    'payment_initiated': [
-      {
-        'user': 'Patel Agro',
-        'time': '4 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Gateway: Razorpay UPI • Amount: ₹21,375',
-        'payload': {
-          'action': 'payment_init',
-          'order_id': 'ord_patel_9827a',
-          'amount': 21375.00,
-          'gateway': 'razorpay',
-          'method': 'upi',
-          'currency': 'INR',
-        },
-      },
-      {
-        'user': 'King Agro',
-        'time': '20 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Gateway: Razorpay Cards • Amount: ₹27,000',
-        'payload': {
-          'action': 'payment_init',
-          'order_id': 'ord_king_1182c',
-          'amount': 27000.00,
-          'gateway': 'razorpay',
-          'method': 'card',
-          'currency': 'INR',
-        },
-      },
-    ],
-    'payment_failed': [
-      {
-        'user': 'King Agro',
-        'time': '19 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Error: Authentication Timeout • Code: FAIL_504',
-        'payload': {
-          'action': 'payment_callback',
-          'status': 'failed',
-          'order_id': 'ord_king_1182c',
-          'amount': 27000.00,
-          'transaction_id': 'txn_king_fa8912',
-          'error_code': 'FAIL_504',
-          'error_message': '3D Secure Authentication timed out by issuer bank',
-        },
-      },
-    ],
-    'payment_success': [
-      {
-        'user': 'Patel Agro',
-        'time': '3 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'TXN ID: txn_patel_su9281 • Amount Paid: ₹21,375',
-        'payload': {
-          'action': 'payment_callback',
-          'status': 'success',
-          'order_id': 'ord_patel_9827a',
-          'amount': 21375.00,
-          'transaction_id': 'txn_patel_su9281',
-          'invoice_number': 'INV-2026-KD8827',
-          'payment_completed_at': '2026-06-04T10:58:02Z',
-        },
-      },
-    ],
-  };
+  static final Map<String, List<Map<String, dynamic>>> _mockEventsLogs = {};
 
   // Clock and Scroll state variables
   Timer? _clockTimer;
@@ -399,13 +151,17 @@ class _DashboardPageState extends State<DashboardPage> {
   int get verifiedDealersCount =>
       _dealersData.where((dealer) => dealer['gst'] == 'Verified').length;
 
-  // Cached futures to prevent visual shifting during hover/rebuild states
-  late Future<String> _revenueTodayFuture;
-  late Future<String> _orderTodayFuture;
-  late Future<String> _activeDealersFuture;
-  late Future<String> _newLeadsFuture;
-  late Future<String> _transactingDealsFuture;
-  late Future<String> _eventsTodayFuture;
+  // Cached dashboard metrics to avoid flickering shimmers on filter change
+  bool _isStatsLoading = true;
+  bool _isStatsRefreshing = false;
+  bool _isEventsLoading = true;
+  String _cachedRevenue = '₹0';
+  String _cachedOrders = '0';
+  String _cachedActiveDealers = '0';
+  String _cachedNewLeads = '0';
+  String _cachedHighPriorityCount = '0';
+  String _cachedEventsToday = '0';
+  String _cachedPendingOrders = '0';
 
   @override
   void initState() {
@@ -448,7 +204,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final timeStr = '$hour:$minute';
     final dateStr =
-        '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+        '${weekdays[now.weekday % 7]}, ${months[now.month - 1]} ${now.day}';
 
     if (shouldSetState && mounted) {
       setState(() {
@@ -509,57 +265,49 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Refreshes all stat card data based on the active filter period.
   /// Called on initState and whenever the dropdown or date range changes.
   void _refreshData() {
+    // Refresh Blocs to keep tables in sync with global filters
+    context.read<OrdersBloc>().add(const FetchOrdersEvent());
+    context.read<DealersBloc>().add(const FetchDealersDataEvent());
+    context.read<LeadsBloc>().add(const FetchLeadsDataEvent());
+
+    setState(() {
+      _isStatsRefreshing = true;
+      _isEventsLoading = true;
+    });
+
     final service = DashboardService();
-    // In a real app, pass [selectedDropdown] to each service call
-    // so the backend returns period-specific values.
-    _revenueTodayFuture = service.getRevenueToday(period: selectedDropdown);
-    _orderTodayFuture = service.getOrderToday(period: selectedDropdown);
-    _activeDealersFuture = service.getActiveDealers(period: selectedDropdown);
-    _newLeadsFuture = service.getNewLeads(period: selectedDropdown);
-    _transactingDealsFuture = service.getTransactingDeals(
-      period: selectedDropdown,
-    );
-    _eventsTodayFuture = service.getEventsToday(period: selectedDropdown);
+
+    Future.wait([
+      service.getEventsToday(period: selectedDropdown).catchError((_) => '0'),
+      AnalyticsService().fetchSummaryMetrics().catchError((_) => <String, dynamic>{}),
+    ]).then((results) {
+      if (mounted) {
+        final eventsCount = results[0] as String;
+        final metrics = results[1] as Map<String, dynamic>;
+
+        setState(() {
+          _cachedEventsToday = eventsCount;
+          _cachedHighPriorityCount = (metrics['highPriority'] ?? '0').toString();
+          _isEventsLoading = false;
+          _isStatsRefreshing = false;
+          _isStatsLoading = false;
+        });
+      }
+    }).catchError((e) {
+      debugPrint('[DashboardPage] Failed to fetch stats: $e');
+      if (mounted) {
+        setState(() {
+          _isEventsLoading = false;
+          _isStatsRefreshing = false;
+          _isStatsLoading = false;
+        });
+      }
+    });
   }
 
-  final List<String> dropdownOptions = ['Today', '1 Week'];
+  final List<String> dropdownOptions = ['Today', '1 Week', 'Total'];
 
-  // Mock data for trends based on timeframe
-  List<double> _getSalesData() {
-    switch (activeTimeframe) {
-      case '1W':
-        return [1200.0, 1500.0, 1100.0, 1800.0, 2200.0, 1900.0, 2450.0];
-      case '3M':
-        return [1800.0, 2200.0, 2450.0];
-      case '1M':
-      default:
-        return [800.0, 1600.0, 2100.0, 2450.0];
-    }
-  }
 
-  List<double> _getLeadsData() {
-    switch (activeTimeframe) {
-      case '1W':
-        return [800.0, 1100.0, 950.0, 1300.0, 1600.0, 1400.0, 1850.0];
-      case '3M':
-        return [1400.0, 1800.0, 1950.0];
-      case '1M':
-      default:
-        return [600.0, 1200.0, 1700.0, 1950.0];
-    }
-  }
-
-  List<String> _getLabels() {
-    switch (activeTimeframe) {
-      case '1W':
-        return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      case '3M':
-        return ['Mar', 'Apr', 'May'];
-      case '1M':
-      default:
-        return ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    }
-  }
 
   String get _rangeDisplay {
     if (_selectedRange != null &&
@@ -613,6 +361,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 setState(() {
                   _selectedRange = val;
                   selectedDropdown = ''; // Calendar overrides dropdown text
+                  _refreshData(); // 🔄 Re-fetch stats for custom period
                 });
                 Navigator.pop(context);
               }
@@ -678,35 +427,44 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isStatsRefreshing) ...[
+            const LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+            ),
+            const SizedBox(height: 6),
+          ],
           // 1. Sleek Modern Welcome Header Card
           _buildWelcomeHeader(isDesktop),
           SizedBox(height: gap),
 
           // 2. Custom Elite Visual Stats Grid
           _buildVisualStatsGrid(isDesktop),
+          SizedBox(height: gap),
 
-          // // 3. Interactive Operations Terminal in Full Width
-          // _buildInteractiveOperationsTable(),
-          // SizedBox(height: gap),
+          // 3. Interactive Operations Terminal in Full Width
+          _buildInteractiveOperationsTable(),
+          SizedBox(height: gap),
 
-          // // 4. Graphical Analytics Layer
-          // if (MediaQuery.of(context).size.width >= 850)
-          //   Row(
-          //     crossAxisAlignment: CrossAxisAlignment.start,
-          //     children: [
-          //       Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
-          //       const SizedBox(width: 20),
-          //       Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
-          //     ],
-          //   )
-          // else
-          //   Column(
-          //     children: [
-          //       _buildInteractiveBezierTrendCard(),
-          //       SizedBox(height: gap),
-          //       _buildLeadPipelineBreakdownCard(),
-          //     ],
-          //   ),
+          // 5. Graphical Analytics Layer
+          if (MediaQuery.of(context).size.width >= 850)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
+                const SizedBox(width: 20),
+                Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
+              ],
+            )
+          else
+            Column(
+              children: [
+                _buildInteractiveBezierTrendCard(),
+                SizedBox(height: gap),
+                _buildLeadPipelineBreakdownCard(),
+              ],
+            ),
         ],
       ),
     );
@@ -1135,263 +893,302 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildVisualStatsGrid(bool isDesktop) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double spacing = isDesktop ? 16.0 : 12.0;
-        int columns = 6;
-        if (constraints.maxWidth < 600) {
-          columns = 1;
-        } else if (constraints.maxWidth < 950) {
-          columns = 2;
-        } else if (constraints.maxWidth < 1200) {
-          columns = 3;
-        } else {
-          columns = 6;
-        }
-        final double width =
-            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            // 1. Revenue Today Card
-            FutureBuilder<String>(
-              future: _revenueTodayFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
+    return BlocBuilder<OrdersBloc, OrdersState>(
+      builder: (context, ordersState) {
+        return BlocBuilder<DealersBloc, DealersState>(
+          builder: (context, dealersState) {
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final double spacing = isDesktop ? 16.0 : 12.0;
+                int columns = 6;
+                if (constraints.maxWidth < 600) {
+                  columns = 1;
+                } else if (constraints.maxWidth < 950) {
+                  columns = 2;
+                } else if (constraints.maxWidth < 1200) {
+                  columns = 3;
+                } else {
+                  columns = 6;
                 }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'Revenue Today',
-                  value: snapshot.data ?? '₹0',
-                  color: AppTheme.success,
-                  trendLabel: '+12.4% vs yesterday',
-                  trendIcon: Icons.trending_up,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const OrdersPage(isStandalone: true),
-                      ),
-                    );
-                  },
-                  visualWidget: SizedBox(
-                    width: 50,
-                    height: 24,
-                    child: CustomPaint(
-                      painter: SparklinePainter([
-                        10,
-                        18,
-                        12,
-                        28,
-                        20,
-                        36,
-                        40,
-                      ], AppTheme.success),
-                    ),
-                  ),
-                );
-              },
-            ),
+                final double width =
+                    (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
-            // 2. Order Today Card
-            FutureBuilder<String>(
-              future: _orderTodayFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'Order Today',
-                  value: snapshot.data ?? '0',
-                  color: AppTheme.lightGreen,
-                  trendLabel: '90% Fulfilled',
-                  trendIcon: Icons.check_circle_outline,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const OrdersPage(isStandalone: true),
-                      ),
-                    );
-                  },
-                  visualWidget: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CustomPaint(
-                      painter: FulfillmentProgressPainter(
-                        0.90,
-                        AppTheme.lightGreen,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                final String periodSuffix = selectedDropdown == 'Today'
+                    ? 'Today'
+                    : (selectedDropdown == '1 Week'
+                          ? 'this Week'
+                          : (selectedDropdown == 'Total' ? 'Total' : 'Period'));
 
-            // 3. Active Dealers Card
-            FutureBuilder<String>(
-              future: _activeDealersFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'Active Dealers',
-                  value: snapshot.data ?? '0',
-                  color: AppTheme.info,
-                  trendLabel: '+42 new this week',
-                  trendIcon: Icons.trending_up,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const DealerManagementPage(isStandalone: true),
-                      ),
-                    );
-                  },
-                  visualWidget: _buildAvatarCluster(),
-                );
-              },
-            ),
+                final bool isOrdersLoading = ordersState.status == OrdersStatus.loading && ordersState.orders.isEmpty;
+                final bool isDealersLoading = dealersState.status == DealersStatus.loading && dealersState.allRawUsers.isEmpty;
 
-            // 4. New Leads Card
-            FutureBuilder<String>(
-              future: _newLeadsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
+                // 1. Calculate Period Filter Range
+                final now = DateTime.now();
+                final today = DateTime(now.year, now.month, now.day);
+                DateTime? startDate;
+                DateTime? endDate;
+                bool isTotal = false;
+
+                if (selectedDropdown == 'Today') {
+                  startDate = today;
+                } else if (selectedDropdown == '1 Week') {
+                  startDate = today.subtract(const Duration(days: 7));
+                } else if (selectedDropdown == 'Total') {
+                  isTotal = true;
+                } else {
+                  // Custom Selected Range
+                  if (_selectedRange != null) {
+                    if (_selectedRange!.startDate != null) {
+                      startDate = DateTime(_selectedRange!.startDate!.year, _selectedRange!.startDate!.month, _selectedRange!.startDate!.day);
+                    }
+                    if (_selectedRange!.endDate != null) {
+                      endDate = DateTime(_selectedRange!.endDate!.year, _selectedRange!.endDate!.month, _selectedRange!.endDate!.day, 23, 59, 59, 999);
+                    }
+                  } else {
+                    startDate = today;
+                  }
                 }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'New Leads',
-                  value: snapshot.data ?? '0',
-                  color: AppTheme.warning,
-                  trendLabel: '5 high priority',
-                  trendIcon: Icons.warning_amber_rounded,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const LeadsPage(isStandalone: true),
-                      ),
-                    );
-                  },
-                  visualWidget: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const LivePulsingBadge(),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Live',
-                        style: GoogleFonts.outfit(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.warning,
+
+                bool isWithinPeriod(DateTime date) {
+                  if (isTotal) return true;
+                  final localDate = date.toLocal();
+                  if (startDate != null && localDate.isBefore(startDate)) return false;
+                  if (endDate != null && localDate.isAfter(endDate)) return false;
+                  return true;
+                }
+
+                // 2. Perform Dynamic Calculations
+                // Card 1: Revenue
+                final double periodRevenue = ordersState.orders
+                    .where((o) => o.orderStatus != 'Cancelled' && isWithinPeriod(o.placedAt))
+                    .fold(0.0, (sum, o) => sum + o.totalAmount);
+
+                String formatCurrency(double amount) {
+                  if (amount >= 100000) {
+                    return '₹${(amount / 100000).toStringAsFixed(1)}L';
+                  }
+                  if (amount >= 1000) {
+                    return '₹${(amount / 1000).toStringAsFixed(1)}k';
+                  }
+                  return '₹${amount.toStringAsFixed(0)}';
+                }
+
+                // Card 2: Orders Count
+                final int periodOrdersCount = ordersState.orders
+                    .where((o) => isWithinPeriod(o.placedAt))
+                    .length;
+
+                // Card 3: Active Dealers
+                final verifiedUserPhonesAndIds = dealersState.allRawUsers
+                    .where((u) => u['kycStatus'] == 'verified')
+                    .expand((u) => [u['_id']?.toString(), u['phoneNumber']?.toString()])
+                    .whereType<String>()
+                    .toSet();
+
+                final int activeDealersCount = ordersState.orders
+                    .where((o) => isWithinPeriod(o.placedAt))
+                    .map((o) => o.userId ?? o.customerPhone)
+                    .where((id) => verifiedUserPhonesAndIds.contains(id))
+                    .toSet()
+                    .length;
+
+                final int verifiedDealersCount = dealersState.allRawUsers
+                    .where((u) => u['kycStatus'] == 'verified')
+                    .length;
+
+                final int dealersDisplay = isTotal ? verifiedDealersCount : activeDealersCount;
+
+                // Card 4: New Leads
+                DateTime? parsedUserDate(Map<String, dynamic> user) {
+                  final dateStr = user['createdAt'] ?? user['updatedAt'];
+                  if (dateStr == null) return null;
+                  try {
+                    return DateTime.parse(dateStr).toLocal();
+                  } catch (_) {
+                    return null;
+                  }
+                }
+                final int periodNewLeads = dealersState.allRawUsers.where((u) {
+                  final isLead = u['kycStatus'] != 'verified';
+                  if (!isLead) return false;
+                  if (isTotal) return true;
+                  final uDate = parsedUserDate(u);
+                  return uDate != null && isWithinPeriod(uDate);
+                }).length;
+
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    // 1. Revenue Card
+                    if (isOrdersLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: 'Revenue $periodSuffix',
+                        value: formatCurrency(periodRevenue),
+                        color: AppTheme.success,
+                        trendLabel: 'Live Revenue',
+                        trendIcon: Icons.bolt_rounded,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/orders');
+                        },
+                        visualWidget: SizedBox(
+                          width: 50,
+                          height: 24,
+                          child: CustomPaint(
+                            painter: SparklinePainter([
+                              10,
+                              18,
+                              12,
+                              28,
+                              20,
+                              36,
+                              40,
+                            ], AppTheme.success),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
 
-            // 5. Transacting Deals Card
-            FutureBuilder<String>(
-              future: _transactingDealsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'Transacting Deals',
-                  value: snapshot.data ?? '0',
-                  color: AppTheme.accentColor,
-                  trendLabel: '₹1.2L value',
-                  trendIcon: Icons.trending_up,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const LeadsPage(isStandalone: true),
-                      ),
-                    );
-                  },
-                  visualWidget: SizedBox(
-                    width: 50,
-                    height: 24,
-                    child: CustomPaint(
-                      painter: SparklinePainter([
-                        5,
-                        12,
-                        8,
-                        15,
-                        22,
-                        19,
-                        25,
-                      ], AppTheme.accentColor),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // 6. Events Today Card
-            FutureBuilder<String>(
-              future: _eventsTodayFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return StatCardShimmer(isCompact: true, width: width);
-                }
-                return AdvancedStatCardWidget(
-                  width: width,
-                  title: 'Events Today',
-                  value: snapshot.data ?? '0',
-                  color: const Color(0xFF8B5CF6), // Vibrant violet
-                  trendLabel: '9 event types tracked',
-                  trendIcon: Icons.bolt_rounded,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const UserEventsPage(),
-                      ),
-                    );
-                  },
-                  visualWidget: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const LivePulsingBadge(color: Color(0xFF8B5CF6)),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Live',
-                        style: GoogleFonts.outfit(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF8B5CF6),
+                    // 2. Order Card
+                    if (isOrdersLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: 'Orders $periodSuffix',
+                        value: '$periodOrdersCount',
+                        color: AppTheme.lightGreen,
+                        trendLabel: 'Market activity',
+                        trendIcon: Icons.analytics_outlined,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/orders');
+                        },
+                        visualWidget: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CustomPaint(
+                            painter: FulfillmentProgressPainter(
+                              0.90,
+                              AppTheme.lightGreen,
+                            ),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+
+                    // 3. Active Dealers Card
+                    if (isDealersLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: 'Active Dealers',
+                        value: '$dealersDisplay',
+                        color: AppTheme.info,
+                        trendLabel: 'Dealers with orders',
+                        trendIcon: Icons.verified_user_outlined,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/dealers');
+                        },
+                        visualWidget: _buildAvatarCluster(),
+                      ),
+
+                    // 4. New Leads Card
+                    if (isDealersLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: selectedDropdown == 'Total' ? 'Total Leads' : 'New Leads',
+                        value: '$periodNewLeads',
+                        color: AppTheme.warning,
+                        trendLabel: 'Recent prospects',
+                        trendIcon: Icons.person_add_outlined,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/leads');
+                        },
+                        visualWidget: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const LivePulsingBadge(),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Live',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.warning,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // 5. High Priority Users Card
+                    if (_isEventsLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: 'High Priority Users',
+                        value: _cachedHighPriorityCount,
+                        color: AppTheme.error,
+                        trendLabel: 'Users needing action',
+                        trendIcon: Icons.priority_high_rounded,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/marketing');
+                        },
+                        visualWidget: SizedBox(
+                          width: 50,
+                          height: 24,
+                          child: Icon(
+                            Icons.priority_high_rounded,
+                            size: 20,
+                            color: AppTheme.error.withOpacity(0.5),
+                          ),
+                        ),
+                      ),
+
+                    // 6. Events Card
+                    if (_isEventsLoading)
+                      StatCardShimmer(isCompact: true, width: width)
+                    else
+                      AdvancedStatCardWidget(
+                        width: width,
+                        title: 'Events $periodSuffix',
+                        value: _cachedEventsToday,
+                        color: const Color(0xFF8B5CF6), // Vibrant violet
+                        trendLabel: 'Telemetry Active',
+                        trendIcon: Icons.bolt_rounded,
+                        onTap: () {
+                          Navigator.pushReplacementNamed(context, '/marketing');
+                        },
+                        visualWidget: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const LivePulsingBadge(color: Color(0xFF8B5CF6)),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Live',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF8B5CF6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 );
               },
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
-
 
   Widget _buildAvatarCluster() {
     return SizedBox(
@@ -1461,260 +1258,395 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildInteractiveBezierTrendCard() {
-    final salesData = _getSalesData();
-    final leadsData = _getLeadsData();
-    final labels = _getLabels();
+    return BlocBuilder<OrdersBloc, OrdersState>(
+      builder: (context, ordersState) {
+        return BlocBuilder<DealersBloc, DealersState>(
+          builder: (context, dealersState) {
+            final orders = ordersState.orders;
+            final leads = dealersState.allRawUsers
+                .where((u) => u['kycStatus'] != 'verified')
+                .toList();
 
-    final double maxVal = [
-      ...salesData,
-      ...leadsData,
-    ].reduce((a, b) => a > b ? a : b);
-    final double maxY = maxVal == 0 ? 1.0 : maxVal * 1.15;
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
 
-    return Container(
-      height: 350,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Revenue & Pipeline Trend',
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Interactive visualization of active conversion channels',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+            final List<double> salesDataRaw = [];
+            final List<double> leadsDataRaw = [];
+            final List<String> labels = [];
+
+            DateTime? parsedLeadDate(Map<String, dynamic> lead) {
+              final dateStr = lead['createdAt'] ?? lead['updatedAt'];
+              if (dateStr == null) return null;
+              try {
+                return DateTime.parse(dateStr).toLocal();
+              } catch (_) {
+                return null;
+              }
+            }
+
+            if (activeTimeframe == '1W') {
+              for (int i = 6; i >= 0; i--) {
+                final d = today.subtract(Duration(days: i));
+                
+                final dayOrders = orders.where((o) {
+                  final localPlaced = o.placedAt.toLocal();
+                  return localPlaced.year == d.year &&
+                      localPlaced.month == d.month &&
+                      localPlaced.day == d.day;
+                });
+                final double revenue = dayOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                salesDataRaw.add(revenue);
+
+                final dayLeads = leads.where((l) {
+                  final lDate = parsedLeadDate(l);
+                  if (lDate == null) return false;
+                  return lDate.year == d.year &&
+                      lDate.month == d.month &&
+                      lDate.day == d.day;
+                }).length.toDouble();
+                leadsDataRaw.add(dayLeads);
+
+                final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                labels.add(weekdays[d.weekday - 1]);
+              }
+            } else if (activeTimeframe == '3M') {
+              for (int i = 2; i >= 0; i--) {
+                int year = today.year;
+                int month = today.month - i;
+                if (month <= 0) {
+                  month += 12;
+                  year -= 1;
+                }
+                final start = DateTime(year, month, 1);
+                int nextMonth = month + 1;
+                int nextYear = year;
+                if (nextMonth > 12) {
+                  nextMonth = 1;
+                  nextYear += 1;
+                }
+                final end = DateTime(nextYear, nextMonth, 1).subtract(const Duration(milliseconds: 1));
+
+                final rangeOrders = orders.where((o) {
+                  final localPlaced = o.placedAt.toLocal();
+                  return localPlaced.isAfter(start) && localPlaced.isBefore(end);
+                });
+                final double revenue = rangeOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                salesDataRaw.add(revenue);
+
+                final rangeLeads = leads.where((l) {
+                  final lDate = parsedLeadDate(l);
+                  if (lDate == null) return false;
+                  return lDate.isAfter(start) && lDate.isBefore(end);
+                }).length.toDouble();
+                leadsDataRaw.add(rangeLeads);
+
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                labels.add(monthNames[month - 1]);
+              }
+            } else {
+              // 1M
+              for (int i = 3; i >= 0; i--) {
+                final startOffset = (i * 7) + 6;
+                final endOffset = i * 7;
+                
+                final startDay = today.subtract(Duration(days: startOffset));
+                final endDay = today.subtract(Duration(days: endOffset));
+                
+                final start = DateTime(startDay.year, startDay.month, startDay.day);
+                final end = DateTime(endDay.year, endDay.month, endDay.day, 23, 59, 59, 999);
+
+                final rangeOrders = orders.where((o) {
+                  final localPlaced = o.placedAt.toLocal();
+                  return localPlaced.isAfter(start) && localPlaced.isBefore(end);
+                });
+                final double revenue = rangeOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                salesDataRaw.add(revenue);
+
+                final rangeLeads = leads.where((l) {
+                  final lDate = parsedLeadDate(l);
+                  if (lDate == null) return false;
+                  return lDate.isAfter(start) && lDate.isBefore(end);
+                }).length.toDouble();
+                leadsDataRaw.add(rangeLeads);
+
+                labels.add('Week ${4 - i}');
+              }
+            }
+
+            final double maxRevenue = salesDataRaw.isEmpty ? 0.0 : salesDataRaw.reduce((a, b) => a > b ? a : b);
+            final double maxLeads = leadsDataRaw.isEmpty ? 0.0 : leadsDataRaw.reduce((a, b) => a > b ? a : b);
+
+            double scale = 1.0;
+            if (maxLeads > 0 && maxRevenue > 0) {
+              scale = maxRevenue / maxLeads;
+            }
+
+            final List<double> salesData = salesDataRaw;
+            final List<double> leadsData = leadsDataRaw.map((v) => v * scale).toList();
+
+            final double maxVal = [
+              ...salesData,
+              ...leadsData,
+            ].reduce((a, b) => a > b ? a : b);
+            final double maxY = maxVal == 0 ? 1.0 : maxVal * 1.15;
+
+            return Container(
+              height: 350,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.cardColor,
+                borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+                boxShadow: AppTheme.cardShadow,
+                border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
               ),
-              const SizedBox(width: 8),
-              _buildTimeframeTabs(),
-            ],
-          ),
-          const SizedBox(height: 25),
-          Expanded(
-            child: RepaintBoundary(
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: AppTheme.borderColor.withOpacity(0.35),
-                      strokeWidth: 0.8,
-                      dashArray: [5, 4],
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 38,
-                        getTitlesWidget: (value, meta) {
-                          if (value == meta.max || value == meta.min)
-                            return const SizedBox.shrink();
-                          final String valString = value >= 1000
-                              ? '₹${(value / 1000).toStringAsFixed(1)}k'
-                              : '₹${value.toStringAsFixed(0)}';
-                          return Text(
-                            valString,
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.textSecondary,
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Revenue & Pipeline Trend',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 32,
-                        interval: 1.0,
-                        getTitlesWidget: (value, meta) {
-                          final int index = value.toInt();
-                          if (index >= 0 && index < labels.length) {
-                            return SideTitleWidget(
-                              meta: meta,
-                              space: 10,
-                              child: Text(
-                                labels[index],
-                                style: GoogleFonts.outfit(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Interactive visualization of active conversion channels',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
                               ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      _buildTimeframeTabs(),
+                    ],
                   ),
-                  borderData: FlBorderData(show: false),
-                  minX: 0,
-                  maxX: (salesData.length - 1).toDouble(),
-                  minY: 0,
-                  maxY: maxY,
-                  lineTouchData: LineTouchData(
-                    handleBuiltInTouches: true,
-                    getTouchedSpotIndicator:
-                        (LineChartBarData barData, List<int> spotIndexes) {
-                          return spotIndexes.map((spotIndex) {
-                            return TouchedSpotIndicatorData(
-                              FlLine(
-                                color: AppTheme.textSecondary.withOpacity(0.15),
-                                strokeWidth: 2.0,
-                              ),
-                              FlDotData(
-                                show: true,
-                                getDotPainter: (spot, percent, barData, index) {
-                                  return FlDotCirclePainter(
-                                    radius: 6.0,
-                                    color: Colors.white,
-                                    strokeWidth: 3.0,
-                                    strokeColor:
-                                        barData.color ?? AppTheme.primaryColor,
+                  const SizedBox(height: 25),
+                  Expanded(
+                    child: RepaintBoundary(
+                      child: LineChart(
+                        LineChartData(
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            getDrawingHorizontalLine: (value) => FlLine(
+                              color: AppTheme.borderColor.withOpacity(0.35),
+                              strokeWidth: 0.8,
+                              dashArray: [5, 4],
+                            ),
+                          ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 38,
+                                getTitlesWidget: (value, meta) {
+                                  if (value == meta.max || value == meta.min)
+                                    return const SizedBox.shrink();
+                                  final String valString = value >= 1000
+                                      ? '₹${(value / 1000).toStringAsFixed(1)}k'
+                                      : '₹${value.toStringAsFixed(0)}';
+                                  return Text(
+                                    valString,
+                                    style: GoogleFonts.outfit(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   );
                                 },
                               ),
-                            );
-                          }).toList();
-                        },
-                    touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (touchedSpot) => AppTheme.cardColor,
-                      tooltipBorder: BorderSide(
-                        color: AppTheme.borderColor.withOpacity(0.8),
-                        width: 0.8,
-                      ),
-                      tooltipPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      tooltipBorderRadius: BorderRadius.circular(8),
-                      fitInsideHorizontally: true,
-                      fitInsideVertically: true,
-                      getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                        return touchedBarSpots.map((barSpot) {
-                          final String bullet = '● ';
-                          final String prefix = barSpot.barIndex == 0
-                              ? 'Revenue: ₹'
-                              : 'Leads: ';
-                          return LineTooltipItem(
-                            '$bullet$prefix${barSpot.y.toInt()}',
-                            GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: barSpot.barIndex == 0
-                                  ? AppTheme.primaryColor
-                                  : AppTheme.accentColor,
                             ),
-                          );
-                        }).toList();
-                      },
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 32,
+                                interval: 1.0,
+                                getTitlesWidget: (value, meta) {
+                                  final int index = value.toInt();
+                                  if (index >= 0 && index < labels.length) {
+                                    return SideTitleWidget(
+                                      meta: meta,
+                                      space: 10,
+                                      child: Text(
+                                        labels[index],
+                                        style: GoogleFonts.outfit(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                            ),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          minX: 0,
+                          maxX: (salesData.length - 1).toDouble(),
+                          minY: 0,
+                          maxY: maxY,
+                          lineTouchData: LineTouchData(
+                            handleBuiltInTouches: true,
+                            getTouchedSpotIndicator:
+                                (LineChartBarData barData, List<int> spotIndexes) {
+                                  return spotIndexes.map((spotIndex) {
+                                    return TouchedSpotIndicatorData(
+                                      FlLine(
+                                        color: AppTheme.textSecondary.withOpacity(0.15),
+                                        strokeWidth: 2.0,
+                                      ),
+                                      FlDotData(
+                                        show: true,
+                                        getDotPainter: (spot, percent, barData, index) {
+                                          return FlDotCirclePainter(
+                                            radius: 6.0,
+                                            color: Colors.white,
+                                            strokeWidth: 3.0,
+                                            strokeColor:
+                                                barData.color ?? AppTheme.primaryColor,
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  }).toList();
+                                },
+                            touchTooltipData: LineTouchTooltipData(
+                              getTooltipColor: (touchedSpot) => AppTheme.cardColor,
+                              tooltipBorder: BorderSide(
+                                color: AppTheme.borderColor.withOpacity(0.8),
+                                width: 0.8,
+                              ),
+                              tooltipPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              tooltipBorderRadius: BorderRadius.circular(8),
+                              fitInsideHorizontally: true,
+                              fitInsideVertically: true,
+                              getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                                return touchedBarSpots.map((barSpot) {
+                                  final int idx = barSpot.x.toInt();
+                                  final String bullet = '● ';
+                                  if (barSpot.barIndex == 0) {
+                                    final revenueVal = salesDataRaw[idx].toInt();
+                                    return LineTooltipItem(
+                                      '${bullet}Revenue: ₹$revenueVal',
+                                      GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    );
+                                  } else {
+                                    final leadsVal = leadsDataRaw[idx].toInt();
+                                    return LineTooltipItem(
+                                      '${bullet}Leads: $leadsVal',
+                                      GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.accentColor,
+                                      ),
+                                    );
+                                  }
+                                }).toList();
+                              },
+                            ),
+                          ),
+                          lineBarsData: [
+                            LineChartBarData(
+                              spots: List.generate(
+                                salesData.length,
+                                (i) => FlSpot(i.toDouble(), salesData[i]),
+                              ),
+                              isCurved: true,
+                              color: AppTheme.primaryColor,
+                              barWidth: 3.0,
+                              isStrokeCapRound: true,
+                              dotData: const FlDotData(show: false),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryColor.withOpacity(0.18),
+                                    AppTheme.primaryColor.withOpacity(0.0),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                            LineChartBarData(
+                              spots: List.generate(
+                                leadsData.length,
+                                (i) => FlSpot(i.toDouble(), leadsData[i]),
+                              ),
+                              isCurved: true,
+                              color: AppTheme.accentColor,
+                              barWidth: 3.0,
+                              isStrokeCapRound: true,
+                              dotData: const FlDotData(show: false),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppTheme.accentColor.withOpacity(0.15),
+                                    AppTheme.accentColor.withOpacity(0.0),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeInOutCubic,
+                      ),
                     ),
                   ),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: List.generate(
-                        salesData.length,
-                        (i) => FlSpot(i.toDouble(), salesData[i]),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildChartLegendIndicator('Revenue', AppTheme.primaryColor),
+                      const SizedBox(width: 24),
+                      _buildChartLegendIndicator(
+                        'Leads Generated',
+                        AppTheme.accentColor,
                       ),
-                      isCurved: true,
-                      color: AppTheme.primaryColor,
-                      barWidth: 3.0,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.primaryColor.withOpacity(0.18),
-                            AppTheme.primaryColor.withOpacity(0.0),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                    ),
-                    LineChartBarData(
-                      spots: List.generate(
-                        leadsData.length,
-                        (i) => FlSpot(i.toDouble(), leadsData[i]),
-                      ),
-                      isCurved: true,
-                      color: AppTheme.accentColor,
-                      barWidth: 3.0,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.accentColor.withOpacity(0.15),
-                            AppTheme.accentColor.withOpacity(0.0),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOutCubic,
+                    ],
+                  ),
+                ],
               ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildChartLegendIndicator('Revenue', AppTheme.primaryColor),
-              const SizedBox(width: 24),
-              _buildChartLegendIndicator(
-                'Leads Generated',
-                AppTheme.accentColor,
-              ),
-            ],
-          ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1800,82 +1732,99 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildLeadPipelineBreakdownCard() {
-    // 24 total: 10 assigned, 10 unassigned, 4 pending
-    final double assigned = 10;
-    final double unassigned = 10;
-    final double pending = 4;
+    return BlocBuilder<DealersBloc, DealersState>(
+      builder: (context, state) {
+        final leads = state.allRawUsers
+            .where((u) => u['kycStatus'] != 'verified')
+            .toList();
+        final double assigned = leads
+            .where((u) => u['assignedAgent'] != null)
+            .length
+            .toDouble();
+        final double unassigned = leads
+            .where((u) => u['assignedAgent'] == null)
+            .length
+            .toDouble();
+        final double pending = leads
+            .where((u) => u['kycStatus'] == 'pending')
+            .length
+            .toDouble();
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      height: 350,
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Lead Pipeline Breakdown',
-            style: GoogleFonts.outfit(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-            ),
+        final total = assigned + unassigned;
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          height: 350,
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+            boxShadow: AppTheme.cardShadow,
+            border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
           ),
-          const SizedBox(height: 2),
-          Text(
-            'Pipeline efficiency analysis',
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          Center(
-            child: AnimatedDonutChart(
-              values: [assigned, unassigned, pending],
-              colors: [AppTheme.info, AppTheme.success, AppTheme.warning],
-              labels: const ['Assigned', 'Unassigned', 'Pending'],
-              hoveredIndex: _hoveredPipelineIndex,
-              onHoverChanged: (idx) {
-                if (idx != _hoveredPipelineIndex) {
-                  setState(() {
-                    _hoveredPipelineIndex = idx;
-                  });
-                }
-              },
-            ),
-          ),
-          const Spacer(),
-          Column(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildPipelineLegendRow(
-                0,
-                'Assigned Leads',
-                '10 (42%)',
-                AppTheme.info,
+              Text(
+                'Lead Pipeline Breakdown',
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
               ),
-              const SizedBox(height: 8),
-              _buildPipelineLegendRow(
-                1,
-                'Unassigned Leads',
-                '10 (42%)',
-                AppTheme.success,
+              const SizedBox(height: 2),
+              Text(
+                'Pipeline efficiency analysis',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                ),
               ),
-              const SizedBox(height: 8),
-              _buildPipelineLegendRow(
-                2,
-                'KYC Pending',
-                '4 (16%)',
-                AppTheme.warning,
+              const Spacer(),
+              Center(
+                child: AnimatedDonutChart(
+                  values: [assigned, unassigned, pending],
+                  colors: [AppTheme.info, AppTheme.success, AppTheme.warning],
+                  labels: const ['Assigned', 'Unassigned', 'Pending'],
+                  hoveredIndex: _hoveredPipelineIndex,
+                  onHoverChanged: (idx) {
+                    if (idx != _hoveredPipelineIndex) {
+                      setState(() {
+                        _hoveredPipelineIndex = idx;
+                      });
+                    }
+                  },
+                ),
+              ),
+              const Spacer(),
+              Column(
+                children: [
+                  _buildPipelineLegendRow(
+                    0,
+                    'Assigned Leads',
+                    '${assigned.toInt()} (${total > 0 ? (assigned / total * 100).toStringAsFixed(0) : 0}%)',
+                    AppTheme.info,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildPipelineLegendRow(
+                    1,
+                    'Unassigned Leads',
+                    '${unassigned.toInt()} (${total > 0 ? (unassigned / total * 100).toStringAsFixed(0) : 0}%)',
+                    AppTheme.success,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildPipelineLegendRow(
+                    2,
+                    'KYC Pending',
+                    '${pending.toInt()}',
+                    AppTheme.warning,
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2015,7 +1964,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'phone': '+91 87654 32109',
       'state': 'Gujarat',
       'created': '5h ago',
-      'status': 'Pending',
+      'status': 'Processing',
     },
     {
       'dealer': 'Shiva Enterprises',
@@ -2031,7 +1980,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'phone': '+91 65432 10987',
       'state': 'MP',
       'created': '1d ago',
-      'status': 'Pending',
+      'status': 'Processing',
     },
     {
       'dealer': 'Krishi Bazaar',
@@ -2039,7 +1988,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'phone': '+91 54321 09876',
       'state': 'Maharashtra',
       'created': '4h ago',
-      'status': 'Pending',
+      'status': 'Processing',
     },
   ];
 
@@ -2072,7 +2021,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'dealer': 'AgroVision Ltd.',
       'state': 'Rajasthan',
       'agent': 'Nirmal Rathore',
-      'gst': 'Pending',
+      'gst': 'Processing',
       'orders': '2',
       'revenue': '₹3,100',
     },
@@ -2089,332 +2038,635 @@ class _DashboardPageState extends State<DashboardPage> {
   String _terminalSearch = '';
 
   Widget _buildInteractiveOperationsTable() {
-    final tabs = [
-      {
-        'label': 'Orders',
-        'icon': Icons.receipt_long_outlined,
-        'count': '${_ordersData.length}',
-      },
-      {
-        'label': 'Leads',
-        'icon': Icons.person_search_outlined,
-        'count': '${_leadsData.length}',
-      },
-      {
-        'label': 'Dealers',
-        'icon': Icons.storefront_outlined,
-        'count': '${_dealersData.length}',
-      },
-    ];
+    return BlocBuilder<OrdersBloc, OrdersState>(
+      builder: (context, ordersState) {
+        return BlocBuilder<DealersBloc, DealersState>(
+          builder: (context, dealersState) {
+            final List<OrderModel> allOrders = ordersState.orders;
+            final List<Map<String, dynamic>> allUsers =
+                dealersState.allRawUsers;
+            final List<Map<String, dynamic>> allRawOrders =
+                dealersState.allRawOrders;
 
-    final bool isMobile = Responsive.isMobile(context);
+            final List<OrderModel> orders = allOrders;
+            final List<Map<String, dynamic>> leads = allUsers
+                .where((u) => u['kycStatus'] != 'verified')
+                .toList();
+            final List<Map<String, dynamic>> dealers = allUsers
+                .where((u) => u['kycStatus'] == 'verified')
+                .toList();
 
-    // Dynamic Title + Live Badge
-    final Widget titleAndBadge = Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text('Operations Terminal', style: AppTheme.headingMD),
-        const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.success.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.success.withOpacity(0.25)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 5,
-                height: 5,
-                decoration: const BoxDecoration(
-                  color: AppTheme.success,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Live',
-                style: AppTheme.labelSM.copyWith(
-                  color: AppTheme.success,
-                  fontSize: 9.5,
-                  height: 1.0,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+            final rows = _getFilteredRows(
+              orders,
+              leads,
+              dealers,
+              allRawOrders,
+              allUsers,
+            );
+            final filteredCount = rows.length;
 
-    // Dynamic Search Field
-    final Widget searchField = Container(
-      height: 34,
-      width: isMobile ? null : 200,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
-          const SizedBox(width: 6),
-          Expanded(
-            child: TextField(
-              onChanged: (v) =>
-                  setState(() => _terminalSearch = v.toLowerCase()),
-              style: AppTheme.bodyMD,
-              decoration: InputDecoration(
-                hintText: 'Search records…',
-                hintStyle: AppTheme.hint,
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+            final tabs = [
+              {
+                'label': 'Orders',
+                'icon': Icons.receipt_long_outlined,
+                'count': '${orders.length}',
+              },
+              {
+                'label': 'Leads',
+                'icon': Icons.person_search_outlined,
+                'count': '${leads.length}',
+              },
+              {
+                'label': 'Dealers',
+                'icon': Icons.storefront_outlined,
+                'count': '${dealers.length}',
+              },
+            ];
 
-    // Dynamic View All Button
-    final Widget viewAllButton = Tooltip(
-      message:
-          'View all ${activeTableTab == 0
-              ? "orders"
-              : activeTableTab == 1
-              ? "leads"
-              : "dealers"}',
-      child: InkWell(
-        onTap: () {
-          final route = activeTableTab == 0
-              ? '/orders'
-              : activeTableTab == 1
-              ? '/leads'
-              : '/dealers';
-          Navigator.pushNamed(context, route);
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.08),
-            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                'View All',
-                style: AppTheme.labelMD.copyWith(
-                  color: AppTheme.primaryColor,
-                  fontWeight: FontWeight.w700,
-                  height: 1.0,
-                ),
-              ),
-              const SizedBox(width: 5),
-              const Icon(
-                Icons.arrow_forward_rounded,
-                size: 15,
-                color: AppTheme.primaryColor,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+            final bool isMobile = Responsive.isMobile(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header bar ────────────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: isMobile
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      titleAndBadge,
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(child: searchField),
-                          const SizedBox(width: 8),
-                          viewAllButton,
-                        ],
-                      ),
-                    ],
-                  )
-                : Row(
+            // Dynamic Title + Live Badge
+            final Widget titleAndBadge = Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text('Operations Terminal', style: AppTheme.headingMD),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.success.withOpacity(0.25),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      titleAndBadge,
-                      const Spacer(),
-                      searchField,
-                      const SizedBox(width: 10),
-                      viewAllButton,
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Live',
+                        style: AppTheme.labelSM.copyWith(
+                          color: AppTheme.success,
+                          fontSize: 9.5,
+                          height: 1.0,
+                        ),
+                      ),
                     ],
                   ),
-          ),
+                ),
+              ],
+            );
 
-          // ── Tab row ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
+            // Dynamic Search Field
+            final Widget searchField = Container(
+              height: 34,
+              width: isMobile ? null : 200,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) =>
+                          setState(() => _terminalSearch = v.toLowerCase()),
+                      style: AppTheme.bodyMD,
+                      decoration: InputDecoration(
+                        hintText: 'Search records…',
+                        hintStyle: AppTheme.hint,
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            // Dynamic View All Button
+            final Widget viewAllButton = Tooltip(
+              message:
+                  'View all ${activeTableTab == 0
+                      ? "orders"
+                      : activeTableTab == 1
+                      ? "leads"
+                      : "dealers"}',
+              child: InkWell(
+                onTap: () {
+                  final route = activeTableTab == 0
+                      ? '/orders'
+                      : activeTableTab == 1
+                      ? '/leads'
+                      : '/dealers';
+                  Navigator.pushNamed(context, route);
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 34,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.08),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withOpacity(0.2),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'View All',
+                        style: AppTheme.labelMD.copyWith(
+                          color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.w700,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 15,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+
+            return Container(
+              decoration: BoxDecoration(
+                color: AppTheme.cardColor,
+                borderRadius: BorderRadius.circular(
+                  AppTheme.borderRadiusXLarge,
+                ),
+                boxShadow: AppTheme.cardShadow,
+                border: Border.all(
+                  color: AppTheme.borderColor.withOpacity(0.5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Header bar ────────────────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                    child: isMobile
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              titleAndBadge,
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(child: searchField),
+                                  const SizedBox(width: 8),
+                                  viewAllButton,
+                                ],
+                              ),
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              titleAndBadge,
+                              const Spacer(),
+                              searchField,
+                              const SizedBox(width: 10),
+                              viewAllButton,
+                            ],
+                          ),
+                  ),
+
+                  // ── Tab row ──────────────────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: Row(
-                      children: List.generate(tabs.length, (idx) {
-                        final isSelected = activeTableTab == idx;
-                        final tabColor = [
-                          AppTheme.primaryColor,
-                          AppTheme.info,
-                          AppTheme.accentColor,
-                        ][idx];
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: () => setState(() {
-                                activeTableTab = idx;
-                                _terminalSearch = '';
-                              }),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? tabColor.withOpacity(0.08)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? tabColor.withOpacity(0.3)
-                                        : AppTheme.borderColor,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      tabs[idx]['icon'] as IconData,
-                                      size: 14,
-                                      color: isSelected
-                                          ? tabColor
-                                          : AppTheme.textSecondary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      tabs[idx]['label'] as String,
-                                      style: AppTheme.labelMD.copyWith(
-                                        color: isSelected
-                                            ? tabColor
-                                            : AppTheme.textSecondary,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? tabColor.withOpacity(0.15)
-                                            : AppTheme.backgroundColor,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        tabs[idx]['count'] as String,
-                                        style: AppTheme.labelSM.copyWith(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: List.generate(tabs.length, (idx) {
+                                final isSelected = activeTableTab == idx;
+                                final tabColor = [
+                                  AppTheme.primaryColor,
+                                  AppTheme.info,
+                                  AppTheme.accentColor,
+                                ][idx];
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: GestureDetector(
+                                      onTap: () => setState(() {
+                                        activeTableTab = idx;
+                                        _terminalSearch = '';
+                                      }),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 7,
+                                        ),
+                                        decoration: BoxDecoration(
                                           color: isSelected
-                                              ? tabColor
-                                              : AppTheme.textSecondary,
-                                          fontSize: 9.5,
+                                              ? tabColor.withOpacity(0.08)
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? tabColor.withOpacity(0.3)
+                                                : AppTheme.borderColor,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              tabs[idx]['icon'] as IconData,
+                                              size: 14,
+                                              color: isSelected
+                                                  ? tabColor
+                                                  : AppTheme.textSecondary,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              tabs[idx]['label'] as String,
+                                              style: AppTheme.labelMD.copyWith(
+                                                color: isSelected
+                                                    ? tabColor
+                                                    : AppTheme.textSecondary,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 1,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: isSelected
+                                                    ? tabColor.withOpacity(0.15)
+                                                    : AppTheme.backgroundColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Text(
+                                                tabs[idx]['count'] as String,
+                                                style: AppTheme.labelSM
+                                                    .copyWith(
+                                                      color: isSelected
+                                                          ? tabColor
+                                                          : AppTheme
+                                                                .textSecondary,
+                                                      fontSize: 9.5,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
+                                  ),
+                                );
+                              }),
                             ),
                           ),
-                        );
-                      }),
+                        ),
+                        if (!isMobile) ...[
+                          const SizedBox(width: 10),
+                          Text('$filteredCount records', style: AppTheme.hint),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-                if (!isMobile) ...[
-                  const SizedBox(width: 10),
-                  Text(
-                    '${_getFilteredRows().length} records',
-                    style: AppTheme.hint,
+
+                  // ── Divider ──────────────────────────────────────────────────────
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Divider(height: 1, color: AppTheme.lightBorderColor),
                   ),
+
+                  // ── Table ────────────────────────────────────────────────────────
+                  _buildTerminalTable(
+                    orders,
+                    leads,
+                    dealers,
+                    allRawOrders,
+                    allUsers,
+                  ),
+
+                  // ── Summary metric bar ────────────────────────────────────────────
+                  _buildSummaryBar(ordersState, dealersState),
                 ],
-              ],
-            ),
-          ),
-
-          // ── Divider ──────────────────────────────────────────────────────
-          const Padding(
-            padding: EdgeInsets.only(top: 12),
-            child: Divider(height: 1, color: AppTheme.lightBorderColor),
-          ),
-
-          // ── Table ────────────────────────────────────────────────────────
-          _buildTerminalTable(),
-
-          // ── Summary metric bar ────────────────────────────────────────────
-          _buildSummaryBar(),
-        ],
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  List<Map<String, dynamic>> _getFilteredRows() {
-    final List<Map<String, dynamic>> source = activeTableTab == 0
-        ? _ordersData
-        : activeTableTab == 1
-        ? _leadsData
-        : _dealersData;
-    if (_terminalSearch.isEmpty) return source;
-    return source
-        .where(
-          (row) => row.values.any(
-            (v) => v.toString().toLowerCase().contains(_terminalSearch),
-          ),
-        )
-        .toList();
+
+
+  List<Map<String, dynamic>> _getFilteredRows(
+    List<OrderModel> orders,
+    List<Map<String, dynamic>> leads,
+    List<Map<String, dynamic>> dealers,
+    List<Map<String, dynamic>> allRawOrders,
+    List<Map<String, dynamic>> allUsers,
+  ) {
+    if (activeTableTab == 0) {
+      Iterable<OrderModel> filtered = orders;
+      if (_terminalSearch.isNotEmpty) {
+        final query = _terminalSearch.toLowerCase();
+        filtered = filtered.where(
+          (o) =>
+              o.customerName.toLowerCase().contains(query) ||
+              o.orderId.toLowerCase().contains(query) ||
+              o.orderStatus.toLowerCase().contains(query),
+        );
+      }
+
+      return filtered
+          .map((o) {
+            // Cross-reference user to get LATEST assigned agent
+            final user = allUsers.firstWhere(
+              (u) => u['_id'] == o.userId,
+              orElse: () => {},
+            );
+            String? latestAgent;
+            if (user.isNotEmpty && user['assignedAgent'] != null) {
+              final agentJson = user['assignedAgent'] as Map<String, dynamic>;
+              latestAgent =
+                  '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
+                      .trim();
+            }
+
+            return {
+              '_id': o.id, // Order ID
+              'userId': o.userId, // Customer's User ID
+              'orderId': o.orderId,
+              'date': '${_formatDate(o.placedAt)} ${_formatTime(o.placedAt)}',
+              'customer': '${o.customerName}\n${o.customerPhone}',
+              'agent': (latestAgent != null && latestAgent.isNotEmpty)
+                  ? latestAgent
+                  : (o.assignedAgent ?? '-'),
+              'agentId': null,
+              'amount': '₹${o.totalAmount.toStringAsFixed(2)}',
+              'payment': o.paymentStatus,
+              'status': o.orderStatus,
+              '_raw': o,
+            };
+          })
+          .take(10)
+          .toList();
+    } else if (activeTableTab == 1) {
+      Iterable<Map<String, dynamic>> filtered = leads;
+      if (_terminalSearch.isNotEmpty) {
+        final query = _terminalSearch.toLowerCase();
+        filtered = filtered.where((u) {
+          final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+              .toLowerCase();
+          return fullName.contains(query) ||
+              (u['phoneNumber']?.toString().contains(query) ?? false) ||
+              (u['email']?.toString().toLowerCase().contains(query) ?? false);
+        });
+      }
+
+      return filtered
+          .map((u) {
+            final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                .trim();
+            final name = personName.isNotEmpty
+                ? personName
+                : (u['phoneNumber'] ?? 'Unnamed Lead');
+            final shopName = u['shopName'] ?? '';
+
+            return {
+              '_id': u['_id'],
+              'dealer':
+                  name +
+                  (shopName.isNotEmpty && shopName.toLowerCase() != 'my store'
+                      ? '\n$shopName'
+                      : ''),
+              'phone': u['phoneNumber'] ?? '-',
+              'location':
+                  '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
+                      .trim()
+                      .replaceAll(RegExp(r'^, |, $'), ''),
+              'activity': u['updatedAt'] != null
+                  ? _formatTimeAgo(u['updatedAt'])
+                  : '-',
+              'agent': u['assignedAgent'] != null
+                  ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                        .trim()
+                  : '-',
+              'agentId': u['assignedAgent']?['_id'],
+              'status': _formatStatusName(
+                u['status'] ?? u['leadStatus'] ?? 'prospect',
+              ),
+              '_raw': u,
+            };
+          })
+          .take(10)
+          .toList();
+    } else {
+      Iterable<Map<String, dynamic>> filtered = dealers;
+      if (_terminalSearch.isNotEmpty) {
+        final query = _terminalSearch.toLowerCase();
+        filtered = filtered.where((u) {
+          final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+              .toLowerCase();
+          return fullName.contains(query) ||
+              (u['phoneNumber']?.toString().contains(query) ?? false) ||
+              (u['email']?.toString().toLowerCase().contains(query) ?? false);
+        });
+      }
+
+      // Group orders for calculations
+      final Map<String, List<Map<String, dynamic>>> ordersByUserId = {};
+      for (final order in allRawOrders) {
+        final userId = order['user']?['_id'];
+        if (userId != null) {
+          ordersByUserId.putIfAbsent(userId, () => []).add(order);
+        }
+      }
+
+      return filtered
+          .map((u) {
+            final userId = u['_id'];
+            final dealerOrders = ordersByUserId[userId] ?? [];
+            final purchaseSum = dealerOrders.fold(
+              0.0,
+              (sum, o) => sum + (o['totalAmount'] as num).toDouble(),
+            );
+
+            final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                .trim();
+            final shopName = u['shopName'] ?? '';
+
+            return {
+              '_id': u['_id'],
+              'dealer':
+                  (shopName.isNotEmpty ? shopName : 'Unnamed Shop') +
+                  (personName.isNotEmpty ? '\n$personName' : ''),
+              'phone': u['phoneNumber'] ?? '-',
+              'location':
+                  '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
+                      .trim()
+                      .replaceAll(RegExp(r'^, |, $'), ''),
+              'agent': u['assignedAgent'] != null
+                  ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                        .trim()
+                  : '-',
+              'agentId': u['assignedAgent']?['_id'],
+              'status': _formatStatusName(
+                u['status'] ?? u['leadStatus'] ?? 'Verified',
+              ),
+              'orders': '${dealerOrders.length}',
+              'revenue': _formatCurrency(purchaseSum),
+              '_raw': u,
+            };
+          })
+          .take(10)
+          .toList();
+    }
   }
 
-  Widget _buildTerminalTable() {
-    final rows = _getFilteredRows();
+  String _formatTime(DateTime dt) {
+    final hr = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
+    return '$hr:$min $ampm';
+  }
+
+  String _formatTimeAgo(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+      if (diff.inHours < 24) return '${diff.inHours} hours ago';
+      if (diff.inDays == 1) return 'Yesterday';
+      return '${diff.inDays} days ago';
+    } catch (e) {
+      return '-';
+    }
+  }
+
+  String _formatStatusName(String status) {
+    switch (status.toLowerCase()) {
+      case 'kyc pending':
+        return 'KYC Pending';
+      case 'call not picked':
+        return 'Call Not Picked';
+      case 'connected but not intrested':
+        return 'Connected But Not Interested';
+      case 'quotation sent':
+        return 'Quotation Sent';
+      case 'negotiation':
+        return 'Negotiation';
+      case 'follow-up':
+        return 'Follow-up';
+      case 'lost':
+        return 'Lost';
+      case 'intrested':
+        return 'Interested';
+      case 'customer busy':
+        return 'Customer Busy';
+      case 'call switch off':
+        return 'Call Switch Off';
+      case 'prospect':
+        return 'Prospect';
+      case 'verified':
+        return 'Verified';
+      case 'pending':
+        return 'Pending';
+      case 'processing':
+        return 'Processing';
+      case 'rto':
+        return 'RTO';
+      default:
+        return status;
+    }
+  }
+
+  String _formatCurrency(double amount) {
+    final int val = amount.round();
+    if (val == 0) return '₹0';
+    final str = val.toString();
+    if (str.length <= 3) return '₹$str';
+    var lastThree = str.substring(str.length - 3);
+    var otherParts = str.substring(0, str.length - 3);
+    if (otherParts.isNotEmpty) {
+      otherParts = otherParts.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d\d)+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+    }
+    return '₹$otherParts,$lastThree';
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return '-';
+    DateTime? dt;
+    if (date is DateTime) {
+      dt = date;
+    } else if (date is String) {
+      dt = DateTime.tryParse(date);
+    }
+
+    if (dt == null) return '-';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  Widget _buildTerminalTable(
+    List<OrderModel> orders,
+    List<Map<String, dynamic>> leads,
+    List<Map<String, dynamic>> dealers,
+    List<Map<String, dynamic>> allRawOrders,
+    List<Map<String, dynamic>> allUsers,
+  ) {
+    final rows = _getFilteredRows(
+      orders,
+      leads,
+      dealers,
+      allRawOrders,
+      allUsers,
+    );
     if (rows.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -2450,10 +2702,36 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final headers = activeTableTab == 0
-        ? ['Dealer', 'Product', 'Amount', 'Agent', 'Date', 'Status', '']
+        ? [
+            'Order ID',
+            'Date & Time',
+            'Customer',
+            'Assigned Agent',
+            'Order Value',
+            'Payment Status',
+            'Fulfillment',
+            '',
+          ]
         : activeTableTab == 1
-        ? ['Dealer', 'Contact', 'Phone', 'State', 'Created', 'Status', '']
-        : ['Dealer', 'State', 'Agent', 'Orders', 'Revenue', 'GST', ''];
+        ? [
+            'Lead Name',
+            'Phone',
+            'Location',
+            'Activity',
+            'Assigned Agent',
+            'Status',
+            '',
+          ]
+        : [
+            'Dealer Name',
+            'Phone',
+            'Location',
+            'Assigned Agent',
+            'Status',
+            'Orders',
+            'Purchase Value',
+            '',
+          ];
 
     return Column(
       children: [
@@ -2483,72 +2761,93 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildTerminalRow(int index, Map<String, dynamic> row) {
     final isEven = index % 2 == 0;
-    final cells = activeTableTab == 0
-        ? [
-            row['dealer'],
-            row['product'],
-            row['amount'],
-            row['agent'],
-            row['date'],
-            row['status'],
-          ]
-        : activeTableTab == 1
-        ? [
-            row['dealer'],
-            row['contact'],
-            row['phone'],
-            row['state'],
-            row['created'],
-            row['status'],
-          ]
-        : [
-            row['dealer'],
-            row['state'],
-            row['agent'],
-            row['orders'],
-            row['revenue'],
-            row['gst'],
-          ];
+    final List<String> cells;
 
-    final statusStr = (row['status'] ?? row['gst'] ?? '') as String;
-    final isPositive = statusStr == 'Completed' || statusStr == 'Verified';
+    if (activeTableTab == 0) {
+      cells = [
+        row['orderId'],
+        row['date'],
+        row['customer'],
+        row['agent'],
+        row['amount'],
+        row['payment'],
+        row['status'],
+      ];
+    } else if (activeTableTab == 1) {
+      cells = [
+        row['dealer'],
+        row['phone'],
+        row['location'],
+        row['activity'],
+        row['agent'],
+        row['status'],
+      ];
+    } else {
+      cells = [
+        row['dealer'],
+        row['phone'],
+        row['location'],
+        row['agent'],
+        row['status'],
+        row['orders'],
+        row['revenue'],
+      ];
+    }
+
+    final String statusStr = row['status'] as String;
 
     return _HoverableRow(
       index: index,
       isEven: isEven,
-      cells: cells.cast<String>(),
+      cells: cells,
       statusStr: statusStr,
-      isPositive: isPositive,
       tabIndex: activeTableTab,
+      rowData: row,
     );
   }
 
-  Widget _buildSummaryBar() {
+  Widget _buildSummaryBar(OrdersState ordersState, DealersState dealersState) {
+    final List<OrderModel> orders = ordersState.orders;
+    final List<Map<String, dynamic>> leads = dealersState.allRawUsers
+        .where((u) => u['kycStatus'] != 'verified')
+        .toList();
+    final List<Map<String, dynamic>> dealers = dealersState.allRawUsers
+        .where((u) => u['kycStatus'] == 'verified')
+        .toList();
+
+    // Calculate count of unique dealers who have placed at least one order
+    final int activeDealersWithOrders = dealersState.allRawOrders
+        .map((o) => o['user']?['_id'])
+        .where((id) => id != null)
+        .toSet()
+        .length;
+
     final metrics = activeTableTab == 0
         ? [
             {
               'label': 'Total Orders',
-              'value': '${_ordersData.length}',
+              'value': '${orders.length}',
               'icon': Icons.receipt_long_outlined,
               'color': AppTheme.primaryColor,
             },
             {
               'label': 'Completed',
               'value':
-                  '${_ordersData.where((r) => r['status'] == 'Completed').length}',
+                  '${orders.where((r) => r.orderStatus == 'Delivered').length}',
               'icon': Icons.check_circle_outline,
               'color': AppTheme.success,
             },
             {
               'label': 'Processing',
               'value':
-                  '${_ordersData.where((r) => r['status'] == 'Processing').length}',
+                  '${orders.where((r) => r.orderStatus == 'Processing').length}',
               'icon': Icons.hourglass_empty_outlined,
               'color': AppTheme.warning,
             },
             {
               'label': 'Total Revenue',
-              'value': '₹8,380',
+              'value':
+                  '₹${orders.fold(0.0, (s, r) => s + r.totalAmount).toInt()}',
               'icon': Icons.currency_rupee,
               'color': AppTheme.info,
             },
@@ -2557,56 +2856,57 @@ class _DashboardPageState extends State<DashboardPage> {
         ? [
             {
               'label': 'Total Leads',
-              'value': '${_leadsData.length}',
+              'value': '${leads.length}',
               'icon': Icons.person_search_outlined,
               'color': AppTheme.info,
             },
             {
               'label': 'Converted',
-              'value':
-                  '${_leadsData.where((r) => r['status'] == 'Completed').length}',
+              'value': '0',
               'icon': Icons.how_to_reg_outlined,
               'color': AppTheme.success,
             },
             {
               'label': 'In Pipeline',
-              'value':
-                  '${_leadsData.where((r) => r['status'] == 'Pending').length}',
+              'value': '${leads.length}',
               'icon': Icons.timelapse_outlined,
               'color': AppTheme.warning,
             },
             {
               'label': 'States',
-              'value': '${_leadsData.map((r) => r['state']).toSet().length}',
+              'value':
+                  '${leads.map((u) => (u['address'] is Map ? u['address']['state'] : '-')).toSet().length}',
               'icon': Icons.map_outlined,
               'color': AppTheme.accentColor,
             },
           ]
         : [
             {
-              'label': 'Active Dealers',
-              'value': '${_dealersData.length}',
-              'icon': Icons.storefront_outlined,
-              'color': AppTheme.accentColor,
-            },
-            {
-              'label': 'GST Verified',
-              'value':
-                  '${_dealersData.where((r) => r['gst'] == 'Verified').length}',
+              'label': 'Total Verified',
+              'value': '${dealers.length}',
               'icon': Icons.verified_outlined,
               'color': AppTheme.success,
             },
             {
+              'label': 'Active (Ordered)',
+              'value': '$activeDealersWithOrders',
+              'icon': Icons.storefront_outlined,
+              'color': AppTheme.accentColor,
+            },
+            {
               'label': 'Total Orders',
-              'value': _dealersData
-                  .fold(0, (s, r) => s + int.parse(r['orders'] as String))
-                  .toString(),
+              'value': '${dealersState.allRawOrders.length}',
               'icon': Icons.receipt_long_outlined,
               'color': AppTheme.primaryColor,
             },
             {
               'label': 'Total Revenue',
-              'value': '₹78,250',
+              'value': _formatCurrency(
+                dealersState.allRawOrders.fold(
+                  0.0,
+                  (sum, o) => sum + (o['totalAmount'] as num).toDouble(),
+                ),
+              ),
               'icon': Icons.currency_rupee,
               'color': AppTheme.info,
             },
@@ -2640,15 +2940,14 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Row(
                     children: [
                       Container(
-                        width: 32,
-                        height: 32,
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: color.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          shape: BoxShape.circle,
                         ),
                         child: Icon(
                           m['icon'] as IconData,
-                          size: 15,
+                          size: 12,
                           color: color,
                         ),
                       ),
@@ -2658,16 +2957,20 @@ class _DashboardPageState extends State<DashboardPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              m['value'] as String,
-                              style: AppTheme.headingSM.copyWith(
-                                fontSize: 13.5,
+                              m['label'] as String,
+                              style: AppTheme.labelSM.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontSize: 9,
                               ),
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              m['label'] as String,
-                              style: AppTheme.labelSM.copyWith(fontSize: 10),
-                              overflow: TextOverflow.ellipsis,
+                              m['value'] as String,
+                              style: AppTheme.labelLG.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -2683,8 +2986,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
         color: AppTheme.backgroundColor.withOpacity(0.6),
         borderRadius: const BorderRadius.only(
@@ -2694,35 +2996,39 @@ class _DashboardPageState extends State<DashboardPage> {
         border: const Border(top: BorderSide(color: AppTheme.lightBorderColor)),
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: metrics.map((m) {
           final color = m['color'] as Color;
-          return Expanded(
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(m['icon'] as IconData, size: 15, color: color),
+          return Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        m['value'] as String,
-                        style: AppTheme.headingSM.copyWith(fontSize: 14),
-                      ),
-                      Text(m['label'] as String, style: AppTheme.labelSM),
-                    ],
+                child: Icon(m['icon'] as IconData, size: 14, color: color),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    m['label'] as String,
+                    style: AppTheme.labelSM.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  Text(
+                    m['value'] as String,
+                    style: AppTheme.labelLG.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           );
         }).toList(),
       ),
@@ -2732,7 +3038,6 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildMobileRecordCard(int index, Map<String, dynamic> row) {
     final isEven = index % 2 == 0;
     final statusStr = (row['status'] ?? row['gst'] ?? '') as String;
-    final isPositive = statusStr == 'Completed' || statusStr == 'Verified';
 
     Widget detailsWidget;
     if (activeTableTab == 0) {
@@ -2812,7 +3117,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              _StatusBadge(label: statusStr, isPositive: isPositive),
+              _StatusBadge(label: statusStr, tabIndex: activeTableTab),
             ],
           ),
           const Padding(
@@ -3216,16 +3521,16 @@ class _HoverableRow extends StatefulWidget {
   final bool isEven;
   final List<String> cells;
   final String statusStr;
-  final bool isPositive;
   final int tabIndex;
+  final Map<String, dynamic> rowData;
 
   const _HoverableRow({
     required this.index,
     required this.isEven,
     required this.cells,
     required this.statusStr,
-    required this.isPositive,
     required this.tabIndex,
+    required this.rowData,
   });
 
   @override
@@ -3235,81 +3540,277 @@ class _HoverableRow extends StatefulWidget {
 class _HoverableRowState extends State<_HoverableRow> {
   bool _hovered = false;
 
+  void _assignAgent() async {
+    final agents = context.read<LeadsBloc>().state.salesAgents;
+    final agentId = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Assign Sales Agent'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'unassign'),
+            child: const Text('None'),
+          ),
+          ...agents.map((agent) {
+            final name =
+                '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+            return SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, agent['_id']),
+              child: Text(
+                name.isNotEmpty ? name : (agent['phoneNumber'] ?? ''),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+
+    if (agentId != null && mounted) {
+      final actualAgentId = agentId == 'unassign' ? null : agentId;
+      final targetId = widget.tabIndex == 0
+          ? widget.rowData['userId']
+          : widget.rowData['_id'];
+
+      if (targetId != null && targetId.toString().isNotEmpty) {
+        context.read<LeadsBloc>().add(
+          AssignAgentToLeadEvent(targetId.toString(), actualAgentId),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot assign agent: Missing User ID')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final statusCell = widget.cells.last;
-    final isStatus =
-        statusCell == 'Completed' ||
-        statusCell == 'Pending' ||
-        statusCell == 'Verified';
+    final int statusIndex = (widget.tabIndex == 2)
+        ? 4
+        : widget.cells.length - 1;
+    final int paymentIndex = (widget.tabIndex == 0) ? 5 : -1;
+    final int agentIndex = (widget.tabIndex == 1) ? 4 : 3;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: _hovered
-              ? AppTheme.primaryColor.withOpacity(0.03)
-              : widget.isEven
-              ? Colors.transparent
-              : AppTheme.backgroundColor.withOpacity(0.4),
-          border: const Border(
-            bottom: BorderSide(color: AppTheme.lightBorderColor),
+      child: GestureDetector(
+        onTap: () {
+          final Map<String, dynamic> row = widget.rowData;
+          final dynamic raw = row['_raw'];
+          if (raw == null) return;
+
+          if (widget.tabIndex == 1) {
+            // Navigate to Lead Profile
+            final leadMap = {
+              'id': raw['_id'],
+              'name': (raw['firstName'] != null || raw['lastName'] != null)
+                  ? '${raw['firstName'] ?? ''} ${raw['lastName'] ?? ''}'.trim()
+                  : (raw['phoneNumber'] ?? 'Unnamed Lead'),
+              'phone': raw['phoneNumber'] ?? '',
+              'shopName': raw['shopName'] ?? '',
+              'villageArea': raw['address']?['villageArea'] ?? '',
+              'city': raw['address']?['cityTehsil'] ?? '',
+              'state': raw['address']?['state'] ?? '',
+              'activity': row['activity'],
+              'agent': row['agent'],
+              'agentId': row['agentId'],
+              'kycStatus': raw['kycStatus'] ?? 'pending',
+              'status': raw['status'] ?? raw['leadStatus'] ?? 'prospect',
+              'notes': raw['notes'] ?? raw['leadNotes'] ?? '',
+              'createdAt': raw['createdAt'],
+              'updatedAt': raw['updatedAt'],
+              'notesHistory': raw['notesHistory'] ?? [],
+            };
+            Navigator.pushNamed(context, '/leads/profile', arguments: leadMap);
+          } else if (widget.tabIndex == 2) {
+            // Navigate to Dealer Profile
+            final dealer = Dealer(
+              id: raw['_id'],
+              name: (raw['firstName'] != null || raw['lastName'] != null)
+                  ? '${raw['firstName'] ?? ''} ${raw['lastName'] ?? ''}'.trim()
+                  : (raw['phoneNumber'] ?? 'Unnamed Dealer'),
+              phone: raw['phoneNumber'] ?? '',
+              shopName: raw['shopName'] ?? '',
+              city: raw['address']?['cityTehsil'] ?? '',
+              state: raw['address']?['state'] ?? '',
+              agent: row['agent'],
+              agentId: row['agentId'],
+              totalOrders: int.tryParse(row['orders'] ?? '0') ?? 0,
+              purchaseValue: row['revenue'] ?? '₹0',
+              isHighValue:
+                  (double.tryParse(
+                        (row['revenue'] ?? '0').replaceAll(
+                          RegExp(r'[^0-9.]'),
+                          '',
+                        ),
+                      ) ??
+                      0) >=
+                  500000,
+              isInactive: (int.tryParse(row['orders'] ?? '0') ?? 0) == 0,
+              kycStatus: raw['kycStatus'] ?? 'verified',
+              status: raw['status'] ?? raw['leadStatus'] ?? 'Verified',
+              address: raw['address'] != null
+                  ? Map<String, dynamic>.from(raw['address'])
+                  : null,
+              gstNumber: raw['gstNumber'],
+              email: raw['email'],
+              gstStatus: 'Verified',
+            );
+            Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
+          } else if (widget.tabIndex == 0) {
+            // Optional: Navigate to Order Details
+            Navigator.pushNamed(
+              context,
+              '/orders/details',
+              arguments: raw, // raw is OrderModel
+            );
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? AppTheme.primaryColor.withOpacity(0.03)
+                : widget.isEven
+                ? Colors.transparent
+                : AppTheme.backgroundColor.withOpacity(0.4),
+            border: const Border(
+              bottom: BorderSide(color: AppTheme.lightBorderColor),
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-            children: [
-              // Data cells (all except last = status)
-              ...widget.cells.sublist(0, widget.cells.length - 1).map((cell) {
-                return Expanded(
-                  child: Text(
-                    cell,
-                    style: AppTheme.tableCell,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }),
-              // Status / GST badge
-              Expanded(
-                child: isStatus
-                    ? Align(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                // Data cells
+                ...widget.cells.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final cell = entry.value;
+
+                  if (idx == statusIndex || idx == paymentIndex) {
+                    // Status or Payment Cell
+                    return Expanded(
+                      child: Align(
                         alignment: Alignment.centerLeft,
                         child: _StatusBadge(
-                          label: statusCell,
-                          isPositive: widget.isPositive,
+                          label: cell,
+                          tabIndex: widget.tabIndex,
                         ),
-                      )
-                    : Text(statusCell, style: AppTheme.tableCell),
-              ),
-              // Action column
-              SizedBox(
-                width: 60,
-                child: AnimatedOpacity(
-                  opacity: _hovered ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _ActionIconBtn(
-                        icon: Icons.open_in_new_rounded,
-                        tooltip: 'View details',
-                        onTap: () {},
                       ),
-                      const SizedBox(width: 4),
-                      _ActionIconBtn(
-                        icon: Icons.more_horiz_rounded,
-                        tooltip: 'More actions',
-                        onTap: () {},
+                    );
+                  }
+
+                  if (idx == agentIndex) {
+                    // Agent Cell
+                    final bool isOrderTab = widget.tabIndex == 0;
+
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: isOrderTab
+                            ? Text(
+                                cell,
+                                style: AppTheme.tableCell.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : GestureDetector(
+                                onTap: _assignAgent,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9FAFB),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          cell,
+                                          style: AppTheme.tableCell.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.arrow_drop_down,
+                                        size: 14,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                       ),
-                    ],
+                    );
+                  }
+
+                  return Expanded(
+                    child: Text(
+                      cell,
+                      style: AppTheme.tableCell,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }),
+                // Action column
+                SizedBox(
+                  width: 60,
+                  child: AnimatedOpacity(
+                    opacity: _hovered ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _ActionIconBtn(
+                          icon: Icons.open_in_new_rounded,
+                          tooltip: 'View details',
+                          onTap: () {
+                            if (widget.tabIndex == 0) {
+                              Navigator.pushNamed(
+                                context,
+                                '/orders/details',
+                                arguments: widget.rowData['_raw'],
+                              );
+                            } else if (widget.tabIndex == 1) {
+                              Navigator.pushNamed(
+                                context,
+                                '/leads/profile',
+                                arguments: widget.rowData['_raw'],
+                              );
+                            } else {
+                              Navigator.pushNamed(
+                                context,
+                                '/dealers/profile',
+                                arguments: widget.rowData['_raw'],
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        _ActionIconBtn(
+                          icon: Icons.more_horiz_rounded,
+                          tooltip: 'More actions',
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3319,30 +3820,142 @@ class _HoverableRowState extends State<_HoverableRow> {
 
 class _StatusBadge extends StatelessWidget {
   final String label;
-  final bool isPositive;
-  const _StatusBadge({required this.label, required this.isPositive});
+  final int? tabIndex; // 0: Orders, 1: Leads, 2: Dealers
+
+  const _StatusBadge({required this.label, this.tabIndex});
 
   @override
   Widget build(BuildContext context) {
-    final color = isPositive ? AppTheme.success : AppTheme.warning;
+    Color color = AppTheme.textSecondary;
+    IconData? icon;
+
+    final String status = label.toLowerCase().trim();
+
+    if (tabIndex == 0) {
+      // Order/Payment Statuses
+      switch (status) {
+        case 'delivered':
+        case 'paid':
+        case 'completed':
+        case 'verified':
+          color = AppTheme.success;
+          if (status != 'paid') icon = Icons.check_circle_outline_rounded;
+          break;
+        case 'shipped':
+          color = AppTheme.info;
+          icon = Icons.local_shipping_outlined;
+          break;
+        case 'out for delivery':
+          color = AppTheme.teal;
+          icon = Icons.directions_run_outlined;
+          break;
+        case 'processing':
+          color = Colors.indigo;
+          icon = Icons.sync_rounded;
+          break;
+        case 'pending':
+          color = AppTheme.warning;
+          icon = Icons.hourglass_empty_rounded;
+          break;
+        case 'cancelled':
+        case 'failed':
+          color = AppTheme.error;
+          icon = Icons.cancel_outlined;
+          break;
+        case 'rto':
+          color = Colors.brown;
+          icon = Icons.assignment_return_outlined;
+          break;
+        case 'partially paid':
+          color = AppTheme.teal;
+          break;
+        case 'failed':
+          color = AppTheme.error;
+          break;
+        default:
+          color = AppTheme.textSecondary;
+      }
+    } else {
+      // Lead/Dealer Statuses
+      switch (status) {
+        case 'kyc pending':
+        case 'pending':
+          color = Colors.amber;
+          icon = Icons.pending_actions_rounded;
+          break;
+        case 'call not picked':
+          color = Colors.orange;
+          icon = Icons.phone_missed_rounded;
+          break;
+        case 'connected but not intrested':
+          color = Colors.blueGrey;
+          icon = Icons.person_remove_outlined;
+          break;
+        case 'quotation sent':
+          color = Colors.blue;
+          icon = Icons.description_outlined;
+          break;
+        case 'negotiation':
+          color = Colors.indigo;
+          icon = Icons.handshake_outlined;
+          break;
+        case 'follow-up':
+          color = Colors.deepPurple;
+          icon = Icons.event_repeat_outlined;
+          break;
+        case 'lost':
+          color = Colors.red;
+          icon = Icons.person_off_outlined;
+          break;
+        case 'intrested':
+        case 'interested':
+          color = Colors.green;
+          icon = Icons.star_border_rounded;
+          break;
+        case 'customer busy':
+          color = Colors.teal;
+          icon = Icons.timer_outlined;
+          break;
+        case 'call switch off':
+          color = Colors.redAccent;
+          icon = Icons.phonelink_erase_rounded;
+          break;
+        case 'prospect':
+          color = Colors.cyan;
+          icon = Icons.person_search_outlined;
+          break;
+        case 'verified':
+          color = AppTheme.success;
+          icon = Icons.verified_user_outlined;
+          break;
+        default:
+          color = AppTheme.textSecondary;
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
+          if (icon != null) ...[
+            Icon(icon, color: color, size: 11),
+            const SizedBox(width: 4),
+          ] else ...[
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 5),
+          ],
           Text(
-            label,
+            tabIndex == 0 ? label : label.toUpperCase(),
             style: AppTheme.labelSM.copyWith(
               color: color,
               fontWeight: FontWeight.w700,
@@ -3666,8 +4279,6 @@ class CustomDonutPainter extends CustomPainter {
         oldDelegate.hoverProgressions[2] != hoverProgressions[2];
   }
 }
-
-
 
 // --- End of fl_chart Integrations ---
 

@@ -127,17 +127,16 @@ class ApiClient {
 
         if (response.statusCode == 200) {
           try {
-            final dynamic decoded = jsonDecode(response.body);
-            if (decoded != null && decoded is Map) {
-              final Map dataMap = decoded;
-              final bool hasSuccess = dataMap['success'] == true;
-              final bool hasToken = dataMap['token'] != null || dataMap['accessToken'] != null;
+            final decoded = jsonDecode(response.body);
+            if (decoded is Map) {
+              final bool hasSuccess = decoded['success'] == true;
+              final bool hasToken = decoded['token'] != null || decoded['accessToken'] != null;
               
               if (hasSuccess || hasToken) {
-                final String? newAccess = dataMap['accessToken']?.toString() ?? dataMap['token']?.toString();
+                final String? newAccess = (decoded['accessToken'] ?? decoded['token'])?.toString();
                 if (newAccess != null) {
                   // Update but keep old refresh token if a new one isn't provided
-                  final String newRefresh = dataMap['refreshToken']?.toString() ?? _refreshToken!;
+                  final String newRefresh = decoded['refreshToken']?.toString() ?? _refreshToken!;
                   await setTokens(newAccess, newRefresh, persistent: true);
                   return true;
                 }
@@ -178,10 +177,11 @@ class ApiClient {
     int attempt = 0;
     while (true) {
       attempt++;
-      // Give more timeout budget on subsequent attempts as server boots up
+      // Give more timeout budget on subsequent attempts as server boots up.
+      // 30s for the first attempt to account for backend cold starts (Cloud Run).
       final currentTimeout = attempt == 1
-          ? const Duration(seconds: 15)
-          : const Duration(seconds: 25);
+          ? const Duration(seconds: 30)
+          : const Duration(seconds: 45);
 
       try {
         final response = await requestFn(currentTimeout);
