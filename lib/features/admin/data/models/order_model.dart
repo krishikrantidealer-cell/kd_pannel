@@ -175,6 +175,7 @@ class OrderModel {
   DateTime? cancelledAt;
   DateTime? rtoAt;
   final String? assignedAgent;
+  final String? assignedAgentId;
 
   OrderModel({
     required this.id,
@@ -208,6 +209,7 @@ class OrderModel {
     this.cancelledAt,
     this.rtoAt,
     this.assignedAgent,
+    this.assignedAgentId,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -218,6 +220,7 @@ class OrderModel {
     String customerRole = 'Lead';
     String? userId;
     String? agentName;
+    String? agentId;
 
     if (userJson != null) {
       userId = userJson['_id']?.toString();
@@ -238,6 +241,7 @@ class OrderModel {
 
       final agentJson = userJson['assignedAgent'] as Map<String, dynamic>?;
       if (agentJson != null) {
+        agentId = agentJson['_id']?.toString();
         agentName =
             '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
                 .trim();
@@ -299,6 +303,7 @@ class OrderModel {
           : null,
       rtoAt: json['rtoAt'] != null ? DateTime.parse(json['rtoAt']) : null,
       assignedAgent: agentName ?? json['assignedAgent'],
+      assignedAgentId: agentId,
     );
   }
 

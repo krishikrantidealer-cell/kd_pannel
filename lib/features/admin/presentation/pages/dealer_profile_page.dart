@@ -43,10 +43,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   bool _isCacheLoaded = false;
   int _activeTab = 0;
   StreamSubscription? _presenceSubscription;
+  StreamSubscription? _dealersWsSubscription;
 
   @override
   void dispose() {
     _presenceSubscription?.cancel();
+    _dealersWsSubscription?.cancel();
     super.dispose();
   }
 
@@ -102,6 +104,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         _loadDealerFromCache();
       }
       _fetchOrders();
+      WebSocketService().connect();
+      _dealersWsSubscription?.cancel();
+      _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
+        if (mounted) {
+          _refreshDealerDetails();
+        }
+      });
       if (AuthService().isAdmin) {
         _fetchSalesAgents();
         _fetchEvents();

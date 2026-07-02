@@ -20,7 +20,6 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 
 import '../../../../core/network/websocket_service.dart';
 
-
 class LeadProfilePage extends StatefulWidget {
   const LeadProfilePage({super.key});
 
@@ -35,10 +34,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   bool _isLoadingEvents = false;
   int _activeTab = 0;
   StreamSubscription? _presenceSubscription;
+  StreamSubscription? _leadsWsSubscription;
 
   @override
   void dispose() {
     _presenceSubscription?.cancel();
+    _leadsWsSubscription?.cancel();
     super.dispose();
   }
 
@@ -46,11 +47,20 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     _presenceSubscription?.cancel();
     _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
       if (!mounted || _lead == null) return;
-      
-      final currentIdentifier = (_lead!['email'] ?? _lead!['phone'] ?? _lead!['phoneNumber'] ?? _lead!['id'] ?? _lead!['_id'])?.toString();
-      final incomingUser = data['user']?.toString() ?? data['userEmail']?.toString();
-      
-      if (currentIdentifier != null && incomingUser != null && currentIdentifier == incomingUser) {
+
+      final currentIdentifier =
+          (_lead!['email'] ??
+                  _lead!['phone'] ??
+                  _lead!['phoneNumber'] ??
+                  _lead!['id'] ??
+                  _lead!['_id'])
+              ?.toString();
+      final incomingUser =
+          data['user']?.toString() ?? data['userEmail']?.toString();
+
+      if (currentIdentifier != null &&
+          incomingUser != null &&
+          currentIdentifier == incomingUser) {
         // If it's a presence update for the current user, refresh the events feed to get the latest audit log
         _fetchEvents();
       }
@@ -67,6 +77,13 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         _isCacheLoaded = true;
         _saveLeadToCache(_lead!);
         _refreshLeadDetails();
+        WebSocketService().connect();
+        _leadsWsSubscription?.cancel();
+        _leadsWsSubscription = WebSocketService().leadsUpdates.listen((_) {
+          if (mounted) {
+            _refreshLeadDetails();
+          }
+        });
         if (AuthService().isAdmin) {
           _fetchEvents();
           _listenToRealTimeEvents();
@@ -2358,7 +2375,8 @@ class _FlatHeaderSection extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  if (kycStatus.toLowerCase() == 'verified') ...[
+                                  if (kycStatus.toLowerCase() ==
+                                      'verified') ...[
                                     const SizedBox(width: 6),
                                     const Icon(
                                       Icons.verified_rounded,
@@ -2377,7 +2395,8 @@ class _FlatHeaderSection extends StatelessWidget {
                                     'KYC: ${kycStatus.toUpperCase()}',
                                     statusColor,
                                   ),
-                                  if (lead['source'] != null && lead['source'].toString().isNotEmpty)
+                                  if (lead['source'] != null &&
+                                      lead['source'].toString().isNotEmpty)
                                     _buildStatusBadge(
                                       'SOURCE: ${lead['source'].toString().toUpperCase()}',
                                       const Color(0xFF3B82F6),
@@ -2470,10 +2489,7 @@ class _FlatHeaderSection extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -2811,9 +2827,13 @@ class _LeadInformationCard extends StatelessWidget {
     final isMobile = Responsive.isMobile(context);
     final String leadName = lead['name'] ?? 'Unnamed Lead';
     final String leadPhone = lead['phone'] ?? '';
-    final String shopName = lead['shopName']?.toString().isNotEmpty == true ? lead['shopName'] : 'No Shop Registered';
+    final String shopName = lead['shopName']?.toString().isNotEmpty == true
+        ? lead['shopName']
+        : 'No Shop Registered';
     final String leadSource = lead['source'] ?? 'App';
-    final String initial = leadName.isNotEmpty ? leadName.substring(0, 1).toUpperCase() : 'L';
+    final String initial = leadName.isNotEmpty
+        ? leadName.substring(0, 1).toUpperCase()
+        : 'L';
 
     final cardBgColor = Colors.white;
 
@@ -2962,7 +2982,10 @@ class _LeadInformationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSectionHeader('Location Details', Icons.pin_drop_outlined),
+                _buildSectionHeader(
+                  'Location Details',
+                  Icons.pin_drop_outlined,
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -3006,7 +3029,10 @@ class _LeadInformationCard extends StatelessWidget {
                 const SizedBox(height: 24),
                 if (lead['deepLinkUrl'] != null &&
                     lead['deepLinkUrl'].toString().trim().isNotEmpty) ...[
-                  _buildSectionHeader('Campaign & UTM Attribution', Icons.insights_outlined),
+                  _buildSectionHeader(
+                    'Campaign & UTM Attribution',
+                    Icons.insights_outlined,
+                  ),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -3080,7 +3106,9 @@ class _LeadInformationCard extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFE9D5FF)),
+                                    border: Border.all(
+                                      color: const Color(0xFFE9D5FF),
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -3113,11 +3141,17 @@ class _LeadInformationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                 ],
-                _buildSectionHeader('Operations & Team Assignment', Icons.assignment_ind_outlined),
+                _buildSectionHeader(
+                  'Operations & Team Assignment',
+                  Icons.assignment_ind_outlined,
+                ),
                 const SizedBox(height: 10),
                 if (!AuthService().isSales) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
@@ -3149,7 +3183,10 @@ class _LeadInformationCard extends StatelessWidget {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
@@ -3157,14 +3194,18 @@ class _LeadInformationCard extends StatelessWidget {
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: salesAgents.any(
-                                (agent) => agent['_id'] == lead['agentId'],
-                              )
+                              value:
+                                  salesAgents.any(
+                                    (agent) => agent['_id'] == lead['agentId'],
+                                  )
                                   ? lead['agentId']
                                   : null,
                               isExpanded: false,
                               isDense: true,
-                              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                              ),
                               hint: Text(
                                 'Select Agent',
                                 style: GoogleFonts.outfit(
@@ -3216,7 +3257,10 @@ class _LeadInformationCard extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF2F2),
                     borderRadius: BorderRadius.circular(12),
@@ -3294,8 +3338,8 @@ class _LeadInformationCard extends StatelessWidget {
               icon is IconData
                   ? Icon(icon, size: 20, color: color)
                   : icon is FaIconData
-                      ? FaIcon(icon, size: 20, color: color)
-                      : const SizedBox.shrink(),
+                  ? FaIcon(icon, size: 20, color: color)
+                  : const SizedBox.shrink(),
               const SizedBox(height: 6),
               Text(
                 label,
@@ -3346,7 +3390,6 @@ class _LeadInformationCard extends StatelessWidget {
     );
   }
 }
-
 
 class _DealerKycDocumentsCard extends StatelessWidget {
   final Map<String, dynamic> lead;
@@ -3749,12 +3792,12 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
                         color: const Color(0xFFFA9527),
                       )
                     : widget.icon is FaIconData
-                        ? FaIcon(
-                            widget.icon,
-                            size: 16,
-                            color: const Color(0xFFFA9527),
-                          )
-                        : const SizedBox.shrink(),
+                    ? FaIcon(
+                        widget.icon,
+                        size: 16,
+                        color: const Color(0xFFFA9527),
+                      )
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -4326,34 +4369,37 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Text(
-                    'Live Activity & Events Feed',
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF111827),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(
+                      'Live Activity & Events Feed',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF111827),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (!widget.isLoading)
-                    IconButton(
-                      icon: const Icon(Icons.refresh_rounded,
-                          size: 18, color: AppTheme.primaryColor),
-                      onPressed: widget.onRefresh,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Refresh Activity Feed',
-                    ),
-                ],
+                    const SizedBox(width: 8),
+                    if (!widget.isLoading)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.refresh_rounded,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
+                        onPressed: widget.onRefresh,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Refresh Activity Feed',
+                      ),
+                  ],
+                ),
               ),
-            ),
-            if (totalEvents > 0)
+              if (totalEvents > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

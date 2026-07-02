@@ -47,6 +47,7 @@ class _MainLayoutState extends State<MainLayout> {
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = [
     const SalesDashboardPage(),
+    const OrdersPage(),
     const LeadsPage(),
     const DealerManagementPage(),
     const SalesCouponPage(),
@@ -100,12 +101,14 @@ class _MainLayoutState extends State<MainLayout> {
       } else {
         if (routeName == '/dashboard' || routeName == '/sales/dashboard') {
           _currentIdx = 0;
-        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
+        } else if (routeName.startsWith('/orders')) {
           _currentIdx = 1;
-        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
+        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
           _currentIdx = 2;
-        } else if (routeName == '/sales/coupons') {
+        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 3;
+        } else if (routeName == '/sales/coupons') {
+          _currentIdx = 4;
         } else {
           _currentIdx = 0;
         }
@@ -132,9 +135,10 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 7) route = '/marketing';
     } else {
       if (index == 0) route = '/dashboard';
-      if (index == 1) route = '/leads';
-      if (index == 2) route = '/dealers';
-      if (index == 3) route = '/sales/coupons';
+      if (index == 1) route = '/orders';
+      if (index == 2) route = '/leads';
+      if (index == 3) route = '/dealers';
+      if (index == 4) route = '/sales/coupons';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

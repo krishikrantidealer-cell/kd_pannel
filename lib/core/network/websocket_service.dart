@@ -22,12 +22,14 @@ class WebSocketService {
   // Streams for components to listen to updates
   final _leadsUpdateController = StreamController<void>.broadcast();
   final _dealersUpdateController = StreamController<void>.broadcast();
+  final _ordersUpdateController = StreamController<void>.broadcast();
   final _notificationUpdateController = StreamController<void>.broadcast();
   final _presenceUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
 
   Stream<void> get leadsUpdates => _leadsUpdateController.stream;
   Stream<void> get dealersUpdates => _dealersUpdateController.stream;
+  Stream<void> get ordersUpdates => _ordersUpdateController.stream;
   Stream<void> get notificationUpdates => _notificationUpdateController.stream;
   Stream<Map<String, dynamic>> get presenceUpdates => _presenceUpdateController.stream;
   Stream<bool> get connectionStatus => _connectionStateController.stream;
@@ -36,6 +38,7 @@ class WebSocketService {
   // Debounce timers for updates
   Timer? _leadsDebounce;
   Timer? _dealersDebounce;
+  Timer? _ordersDebounce;
   Timer? _notificationDebounce;
 
   void _triggerLeadsUpdate() {
@@ -52,6 +55,15 @@ class WebSocketService {
     _dealersDebounce = Timer(const Duration(milliseconds: 1500), () {
       if (!_dealersUpdateController.isClosed) {
         _dealersUpdateController.add(null);
+      }
+    });
+  }
+
+  void _triggerOrdersUpdate() {
+    _ordersDebounce?.cancel();
+    _ordersDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (!_ordersUpdateController.isClosed) {
+        _ordersUpdateController.add(null);
       }
     });
   }
@@ -181,6 +193,9 @@ class WebSocketService {
         case 'DEALERS_UPDATE':
           _triggerDealersUpdate();
           break;
+        case 'ORDERS_UPDATE':
+          _triggerOrdersUpdate();
+          break;
         case 'NOTIFICATION_RECEIVED':
           _triggerNotificationUpdate();
           break;
@@ -198,6 +213,7 @@ class WebSocketService {
       final String msgStr = rawMessage.toString();
       if (msgStr.contains('LEADS_UPDATE')) _triggerLeadsUpdate();
       if (msgStr.contains('DEALERS_UPDATE')) _triggerDealersUpdate();
+      if (msgStr.contains('ORDERS_UPDATE')) _triggerOrdersUpdate();
       if (msgStr.contains('NOTIFICATION_RECEIVED')) _triggerNotificationUpdate();
     }
   }
@@ -232,6 +248,7 @@ class WebSocketService {
     _retryCount = 0;
     _leadsDebounce?.cancel();
     _dealersDebounce?.cancel();
+    _ordersDebounce?.cancel();
     _notificationDebounce?.cancel();
     _reconnectTimer?.cancel();
     _heartbeatTimer?.cancel();

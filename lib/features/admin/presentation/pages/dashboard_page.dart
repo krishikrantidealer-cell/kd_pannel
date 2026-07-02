@@ -144,6 +144,9 @@ class _DashboardPageState extends State<DashboardPage> {
   String _timeString = '';
   String _dateString = '';
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription? _dealersWsSubscription;
+  StreamSubscription? _leadsWsSubscription;
+  StreamSubscription? _ordersWsSubscription;
 
   // Dynamic getters for administrative operational stats
   int get pendingOrdersCount =>
@@ -170,6 +173,30 @@ class _DashboardPageState extends State<DashboardPage> {
     _updateClock(shouldSetState: false);
     _clockTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _updateClock(shouldSetState: true);
+    });
+
+    // Connect to WebSockets and listen to real-time updates
+    WebSocketService().connect();
+    _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
+      if (mounted) {
+        context.read<DealersBloc>().add(
+          const FetchDealersDataEvent(forceRefresh: true),
+        );
+      }
+    });
+    _leadsWsSubscription = WebSocketService().leadsUpdates.listen((_) {
+      if (mounted) {
+        context.read<LeadsBloc>().add(
+          const FetchLeadsDataEvent(forceRefresh: true),
+        );
+      }
+    });
+    _ordersWsSubscription = WebSocketService().ordersUpdates.listen((_) {
+      if (mounted) {
+        context.read<OrdersBloc>().add(
+          const FetchOrdersEvent(forceRefresh: true),
+        );
+      }
     });
   }
 
@@ -235,7 +262,11 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _dealersWsSubscription?.cancel();
+    _leadsWsSubscription?.cancel();
+    _ordersWsSubscription?.cancel();
     _scrollController.dispose();
+    _terminalSearchController.dispose();
     super.dispose();
   }
 
@@ -278,36 +309,41 @@ class _DashboardPageState extends State<DashboardPage> {
     final service = DashboardService();
 
     Future.wait([
-      service.getEventsToday(period: selectedDropdown).catchError((_) => '0'),
-      AnalyticsService().fetchSummaryMetrics().catchError((_) => <String, dynamic>{}),
-    ]).then((results) {
-      if (mounted) {
-        final eventsCount = results[0] as String;
-        final metrics = results[1] as Map<String, dynamic>;
+          service
+              .getEventsToday(period: selectedDropdown)
+              .catchError((_) => '0'),
+          AnalyticsService().fetchSummaryMetrics().catchError(
+            (_) => <String, dynamic>{},
+          ),
+        ])
+        .then((results) {
+          if (mounted) {
+            final eventsCount = results[0] as String;
+            final metrics = results[1] as Map<String, dynamic>;
 
-        setState(() {
-          _cachedEventsToday = eventsCount;
-          _cachedHighPriorityCount = (metrics['highPriority'] ?? '0').toString();
-          _isEventsLoading = false;
-          _isStatsRefreshing = false;
-          _isStatsLoading = false;
+            setState(() {
+              _cachedEventsToday = eventsCount;
+              _cachedHighPriorityCount = (metrics['highPriority'] ?? '0')
+                  .toString();
+              _isEventsLoading = false;
+              _isStatsRefreshing = false;
+              _isStatsLoading = false;
+            });
+          }
+        })
+        .catchError((e) {
+          debugPrint('[DashboardPage] Failed to fetch stats: $e');
+          if (mounted) {
+            setState(() {
+              _isEventsLoading = false;
+              _isStatsRefreshing = false;
+              _isStatsLoading = false;
+            });
+          }
         });
-      }
-    }).catchError((e) {
-      debugPrint('[DashboardPage] Failed to fetch stats: $e');
-      if (mounted) {
-        setState(() {
-          _isEventsLoading = false;
-          _isStatsRefreshing = false;
-          _isStatsLoading = false;
-        });
-      }
-    });
   }
 
   final List<String> dropdownOptions = ['Today', '1 Week', 'Total'];
-
-
 
   String get _rangeDisplay {
     if (_selectedRange != null &&
@@ -911,7 +947,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   columns = 6;
                 }
                 final double width =
-                    (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+                    (constraints.maxWidth - (spacing * (columns - 1))) /
+                    columns;
 
                 final String periodSuffix = selectedDropdown == 'Today'
                     ? 'Today'
@@ -919,8 +956,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? 'this Week'
                           : (selectedDropdown == 'Total' ? 'Total' : 'Period'));
 
-                final bool isOrdersLoading = ordersState.status == OrdersStatus.loading && ordersState.orders.isEmpty;
-                final bool isDealersLoading = dealersState.status == DealersStatus.loading && dealersState.allRawUsers.isEmpty;
+                final bool isOrdersLoading =
+                    ordersState.status == OrdersStatus.loading &&
+                    ordersState.orders.isEmpty;
+                final bool isDealersLoading =
+                    dealersState.status == DealersStatus.loading &&
+                    dealersState.allRawUsers.isEmpty;
 
                 // 1. Calculate Period Filter Range
                 final now = DateTime.now();
@@ -939,10 +980,22 @@ class _DashboardPageState extends State<DashboardPage> {
                   // Custom Selected Range
                   if (_selectedRange != null) {
                     if (_selectedRange!.startDate != null) {
-                      startDate = DateTime(_selectedRange!.startDate!.year, _selectedRange!.startDate!.month, _selectedRange!.startDate!.day);
+                      startDate = DateTime(
+                        _selectedRange!.startDate!.year,
+                        _selectedRange!.startDate!.month,
+                        _selectedRange!.startDate!.day,
+                      );
                     }
                     if (_selectedRange!.endDate != null) {
-                      endDate = DateTime(_selectedRange!.endDate!.year, _selectedRange!.endDate!.month, _selectedRange!.endDate!.day, 23, 59, 59, 999);
+                      endDate = DateTime(
+                        _selectedRange!.endDate!.year,
+                        _selectedRange!.endDate!.month,
+                        _selectedRange!.endDate!.day,
+                        23,
+                        59,
+                        59,
+                        999,
+                      );
                     }
                   } else {
                     startDate = today;
@@ -952,25 +1005,31 @@ class _DashboardPageState extends State<DashboardPage> {
                 bool isWithinPeriod(DateTime date) {
                   if (isTotal) return true;
                   final localDate = date.toLocal();
-                  if (startDate != null && localDate.isBefore(startDate)) return false;
-                  if (endDate != null && localDate.isAfter(endDate)) return false;
+                  if (startDate != null && localDate.isBefore(startDate))
+                    return false;
+                  if (endDate != null && localDate.isAfter(endDate))
+                    return false;
                   return true;
                 }
 
                 // 2. Perform Dynamic Calculations
                 // Card 1: Revenue
                 final double periodRevenue = ordersState.orders
-                    .where((o) => o.orderStatus != 'Cancelled' && isWithinPeriod(o.placedAt))
+                    .where(
+                      (o) =>
+                          o.orderStatus != 'Cancelled' &&
+                          isWithinPeriod(o.placedAt),
+                    )
                     .fold(0.0, (sum, o) => sum + o.totalAmount);
 
                 String formatCurrency(double amount) {
                   if (amount >= 100000) {
-                    return '₹${(amount / 100000).toStringAsFixed(1)}L';
+                    return '₹${(amount / 100000).toStringAsFixed(2)}L';
                   }
                   if (amount >= 1000) {
-                    return '₹${(amount / 1000).toStringAsFixed(1)}k';
+                    return '₹${(amount / 1000).toStringAsFixed(2)}k';
                   }
-                  return '₹${amount.toStringAsFixed(0)}';
+                  return '₹${amount.toStringAsFixed(2)}';
                 }
 
                 // Card 2: Orders Count
@@ -980,8 +1039,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 // Card 3: Active Dealers
                 final verifiedUserPhonesAndIds = dealersState.allRawUsers
-                    .where((u) => u['kycStatus'] == 'verified')
-                    .expand((u) => [u['_id']?.toString(), u['phoneNumber']?.toString()])
+                    .where(
+                      (u) =>
+                          u['role'] == 'user' && u['kycStatus'] == 'verified',
+                    )
+                    .expand(
+                      (u) => [
+                        u['_id']?.toString(),
+                        u['phoneNumber']?.toString(),
+                      ],
+                    )
                     .whereType<String>()
                     .toSet();
 
@@ -993,10 +1060,15 @@ class _DashboardPageState extends State<DashboardPage> {
                     .length;
 
                 final int verifiedDealersCount = dealersState.allRawUsers
-                    .where((u) => u['kycStatus'] == 'verified')
+                    .where(
+                      (u) =>
+                          u['role'] == 'user' && u['kycStatus'] == 'verified',
+                    )
                     .length;
 
-                final int dealersDisplay = isTotal ? verifiedDealersCount : activeDealersCount;
+                final int dealersDisplay = isTotal
+                    ? verifiedDealersCount
+                    : activeDealersCount;
 
                 // Card 4: New Leads
                 DateTime? parsedUserDate(Map<String, dynamic> user) {
@@ -1008,8 +1080,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     return null;
                   }
                 }
+
                 final int periodNewLeads = dealersState.allRawUsers.where((u) {
-                  final isLead = u['kycStatus'] != 'verified';
+                  final isLead =
+                      u['role'] == 'user' && u['kycStatus'] != 'verified';
                   if (!isLead) return false;
                   if (isTotal) return true;
                   final uDate = parsedUserDate(u);
@@ -1077,16 +1151,16 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
 
-                    // 3. Active Dealers Card
+                    // 3. Total Dealers Card
                     if (isDealersLoading)
                       StatCardShimmer(isCompact: true, width: width)
                     else
                       AdvancedStatCardWidget(
                         width: width,
-                        title: 'Active Dealers',
-                        value: '$dealersDisplay',
+                        title: 'Total Dealers',
+                        value: '$verifiedDealersCount',
                         color: AppTheme.info,
-                        trendLabel: 'Dealers with orders',
+                        trendLabel: 'Verified on platform',
                         trendIcon: Icons.verified_user_outlined,
                         onTap: () {
                           Navigator.pushReplacementNamed(context, '/dealers');
@@ -1100,7 +1174,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     else
                       AdvancedStatCardWidget(
                         width: width,
-                        title: selectedDropdown == 'Total' ? 'Total Leads' : 'New Leads',
+                        title: selectedDropdown == 'Total'
+                            ? 'Total Leads'
+                            : 'New Leads',
                         value: '$periodNewLeads',
                         color: AppTheme.warning,
                         trendLabel: 'Recent prospects',
@@ -1264,7 +1340,9 @@ class _DashboardPageState extends State<DashboardPage> {
           builder: (context, dealersState) {
             final orders = ordersState.orders;
             final leads = dealersState.allRawUsers
-                .where((u) => u['kycStatus'] != 'verified')
+                .where(
+                  (u) => u['role'] == 'user' && u['kycStatus'] != 'verified',
+                )
                 .toList();
 
             final now = DateTime.now();
@@ -1287,26 +1365,40 @@ class _DashboardPageState extends State<DashboardPage> {
             if (activeTimeframe == '1W') {
               for (int i = 6; i >= 0; i--) {
                 final d = today.subtract(Duration(days: i));
-                
+
                 final dayOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
                   return localPlaced.year == d.year &&
                       localPlaced.month == d.month &&
                       localPlaced.day == d.day;
                 });
-                final double revenue = dayOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                final double revenue = dayOrders.fold(
+                  0.0,
+                  (sum, o) => sum + o.totalAmount,
+                );
                 salesDataRaw.add(revenue);
 
-                final dayLeads = leads.where((l) {
-                  final lDate = parsedLeadDate(l);
-                  if (lDate == null) return false;
-                  return lDate.year == d.year &&
-                      lDate.month == d.month &&
-                      lDate.day == d.day;
-                }).length.toDouble();
+                final dayLeads = leads
+                    .where((l) {
+                      final lDate = parsedLeadDate(l);
+                      if (lDate == null) return false;
+                      return lDate.year == d.year &&
+                          lDate.month == d.month &&
+                          lDate.day == d.day;
+                    })
+                    .length
+                    .toDouble();
                 leadsDataRaw.add(dayLeads);
 
-                final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                final weekdays = [
+                  'Mon',
+                  'Tue',
+                  'Wed',
+                  'Thu',
+                  'Fri',
+                  'Sat',
+                  'Sun',
+                ];
                 labels.add(weekdays[d.weekday - 1]);
               }
             } else if (activeTimeframe == '3M') {
@@ -1324,23 +1416,47 @@ class _DashboardPageState extends State<DashboardPage> {
                   nextMonth = 1;
                   nextYear += 1;
                 }
-                final end = DateTime(nextYear, nextMonth, 1).subtract(const Duration(milliseconds: 1));
+                final end = DateTime(
+                  nextYear,
+                  nextMonth,
+                  1,
+                ).subtract(const Duration(milliseconds: 1));
 
                 final rangeOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
-                  return localPlaced.isAfter(start) && localPlaced.isBefore(end);
+                  return localPlaced.isAfter(start) &&
+                      localPlaced.isBefore(end);
                 });
-                final double revenue = rangeOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                final double revenue = rangeOrders.fold(
+                  0.0,
+                  (sum, o) => sum + o.totalAmount,
+                );
                 salesDataRaw.add(revenue);
 
-                final rangeLeads = leads.where((l) {
-                  final lDate = parsedLeadDate(l);
-                  if (lDate == null) return false;
-                  return lDate.isAfter(start) && lDate.isBefore(end);
-                }).length.toDouble();
+                final rangeLeads = leads
+                    .where((l) {
+                      final lDate = parsedLeadDate(l);
+                      if (lDate == null) return false;
+                      return lDate.isAfter(start) && lDate.isBefore(end);
+                    })
+                    .length
+                    .toDouble();
                 leadsDataRaw.add(rangeLeads);
 
-                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const monthNames = [
+                  'Jan',
+                  'Feb',
+                  'Mar',
+                  'Apr',
+                  'May',
+                  'Jun',
+                  'Jul',
+                  'Aug',
+                  'Sep',
+                  'Oct',
+                  'Nov',
+                  'Dec',
+                ];
                 labels.add(monthNames[month - 1]);
               }
             } else {
@@ -1348,33 +1464,56 @@ class _DashboardPageState extends State<DashboardPage> {
               for (int i = 3; i >= 0; i--) {
                 final startOffset = (i * 7) + 6;
                 final endOffset = i * 7;
-                
+
                 final startDay = today.subtract(Duration(days: startOffset));
                 final endDay = today.subtract(Duration(days: endOffset));
-                
-                final start = DateTime(startDay.year, startDay.month, startDay.day);
-                final end = DateTime(endDay.year, endDay.month, endDay.day, 23, 59, 59, 999);
+
+                final start = DateTime(
+                  startDay.year,
+                  startDay.month,
+                  startDay.day,
+                );
+                final end = DateTime(
+                  endDay.year,
+                  endDay.month,
+                  endDay.day,
+                  23,
+                  59,
+                  59,
+                  999,
+                );
 
                 final rangeOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
-                  return localPlaced.isAfter(start) && localPlaced.isBefore(end);
+                  return localPlaced.isAfter(start) &&
+                      localPlaced.isBefore(end);
                 });
-                final double revenue = rangeOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+                final double revenue = rangeOrders.fold(
+                  0.0,
+                  (sum, o) => sum + o.totalAmount,
+                );
                 salesDataRaw.add(revenue);
 
-                final rangeLeads = leads.where((l) {
-                  final lDate = parsedLeadDate(l);
-                  if (lDate == null) return false;
-                  return lDate.isAfter(start) && lDate.isBefore(end);
-                }).length.toDouble();
+                final rangeLeads = leads
+                    .where((l) {
+                      final lDate = parsedLeadDate(l);
+                      if (lDate == null) return false;
+                      return lDate.isAfter(start) && lDate.isBefore(end);
+                    })
+                    .length
+                    .toDouble();
                 leadsDataRaw.add(rangeLeads);
 
                 labels.add('Week ${4 - i}');
               }
             }
 
-            final double maxRevenue = salesDataRaw.isEmpty ? 0.0 : salesDataRaw.reduce((a, b) => a > b ? a : b);
-            final double maxLeads = leadsDataRaw.isEmpty ? 0.0 : leadsDataRaw.reduce((a, b) => a > b ? a : b);
+            final double maxRevenue = salesDataRaw.isEmpty
+                ? 0.0
+                : salesDataRaw.reduce((a, b) => a > b ? a : b);
+            final double maxLeads = leadsDataRaw.isEmpty
+                ? 0.0
+                : leadsDataRaw.reduce((a, b) => a > b ? a : b);
 
             double scale = 1.0;
             if (maxLeads > 0 && maxRevenue > 0) {
@@ -1382,7 +1521,9 @@ class _DashboardPageState extends State<DashboardPage> {
             }
 
             final List<double> salesData = salesDataRaw;
-            final List<double> leadsData = leadsDataRaw.map((v) => v * scale).toList();
+            final List<double> leadsData = leadsDataRaw
+                .map((v) => v * scale)
+                .toList();
 
             final double maxVal = [
               ...salesData,
@@ -1395,9 +1536,13 @@ class _DashboardPageState extends State<DashboardPage> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppTheme.cardColor,
-                borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+                borderRadius: BorderRadius.circular(
+                  AppTheme.borderRadiusXLarge,
+                ),
                 boxShadow: AppTheme.cardShadow,
-                border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+                border: Border.all(
+                  color: AppTheme.borderColor.withOpacity(0.5),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1513,30 +1658,37 @@ class _DashboardPageState extends State<DashboardPage> {
                           lineTouchData: LineTouchData(
                             handleBuiltInTouches: true,
                             getTouchedSpotIndicator:
-                                (LineChartBarData barData, List<int> spotIndexes) {
+                                (
+                                  LineChartBarData barData,
+                                  List<int> spotIndexes,
+                                ) {
                                   return spotIndexes.map((spotIndex) {
                                     return TouchedSpotIndicatorData(
                                       FlLine(
-                                        color: AppTheme.textSecondary.withOpacity(0.15),
+                                        color: AppTheme.textSecondary
+                                            .withOpacity(0.15),
                                         strokeWidth: 2.0,
                                       ),
                                       FlDotData(
                                         show: true,
-                                        getDotPainter: (spot, percent, barData, index) {
-                                          return FlDotCirclePainter(
-                                            radius: 6.0,
-                                            color: Colors.white,
-                                            strokeWidth: 3.0,
-                                            strokeColor:
-                                                barData.color ?? AppTheme.primaryColor,
-                                          );
-                                        },
+                                        getDotPainter:
+                                            (spot, percent, barData, index) {
+                                              return FlDotCirclePainter(
+                                                radius: 6.0,
+                                                color: Colors.white,
+                                                strokeWidth: 3.0,
+                                                strokeColor:
+                                                    barData.color ??
+                                                    AppTheme.primaryColor,
+                                              );
+                                            },
                                       ),
                                     );
                                   }).toList();
                                 },
                             touchTooltipData: LineTouchTooltipData(
-                              getTooltipColor: (touchedSpot) => AppTheme.cardColor,
+                              getTooltipColor: (touchedSpot) =>
+                                  AppTheme.cardColor,
                               tooltipBorder: BorderSide(
                                 color: AppTheme.borderColor.withOpacity(0.8),
                                 width: 0.8,
@@ -1548,33 +1700,36 @@ class _DashboardPageState extends State<DashboardPage> {
                               tooltipBorderRadius: BorderRadius.circular(8),
                               fitInsideHorizontally: true,
                               fitInsideVertically: true,
-                              getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                                return touchedBarSpots.map((barSpot) {
-                                  final int idx = barSpot.x.toInt();
-                                  final String bullet = '● ';
-                                  if (barSpot.barIndex == 0) {
-                                    final revenueVal = salesDataRaw[idx].toInt();
-                                    return LineTooltipItem(
-                                      '${bullet}Revenue: ₹$revenueVal',
-                                      GoogleFonts.outfit(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppTheme.primaryColor,
-                                      ),
-                                    );
-                                  } else {
-                                    final leadsVal = leadsDataRaw[idx].toInt();
-                                    return LineTooltipItem(
-                                      '${bullet}Leads: $leadsVal',
-                                      GoogleFonts.outfit(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppTheme.accentColor,
-                                      ),
-                                    );
-                                  }
-                                }).toList();
-                              },
+                              getTooltipItems:
+                                  (List<LineBarSpot> touchedBarSpots) {
+                                    return touchedBarSpots.map((barSpot) {
+                                      final int idx = barSpot.x.toInt();
+                                      final String bullet = '● ';
+                                      if (barSpot.barIndex == 0) {
+                                        final revenueVal = salesDataRaw[idx]
+                                            .toInt();
+                                        return LineTooltipItem(
+                                          '${bullet}Revenue: ₹$revenueVal',
+                                          GoogleFonts.outfit(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        );
+                                      } else {
+                                        final leadsVal = leadsDataRaw[idx]
+                                            .toInt();
+                                        return LineTooltipItem(
+                                          '${bullet}Leads: $leadsVal',
+                                          GoogleFonts.outfit(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppTheme.accentColor,
+                                          ),
+                                        );
+                                      }
+                                    }).toList();
+                                  },
                             ),
                           ),
                           lineBarsData: [
@@ -1633,7 +1788,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildChartLegendIndicator('Revenue', AppTheme.primaryColor),
+                      _buildChartLegendIndicator(
+                        'Revenue',
+                        AppTheme.primaryColor,
+                      ),
                       const SizedBox(width: 24),
                       _buildChartLegendIndicator(
                         'Leads Generated',
@@ -1734,23 +1892,28 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildLeadPipelineBreakdownCard() {
     return BlocBuilder<DealersBloc, DealersState>(
       builder: (context, state) {
-        final leads = state.allRawUsers
-            .where((u) => u['kycStatus'] != 'verified')
+        final allUsers = state.allRawUsers
+            .where((u) => u['role'] == 'user')
             .toList();
-        final double assigned = leads
-            .where((u) => u['assignedAgent'] != null)
-            .length
-            .toDouble();
-        final double unassigned = leads
-            .where((u) => u['assignedAgent'] == null)
-            .length
-            .toDouble();
-        final double pending = leads
-            .where((u) => u['kycStatus'] == 'pending')
+
+        final double verified = allUsers
+            .where((u) => u['kycStatus'] == 'verified')
             .length
             .toDouble();
 
-        final total = assigned + unassigned;
+        final double assignedLeads = allUsers
+            .where(
+              (u) => u['kycStatus'] != 'verified' && u['assignedAgent'] != null,
+            )
+            .length
+            .toDouble();
+
+        final double unassignedLeads = allUsers
+            .where(
+              (u) => u['kycStatus'] != 'verified' && u['assignedAgent'] == null,
+            )
+            .length
+            .toDouble();
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -1765,7 +1928,7 @@ class _DashboardPageState extends State<DashboardPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Lead Pipeline Breakdown',
+                'User Pipeline Breakdown',
                 style: GoogleFonts.outfit(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -1774,7 +1937,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Pipeline efficiency analysis',
+                'Platform conversion efficiency',
                 style: GoogleFonts.outfit(
                   fontSize: 11,
                   color: AppTheme.textSecondary,
@@ -1783,9 +1946,14 @@ class _DashboardPageState extends State<DashboardPage> {
               const Spacer(),
               Center(
                 child: AnimatedDonutChart(
-                  values: [assigned, unassigned, pending],
-                  colors: [AppTheme.info, AppTheme.success, AppTheme.warning],
-                  labels: const ['Assigned', 'Unassigned', 'Pending'],
+                  values: [verified, assignedLeads, unassignedLeads],
+                  colors: [AppTheme.success, AppTheme.info, AppTheme.warning],
+                  labels: const [
+                    'Verified Dealers',
+                    'Assigned Leads',
+                    'Unassigned Leads',
+                  ],
+                  centerLabelOverride: 'Total Users',
                   hoveredIndex: _hoveredPipelineIndex,
                   onHoverChanged: (idx) {
                     if (idx != _hoveredPipelineIndex) {
@@ -1801,22 +1969,22 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   _buildPipelineLegendRow(
                     0,
-                    'Assigned Leads',
-                    '${assigned.toInt()} (${total > 0 ? (assigned / total * 100).toStringAsFixed(0) : 0}%)',
-                    AppTheme.info,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildPipelineLegendRow(
-                    1,
-                    'Unassigned Leads',
-                    '${unassigned.toInt()} (${total > 0 ? (unassigned / total * 100).toStringAsFixed(0) : 0}%)',
+                    'Verified Dealers',
+                    '${verified.toInt()}',
                     AppTheme.success,
                   ),
                   const SizedBox(height: 8),
                   _buildPipelineLegendRow(
+                    1,
+                    'Assigned Leads',
+                    '${assignedLeads.toInt()}',
+                    AppTheme.info,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildPipelineLegendRow(
                     2,
-                    'KYC Pending',
-                    '${pending.toInt()}',
+                    'Unassigned Leads',
+                    '${unassignedLeads.toInt()}',
                     AppTheme.warning,
                   ),
                 ],
@@ -2036,6 +2204,8 @@ class _DashboardPageState extends State<DashboardPage> {
   ];
 
   String _terminalSearch = '';
+  final TextEditingController _terminalSearchController =
+      TextEditingController();
 
   Widget _buildInteractiveOperationsTable() {
     return BlocBuilder<OrdersBloc, OrdersState>(
@@ -2050,10 +2220,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
             final List<OrderModel> orders = allOrders;
             final List<Map<String, dynamic>> leads = allUsers
-                .where((u) => u['kycStatus'] != 'verified')
+                .where(
+                  (u) => u['role'] == 'user' && u['kycStatus'] != 'verified',
+                )
                 .toList();
             final List<Map<String, dynamic>> dealers = allUsers
-                .where((u) => u['kycStatus'] == 'verified')
+                .where(
+                  (u) => u['role'] == 'user' && u['kycStatus'] == 'verified',
+                )
                 .toList();
 
             final rows = _getFilteredRows(
@@ -2065,21 +2239,115 @@ class _DashboardPageState extends State<DashboardPage> {
             );
             final filteredCount = rows.length;
 
+            // Calculate global filtered counts for the badges
+            int filteredOrdersCount = orders.length;
+            int filteredLeadsCount = leads.length;
+            int filteredDealersCount = dealers.length;
+
+            if (_terminalSearch.isNotEmpty) {
+              final query = _terminalSearch.toLowerCase();
+              filteredOrdersCount = orders
+                  .where(
+                    (o) =>
+                        o.customerName.toLowerCase().contains(query) ||
+                        o.customerPhone.contains(query) ||
+                        o.orderId.toLowerCase().contains(query) ||
+                        o.orderStatus.toLowerCase().contains(query) ||
+                        (o.shopName?.toLowerCase().contains(query) ?? false) ||
+                        (o.awbNumber?.toLowerCase().contains(query) ?? false) ||
+                        o.paymentStatus.toLowerCase().contains(query) ||
+                        o.paymentMethod.toLowerCase().contains(query) ||
+                        (o.assignedAgent?.toLowerCase().contains(query) ??
+                            false),
+                  )
+                  .length;
+
+              filteredLeadsCount = leads.where((u) {
+                final fullName =
+                    '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                        .toLowerCase();
+                final phone = u['phoneNumber']?.toString().toLowerCase() ?? '';
+                final email = u['email']?.toString().toLowerCase() ?? '';
+                final city =
+                    u['address']?['cityTehsil']?.toString().toLowerCase() ?? '';
+                final state =
+                    u['address']?['state']?.toString().toLowerCase() ?? '';
+                final pincode =
+                    u['address']?['pincode']?.toString().toLowerCase() ?? '';
+                final shop = u['shopName']?.toString().toLowerCase() ?? '';
+                final agent = u['assignedAgent'] != null
+                    ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                          .trim()
+                          .toLowerCase()
+                    : '';
+                final status = (u['status'] ?? u['leadStatus'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                return fullName.contains(query) ||
+                    phone.contains(query) ||
+                    email.contains(query) ||
+                    city.contains(query) ||
+                    state.contains(query) ||
+                    pincode.contains(query) ||
+                    shop.contains(query) ||
+                    agent.contains(query) ||
+                    status.contains(query);
+              }).length;
+
+              filteredDealersCount = dealers.where((u) {
+                final fullName =
+                    '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                        .toLowerCase();
+                final phone = u['phoneNumber']?.toString().toLowerCase() ?? '';
+                final email = u['email']?.toString().toLowerCase() ?? '';
+                final city =
+                    u['address']?['cityTehsil']?.toString().toLowerCase() ?? '';
+                final state =
+                    u['address']?['state']?.toString().toLowerCase() ?? '';
+                final pincode =
+                    u['address']?['pincode']?.toString().toLowerCase() ?? '';
+                final shop = u['shopName']?.toString().toLowerCase() ?? '';
+                final agent = u['assignedAgent'] != null
+                    ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                          .trim()
+                          .toLowerCase()
+                    : '';
+                final status = (u['status'] ?? u['leadStatus'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                return fullName.contains(query) ||
+                    phone.contains(query) ||
+                    email.contains(query) ||
+                    city.contains(query) ||
+                    state.contains(query) ||
+                    pincode.contains(query) ||
+                    shop.contains(query) ||
+                    agent.contains(query) ||
+                    status.contains(query);
+              }).length;
+            }
+
             final tabs = [
               {
                 'label': 'Orders',
                 'icon': Icons.receipt_long_outlined,
-                'count': '${orders.length}',
+                'count': _terminalSearch.isNotEmpty
+                    ? '$filteredOrdersCount/${orders.length}'
+                    : '${orders.length}',
               },
               {
                 'label': 'Leads',
                 'icon': Icons.person_search_outlined,
-                'count': '${leads.length}',
+                'count': _terminalSearch.isNotEmpty
+                    ? '$filteredLeadsCount/${leads.length}'
+                    : '${leads.length}',
               },
               {
                 'label': 'Dealers',
                 'icon': Icons.storefront_outlined,
-                'count': '${dealers.length}',
+                'count': _terminalSearch.isNotEmpty
+                    ? '$filteredDealersCount/${dealers.length}'
+                    : '${dealers.length}',
               },
             ];
 
@@ -2133,33 +2401,95 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // Dynamic Search Field
             final Widget searchField = Container(
-              height: 34,
-              width: isMobile ? null : 200,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              height: 40,
+              width: isMobile ? null : 250,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppTheme.borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
-                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
-                      onChanged: (v) =>
-                          setState(() => _terminalSearch = v.toLowerCase()),
-                      style: AppTheme.bodyMD,
+                      controller: _terminalSearchController,
+                      onChanged: (v) {
+                        setState(() => _terminalSearch = v.toLowerCase());
+
+                        // Sync search query to BLoCs
+                        context.read<OrdersBloc>().add(
+                          UpdateOrdersFilterEvent(searchQuery: v),
+                        );
+                        context.read<DealersBloc>().add(
+                          UpdateDealersFilterEvent(searchQuery: v),
+                        );
+                        context.read<LeadsBloc>().add(
+                          UpdateLeadsFilterEvent(searchQuery: v),
+                        );
+                      },
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: InputDecoration(
-                        hintText: 'Search records…',
-                        hintStyle: AppTheme.hint,
+                        hintText: activeTableTab == 0
+                            ? 'Search order ID, client, phone...'
+                            : activeTableTab == 1
+                            ? 'Search lead name, phone, city...'
+                            : 'Search dealer name, phone, city...',
+                        hintStyle: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary.withOpacity(0.7),
+                          fontWeight: FontWeight.w500,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
                   ),
+                  if (_terminalSearch.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _terminalSearch = '';
+                          _terminalSearchController.clear();
+                        });
+                        // Sync clear to BLoCs
+                        context.read<OrdersBloc>().add(
+                          const UpdateOrdersFilterEvent(searchQuery: ''),
+                        );
+                        context.read<DealersBloc>().add(
+                          const UpdateDealersFilterEvent(searchQuery: ''),
+                        );
+                        context.read<LeadsBloc>().add(
+                          const UpdateLeadsFilterEvent(searchQuery: ''),
+                        );
+                      },
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -2284,7 +2614,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                     child: GestureDetector(
                                       onTap: () => setState(() {
                                         activeTableTab = idx;
-                                        _terminalSearch = '';
                                       }),
                                       child: AnimatedContainer(
                                         duration: const Duration(
@@ -2367,7 +2696,12 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         if (!isMobile) ...[
                           const SizedBox(width: 10),
-                          Text('$filteredCount records', style: AppTheme.hint),
+                          Text(
+                            _terminalSearch.isNotEmpty
+                                ? 'Showing ${rows.length > 10 ? 10 : rows.length} of ${rows.length} records'
+                                : '${rows.length} records',
+                            style: AppTheme.hint,
+                          ),
                         ],
                       ],
                     ),
@@ -2380,13 +2714,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
 
                   // ── Table ────────────────────────────────────────────────────────
-                  _buildTerminalTable(
-                    orders,
-                    leads,
-                    dealers,
-                    allRawOrders,
-                    allUsers,
-                  ),
+                  _buildTerminalTable(rows),
 
                   // ── Summary metric bar ────────────────────────────────────────────
                   _buildSummaryBar(ordersState, dealersState),
@@ -2398,8 +2726,6 @@ class _DashboardPageState extends State<DashboardPage> {
       },
     );
   }
-
-
 
   List<Map<String, dynamic>> _getFilteredRows(
     List<OrderModel> orders,
@@ -2415,44 +2741,47 @@ class _DashboardPageState extends State<DashboardPage> {
         filtered = filtered.where(
           (o) =>
               o.customerName.toLowerCase().contains(query) ||
+              o.customerPhone.contains(query) ||
               o.orderId.toLowerCase().contains(query) ||
-              o.orderStatus.toLowerCase().contains(query),
+              o.orderStatus.toLowerCase().contains(query) ||
+              (o.shopName?.toLowerCase().contains(query) ?? false) ||
+              (o.awbNumber?.toLowerCase().contains(query) ?? false) ||
+              o.paymentStatus.toLowerCase().contains(query) ||
+              o.paymentMethod.toLowerCase().contains(query) ||
+              (o.assignedAgent?.toLowerCase().contains(query) ?? false),
         );
       }
 
-      return filtered
-          .map((o) {
-            // Cross-reference user to get LATEST assigned agent
-            final user = allUsers.firstWhere(
-              (u) => u['_id'] == o.userId,
-              orElse: () => {},
-            );
-            String? latestAgent;
-            if (user.isNotEmpty && user['assignedAgent'] != null) {
-              final agentJson = user['assignedAgent'] as Map<String, dynamic>;
-              latestAgent =
-                  '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
-                      .trim();
-            }
+      return filtered.map((o) {
+        // Cross-reference user to get LATEST assigned agent
+        final user = allUsers.firstWhere(
+          (u) => u['_id'] == o.userId,
+          orElse: () => {},
+        );
+        String? latestAgent;
+        if (user.isNotEmpty && user['assignedAgent'] != null) {
+          final agentJson = user['assignedAgent'] as Map<String, dynamic>;
+          latestAgent =
+              '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
+                  .trim();
+        }
 
-            return {
-              '_id': o.id, // Order ID
-              'userId': o.userId, // Customer's User ID
-              'orderId': o.orderId,
-              'date': '${_formatDate(o.placedAt)} ${_formatTime(o.placedAt)}',
-              'customer': '${o.customerName}\n${o.customerPhone}',
-              'agent': (latestAgent != null && latestAgent.isNotEmpty)
-                  ? latestAgent
-                  : (o.assignedAgent ?? '-'),
-              'agentId': null,
-              'amount': '₹${o.totalAmount.toStringAsFixed(2)}',
-              'payment': o.paymentStatus,
-              'status': o.orderStatus,
-              '_raw': o,
-            };
-          })
-          .take(10)
-          .toList();
+        return {
+          '_id': o.id, // Order ID
+          'userId': o.userId, // Customer's User ID
+          'orderId': o.orderId,
+          'date': '${_formatDate(o.placedAt)} ${_formatTime(o.placedAt)}',
+          'customer': '${o.customerName}\n${o.customerPhone}',
+          'agent': (latestAgent != null && latestAgent.isNotEmpty)
+              ? latestAgent
+              : (o.assignedAgent ?? '-'),
+          'agentId': null,
+          'amount': '₹${o.totalAmount.toStringAsFixed(2)}',
+          'payment': o.paymentStatus,
+          'status': o.orderStatus,
+          '_raw': o,
+        };
+      }).toList();
     } else if (activeTableTab == 1) {
       Iterable<Map<String, dynamic>> filtered = leads;
       if (_terminalSearch.isNotEmpty) {
@@ -2460,49 +2789,69 @@ class _DashboardPageState extends State<DashboardPage> {
         filtered = filtered.where((u) {
           final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
               .toLowerCase();
+          final phone = u['phoneNumber']?.toString().toLowerCase() ?? '';
+          final email = u['email']?.toString().toLowerCase() ?? '';
+          final city =
+              u['address']?['cityTehsil']?.toString().toLowerCase() ?? '';
+          final state = u['address']?['state']?.toString().toLowerCase() ?? '';
+          final pincode =
+              u['address']?['pincode']?.toString().toLowerCase() ?? '';
+          final shop = u['shopName']?.toString().toLowerCase() ?? '';
+          final agent = u['assignedAgent'] != null
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                    .trim()
+                    .toLowerCase()
+              : '';
+          final status = (u['status'] ?? u['leadStatus'] ?? '')
+              .toString()
+              .toLowerCase();
+
           return fullName.contains(query) ||
-              (u['phoneNumber']?.toString().contains(query) ?? false) ||
-              (u['email']?.toString().toLowerCase().contains(query) ?? false);
+              phone.contains(query) ||
+              email.contains(query) ||
+              city.contains(query) ||
+              state.contains(query) ||
+              pincode.contains(query) ||
+              shop.contains(query) ||
+              agent.contains(query) ||
+              status.contains(query);
         });
       }
 
-      return filtered
-          .map((u) {
-            final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-                .trim();
-            final name = personName.isNotEmpty
-                ? personName
-                : (u['phoneNumber'] ?? 'Unnamed Lead');
-            final shopName = u['shopName'] ?? '';
+      return filtered.map((u) {
+        final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim();
+        final name = personName.isNotEmpty
+            ? personName
+            : (u['phoneNumber'] ?? 'Unnamed Lead');
+        final shopName = u['shopName'] ?? '';
 
-            return {
-              '_id': u['_id'],
-              'dealer':
-                  name +
-                  (shopName.isNotEmpty && shopName.toLowerCase() != 'my store'
-                      ? '\n$shopName'
-                      : ''),
-              'phone': u['phoneNumber'] ?? '-',
-              'location':
-                  '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
-                      .trim()
-                      .replaceAll(RegExp(r'^, |, $'), ''),
-              'activity': u['updatedAt'] != null
-                  ? _formatTimeAgo(u['updatedAt'])
-                  : '-',
-              'agent': u['assignedAgent'] != null
-                  ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                        .trim()
-                  : '-',
-              'agentId': u['assignedAgent']?['_id'],
-              'status': _formatStatusName(
-                u['status'] ?? u['leadStatus'] ?? 'prospect',
-              ),
-              '_raw': u,
-            };
-          })
-          .take(10)
-          .toList();
+        return {
+          '_id': u['_id'],
+          'dealer':
+              name +
+              (shopName.isNotEmpty && shopName.toLowerCase() != 'my store'
+                  ? '\n$shopName'
+                  : ''),
+          'phone': u['phoneNumber'] ?? '-',
+          'location':
+              '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
+                  .trim()
+                  .replaceAll(RegExp(r'^, |, $'), ''),
+          'activity': u['updatedAt'] != null
+              ? _formatTimeAgo(u['updatedAt'])
+              : '-',
+          'agent': u['assignedAgent'] != null
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                    .trim()
+              : '-',
+          'agentId': u['assignedAgent']?['_id'],
+          'status': _formatStatusName(
+            u['status'] ?? u['leadStatus'] ?? 'prospect',
+          ),
+          '_raw': u,
+        };
+      }).toList();
     } else {
       Iterable<Map<String, dynamic>> filtered = dealers;
       if (_terminalSearch.isNotEmpty) {
@@ -2510,9 +2859,32 @@ class _DashboardPageState extends State<DashboardPage> {
         filtered = filtered.where((u) {
           final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
               .toLowerCase();
+          final phone = u['phoneNumber']?.toString().toLowerCase() ?? '';
+          final email = u['email']?.toString().toLowerCase() ?? '';
+          final city =
+              u['address']?['cityTehsil']?.toString().toLowerCase() ?? '';
+          final state = u['address']?['state']?.toString().toLowerCase() ?? '';
+          final pincode =
+              u['address']?['pincode']?.toString().toLowerCase() ?? '';
+          final shop = u['shopName']?.toString().toLowerCase() ?? '';
+          final agent = u['assignedAgent'] != null
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                    .trim()
+                    .toLowerCase()
+              : '';
+          final status = (u['status'] ?? u['leadStatus'] ?? '')
+              .toString()
+              .toLowerCase();
+
           return fullName.contains(query) ||
-              (u['phoneNumber']?.toString().contains(query) ?? false) ||
-              (u['email']?.toString().toLowerCase().contains(query) ?? false);
+              phone.contains(query) ||
+              email.contains(query) ||
+              city.contains(query) ||
+              state.contains(query) ||
+              pincode.contains(query) ||
+              shop.contains(query) ||
+              agent.contains(query) ||
+              status.contains(query);
         });
       }
 
@@ -2525,44 +2897,41 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      return filtered
-          .map((u) {
-            final userId = u['_id'];
-            final dealerOrders = ordersByUserId[userId] ?? [];
-            final purchaseSum = dealerOrders.fold(
-              0.0,
-              (sum, o) => sum + (o['totalAmount'] as num).toDouble(),
-            );
+      return filtered.map((u) {
+        final userId = u['_id'];
+        final dealerOrders = ordersByUserId[userId] ?? [];
+        final purchaseSum = dealerOrders.fold(
+          0.0,
+          (sum, o) => sum + (o['totalAmount'] as num).toDouble(),
+        );
 
-            final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-                .trim();
-            final shopName = u['shopName'] ?? '';
+        final personName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim();
+        final shopName = u['shopName'] ?? '';
 
-            return {
-              '_id': u['_id'],
-              'dealer':
-                  (shopName.isNotEmpty ? shopName : 'Unnamed Shop') +
-                  (personName.isNotEmpty ? '\n$personName' : ''),
-              'phone': u['phoneNumber'] ?? '-',
-              'location':
-                  '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
-                      .trim()
-                      .replaceAll(RegExp(r'^, |, $'), ''),
-              'agent': u['assignedAgent'] != null
-                  ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                        .trim()
-                  : '-',
-              'agentId': u['assignedAgent']?['_id'],
-              'status': _formatStatusName(
-                u['status'] ?? u['leadStatus'] ?? 'Verified',
-              ),
-              'orders': '${dealerOrders.length}',
-              'revenue': _formatCurrency(purchaseSum),
-              '_raw': u,
-            };
-          })
-          .take(10)
-          .toList();
+        return {
+          '_id': u['_id'],
+          'dealer':
+              (shopName.isNotEmpty ? shopName : 'Unnamed Shop') +
+              (personName.isNotEmpty ? '\n$personName' : ''),
+          'phone': u['phoneNumber'] ?? '-',
+          'location':
+              '${u['address']?['cityTehsil'] ?? ''}, ${u['address']?['state'] ?? ''}'
+                  .trim()
+                  .replaceAll(RegExp(r'^, |, $'), ''),
+          'agent': u['assignedAgent'] != null
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                    .trim()
+              : '-',
+          'agentId': u['assignedAgent']?['_id'],
+          'status': _formatStatusName(
+            u['status'] ?? u['leadStatus'] ?? 'Verified',
+          ),
+          'orders': '${dealerOrders.length}',
+          'revenue': _formatCurrency(purchaseSum),
+          '_raw': u,
+        };
+      }).toList();
     }
   }
 
@@ -2625,19 +2994,24 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   String _formatCurrency(double amount) {
-    final int val = amount.round();
-    if (val == 0) return '₹0';
-    final str = val.toString();
-    if (str.length <= 3) return '₹$str';
-    var lastThree = str.substring(str.length - 3);
-    var otherParts = str.substring(0, str.length - 3);
+    String parts = amount.toStringAsFixed(2);
+    List<String> split = parts.split('.');
+    String integerPart = split[0];
+    String decimalPart = split[1];
+
+    if (integerPart.length <= 3) {
+      return '₹$integerPart.$decimalPart';
+    }
+
+    String lastThree = integerPart.substring(integerPart.length - 3);
+    String otherParts = integerPart.substring(0, integerPart.length - 3);
     if (otherParts.isNotEmpty) {
       otherParts = otherParts.replaceAllMapped(
         RegExp(r'(\d)(?=(\d\d)+(?!\d))'),
         (Match m) => '${m[1]},',
       );
     }
-    return '₹$otherParts,$lastThree';
+    return '₹$otherParts,$lastThree.$decimalPart';
   }
 
   String _formatDate(dynamic date) {
@@ -2653,20 +3027,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return '${dt.day}/${dt.month}/${dt.year}';
   }
 
-  Widget _buildTerminalTable(
-    List<OrderModel> orders,
-    List<Map<String, dynamic>> leads,
-    List<Map<String, dynamic>> dealers,
-    List<Map<String, dynamic>> allRawOrders,
-    List<Map<String, dynamic>> allUsers,
-  ) {
-    final rows = _getFilteredRows(
-      orders,
-      leads,
-      dealers,
-      allRawOrders,
-      allUsers,
-    );
+  Widget _buildTerminalTable(List<Map<String, dynamic>> rows) {
     if (rows.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -2693,6 +3054,8 @@ class _DashboardPageState extends State<DashboardPage> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           children: rows
+              .take(10)
+              .toList()
               .asMap()
               .entries
               .map((entry) => _buildMobileRecordCard(entry.key, entry.value))
@@ -2752,9 +3115,12 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         const Divider(height: 1, color: AppTheme.lightBorderColor),
         // Data rows
-        ...rows.asMap().entries.map(
-          (entry) => _buildTerminalRow(entry.key, entry.value),
-        ),
+        ...rows
+            .take(10)
+            .toList()
+            .asMap()
+            .entries
+            .map((entry) => _buildTerminalRow(entry.key, entry.value)),
       ],
     );
   }
@@ -2809,10 +3175,10 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildSummaryBar(OrdersState ordersState, DealersState dealersState) {
     final List<OrderModel> orders = ordersState.orders;
     final List<Map<String, dynamic>> leads = dealersState.allRawUsers
-        .where((u) => u['kycStatus'] != 'verified')
+        .where((u) => u['role'] == 'user' && u['kycStatus'] != 'verified')
         .toList();
     final List<Map<String, dynamic>> dealers = dealersState.allRawUsers
-        .where((u) => u['kycStatus'] == 'verified')
+        .where((u) => u['role'] == 'user' && u['kycStatus'] == 'verified')
         .toList();
 
     // Calculate count of unique dealers who have placed at least one order
@@ -2861,14 +3227,16 @@ class _DashboardPageState extends State<DashboardPage> {
               'color': AppTheme.info,
             },
             {
-              'label': 'Converted',
-              'value': '0',
+              'label': 'Assigned',
+              'value':
+                  '${leads.where((u) => u['assignedAgent'] != null).length}',
               'icon': Icons.how_to_reg_outlined,
               'color': AppTheme.success,
             },
             {
-              'label': 'In Pipeline',
-              'value': '${leads.length}',
+              'label': 'Unassigned',
+              'value':
+                  '${leads.where((u) => u['assignedAgent'] == null).length}',
               'icon': Icons.timelapse_outlined,
               'color': AppTheme.warning,
             },
@@ -4005,6 +4373,7 @@ class AnimatedDonutChart extends StatefulWidget {
   final List<String> labels;
   final int hoveredIndex;
   final ValueChanged<int> onHoverChanged;
+  final String? centerLabelOverride;
 
   const AnimatedDonutChart({
     super.key,
@@ -4013,6 +4382,7 @@ class AnimatedDonutChart extends StatefulWidget {
     required this.labels,
     this.hoveredIndex = -1,
     required this.onHoverChanged,
+    this.centerLabelOverride,
   });
 
   @override
@@ -4058,7 +4428,7 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart>
 
     final String centerLabel = isTouchActive
         ? widget.labels[activeIndex]
-        : 'Active Leads';
+        : (widget.centerLabelOverride ?? 'Active Leads');
 
     final Color centerColor = isTouchActive
         ? widget.colors[activeIndex]

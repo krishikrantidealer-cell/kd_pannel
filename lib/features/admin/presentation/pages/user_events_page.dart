@@ -48,6 +48,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   int _globalFailedPaymentsCount = 0;
   int _globalAbandonedCartsCount = 0;
   Map<String, List<Map<String, dynamic>>> _eventsLogs = {};
+  final Set<String> _processedEventIds = {};
   Map<String, String> _nameToId = {};
   List<Map<String, dynamic>> _realTimeUsers = [];
   Timer? _realTimeTimer;
@@ -238,13 +239,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
       // High priority logic
       bool isHigh = false;
       String reason = '';
-      if (userGroups.containsKey('payment_failed')) {
+      final bool hasSuccess = userGroups.containsKey('payment_success');
+
+      if (userGroups.containsKey('payment_failed') && !hasSuccess) {
         isHigh = true;
         reason = 'Payment Failed';
-      } else if (userGroups.containsKey('checkout_started') && !userGroups.containsKey('payment_success')) {
+      } else if (userGroups.containsKey('checkout_started') && !hasSuccess) {
         isHigh = true;
         reason = 'Abandoned Checkout';
-      } else if (userGroups.containsKey('add_to_cart') && !userGroups.containsKey('checkout_started')) {
+      } else if (userGroups.containsKey('add_to_cart') && !userGroups.containsKey('checkout_started') && !hasSuccess) {
         isHigh = true;
         reason = 'Abandoned Cart';
       }
@@ -461,6 +464,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
     Map<String, String> nameToId,
   ) {
     for (var event in flatEvents) {
+      final String? eventId = event['_id']?.toString() ?? event['eventId']?.toString();
+      if (eventId != null) {
+        if (_processedEventIds.contains(eventId)) continue;
+        _processedEventIds.add(eventId);
+      }
+
       final rawUser = event['user']?.toString();
       if (rawUser == null ||
           rawUser.isEmpty ||
@@ -529,11 +538,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
   Future<void> _loadEvents({
     bool silent = false,
     String? searchQuery,
+    String? metricFilter,
     bool isBackground = false,
   }) async {
     if (!mounted || _isLoadingEvents) return;
     _isLoadingEvents = true;
     _isBackgroundLoading = isBackground;
+    
+    final bool isSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
+    final String activeMetricFilter = metricFilter ?? _selectedMetricFilter;
+
     if (!silent && _eventsLogs.isEmpty) {
       setState(() {
         _isLoading = true;
@@ -549,8 +563,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     try {
       final futures = await Future.wait([
         AnalyticsService().fetchEventsPaged(
-          limit: 150,
+          limit: 300,
           userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+          filter: activeMetricFilter,
         ),
         AnalyticsService().fetchSummaryMetrics(),
       ]);
@@ -565,25 +580,39 @@ class _UserEventsPageState extends State<UserEventsPage> {
       }
 
       final flatEvents = res['events'] as List<Map<String, dynamic>>;
-      _nextCursor = res['nextCursor'] as String?;
 
       if (flatEvents.isNotEmpty) {
-        final Map<String, List<Map<String, dynamic>>> grouped = {};
-        final Map<String, String> nameToId = {};
+        // If background refresh and not a search, merge with existing logs
+        final bool shouldMerge = isBackground && !isSearch;
+        
+        if (!shouldMerge) {
+          _eventsLogs = {};
+          _processedEventIds.clear();
+          _nameToId = {};
+          _nextCursor = res['nextCursor'] as String?;
+        }
 
-        _processEventsList(flatEvents, grouped, nameToId);
+        final Map<String, List<Map<String, dynamic>>> currentGrouped = Map.from(_eventsLogs);
+        final Map<String, String> currentNameToId = Map.from(_nameToId);
 
-        _eventsLogs = grouped;
-        _nameToId = nameToId;
-      } else {
+        _processEventsList(flatEvents, currentGrouped, currentNameToId);
+
+        _eventsLogs = currentGrouped;
+        _nameToId = currentNameToId;
+      } else if (!isBackground) {
         _eventsLogs = {};
+        _processedEventIds.clear();
         _nameToId = {};
         _isFallbackMode = false;
+        _nextCursor = null;
       }
     } catch (e) {
       debugPrint('[UserEventsPage] Failed to fetch events: $e');
-      _eventsLogs = {};
-      _isFallbackMode = true;
+      if (!isBackground) {
+        _eventsLogs = {};
+        _processedEventIds.clear();
+        _isFallbackMode = true;
+      }
     }
 
     _rebuildCache();
@@ -598,16 +627,17 @@ class _UserEventsPageState extends State<UserEventsPage> {
       }).length;
     }
 
-    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+    if (isSearch) {
       if (_cachedUsersWithEvents.isNotEmpty) {
         _selectedUser = _cachedUsersWithEvents.first;
       } else {
         _selectedUser = null;
       }
-    } else {
+      _selectedEventType = null;
+    } else if (!isBackground) {
       _selectedUser = null;
+      _selectedEventType = null;
     }
-    _selectedEventType = null;
 
     if (mounted) {
       setState(() {
@@ -628,9 +658,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     try {
       final res = await AnalyticsService().fetchEventsPaged(
-        limit: 150,
+        limit: 300,
         before: _nextCursor,
         userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+        filter: _selectedMetricFilter,
       );
       final flatEvents = res['events'] as List<Map<String, dynamic>>;
       _nextCursor = res['nextCursor'] as String?;
@@ -1726,6 +1757,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     _selectedPriority = 'High Priority';
                   }
                 });
+                _loadEvents(silent: false, metricFilter: _selectedMetricFilter);
               },
               isSelected: _selectedMetricFilter == 'High Priority',
             ),
@@ -1745,6 +1777,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     _selectedPriority = 'All';
                   }
                 });
+                _loadEvents(silent: false, metricFilter: _selectedMetricFilter);
               },
               isSelected: _selectedMetricFilter == 'Abandoned Carts',
             ),
@@ -1764,6 +1797,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     _selectedPriority = 'All';
                   }
                 });
+                _loadEvents(silent: false, metricFilter: _selectedMetricFilter);
               },
               isSelected: _selectedMetricFilter == 'Failed Payments',
             ),
@@ -2301,7 +2335,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 label: 'Priority',
                 value: _selectedPriority,
                 options: ['All', 'High Priority'],
-                onChanged: (val) => setState(() => _selectedPriority = val!),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedPriority = val!;
+                    _selectedMetricFilter = val; // Sync with metric filter
+                  });
+                  _loadEvents(silent: false, metricFilter: val);
+                },
               ),
               if (_selectedUserType != 'All' ||
                   _selectedPriority != 'All' ||
@@ -2316,6 +2356,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                       _userSearchQuery = '';
                       _userSearchController.clear();
                     });
+                    _loadEvents(silent: false, metricFilter: 'All');
                   },
                   icon: const Icon(Icons.filter_list_off_rounded, size: 14),
                   label: Text(

@@ -11,6 +11,9 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'dart:async';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
@@ -30,6 +33,7 @@ class _OrdersPageState extends State<OrdersPage> {
   final TextEditingController _searchController = TextEditingController();
 
   String? _hoveredOrderId;
+  StreamSubscription? _ordersWsSubscription;
 
   @override
   void initState() {
@@ -39,10 +43,18 @@ class _OrdersPageState extends State<OrdersPage> {
     if (bloc.state.status == OrdersStatus.initial) {
       bloc.add(const FetchOrdersEvent());
     }
+
+    WebSocketService().connect();
+    _ordersWsSubscription = WebSocketService().ordersUpdates.listen((_) {
+      if (mounted) {
+        context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _ordersWsSubscription?.cancel();
     _scrollController.dispose();
     _tableHorizontalController.dispose();
     _searchController.dispose();
@@ -54,7 +66,29 @@ class _OrdersPageState extends State<OrdersPage> {
     List<OrderModel> orders,
     OrdersState state,
   ) {
-    return orders.where((order) {
+    final role = AuthService().currentUserRole ?? UserRole.admin;
+    final String? currentAgentId = AuthService().currentUserId;
+    final String? currentAgentName = AuthService().currentUserName?.toLowerCase().trim();
+
+    // 1. First, apply Role-based base filtering (Agent Assignment)
+    Iterable<OrderModel> baseOrders = orders;
+    if (role == UserRole.sales) {
+      baseOrders = orders.where((order) {
+        // Match by ID first (most reliable)
+        if (currentAgentId != null && order.assignedAgentId == currentAgentId) {
+          return true;
+        }
+        // Fallback to name match (for legacy or inconsistent data)
+        if (currentAgentName != null) {
+          final assigned = order.assignedAgent?.toLowerCase().trim() ?? '';
+          return assigned == currentAgentName;
+        }
+        return false;
+      });
+    }
+
+    // 2. Then apply UI filters (Search, Status, etc)
+    return baseOrders.where((order) {
       final query = state.searchQuery.toLowerCase().trim();
       final matchesSearch =
           order.orderId.toLowerCase().contains(query) ||
@@ -91,6 +125,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
           return BlocConsumer<OrdersBloc, OrdersState>(
             listener: (context, state) {
+              if (_searchController.text != state.searchQuery) {
+                _searchController.text = state.searchQuery;
+              }
               if (state.errorMessage != null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -218,7 +255,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             padding: EdgeInsets.symmetric(
                               horizontal: screenPadding.left,
                             ),
-                            child: _buildStatsGrid(state),
+                            child: _buildStatsGrid(state, filtered),
                           ),
                           const SizedBox(height: 24),
 
@@ -303,24 +340,24 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildStatsGrid(OrdersState state) {
+  Widget _buildStatsGrid(OrdersState state, List<OrderModel> filteredOrders) {
     final bool isDesktop = Responsive.isDesktop(context);
 
-    // Dynamic counts from all orders
-    final int totalOrders = state.orders.length;
-    final int processingOrders = state.orders
+    // Dynamic counts from filtered orders (which are already agent-filtered if sales)
+    final int totalOrders = filteredOrders.length;
+    final int processingOrders = filteredOrders
         .where((o) => o.orderStatus.toLowerCase() == 'processing')
         .length;
-    final int shippedOrders = state.orders
+    final int shippedOrders = filteredOrders
         .where((o) => o.orderStatus.toLowerCase() == 'shipped')
         .length;
-    final int deliveredOrders = state.orders
+    final int deliveredOrders = filteredOrders
         .where((o) => o.orderStatus.toLowerCase() == 'delivered')
         .length;
 
     // Today's orders
     final now = DateTime.now();
-    final placedToday = state.orders
+    final placedToday = filteredOrders
         .where(
           (o) =>
               o.placedAt.year == now.year &&
@@ -330,7 +367,7 @@ class _OrdersPageState extends State<OrdersPage> {
         .length;
 
     // Shipped / Out for delivery in transit
-    final outForDeliveryOrders = state.orders
+    final outForDeliveryOrders = filteredOrders
         .where((o) => o.orderStatus.toLowerCase() == 'out for delivery')
         .length;
     final totalInTransit = shippedOrders + outForDeliveryOrders;

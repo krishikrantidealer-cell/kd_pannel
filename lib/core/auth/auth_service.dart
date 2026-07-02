@@ -14,6 +14,7 @@ class AuthService {
   UserRole? _currentUserRole;
   String? _currentUserId;
   String? _currentUserEmail;
+  String? _currentUserName;
   String? _lastError;
   String? _sessionId;
   bool _isInitialized = false;
@@ -21,6 +22,7 @@ class AuthService {
   UserRole? get currentUserRole => _currentUserRole;
   String? get currentUserId => _currentUserId;
   String? get currentUserEmail => _currentUserEmail;
+  String? get currentUserName => _currentUserName;
   String? get lastError => _lastError;
   String? get sessionId => _sessionId;
   bool get isInitialized => _isInitialized;
@@ -37,6 +39,7 @@ class AuthService {
       }
       _currentUserId = prefs.getString('kd_user_id');
       _currentUserEmail = prefs.getString('kd_user_email');
+      _currentUserName = prefs.getString('kd_user_name');
     } catch (_) {}
     _isInitialized = true;
   }
@@ -65,8 +68,13 @@ class AuthService {
           final userRoleStr = data['user']['role'];
           final userIdStr = data['user']['id'] ?? data['user']['_id'];
           final userEmailStr = data['user']['email'];
+          final firstName = data['user']['firstName'] ?? '';
+          final lastName = data['user']['lastName'] ?? '';
+          final userName = '$firstName $lastName'.trim();
+
           _currentUserId = userIdStr;
           _currentUserEmail = userEmailStr;
+          _currentUserName = userName;
 
           final prefs = await SharedPreferences.getInstance();
           if (userIdStr != null) {
@@ -74,6 +82,9 @@ class AuthService {
           }
           if (userEmailStr != null) {
             await prefs.setString('kd_user_email', userEmailStr);
+          }
+          if (userName.isNotEmpty) {
+            await prefs.setString('kd_user_name', userName);
           }
           if (rememberMe) {
             await prefs.setString('kd_user_role', userRoleStr);
@@ -129,6 +140,7 @@ class AuthService {
     _currentUserRole = null;
     _currentUserId = null;
     _currentUserEmail = null;
+    _currentUserName = null;
     _lastError = null;
     ApiClient().clearCache();
     ApiClient().clearTokens();
@@ -137,6 +149,7 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('kd_user_id');
       await prefs.remove('kd_user_email');
+      await prefs.remove('kd_user_name');
     } catch (_) {}
   }
 

@@ -394,8 +394,18 @@ class _LeadsPageState extends State<LeadsPage> {
           final role = u['role'] ?? 'user';
           if (role != 'user') return false;
 
+          // Leads should ONLY show non-verified users
+          final kycStatus = u['kycStatus'] ?? 'pending';
+          if (kycStatus == 'verified') return false;
+
           if (isSales) {
-            final assignedAgentId = u['assignedAgent']?['_id'];
+            final dynamic assignedAgent = u['assignedAgent'];
+            String? assignedAgentId;
+            if (assignedAgent is Map) {
+              assignedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
+            } else {
+              assignedAgentId = assignedAgent?.toString();
+            }
             return assignedAgentId == agentId;
           }
           return true;
@@ -405,6 +415,25 @@ class _LeadsPageState extends State<LeadsPage> {
               (u['firstName'] != null || u['lastName'] != null)
               ? '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim()
               : '';
+          final dynamic assignedAgent = u['assignedAgent'];
+          String? resolvedAgentId;
+          String agentName = '-';
+          
+          if (assignedAgent != null) {
+            if (assignedAgent is Map) {
+              resolvedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
+              agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
+              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '-').toString();
+            } else {
+              resolvedAgentId = assignedAgent.toString();
+              agentName = 'Assigned'; // Fallback name if it's just an ID
+            }
+            if (resolvedAgentId == null || resolvedAgentId.trim().isEmpty || resolvedAgentId == '-') {
+              resolvedAgentId = null;
+              agentName = '-';
+            }
+          }
+
           return {
             'id': u['_id'],
             'name': personName.isNotEmpty
@@ -420,16 +449,13 @@ class _LeadsPageState extends State<LeadsPage> {
             'activity': u['updatedAt'] != null
                 ? _formatTimeAgo(u['updatedAt'])
                 : '-',
-            'agent': u['assignedAgent'] != null
-                ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                      .trim()
-                : '-',
-            'agentId': u['assignedAgent']?['_id'],
+            'agent': agentName,
+            'agentId': resolvedAgentId,
             'source': u['source'] ?? 'App',
             'processingStatus':
                 u['kycStatus'] == 'pending' || u['kycStatus'] == 'submitted'
                 ? 'KYC Pending'
-                : (u['assignedAgent'] != null ? 'Assigned' : 'Unassigned'),
+                : (resolvedAgentId != null ? 'Assigned' : 'Unassigned'),
             'kycStatus': u['kycStatus'] ?? 'pending',
             'gstNumber': u['gstNumber'] ?? '',
             'userType': u['userType'] ?? '',
@@ -655,6 +681,9 @@ class _LeadsPageState extends State<LeadsPage> {
     return SelectionArea(
       child: BlocConsumer<LeadsBloc, LeadsState>(
         listener: (context, state) {
+          if (_searchController.text != state.searchQuery) {
+            _searchController.text = state.searchQuery;
+          }
           if (state.errorMessage != null) {
             NavigationService.messengerKey.currentState?.showSnackBar(
               SnackBar(
@@ -675,9 +704,45 @@ class _LeadsPageState extends State<LeadsPage> {
           }
         },
         builder: (context, state) {
-          // Optimization: Calculate leads once per build
           final allLeadsData = _getAllLeads(state.allRawUsers);
-          final filteredLeadsData = _getFilteredLeads(allLeadsData, state);
+
+          // Date Filtering (Global for page)
+          DateTime? startDate;
+          DateTime? endDate;
+
+          if (state.selectedRange != null && state.selectedRange!.startDate != null) {
+            startDate = state.selectedRange!.startDate;
+            endDate = state.selectedRange!.endDate ?? state.selectedRange!.startDate;
+            endDate = DateTime(endDate!.year, endDate.month, endDate.day, 23, 59, 59);
+          } else if (state.selectedTimeframe.isNotEmpty && state.selectedTimeframe != 'All Time') {
+            final now = DateTime.now();
+            endDate = now;
+            switch (state.selectedTimeframe) {
+              case 'Last 1 Week': startDate = now.subtract(const Duration(days: 7)); break;
+              case 'Last 2 Weeks': startDate = now.subtract(const Duration(days: 14)); break;
+              case 'Last 3 Weeks': startDate = now.subtract(const Duration(days: 21)); break;
+              case 'Last 1 Month': startDate = DateTime(now.year, now.month - 1, now.day); break;
+              case 'Last 3 Months': startDate = DateTime(now.year, now.month - 3, now.day); break;
+              case 'Last 6 Months': startDate = DateTime(now.year, now.month - 6, now.day); break;
+              case 'This Month': startDate = DateTime(now.year, now.month, 1); break;
+            }
+          }
+
+          var dateFilteredLeads = allLeadsData;
+          if (startDate != null && endDate != null) {
+            dateFilteredLeads = allLeadsData.where((l) {
+              final dateStr = l['createdAt'] ?? l['updatedAt'];
+              if (dateStr == null) return false;
+              try {
+                final date = DateTime.parse(dateStr).toLocal();
+                return date.isAfter(startDate!) && date.isBefore(endDate!);
+              } catch (e) {
+                return false;
+              }
+            }).toList();
+          }
+
+          final filteredLeadsData = _getFilteredLeads(dateFilteredLeads, state);
 
           final verifiedDealersCount = state.allRawUsers.where((u) {
             final role = u['role'] ?? 'user';
@@ -686,72 +751,17 @@ class _LeadsPageState extends State<LeadsPage> {
             if (!isVerifiedDealer) return false;
 
             if (AuthService().isSales) {
-              final assignedAgentId = u['assignedAgent']?['_id'];
+              final dynamic assignedAgent = u['assignedAgent'];
+              String? assignedAgentId;
+              if (assignedAgent is Map) {
+                assignedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
+              } else {
+                assignedAgentId = assignedAgent?.toString();
+              }
               return assignedAgentId == AuthService().currentUserId;
             }
             return true;
           }).length;
-
-          // Date Filtering for leads stats grid
-          DateTime? statsStartDate;
-          DateTime? statsEndDate;
-
-          if (state.selectedRange != null &&
-              state.selectedRange!.startDate != null) {
-            statsStartDate = state.selectedRange!.startDate;
-            statsEndDate =
-                state.selectedRange!.endDate ?? state.selectedRange!.startDate;
-            statsEndDate = DateTime(
-              statsEndDate!.year,
-              statsEndDate.month,
-              statsEndDate.day,
-              23,
-              59,
-              59,
-            );
-          } else if (state.selectedTimeframe.isNotEmpty &&
-              state.selectedTimeframe != 'All Time') {
-            final now = DateTime.now();
-            statsEndDate = now;
-            switch (state.selectedTimeframe) {
-              case 'Last 1 Week':
-                statsStartDate = now.subtract(const Duration(days: 7));
-                break;
-              case 'Last 2 Weeks':
-                statsStartDate = now.subtract(const Duration(days: 14));
-                break;
-              case 'Last 3 Weeks':
-                statsStartDate = now.subtract(const Duration(days: 21));
-                break;
-              case 'Last 1 Month':
-                statsStartDate = DateTime(now.year, now.month - 1, now.day);
-                break;
-              case 'Last 3 Months':
-                statsStartDate = DateTime(now.year, now.month - 3, now.day);
-                break;
-              case 'Last 6 Months':
-                statsStartDate = DateTime(now.year, now.month - 6, now.day);
-                break;
-              case 'This Month':
-                statsStartDate = DateTime(now.year, now.month, 1);
-                break;
-            }
-          }
-
-          var statsLeads = allLeadsData;
-          if (statsStartDate != null && statsEndDate != null) {
-            statsLeads = statsLeads.where((l) {
-              final dateStr = l['createdAt'] ?? l['updatedAt'];
-              if (dateStr == null) return false;
-              try {
-                final date = DateTime.parse(dateStr).toLocal();
-                return date.isAfter(statsStartDate!) &&
-                    date.isBefore(statsEndDate!);
-              } catch (e) {
-                return false;
-              }
-            }).toList();
-          }
 
           final Widget body = Builder(
             builder: (context) => (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
@@ -897,8 +907,10 @@ class _LeadsPageState extends State<LeadsPage> {
                                       ),
                                     const SizedBox(height: 16),
                                     _LeadsStatsGrid(
-                                      leads: statsLeads,
-                                      verifiedDealersCount: verifiedDealersCount,
+                                      leads: dateFilteredLeads,
+                                      verifiedDealersCount: (state.selectedTimeframe == 'All Time' || (state.selectedTimeframe.isEmpty && state.selectedRange == null))
+                                          ? verifiedDealersCount
+                                          : dateFilteredLeads.where((l) => l['kycStatus'] == 'verified').length,
                                     ),
                                     const SizedBox(height: 24),
                                     _buildFilterChips(isMobile, state),
@@ -1488,8 +1500,6 @@ class _LeadsTableCard extends StatefulWidget {
 class _LeadsTableCardState extends State<_LeadsTableCard> {
   String selectedAssign = 'Assign';
   String selectedStatus = 'Status';
-  PickerDateRange? _selectedTableRange;
-  String selectedTableDropdown = 'All Time';
   final Set<String> _selectedLeadIds = {};
   int get _currentPage => context.read<LeadsBloc>().state.currentPage;
   int get _pageSize => context.read<LeadsBloc>().state.pageSize;
@@ -1666,66 +1676,6 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     );
   }
 
-  String get _tableRangeDisplay {
-    if (_selectedTableRange != null &&
-        _selectedTableRange!.startDate != null &&
-        _selectedTableRange!.endDate != null) {
-      final start = _selectedTableRange!.startDate!;
-      final end = _selectedTableRange!.endDate!;
-      final months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${start.day.toString().padLeft(2, '0')} ${months[start.month - 1]} - ${end.day.toString().padLeft(2, '0')} ${months[end.month - 1]}';
-    }
-    return selectedTableDropdown;
-  }
-
-  void _showTableDatePicker() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        content: SizedBox(
-          height: 400,
-          width: 350,
-          child: SfDateRangePicker(
-            backgroundColor: Colors.white,
-            selectionMode: DateRangePickerSelectionMode.range,
-            showActionButtons: true,
-            confirmText: 'Apply',
-            cancelText: 'Cancel',
-            selectionShape: DateRangePickerSelectionShape.rectangle,
-            rangeSelectionColor: AppTheme.primaryColor.withValues(alpha: 0.12),
-            startRangeSelectionColor: AppTheme.primaryColor,
-            endRangeSelectionColor: AppTheme.primaryColor,
-            initialSelectedRange: _selectedTableRange,
-            onSubmit: (Object? val) {
-              if (val is PickerDateRange &&
-                  val.startDate != null &&
-                  val.endDate != null) {
-                setState(() => _selectedTableRange = val);
-                Navigator.pop(context);
-              }
-            },
-            onCancel: () => Navigator.pop(context),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   void didUpdateWidget(_LeadsTableCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1798,7 +1748,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
 
-    // 1. Local Filtering for Table Controls
+    // 1. Local Filtering for Table Controls (Status & Agent only)
     List<Map<String, dynamic>> tableLeads = widget.leads;
 
     // Filter by Assigned Agent (only for admin)
@@ -1823,68 +1773,6 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
         if (filterStatus == 'connected but not interested')
           filterStatus = 'connected but not intrested';
         return dbStatus == filterStatus;
-      }).toList();
-    }
-
-    // Filter by Table Date Section
-    DateTime? tableStartDate;
-    DateTime? tableEndDate;
-    if (_selectedTableRange != null && _selectedTableRange!.startDate != null) {
-      tableStartDate = _selectedTableRange!.startDate;
-      tableEndDate =
-          _selectedTableRange!.endDate ?? _selectedTableRange!.startDate;
-      tableEndDate = DateTime(
-        tableEndDate!.year,
-        tableEndDate.month,
-        tableEndDate.day,
-        23,
-        59,
-        59,
-      );
-    } else {
-      final now = DateTime.now();
-      switch (selectedTableDropdown) {
-        case 'Today':
-          tableStartDate = DateTime(now.year, now.month, now.day);
-          tableEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
-          break;
-        case 'Yesterday':
-          final yesterday = now.subtract(const Duration(days: 1));
-          tableStartDate = DateTime(
-            yesterday.year,
-            yesterday.month,
-            yesterday.day,
-          );
-          tableEndDate = DateTime(
-            yesterday.year,
-            yesterday.month,
-            yesterday.day,
-            23,
-            59,
-            59,
-          );
-          break;
-        case 'Last 7 Days':
-          tableStartDate = now.subtract(const Duration(days: 7));
-          tableEndDate = now;
-          break;
-        case 'Last 30 Days':
-          tableStartDate = now.subtract(const Duration(days: 30));
-          tableEndDate = now;
-          break;
-      }
-    }
-
-    if (tableStartDate != null && tableEndDate != null) {
-      tableLeads = tableLeads.where((l) {
-        final dateStr = l['createdAt'] ?? l['updatedAt'];
-        if (dateStr == null) return false;
-        try {
-          final date = DateTime.parse(dateStr).toLocal();
-          return date.isAfter(tableStartDate!) && date.isBefore(tableEndDate!);
-        } catch (e) {
-          return false;
-        }
       }).toList();
     }
 
@@ -2019,108 +1907,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
           'Call Switch Off',
           'Prospect',
         ], (val) => setState(() => selectedStatus = val!)),
-        const SizedBox(width: 12),
-        _buildTableDateSection(),
       ],
-    );
-  }
-
-  Widget _buildTableDateSection() {
-    return Container(
-      height: widget.isMobile ? 32 : 36,
-      padding: const EdgeInsets.only(left: 10, right: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: _showTableDatePicker,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Icon(
-                  Icons.calendar_month_outlined,
-                  size: widget.isMobile ? 14 : 16,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 16,
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            color: AppTheme.borderColor.withValues(alpha: 0.6),
-          ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: null,
-              isExpanded: false,
-              isDense: true,
-              padding: EdgeInsets.zero,
-              hint: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Text(
-                      _tableRangeDisplay,
-                      style: GoogleFonts.outfit(
-                        fontSize: widget.isMobile ? 11 : 12,
-                        color: AppTheme.textPrimary.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, right: 2),
-                    child: Icon(
-                      Icons.keyboard_arrow_down,
-                      size: widget.isMobile ? 14 : 16,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              icon: const SizedBox.shrink(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    selectedTableDropdown = newValue;
-                    _selectedTableRange = null;
-                  });
-                }
-              },
-              items:
-                  [
-                    'All Time',
-                    'Today',
-                    'Yesterday',
-                    'Last 7 Days',
-                    'Last 30 Days',
-                  ].map<DropdownMenuItem<String>>((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(
-                        value,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -3335,15 +3122,16 @@ class _LeadsStatsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unassignedCount = leads
-        .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
+        .where((l) => l['agentId'] == null)
         .length;
     final assignedCount = leads
-        .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
+        .where((l) => l['agentId'] != null)
         .length;
     final kycPendingCount = leads
-        .where(
-          (l) => l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
-        )
+        .where((l) {
+          final status = l['kycStatus'].toString().toLowerCase();
+          return status == 'pending' || status == 'submitted';
+        })
         .length;
 
     return LayoutBuilder(

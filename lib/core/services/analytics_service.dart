@@ -212,7 +212,12 @@ class AnalyticsService extends WidgetsBindingObserver {
     }
   }
 
-  Future<Map<String, dynamic>> fetchEventsPaged({String? userEmail, int limit = 150, String? before}) async {
+  Future<Map<String, dynamic>> fetchEventsPaged({
+    String? userEmail,
+    int limit = 150,
+    String? before,
+    String? filter,
+  }) async {
     try {
       String path = '/events?limit=$limit';
       if (userEmail != null) {
@@ -220,6 +225,9 @@ class AnalyticsService extends WidgetsBindingObserver {
       }
       if (before != null) {
         path += '&before=${Uri.encodeComponent(before)}';
+      }
+      if (filter != null && filter != 'All') {
+        path += '&filter=${Uri.encodeComponent(filter)}';
       }
       final response = await _apiClient.get(path);
       if (response.statusCode == 200) {
