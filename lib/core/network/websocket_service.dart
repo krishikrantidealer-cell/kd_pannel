@@ -43,7 +43,7 @@ class WebSocketService {
 
   void _triggerLeadsUpdate() {
     _leadsDebounce?.cancel();
-    _leadsDebounce = Timer(const Duration(milliseconds: 1500), () {
+    _leadsDebounce = Timer(const Duration(milliseconds: 500), () {
       if (!_leadsUpdateController.isClosed) {
         _leadsUpdateController.add(null);
       }
@@ -52,7 +52,7 @@ class WebSocketService {
 
   void _triggerDealersUpdate() {
     _dealersDebounce?.cancel();
-    _dealersDebounce = Timer(const Duration(milliseconds: 1500), () {
+    _dealersDebounce = Timer(const Duration(milliseconds: 500), () {
       if (!_dealersUpdateController.isClosed) {
         _dealersUpdateController.add(null);
       }
@@ -61,7 +61,7 @@ class WebSocketService {
 
   void _triggerOrdersUpdate() {
     _ordersDebounce?.cancel();
-    _ordersDebounce = Timer(const Duration(milliseconds: 1500), () {
+    _ordersDebounce = Timer(const Duration(milliseconds: 500), () {
       if (!_ordersUpdateController.isClosed) {
         _ordersUpdateController.add(null);
       }
@@ -70,7 +70,7 @@ class WebSocketService {
 
   void _triggerNotificationUpdate() {
     _notificationDebounce?.cancel();
-    _notificationDebounce = Timer(const Duration(milliseconds: 800), () {
+    _notificationDebounce = Timer(const Duration(milliseconds: 200), () {
       if (!_notificationUpdateController.isClosed) {
         _notificationUpdateController.add(null);
       }

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -21,11 +23,24 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
   List<Map<String, dynamic>> _coupons = [];
   bool _isLoading = true;
   String? _error;
+  StreamSubscription? _wsSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchCoupons();
+    
+    // Listen for generic notification updates to refresh coupons
+    // (Assuming server triggers NOTIFICATION_RECEIVED or similar for new coupons)
+    _wsSubscription = WebSocketService().notificationUpdates.listen((_) {
+      if (mounted) _fetchCoupons();
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchCoupons() async {

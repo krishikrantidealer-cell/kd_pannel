@@ -46,3 +46,7 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
 class ClearOrdersMessageEvent extends OrdersEvent {
   const ClearOrdersMessageEvent();
 }
+
+class ResetOrdersEvent extends OrdersEvent {
+  const ResetOrdersEvent();
+}

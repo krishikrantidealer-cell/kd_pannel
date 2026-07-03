@@ -210,12 +210,12 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       if (success) {
+        // Clear any previous route-specific cache if necessary
         if (role == UserRole.admin) {
           _precacheProductData();
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        } else {
-          Navigator.pushReplacementNamed(context, '/leads');
         }
+        // Redirect to dashboard (MainLayout handles role-specific view orchestration)
+        Navigator.pushReplacementNamed(context, '/dashboard');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -506,11 +506,12 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 12),
                         ],
                         TypewriterText(
-                          text: 'Authorized Portal',
+                          key: ValueKey(_selectedRole), // Re-trigger typing animation on role change
+                          text: _selectedRole == UserRole.admin
+                              ? 'Admin Portal'
+                              : 'Sales Portal',
                           style: GoogleFonts.outfit(
-                            fontSize: isDesktop
-                                ? 30
-                                : 22, // Beautiful scaling title font
+                            fontSize: isDesktop ? 30 : 22,
                             fontWeight: FontWeight.w900,
                             color: isDesktop
                                 ? const Color(0xFF0F172A)

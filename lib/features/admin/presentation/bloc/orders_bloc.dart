@@ -10,6 +10,11 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     on<FetchOrdersEvent>(_onFetchOrders);
     on<UpdateOrdersFilterEvent>(_onUpdateOrdersFilter);
     on<ClearOrdersMessageEvent>(_onClearOrdersMessage);
+    on<ResetOrdersEvent>(_onResetOrders);
+  }
+
+  void _onResetOrders(ResetOrdersEvent event, Emitter<OrdersState> emit) {
+    emit(const OrdersState());
   }
 
   Future<void> _onFetchOrders(

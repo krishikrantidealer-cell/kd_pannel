@@ -20,6 +20,11 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<DeleteLeadEvent>(_onDeleteLead);
     on<UpdateLeadDetailsEvent>(_onUpdateLeadDetails);
     on<AdminSubmitKycEvent>(_onAdminSubmitKyc);
+    on<ResetLeadsEvent>(_onResetLeads);
+  }
+
+  void _onResetLeads(ResetLeadsEvent event, Emitter<LeadsState> emit) {
+    emit(const LeadsState());
   }
 
   Future<void> _onFetchLeadsData(

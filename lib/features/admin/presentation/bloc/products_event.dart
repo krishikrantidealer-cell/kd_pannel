@@ -47,3 +47,7 @@ class ToggleProductAvailabilityEvent extends ProductsEvent {
   @override
   List<Object?> get props => [productId, newInStock];
 }
+
+class ResetProductsEvent extends ProductsEvent {
+  const ResetProductsEvent();
+}

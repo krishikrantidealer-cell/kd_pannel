@@ -110,7 +110,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
       final userId = prefs.getString('kd_user_id');
       
       if (token != null && role != null && userId != null) {
-        _initialRoute = role == 'sales' ? '/leads' : '/dashboard';
+        _initialRoute = '/dashboard';
         WebSocketService().connect();
       }
     } catch (_) {}
@@ -200,5 +200,3 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
     );
   }
 }
-
-// Remove the old MyApp class as it is now merged into MyAppWrapper

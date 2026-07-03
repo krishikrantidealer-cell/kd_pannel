@@ -1,5 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 
 class NavigationService {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -12,8 +21,21 @@ class NavigationService {
     if (_isRedirectingToLogin) return;
     _isRedirectingToLogin = true;
 
-    // Clear local session state synchronously
-    AuthService().clearLocalSessionState();
+    // Clear local session state and telemetry
+    AuthService().logout();
+
+    // Reset all global Blocs to prevent data leaking between users
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      try {
+        context.read<OrdersBloc>().add(const ResetOrdersEvent());
+        context.read<LeadsBloc>().add(const ResetLeadsEvent());
+        context.read<DealersBloc>().add(const ResetDealersEvent());
+        context.read<ProductsBloc>().add(const ResetProductsEvent());
+      } catch (e) {
+        debugPrint('[NavigationService] Error resetting blocs: $e');
+      }
+    }
 
     // Redirect to login screen and clear the navigation stack
     navigatorKey.currentState?.pushNamedAndRemoveUntil(

@@ -15,6 +15,11 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<ToggleBlockDealerEvent>(_onToggleBlockDealer);
     on<DeleteDealerEvent>(_onDeleteDealer);
     on<UpdateDealerDetailsEvent>(_onUpdateDealerDetails);
+    on<ResetDealersEvent>(_onResetDealers);
+  }
+
+  void _onResetDealers(ResetDealersEvent event, Emitter<DealersState> emit) {
+    emit(const DealersState());
   }
 
   Future<void> _onFetchDealersData(

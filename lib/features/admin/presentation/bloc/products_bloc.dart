@@ -23,6 +23,11 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
     on<FilterProductsByCategoryEvent>(_onFilterProductsByCategory);
     on<DeleteProductEvent>(_onDeleteProduct);
     on<ToggleProductAvailabilityEvent>(_onToggleProductAvailability);
+    on<ResetProductsEvent>(_onResetProducts);
+  }
+
+  void _onResetProducts(ResetProductsEvent event, Emitter<ProductsState> emit) {
+    emit(const ProductsState());
   }
 
   List<Map<String, dynamic>> _applyFilter({

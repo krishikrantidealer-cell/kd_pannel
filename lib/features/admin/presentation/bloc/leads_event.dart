@@ -164,3 +164,7 @@ class AdminSubmitKycEvent extends LeadsEvent {
         shopFileName,
       ];
 }
+
+class ResetLeadsEvent extends LeadsEvent {
+  const ResetLeadsEvent();
+}

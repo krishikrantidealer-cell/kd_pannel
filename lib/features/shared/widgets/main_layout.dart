@@ -14,6 +14,7 @@ import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
+import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 
@@ -184,9 +185,7 @@ class _MainLayoutState extends State<MainLayout> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context); // Close the dialog
-                WebSocketService().disconnect();
-                AuthService().logout();
-                Navigator.pushReplacementNamed(context, '/login');
+                NavigationService.navigateToLogin(showSessionExpiredMessage: false);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.error,

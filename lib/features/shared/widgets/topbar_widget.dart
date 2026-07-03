@@ -595,9 +595,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
-              WebSocketService().disconnect();
-              AuthService().logout();
-              NavigationService.navigateToLogin();
+              NavigationService.navigateToLogin(showSessionExpiredMessage: false);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.error,

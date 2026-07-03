@@ -101,6 +101,15 @@ class AuthService {
             return false;
           }
 
+          // Enforce role check: Ensure the authenticated user matches the selected role in the UI
+          if (_currentUserRole != role) {
+            final String selectedRoleName = role == UserRole.admin ? 'Admin' : 'Sales';
+            final String actualRoleName = _currentUserRole == UserRole.admin ? 'Admin' : 'Sales';
+            _lastError = 'Access denied: Your account has $actualRoleName privileges, but you selected $selectedRoleName login.';
+            _currentUserRole = null;
+            return false;
+          }
+
           // Log success to DB event tracking
           AnalyticsService().logEvent('login_success', properties: {
             'email': userEmailStr,

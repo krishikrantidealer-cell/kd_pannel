@@ -135,3 +135,7 @@ class UpdateDealerDetailsEvent extends DealersEvent {
   @override
   List<Object?> get props => [userId, updateData];
 }
+
+class ResetDealersEvent extends DealersEvent {
+  const ResetDealersEvent();
+}
