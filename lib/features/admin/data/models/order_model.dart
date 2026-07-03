@@ -239,12 +239,18 @@ class OrderModel {
           (userJson['isKycComplete'] == true);
       customerRole = isKycVerified ? 'Dealer' : 'Lead';
 
-      final agentJson = userJson['assignedAgent'] as Map<String, dynamic>?;
-      if (agentJson != null) {
-        agentId = agentJson['_id']?.toString();
-        agentName =
-            '${agentJson['firstName'] ?? ''} ${agentJson['lastName'] ?? ''}'
-                .trim();
+      final dynamic assignedAgent = userJson['assignedAgent'];
+      if (assignedAgent != null) {
+        if (assignedAgent is Map) {
+          agentId = (assignedAgent['_id'] ?? assignedAgent['id'])?.toString();
+          final firstName = assignedAgent['firstName'] ?? '';
+          final lastName = assignedAgent['lastName'] ?? '';
+          agentName = '$firstName $lastName'.trim();
+          if (agentName!.isEmpty) agentName = assignedAgent['phoneNumber']?.toString();
+        } else {
+          // It's just an ID string
+          agentId = assignedAgent.toString();
+        }
       }
     }
 

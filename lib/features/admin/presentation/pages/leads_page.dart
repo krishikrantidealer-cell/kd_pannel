@@ -398,16 +398,7 @@ class _LeadsPageState extends State<LeadsPage> {
           final kycStatus = u['kycStatus'] ?? 'pending';
           if (kycStatus == 'verified') return false;
 
-          if (isSales) {
-            final dynamic assignedAgent = u['assignedAgent'];
-            String? assignedAgentId;
-            if (assignedAgent is Map) {
-              assignedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
-            } else {
-              assignedAgentId = assignedAgent?.toString();
-            }
-            return assignedAgentId == agentId;
-          }
+          // Note: Sales Agent filtering is now handled by the Backend API
           return true;
         })
         .map((u) {

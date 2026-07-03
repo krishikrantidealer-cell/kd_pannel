@@ -85,15 +85,10 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   }
 
   List<Map<String, dynamic>> _getFilteredLeads(List<Map<String, dynamic>> rawUsers) {
-    final agentId = _auth.currentUserId;
     var filtered = rawUsers.where((u) {
       final role = u['role'] ?? 'user';
       final kycStatus = u['kycStatus'] ?? 'pending';
-      final isLead = role == 'user' && kycStatus != 'verified';
-      if (!isLead) return false;
-
-      final assignedAgentId = u['assignedAgent']?['_id'];
-      return assignedAgentId == agentId;
+      return role == 'user' && kycStatus != 'verified';
     });
 
     if (_statusFilter != 'All') {
@@ -131,15 +126,10 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   }
 
   List<Map<String, dynamic>> _getFilteredDealers(List<Map<String, dynamic>> rawUsers) {
-    final agentId = _auth.currentUserId;
     var filtered = rawUsers.where((u) {
       final role = u['role'] ?? 'user';
       final kycStatus = u['kycStatus'] ?? 'pending';
-      final isDealer = role == 'user' && kycStatus == 'verified';
-      if (!isDealer) return false;
-
-      final assignedAgentId = u['assignedAgent']?['_id'];
-      return assignedAgentId == agentId;
+      return role == 'user' && kycStatus == 'verified';
     });
 
     if (_statusFilter != 'All') {
@@ -183,19 +173,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   }
 
   List<OrderModel> _getFilteredOrders(List<OrderModel> allOrders) {
-    final currentAgentId = _auth.currentUserId;
-    final currentAgentName = _auth.currentUserName?.toLowerCase().trim();
-
-    var filtered = allOrders.where((o) {
-      if (currentAgentId != null && o.assignedAgentId == currentAgentId) {
-        return true;
-      }
-      if (currentAgentName != null) {
-        final assignedAgent = o.assignedAgent?.toLowerCase().trim();
-        return assignedAgent == currentAgentName;
-      }
-      return false;
-    });
+    Iterable<OrderModel> filtered = allOrders;
 
     if (_statusFilter != 'All') {
       filtered = filtered.where((o) => o.orderStatus.toLowerCase() == _statusFilter.toLowerCase());

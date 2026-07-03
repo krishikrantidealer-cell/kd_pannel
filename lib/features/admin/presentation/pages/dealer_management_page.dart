@@ -233,10 +233,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           final isDealer = role == 'user' && kycStatus == 'verified';
           if (!isDealer) return false;
 
-          if (isSales) {
-            final assignedAgentId = u['assignedAgent']?['_id'];
-            return assignedAgentId == agentId;
-          }
+          // Note: Sales Agent filtering is now handled by the Backend API
           return true;
         })
         .map((u) {

@@ -70,22 +70,8 @@ class _OrdersPageState extends State<OrdersPage> {
     final String? currentAgentId = AuthService().currentUserId;
     final String? currentAgentName = AuthService().currentUserName?.toLowerCase().trim();
 
-    // 1. First, apply Role-based base filtering (Agent Assignment)
+    // 1. Role-based base filtering (Now handled by Backend, UI filtering removed for robustness)
     Iterable<OrderModel> baseOrders = orders;
-    if (role == UserRole.sales) {
-      baseOrders = orders.where((order) {
-        // Match by ID first (most reliable)
-        if (currentAgentId != null && order.assignedAgentId == currentAgentId) {
-          return true;
-        }
-        // Fallback to name match (for legacy or inconsistent data)
-        if (currentAgentName != null) {
-          final assigned = order.assignedAgent?.toLowerCase().trim() ?? '';
-          return assigned == currentAgentName;
-        }
-        return false;
-      });
-    }
 
     // 2. Then apply UI filters (Search, Status, etc)
     return baseOrders.where((order) {
