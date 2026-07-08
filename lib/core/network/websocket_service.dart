@@ -25,6 +25,7 @@ class WebSocketService {
   final _ordersUpdateController = StreamController<void>.broadcast();
   final _notificationUpdateController = StreamController<void>.broadcast();
   final _presenceUpdateController = StreamController<Map<String, dynamic>>.broadcast();
+  final _auditLogUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
 
   Stream<void> get leadsUpdates => _leadsUpdateController.stream;
@@ -32,6 +33,7 @@ class WebSocketService {
   Stream<void> get ordersUpdates => _ordersUpdateController.stream;
   Stream<void> get notificationUpdates => _notificationUpdateController.stream;
   Stream<Map<String, dynamic>> get presenceUpdates => _presenceUpdateController.stream;
+  Stream<Map<String, dynamic>> get auditLogUpdates => _auditLogUpdateController.stream;
   Stream<bool> get connectionStatus => _connectionStateController.stream;
   bool get connectionStatusNow => _isConnected;
 
@@ -202,6 +204,11 @@ class WebSocketService {
         case 'PRESENCE_UPDATE':
           if (data['data'] != null) {
             _presenceUpdateController.add(Map<String, dynamic>.from(data['data']));
+          }
+          break;
+        case 'AUDIT_LOG_CREATED':
+          if (data['data'] != null) {
+            _auditLogUpdateController.add(Map<String, dynamic>.from(data['data']));
           }
           break;
         case 'FORCE_LOGOUT':

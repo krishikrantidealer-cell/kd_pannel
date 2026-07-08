@@ -159,6 +159,7 @@ class AuthService {
       await prefs.remove('kd_user_id');
       await prefs.remove('kd_user_email');
       await prefs.remove('kd_user_name');
+      await prefs.remove('cached_last_agent');
     } catch (_) {}
   }
 

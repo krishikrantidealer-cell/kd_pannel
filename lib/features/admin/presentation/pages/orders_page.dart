@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,7 +14,10 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'dart:async';
+
+import '../../../../core/network/api_client.dart';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
@@ -34,6 +38,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String? _hoveredOrderId;
   StreamSubscription? _ordersWsSubscription;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -59,6 +64,38 @@ class _OrdersPageState extends State<OrdersPage> {
     _tableHorizontalController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncToSheets() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+
+    try {
+      final res = await ApiClient().post('/orders/admin/sheets/sync', {});
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        _showSnack(
+          'Successfully synced ${data['count']} orders to Google Sheets!',
+        );
+      } else {
+        _showSnack('Sync failed: ${res.statusCode}', isError: true);
+      }
+    } catch (e) {
+      _showSnack('Error: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.outfit(color: Colors.white)),
+        backgroundColor: isError ? Colors.red.shade600 : AppTheme.primaryColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   // --- QUERY FILTERING MECHANICS ---
@@ -282,6 +319,32 @@ class _OrdersPageState extends State<OrdersPage> {
                         color: AppTheme.textPrimary,
                       ),
                     ),
+                    actions: [
+                      if (AuthService().isAdmin)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: TextButton.icon(
+                            onPressed: _isSyncing ? null : _syncToSheets,
+                            icon: _isSyncing
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  )
+                                : const Icon(Icons.sync_rounded, size: 16),
+                            label: Text(
+                              _isSyncing ? 'Syncing...' : 'Sync',
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                     backgroundColor: Colors.white,
                     foregroundColor: AppTheme.textPrimary,
                     elevation: 0,
@@ -303,25 +366,56 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final bool isAdmin = AuthService().isAdmin;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Order Management',
-          style: GoogleFonts.outfit(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Order Management',
+              style: GoogleFonts.outfit(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
+        if (isAdmin)
+          FilledButton.icon(
+            onPressed: _isSyncing ? null : _syncToSheets,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.sync_rounded, size: 18),
+            label: Text(
+              _isSyncing ? 'Syncing...' : 'Sync to Sheets',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -567,11 +661,21 @@ class _OrdersPageState extends State<OrdersPage> {
 
     final List<String> paymentMethodOptions = ['All Methods', 'Online', 'COD'];
 
+    final List<String> timeframeOptions = [
+      'All Time',
+      'Today',
+      'Last 1 Week',
+      'Last 1 Month',
+      'Last 3 Months',
+    ];
+
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           searchField,
+          const SizedBox(height: 10),
+          _buildTimeframeRow(isMobile, state, timeframeOptions),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -621,32 +725,176 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
-    return Row(
+    return Column(
       children: [
-        Expanded(child: searchField),
-        const SizedBox(width: 12),
-        _buildDropdown(orderStatusOptions, state.selectedOrderStatus, (val) {
-          context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedOrderStatus: val!, currentPage: 1),
-          );
-        }, width: 150),
-        const SizedBox(width: 12),
-        _buildDropdown(paymentStatusOptions, state.selectedPaymentStatus, (
-          val,
-        ) {
-          context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedPaymentStatus: val!, currentPage: 1),
-          );
-        }, width: 150),
-        const SizedBox(width: 12),
-        _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
-          val,
-        ) {
-          context.read<OrdersBloc>().add(
-            UpdateOrdersFilterEvent(selectedPaymentMethod: val!, currentPage: 1),
-          );
-        }, width: 130),
+        Row(
+          children: [
+            Expanded(child: searchField),
+            const SizedBox(width: 12),
+            _buildTimeframeRow(isMobile, state, timeframeOptions),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildDropdown(orderStatusOptions, state.selectedOrderStatus, (val) {
+              context.read<OrdersBloc>().add(
+                UpdateOrdersFilterEvent(selectedOrderStatus: val!, currentPage: 1),
+              );
+            }, width: 150),
+            const SizedBox(width: 12),
+            _buildDropdown(paymentStatusOptions, state.selectedPaymentStatus, (
+              val,
+            ) {
+              context.read<OrdersBloc>().add(
+                UpdateOrdersFilterEvent(selectedPaymentStatus: val!, currentPage: 1),
+              );
+            }, width: 150),
+            const SizedBox(width: 12),
+            _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
+              val,
+            ) {
+              context.read<OrdersBloc>().add(
+                UpdateOrdersFilterEvent(selectedPaymentMethod: val!, currentPage: 1),
+              );
+            }, width: 130),
+            const Spacer(),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildTimeframeRow(bool isMobile, OrdersState state, List<String> options) {
+    return Container(
+      height: 38,
+      width: isMobile ? null : 180,
+      padding: const EdgeInsets.only(left: 10, right: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => _showSyncfusionDatePicker(state.selectedRange),
+            child: const MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Icon(
+                Icons.calendar_month_outlined,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 1,
+            height: 16,
+            color: AppTheme.borderColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: null,
+                isExpanded: true,
+                isDense: true,
+                padding: EdgeInsets.zero,
+                hint: Text(
+                  _getRangeDisplay(state.selectedRange, state.selectedTimeframe),
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 16,
+                  color: AppTheme.textSecondary,
+                ),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    context.read<OrdersBloc>().add(
+                      UpdateOrdersFilterEvent(
+                        selectedTimeframe: newValue,
+                        resetRange: true,
+                        currentPage: 1,
+                      ),
+                    );
+                  }
+                },
+                items: options
+                    .map<DropdownMenuItem<String>>(
+                      (String value) => DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(
+                          value,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getRangeDisplay(PickerDateRange? selectedRange, String selectedTimeframe) {
+    if (selectedRange != null && selectedRange.startDate != null && selectedRange.endDate != null) {
+      final start = selectedRange.startDate!;
+      final end = selectedRange.endDate!;
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${start.day} ${months[start.month - 1]} - ${end.day} ${months[end.month - 1]}';
+    }
+    return selectedTimeframe;
+  }
+
+  void _showSyncfusionDatePicker(PickerDateRange? initialRange) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        content: SizedBox(
+          height: 400,
+          width: 350,
+          child: SfDateRangePicker(
+            backgroundColor: Colors.white,
+            selectionMode: DateRangePickerSelectionMode.range,
+            showActionButtons: true,
+            confirmText: 'Apply',
+            cancelText: 'Cancel',
+            selectionShape: DateRangePickerSelectionShape.rectangle,
+            rangeSelectionColor: AppTheme.primaryColor.withOpacity(0.12),
+            startRangeSelectionColor: AppTheme.primaryColor,
+            endRangeSelectionColor: AppTheme.primaryColor,
+            initialSelectedRange: initialRange,
+            onSubmit: (Object? val) {
+              if (val is PickerDateRange && val.startDate != null && val.endDate != null) {
+                context.read<OrdersBloc>().add(
+                  UpdateOrdersFilterEvent(
+                    selectedRange: val,
+                    selectedTimeframe: '',
+                    currentPage: 1,
+                  ),
+                );
+                Navigator.pop(context);
+              }
+            },
+            onCancel: () => Navigator.pop(context),
+          ),
+        ),
+      ),
     );
   }
 

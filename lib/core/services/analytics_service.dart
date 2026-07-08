@@ -275,6 +275,39 @@ class AnalyticsService extends WidgetsBindingObserver {
     }
   }
 
+  Future<Map<String, dynamic>> fetchAuditLogs({
+    String? adminEmail,
+    int limit = 50,
+    String? before,
+    String? role,
+  }) async {
+    String path = '/admin/audit-logs?limit=$limit';
+    if (adminEmail != null) {
+      path += '&adminEmail=${Uri.encodeComponent(adminEmail)}';
+    }
+    if (before != null) {
+      path += '&before=${Uri.encodeComponent(before)}';
+    }
+    if (role != null) {
+      path += '&role=${Uri.encodeComponent(role)}';
+    }
+
+    final response = await _apiClient.get(path);
+    if (response.statusCode == 200) {
+      final dynamic data = jsonDecode(response.body);
+      if (data is Map && data['success'] == true) {
+        return {
+          'logs': List<Map<String, dynamic>>.from(data['data'] ?? []),
+          'totalCount': data['totalCount'] ?? 0,
+          'nextCursor': data['nextCursor'],
+        };
+      }
+      throw Exception(data['message'] ?? 'Unknown error fetching logs');
+    } else {
+      throw Exception('Server error (${response.statusCode})');
+    }
+  }
+
   // --- Persistence ---
 
   Future<void> _saveToDisk() async {

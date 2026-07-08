@@ -23,7 +23,26 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     emit(state.copyWith(status: OrdersStatus.loading));
     try {
-      final response = await ApiClient().get('/orders/admin/all');
+      String queryParams = '';
+      if (state.selectedRange != null && state.selectedRange!.startDate != null) {
+        final start = state.selectedRange!.startDate!.toUtc().toIso8601String();
+        final end = (state.selectedRange!.endDate ?? state.selectedRange!.startDate!).toUtc().toIso8601String();
+        queryParams = '?startDate=$start&endDate=$end';
+      } else if (state.selectedTimeframe != 'All Time') {
+        final now = DateTime.now();
+        DateTime? startDate;
+        switch (state.selectedTimeframe) {
+          case 'Today': startDate = DateTime(now.year, now.month, now.day); break;
+          case 'Last 1 Week': startDate = now.subtract(const Duration(days: 7)); break;
+          case 'Last 1 Month': startDate = DateTime(now.year, now.month - 1, now.day); break;
+          case 'Last 3 Months': startDate = DateTime(now.year, now.month - 3, now.day); break;
+        }
+        if (startDate != null) {
+          queryParams = '?startDate=${startDate.toUtc().toIso8601String()}';
+        }
+      }
+
+      final response = await ApiClient().get('/orders/admin/all$queryParams');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
@@ -53,14 +72,33 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     UpdateOrdersFilterEvent event,
     Emitter<OrdersState> emit,
   ) {
-    emit(state.copyWith(
-      searchQuery: event.searchQuery,
-      selectedOrderStatus: event.selectedOrderStatus,
-      selectedPaymentStatus: event.selectedPaymentStatus,
-      selectedPaymentMethod: event.selectedPaymentMethod,
-      currentPage: event.currentPage,
-      pageSize: event.pageSize,
-    ));
+    if (event.resetRange) {
+      emit(state.copyWithResetRange(
+        searchQuery: event.searchQuery,
+        selectedOrderStatus: event.selectedOrderStatus,
+        selectedPaymentStatus: event.selectedPaymentStatus,
+        selectedPaymentMethod: event.selectedPaymentMethod,
+        selectedTimeframe: event.selectedTimeframe,
+        currentPage: event.currentPage,
+        pageSize: event.pageSize,
+      ));
+    } else {
+      emit(state.copyWith(
+        searchQuery: event.searchQuery,
+        selectedOrderStatus: event.selectedOrderStatus,
+        selectedPaymentStatus: event.selectedPaymentStatus,
+        selectedPaymentMethod: event.selectedPaymentMethod,
+        selectedTimeframe: event.selectedTimeframe,
+        selectedRange: event.selectedRange,
+        currentPage: event.currentPage,
+        pageSize: event.pageSize,
+      ));
+    }
+
+    // If timeframe or range changed, trigger a fresh fetch
+    if (event.selectedTimeframe != null || event.selectedRange != null || event.resetRange) {
+      add(const FetchOrdersEvent(forceRefresh: true));
+    }
   }
 
   void _onClearOrdersMessage(

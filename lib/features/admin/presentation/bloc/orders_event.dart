@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
 abstract class OrdersEvent extends Equatable {
   const OrdersEvent();
@@ -20,6 +21,9 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
   final String? selectedOrderStatus;
   final String? selectedPaymentStatus;
   final String? selectedPaymentMethod;
+  final String? selectedTimeframe;
+  final PickerDateRange? selectedRange;
+  final bool resetRange;
   final int? currentPage;
   final int? pageSize;
 
@@ -28,6 +32,9 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
     this.selectedOrderStatus,
     this.selectedPaymentStatus,
     this.selectedPaymentMethod,
+    this.selectedTimeframe,
+    this.selectedRange,
+    this.resetRange = false,
     this.currentPage,
     this.pageSize,
   });
@@ -38,6 +45,9 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
         selectedOrderStatus,
         selectedPaymentStatus,
         selectedPaymentMethod,
+        selectedTimeframe,
+        selectedRange,
+        resetRange,
         currentPage,
         pageSize,
       ];

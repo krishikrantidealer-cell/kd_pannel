@@ -232,9 +232,12 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         throw Exception(data['message'] ?? 'Failed to create sales agent');
       }
     } catch (e) {
+      // Revert optimistic update by triggering a fresh data fetch from server
+      add(const FetchLeadsDataEvent(forceRefresh: true));
+      
       emit(state.copyWithKeepMessages(
-        status: LeadsStatus.success,
-        errorMessage: e.toString(),
+        status: LeadsStatus.failure,
+        errorMessage: 'Verification failed: ${e.toString()}',
       ));
     }
   }
@@ -578,20 +581,27 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           'shopName': event.shopName,
           'gstNumber': event.gstNumber ?? '',
         },
-        filesBuilder: () => [
-          http.MultipartFile.fromBytes(
-            'licenceImage',
-            event.licenceImageBytes,
-            filename: event.licenceFileName,
-            contentType: _getMediaType(event.licenceFileName),
-          ),
-          http.MultipartFile.fromBytes(
-            'shopImage',
-            event.shopImageBytes,
-            filename: event.shopFileName,
-            contentType: _getMediaType(event.shopFileName),
-          ),
-        ],
+        filesBuilder: () {
+          final files = [
+            http.MultipartFile.fromBytes(
+              'licenceImage',
+              event.licenceImageBytes,
+              filename: event.licenceFileName,
+              contentType: _getMediaType(event.licenceFileName),
+            ),
+          ];
+          if (event.shopImageBytes != null && event.shopFileName != null) {
+            files.add(
+              http.MultipartFile.fromBytes(
+                'shopImage',
+                event.shopImageBytes!,
+                filename: event.shopFileName!,
+                contentType: _getMediaType(event.shopFileName!),
+              ),
+            );
+          }
+          return files;
+        },
       );
 
       if (res.statusCode == 200) {

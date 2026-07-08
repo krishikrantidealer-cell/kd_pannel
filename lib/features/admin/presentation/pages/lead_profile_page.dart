@@ -900,8 +900,19 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
                         onTap: () {
-                          final userId = _lead!['id'] ?? _lead!['_id'];
-                          if (userId != null) {
+                          // Robust ID extraction: handle string, Map ($oid), or null
+                          final dynamic rawId = _lead!['id'] ?? _lead!['_id'];
+                          String? userId;
+                          
+                          if (rawId is String) {
+                            userId = rawId;
+                          } else if (rawId is Map && rawId.containsKey('\$oid')) {
+                            userId = rawId['\$oid'].toString();
+                          } else if (rawId != null) {
+                            userId = rawId.toString();
+                          }
+
+                          if (userId != null && userId.isNotEmpty) {
                             context.read<LeadsBloc>().add(
                               VerifyKYCEvent(userId),
                             );
@@ -1513,7 +1524,13 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     final gstController = TextEditingController(
       text: _lead!['gstNumber'] ?? '',
     );
-    String selectedUserType = 'Retailer and Distributor';
+    
+    final validUserTypes = ['retailer', 'distributor', 'wholesaler', 'farmer'];
+    String initialType = _lead!['userType']?.toString().toLowerCase() ?? 'retailer';
+    if (!validUserTypes.contains(initialType)) {
+      initialType = 'retailer';
+    }
+    String selectedUserType = initialType;
 
     PlatformFile? licenceFile;
     PlatformFile? shopFile;
@@ -1556,9 +1573,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                     child: DropdownButton<String>(
                       isExpanded: true,
                       value: selectedUserType,
-                      items: ['Retailer and Distributor']
+                      items: validUserTypes
                           .map(
-                            (e) => DropdownMenuItem(value: e, child: Text(e)),
+                            (e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(e[0].toUpperCase() + e.substring(1)),
+                            ),
                           )
                           .toList(),
                       onChanged: (val) =>
@@ -1599,26 +1619,31 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed:
-                  (licenceFile == null ||
-                      shopFile == null ||
-                      shopNameController.text.trim().isEmpty)
-                  ? null
-                  : () {
-                      context.read<LeadsBloc>().add(
-                        AdminSubmitKycEvent(
-                          userId: _lead!['id'] ?? _lead!['_id'],
-                          userType: selectedUserType,
-                          shopName: shopNameController.text.trim(),
-                          gstNumber: gstController.text.trim(),
-                          licenceImageBytes: licenceFile!.bytes!.toList(),
-                          licenceFileName: licenceFile!.name,
-                          shopImageBytes: shopFile!.bytes!.toList(),
-                          shopFileName: shopFile!.name,
-                        ),
-                      );
-                      Navigator.pop(context);
-                    },
+              onPressed: () {
+                final isFarmer = selectedUserType == 'farmer';
+                final hasLicence = licenceFile != null;
+                final hasShopImage = shopFile != null;
+                final hasShopName = shopNameController.text.trim().isNotEmpty;
+
+                if (!hasLicence) return null;
+                if (!isFarmer && (!hasShopImage || !hasShopName)) return null;
+
+                return () {
+                  context.read<LeadsBloc>().add(
+                    AdminSubmitKycEvent(
+                      userId: _lead!['id'] ?? _lead!['_id'],
+                      userType: selectedUserType,
+                      shopName: isFarmer ? '' : shopNameController.text.trim(),
+                      gstNumber: gstController.text.trim(),
+                      licenceImageBytes: licenceFile!.bytes!.toList(),
+                      licenceFileName: licenceFile!.name,
+                      shopImageBytes: isFarmer ? null : shopFile?.bytes?.toList(),
+                      shopFileName: isFarmer ? null : shopFile?.name,
+                    ),
+                  );
+                  Navigator.pop(context);
+                };
+              }(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,

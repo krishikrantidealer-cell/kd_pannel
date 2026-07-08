@@ -6,7 +6,9 @@ import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/admin_audit_logs_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/team_member_profile_page.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -21,6 +23,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_event.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -73,6 +77,9 @@ void main() async {
         ),
         BlocProvider<ProductsBloc>(
           create: (context) => ProductsBloc()..add(const LoadProductsEvent()),
+        ),
+        BlocProvider<AuditLogsBloc>(
+          create: (context) => AuditLogsBloc()..add(const FetchAuditLogsInitial()),
         ),
       ],
       child: const MyAppWrapper(),
@@ -187,6 +194,10 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/marketing': (context) => const MainLayout(),
         '/support': (context) => const MainLayout(),
         '/team': (context) => const MainLayout(),
+        '/team/profile': (context) =>
+            const MainLayout(child: TeamMemberProfilePage()),
+        '/logs': (context) => const MainLayout(),
+        '/admin/logs': (context) => const MainLayout(),
         '/reports': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Reports'))),
         ),

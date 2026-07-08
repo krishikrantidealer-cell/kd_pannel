@@ -385,6 +385,16 @@ class _LeadsPageState extends State<LeadsPage> {
     return _getAllLeads(state.allRawUsers);
   }
 
+  String _normalizeId(dynamic id) {
+    if (id == null) return '';
+    if (id is String) return id;
+    if (id is Map) {
+      if (id['\$oid'] != null) return id['\$oid'].toString();
+      if (id['_id'] != null) return _normalizeId(id['_id']);
+    }
+    return id.toString();
+  }
+
   List<Map<String, dynamic>> _getAllLeads(List<Map<String, dynamic>> rawUsers) {
     final isSales = AuthService().isSales;
     final agentId = AuthService().currentUserId;
@@ -412,21 +422,32 @@ class _LeadsPageState extends State<LeadsPage> {
           
           if (assignedAgent != null) {
             if (assignedAgent is Map) {
-              resolvedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
+              resolvedAgentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
               agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
-              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '-').toString();
+              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
             } else {
               resolvedAgentId = assignedAgent.toString();
-              agentName = 'Assigned'; // Fallback name if it's just an ID
             }
             if (resolvedAgentId == null || resolvedAgentId.trim().isEmpty || resolvedAgentId == '-') {
               resolvedAgentId = null;
               agentName = '-';
+            } else if (agentName.isEmpty || agentName == '-') {
+              // Try to resolve name from rawUsers
+              final agentUser = rawUsers.firstWhere(
+                (rawU) => _normalizeId(rawU['_id']) == resolvedAgentId,
+                orElse: () => {},
+              );
+              if (agentUser.isNotEmpty) {
+                agentName = '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'.trim();
+                if (agentName.isEmpty) agentName = (agentUser['phoneNumber'] ?? '-').toString();
+              } else {
+                agentName = 'Assigned';
+              }
             }
           }
 
           return {
-            'id': u['_id'],
+            'id': _normalizeId(u['_id']),
             'name': personName.isNotEmpty
                 ? personName
                 : (u['phoneNumber'] ?? 'Unnamed Lead'),
@@ -743,13 +764,9 @@ class _LeadsPageState extends State<LeadsPage> {
 
             if (AuthService().isSales) {
               final dynamic assignedAgent = u['assignedAgent'];
-              String? assignedAgentId;
-              if (assignedAgent is Map) {
-                assignedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'])?.toString();
-              } else {
-                assignedAgentId = assignedAgent?.toString();
-              }
-              return assignedAgentId == AuthService().currentUserId;
+              final String? assignedAgentId = _normalizeId(assignedAgent?['_id'] ?? assignedAgent?['\$oid'] ?? assignedAgent);
+              final bool matches = assignedAgentId != null && assignedAgentId != '-' && assignedAgentId == AuthService().currentUserId;
+              return matches;
             }
             return true;
           }).length;

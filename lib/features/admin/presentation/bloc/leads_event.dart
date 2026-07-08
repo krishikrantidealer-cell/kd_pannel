@@ -140,8 +140,8 @@ class AdminSubmitKycEvent extends LeadsEvent {
   final String? gstNumber;
   final List<int> licenceImageBytes;
   final String licenceFileName;
-  final List<int> shopImageBytes;
-  final String shopFileName;
+  final List<int>? shopImageBytes;
+  final String? shopFileName;
 
   const AdminSubmitKycEvent({
     required this.userId,
@@ -150,8 +150,8 @@ class AdminSubmitKycEvent extends LeadsEvent {
     this.gstNumber,
     required this.licenceImageBytes,
     required this.licenceFileName,
-    required this.shopImageBytes,
-    required this.shopFileName,
+    this.shopImageBytes,
+    this.shopFileName,
   });
 
   @override

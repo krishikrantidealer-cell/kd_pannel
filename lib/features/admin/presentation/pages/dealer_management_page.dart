@@ -212,6 +212,16 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return '₹$otherParts,$lastThree';
   }
 
+  String _normalizeId(dynamic id) {
+    if (id == null) return '';
+    if (id is String) return id;
+    if (id is Map) {
+      if (id['\$oid'] != null) return id['\$oid'].toString();
+      if (id['_id'] != null) return _normalizeId(id['_id']);
+    }
+    return id.toString();
+  }
+
   List<Dealer> _getallCalculatedDealers(DealersState state) {
     final isSales = AuthService().isSales;
     final agentId = AuthService().currentUserId;
@@ -220,8 +230,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     final Map<String, List<Map<String, dynamic>>> ordersByUserId = {};
     for (final order in state.allRawOrders) {
       if (order['orderStatus'] == 'Cancelled') continue;
-      final userId = order['user']?['_id'];
-      if (userId != null) {
+      final userId = _normalizeId(order['user']?['_id']);
+      if (userId.isNotEmpty) {
         ordersByUserId.putIfAbsent(userId, () => []).add(order);
       }
     }
@@ -237,7 +247,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           return true;
         })
         .map((u) {
-          final userId = u['_id'];
+          final userId = _normalizeId(u['_id']);
           final dealerOrders = ordersByUserId[userId] ?? [];
           final totalOrdersCount = dealerOrders.length;
 
@@ -253,10 +263,36 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             }
           }
 
-          final agentName = u['assignedAgent'] != null
-              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                    .trim()
-              : '-';
+          final assignedAgent = u['assignedAgent'];
+          String? resolvedAgentId;
+          String agentName = '-';
+
+          if (assignedAgent != null) {
+            if (assignedAgent is Map) {
+              resolvedAgentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
+              agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
+              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
+            } else {
+              resolvedAgentId = assignedAgent.toString();
+            }
+
+            if (resolvedAgentId == null || resolvedAgentId.trim().isEmpty || resolvedAgentId == '-') {
+              resolvedAgentId = null;
+              agentName = '-';
+            } else if (agentName.isEmpty || agentName == '-') {
+              // Try to resolve name from rawUsers
+              final agentUser = state.allRawUsers.firstWhere(
+                (rawU) => _normalizeId(rawU['_id']) == resolvedAgentId,
+                orElse: () => {},
+              );
+              if (agentUser.isNotEmpty) {
+                agentName = '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'.trim();
+                if (agentName.isEmpty) agentName = (agentUser['phoneNumber'] ?? '-').toString();
+              } else {
+                agentName = 'Assigned';
+              }
+            }
+          }
 
           final String personName =
               (u['firstName'] != null || u['lastName'] != null)
@@ -281,8 +317,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             isInactive: isInactiveDealer,
             source: u['source'] ?? 'App',
             deepLinkUrl: u['deepLinkUrl'],
-            id: u['_id'],
-            agentId: u['assignedAgent']?['_id'],
+            id: userId,
+            agentId: resolvedAgentId,
             licenceImage: u['licenceImage'],
             shopImage: u['shopImage'],
             gstNumber: u['gstNumber'],
