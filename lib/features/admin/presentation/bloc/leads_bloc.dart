@@ -582,14 +582,17 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           'gstNumber': event.gstNumber ?? '',
         },
         filesBuilder: () {
-          final files = [
-            http.MultipartFile.fromBytes(
-              'licenceImage',
-              event.licenceImageBytes,
-              filename: event.licenceFileName,
-              contentType: _getMediaType(event.licenceFileName),
-            ),
-          ];
+          final files = <http.MultipartFile>[];
+          if (event.licenceImageBytes != null && event.licenceFileName != null) {
+            files.add(
+              http.MultipartFile.fromBytes(
+                'licenceImage',
+                event.licenceImageBytes!,
+                filename: event.licenceFileName!,
+                contentType: _getMediaType(event.licenceFileName!),
+              ),
+            );
+          }
           if (event.shopImageBytes != null && event.shopFileName != null) {
             files.add(
               http.MultipartFile.fromBytes(

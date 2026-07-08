@@ -138,8 +138,8 @@ class AdminSubmitKycEvent extends LeadsEvent {
   final String userType;
   final String shopName;
   final String? gstNumber;
-  final List<int> licenceImageBytes;
-  final String licenceFileName;
+  final List<int>? licenceImageBytes;
+  final String? licenceFileName;
   final List<int>? shopImageBytes;
   final String? shopFileName;
 
@@ -148,8 +148,8 @@ class AdminSubmitKycEvent extends LeadsEvent {
     required this.userType,
     required this.shopName,
     this.gstNumber,
-    required this.licenceImageBytes,
-    required this.licenceFileName,
+    this.licenceImageBytes,
+    this.licenceFileName,
     this.shopImageBytes,
     this.shopFileName,
   });

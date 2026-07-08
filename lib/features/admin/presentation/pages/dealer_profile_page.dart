@@ -17,9 +17,11 @@ import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart'
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kd_pannel/core/utils/navigation_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
-
 import '../../../../core/auth/auth_service.dart';
 import '../../../../core/network/websocket_service.dart';
 
@@ -736,6 +738,220 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     );
   }
 
+  Widget _buildFilePicker(
+    String label,
+    PlatformFile? file,
+    VoidCallback onTap,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: file != null ? AppTheme.success : AppTheme.borderColor,
+                style: BorderStyle.solid,
+              ),
+              color: file != null
+                  ? AppTheme.success.withOpacity(0.05)
+                  : Colors.white,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  file != null ? Icons.check_circle_outline : Icons.upload_file,
+                  size: 20,
+                  color: file != null
+                      ? AppTheme.success
+                      : AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    file?.name ?? 'Click to select image',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: file != null
+                          ? AppTheme.success
+                          : AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showUploadKycDialog() {
+    final shopNameController = TextEditingController(
+      text: _dealer!.shopName ?? '',
+    );
+    final gstController = TextEditingController(
+      text: _dealer!.gstNumber ?? '',
+    );
+    
+    final validUserTypes = ['retailer', 'distributor', 'wholesaler', 'farmer'];
+    String initialType = _dealer!.userType?.toLowerCase() ?? 'retailer';
+    if (!validUserTypes.contains(initialType)) {
+      initialType = 'retailer';
+    }
+    String selectedUserType = initialType;
+
+    PlatformFile? licenceFile;
+    PlatformFile? shopFile;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          title: Text(
+            'Upload KYC Documents',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildEditField('Shop Name', shopNameController),
+                const SizedBox(height: 12),
+                _buildEditField('GST Number (Optional)', gstController),
+                const SizedBox(height: 12),
+                Text(
+                  'User Type',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: selectedUserType,
+                      items: validUserTypes
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(e[0].toUpperCase() + e.substring(1)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setStateDialog(() => selectedUserType = val!),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildFilePicker(
+                  'GST Certificate / Licence',
+                  licenceFile,
+                  () async {
+                    final res = await FilePicker.pickFiles(
+                      type: FileType.image,
+                      withData: true,
+                    );
+                    if (res != null) {
+                      setStateDialog(() => licenceFile = res.files.first);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildFilePicker('Shop Exterior Image', shopFile, () async {
+                  final res = await FilePicker.pickFiles(
+                    type: FileType.image,
+                    withData: true,
+                  );
+                  if (res != null) {
+                    setStateDialog(() => shopFile = res.files.first);
+                  }
+                }),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final isFarmer = selectedUserType == 'farmer';
+                final existingLicence = _dealer!.licenceImage;
+                final existingShopImage = _dealer!.shopImage;
+                final hasExistingLicence = existingLicence != null &&
+                    existingLicence.trim().isNotEmpty &&
+                    existingLicence != 'null';
+                final hasExistingShop = existingShopImage != null &&
+                    existingShopImage.trim().isNotEmpty &&
+                    existingShopImage != 'null';
+
+                final hasLicence = licenceFile != null || hasExistingLicence;
+                final hasShopImage =
+                    isFarmer || shopFile != null || hasExistingShop;
+                final hasShopName =
+                    isFarmer || shopNameController.text.trim().isNotEmpty;
+
+                if (!hasLicence) return null;
+                if (!isFarmer && (!hasShopImage || !hasShopName)) return null;
+
+                return () {
+                  context.read<LeadsBloc>().add(
+                    AdminSubmitKycEvent(
+                      userId: _dealer!.id!,
+                      userType: selectedUserType,
+                      shopName: isFarmer ? '' : shopNameController.text.trim(),
+                      gstNumber: gstController.text.trim(),
+                      licenceImageBytes: licenceFile?.bytes?.toList(),
+                      licenceFileName: licenceFile?.name,
+                      shopImageBytes:
+                          isFarmer ? null : shopFile?.bytes?.toList(),
+                      shopFileName: isFarmer ? null : shopFile?.name,
+                    ),
+                  );
+                  Navigator.pop(context);
+                };
+              }(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Submit KYC'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -867,158 +1083,188 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       notesHistory: _dealer!.notesHistory,
     );
 
-    return SelectionArea(
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryColor),
-              )
-            : SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-                  vertical: isMobile ? 20 : 32,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. BACK HEADER
-                    _buildBreadcrumbs(context, isMobile, currentDealer.name),
-                    const SizedBox(height: 16),
+    return BlocListener<LeadsBloc, LeadsState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+        }
+        if (state.actionSuccessMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          final msg = state.actionSuccessMessage!;
+          context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
+          if (msg.contains('KYC documents uploaded successfully') ||
+              msg.contains('KYC submitted successfully')) {
+            _refreshDealerDetails();
+            context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+          }
+        }
+      },
+      child: SelectionArea(
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          body: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                )
+              : SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
+                    vertical: isMobile ? 20 : 32,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. BACK HEADER
+                      _buildBreadcrumbs(context, isMobile, currentDealer.name),
+                      const SizedBox(height: 16),
 
-                    // 2. HEADER SECTION
-                    _DealerHeroCard(
-                      dealer: currentDealer,
-                      onToggleBlock: _toggleBlockDealer,
-                      onEdit: _editDealer,
-                      onDelete: _deleteDealer,
-                      onCreateOrder: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CreateOrderPage(dealer: currentDealer),
-                          ),
-                        );
-                        if (result == true && mounted) {
-                          _fetchOrders();
-                          _refreshDealerDetails();
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
+                      // 2. HEADER SECTION
+                      _DealerHeroCard(
+                        dealer: currentDealer,
+                        onToggleBlock: _toggleBlockDealer,
+                        onEdit: _editDealer,
+                        onDelete: _deleteDealer,
+                        onCreateOrder: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CreateOrderPage(dealer: currentDealer),
+                            ),
+                          );
+                          if (result == true && mounted) {
+                            _fetchOrders();
+                            _refreshDealerDetails();
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 24),
 
-                    // 3. TAB CONTROLLER CHIPS SELECTOR
-                    _buildAdvancedProfileTabs(),
-                    const SizedBox(height: 24),
+                      // 3. TAB CONTROLLER CHIPS SELECTOR
+                      _buildAdvancedProfileTabs(),
+                      const SizedBox(height: 24),
 
-                    // 4. TABBED CONTENT CHANNELS
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: _activeTab == 0
-                          ? Column(
-                              key: const ValueKey(0),
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _StatsCardsSection(
-                                  dealer: currentDealer,
-                                  orders: _orders,
-                                ),
-                                const SizedBox(height: 24),
-                                if (!isMobile) ...[
-                                  IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(
-                                          flex: 1,
-                                          child: _DealerInformationCard(
-                                            dealer: currentDealer,
-                                            salesAgents: _salesAgents,
-                                            currentAgentId: _agentId,
-                                            onAssignAgent: _assignAgent,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 32),
-                                        Expanded(
-                                          flex: 1,
-                                          child: _DealerKycDocumentsCard(
-                                            dealer: currentDealer,
-                                            onViewDocument: _launchUrl,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ] else ...[
-                                  _DealerInformationCard(
+                      // 4. TABBED CONTENT CHANNELS
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: _activeTab == 0
+                            ? Column(
+                                key: const ValueKey(0),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _StatsCardsSection(
                                     dealer: currentDealer,
-                                    salesAgents: _salesAgents,
-                                    currentAgentId: _agentId,
-                                    onAssignAgent: _assignAgent,
+                                    orders: _orders,
                                   ),
                                   const SizedBox(height: 24),
-                                  _DealerKycDocumentsCard(
-                                    dealer: currentDealer,
-                                    onViewDocument: _launchUrl,
-                                  ),
+                                  if (!isMobile) ...[
+                                    IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            flex: 1,
+                                            child: _DealerInformationCard(
+                                              dealer: currentDealer,
+                                              salesAgents: _salesAgents,
+                                              currentAgentId: _agentId,
+                                              onAssignAgent: _assignAgent,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 32),
+                                          Expanded(
+                                            flex: 1,
+                                            child: _DealerKycDocumentsCard(
+                                              dealer: currentDealer,
+                                              onViewDocument: _launchUrl,
+                                              onUpload: _showUploadKycDialog,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    _DealerInformationCard(
+                                      dealer: currentDealer,
+                                      salesAgents: _salesAgents,
+                                      currentAgentId: _agentId,
+                                      onAssignAgent: _assignAgent,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _DealerKycDocumentsCard(
+                                      dealer: currentDealer,
+                                      onViewDocument: _launchUrl,
+                                      onUpload: _showUploadKycDialog,
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            )
-                          : _activeTab == 1
-                          ? _OrderHistoryCard(
-                              key: const ValueKey(1),
-                              dealer: currentDealer,
-                              orders: _orders,
-                              isLoading: _isLoadingOrders,
-                            )
-                          : _activeTab == 2
-                          ? _UserEventsCard(
-                              key: const ValueKey(2),
-                              userIdentifier:
-                                  currentDealer.email ??
-                                  currentDealer.phone ??
-                                  currentDealer.id ??
-                                  '',
-                              events: _events,
-                              isLoading: _isLoadingEvents,
-                              onRefresh: () => _fetchEvents(),
-                            )
-                          : Column(
-                              key: const ValueKey(3),
-                              children: [
-                                if (currentDealer.id != null)
-                                  UserStatusNotesWidget(
-                                    userId: currentDealer.id!,
-                                    initialStatus:
-                                        currentDealer.status ?? 'prospect',
-                                    initialNotes: currentDealer.notes ?? '',
-                                    notesHistory: currentDealer.notesHistory,
-                                    isSubmitting:
-                                        context
-                                            .watch<DealersBloc>()
-                                            .state
-                                            .status ==
-                                        DealersStatus.submitting,
-                                    onSave: (status, notes) {
-                                      context.read<DealersBloc>().add(
-                                        UpdateDealerDetailsEvent(
-                                          userId: currentDealer.id!,
-                                          updateData: {
-                                            'leadStatus': status,
-                                            'leadNotes': notes,
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                              ],
-                            ),
-                    ),
-                  ],
+                              )
+                            : _activeTab == 1
+                            ? _OrderHistoryCard(
+                                key: const ValueKey(1),
+                                dealer: currentDealer,
+                                orders: _orders,
+                                isLoading: _isLoadingOrders,
+                              )
+                            : _activeTab == 2
+                            ? _UserEventsCard(
+                                key: const ValueKey(2),
+                                userIdentifier:
+                                    currentDealer.email ??
+                                    currentDealer.phone ??
+                                    currentDealer.id ??
+                                    '',
+                                events: _events,
+                                isLoading: _isLoadingEvents,
+                                onRefresh: () => _fetchEvents(),
+                              )
+                            : Column(
+                                key: const ValueKey(3),
+                                children: [
+                                  if (currentDealer.id != null)
+                                    UserStatusNotesWidget(
+                                      userId: currentDealer.id!,
+                                      initialStatus:
+                                          currentDealer.status ?? 'prospect',
+                                      initialNotes: currentDealer.notes ?? '',
+                                      notesHistory: currentDealer.notesHistory,
+                                      isSubmitting:
+                                          context
+                                              .watch<DealersBloc>()
+                                              .state
+                                              .status ==
+                                          DealersStatus.submitting,
+                                      onSave: (status, notes) {
+                                        context.read<DealersBloc>().add(
+                                          UpdateDealerDetailsEvent(
+                                            userId: currentDealer.id!,
+                                            updateData: {
+                                              'leadStatus': status,
+                                              'leadNotes': notes,
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -3118,10 +3364,12 @@ class _OrderHistoryCardState extends State<_OrderHistoryCard> {
 class _DealerKycDocumentsCard extends StatelessWidget {
   final Dealer dealer;
   final Function(String url) onViewDocument;
+  final VoidCallback onUpload;
 
   const _DealerKycDocumentsCard({
     required this.dealer,
     required this.onViewDocument,
+    required this.onUpload,
   });
 
   Widget _buildMiniStat(String label, String value, Color color) {
@@ -3166,6 +3414,7 @@ class _DealerKycDocumentsCard extends StatelessWidget {
         dealer.licenceImage != null && dealer.licenceImage!.isNotEmpty;
     final hasShopImage =
         dealer.shopImage != null && dealer.shopImage!.isNotEmpty;
+    final hasBoth = hasLicence && hasShopImage;
 
     return Container(
       padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -3177,13 +3426,29 @@ class _DealerKycDocumentsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Dealer KYC Documents',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF111827),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Dealer KYC Documents',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onUpload,
+                icon: Icon(
+                    hasBoth ? Icons.edit_document : Icons.upload_rounded,
+                    size: 16),
+                label: Text(hasBoth ? 'Edit Documents' : 'Upload Documents'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Column(

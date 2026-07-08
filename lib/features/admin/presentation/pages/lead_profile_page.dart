@@ -1621,9 +1621,20 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
             ElevatedButton(
               onPressed: () {
                 final isFarmer = selectedUserType == 'farmer';
-                final hasLicence = licenceFile != null;
-                final hasShopImage = shopFile != null;
-                final hasShopName = shopNameController.text.trim().isNotEmpty;
+                final existingLicence = _lead!['licenceImage']?.toString();
+                final existingShopImage = _lead!['shopImage']?.toString();
+                final hasExistingLicence = existingLicence != null &&
+                    existingLicence.trim().isNotEmpty &&
+                    existingLicence != 'null';
+                final hasExistingShop = existingShopImage != null &&
+                    existingShopImage.trim().isNotEmpty &&
+                    existingShopImage != 'null';
+
+                final hasLicence = licenceFile != null || hasExistingLicence;
+                final hasShopImage =
+                    isFarmer || shopFile != null || hasExistingShop;
+                final hasShopName =
+                    isFarmer || shopNameController.text.trim().isNotEmpty;
 
                 if (!hasLicence) return null;
                 if (!isFarmer && (!hasShopImage || !hasShopName)) return null;
@@ -1635,9 +1646,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       userType: selectedUserType,
                       shopName: isFarmer ? '' : shopNameController.text.trim(),
                       gstNumber: gstController.text.trim(),
-                      licenceImageBytes: licenceFile!.bytes!.toList(),
-                      licenceFileName: licenceFile!.name,
-                      shopImageBytes: isFarmer ? null : shopFile?.bytes?.toList(),
+                      licenceImageBytes: licenceFile?.bytes?.toList(),
+                      licenceFileName: licenceFile?.name,
+                      shopImageBytes:
+                          isFarmer ? null : shopFile?.bytes?.toList(),
                       shopFileName: isFarmer ? null : shopFile?.name,
                     ),
                   );
@@ -3637,16 +3649,17 @@ class _DealerKycDocumentsCard extends StatelessWidget {
                   color: const Color(0xFF111827),
                 ),
               ),
-              if (!hasBoth)
-                TextButton.icon(
-                  onPressed: onUpload,
-                  icon: const Icon(Icons.upload_rounded, size: 16),
-                  label: const Text('Upload Documents'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.primaryColor,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
+              TextButton.icon(
+                onPressed: onUpload,
+                icon: Icon(
+                    hasBoth ? Icons.edit_document : Icons.upload_rounded,
+                    size: 16),
+                label: Text(hasBoth ? 'Edit Documents' : 'Upload Documents'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
