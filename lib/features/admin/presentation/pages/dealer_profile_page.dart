@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -59,8 +60,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
       if (!mounted || _dealer == null) return;
 
-      final incomingUser =
-          (data['user'] ?? data['userEmail'] ?? data['userId'])?.toString();
+      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])
+          ?.toString();
       if (incomingUser == null) return;
 
       final List<String> myIdentifiers = [
@@ -261,24 +262,30 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     try {
       final String dealerId = _dealer!.id!;
       // Passing both userId and user for maximum compatibility with backend changes
-      final res = await ApiClient().get('/orders/admin/all?userId=$dealerId&user=$dealerId');
-      
+      final res = await ApiClient().get(
+        '/orders/admin/all?userId=$dealerId&user=$dealerId',
+      );
+
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
           final List rawOrders = data['orders'] ?? [];
-          
+
           if (mounted) {
             setState(() {
               // Local filtering as a second layer of safety
               _orders = rawOrders
                   .map((o) => Map<String, dynamic>.from(o))
-                  .where((o) => 
-                      (o['user'] is Map && o['user']['_id'] == dealerId) || 
-                      o['user'] == dealerId)
+                  .where(
+                    (o) =>
+                        (o['user'] is Map && o['user']['_id'] == dealerId) ||
+                        o['user'] == dealerId,
+                  )
                   .toList();
             });
-            debugPrint('Loaded ${_orders.length} filtered orders for dealer $dealerId (Total returned: ${rawOrders.length})');
+            debugPrint(
+              'Loaded ${_orders.length} filtered orders for dealer $dealerId (Total returned: ${rawOrders.length})',
+            );
           }
         }
       }
@@ -805,10 +812,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     final shopNameController = TextEditingController(
       text: _dealer!.shopName ?? '',
     );
-    final gstController = TextEditingController(
-      text: _dealer!.gstNumber ?? '',
-    );
-    
+    final gstController = TextEditingController(text: _dealer!.gstNumber ?? '');
+
     final validUserTypes = ['retailer', 'distributor', 'wholesaler', 'farmer'];
     String initialType = _dealer!.userType?.toLowerCase() ?? 'retailer';
     if (!validUserTypes.contains(initialType)) {
@@ -907,10 +912,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                 final isFarmer = selectedUserType == 'farmer';
                 final existingLicence = _dealer!.licenceImage;
                 final existingShopImage = _dealer!.shopImage;
-                final hasExistingLicence = existingLicence != null &&
+                final hasExistingLicence =
+                    existingLicence != null &&
                     existingLicence.trim().isNotEmpty &&
                     existingLicence != 'null';
-                final hasExistingShop = existingShopImage != null &&
+                final hasExistingShop =
+                    existingShopImage != null &&
                     existingShopImage.trim().isNotEmpty &&
                     existingShopImage != 'null';
 
@@ -932,8 +939,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       gstNumber: gstController.text.trim(),
                       licenceImageBytes: licenceFile?.bytes?.toList(),
                       licenceFileName: licenceFile?.name,
-                      shopImageBytes:
-                          isFarmer ? null : shopFile?.bytes?.toList(),
+                      shopImageBytes: isFarmer
+                          ? null
+                          : shopFile?.bytes?.toList(),
                       shopFileName: isFarmer ? null : shopFile?.name,
                     ),
                   );
@@ -1106,7 +1114,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           if (msg.contains('KYC documents uploaded successfully') ||
               msg.contains('KYC submitted successfully')) {
             _refreshDealerDetails();
-            context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+            context.read<DealersBloc>().add(
+              const FetchDealersDataEvent(forceRefresh: true),
+            );
           }
         }
       },
@@ -1115,7 +1125,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           backgroundColor: const Color(0xFFF8FAFC),
           body: _isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryColor,
+                  ),
                 )
               : SingleChildScrollView(
                   padding: EdgeInsets.symmetric(
@@ -1154,7 +1166,6 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       // 3. TAB CONTROLLER CHIPS SELECTOR
                       _buildAdvancedProfileTabs(),
                       const SizedBox(height: 24),
-
                       // 4. TABBED CONTENT CHANNELS
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
@@ -1545,12 +1556,13 @@ class _DealerHeroCard extends StatelessWidget {
               height: isMobile ? 100 : 130,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: dealer.isBlocked ||
+                  colors:
+                      dealer.isBlocked ||
                           (dealer.kycStatus?.toLowerCase() == 'rejected')
                       ? [const Color(0xFF991B1B), const Color(0xFFEF4444)]
                       : dealer.kycStatus?.toLowerCase() == 'verified'
-                          ? [const Color(0xFF065F46), const Color(0xFF10B981)]
-                          : [const Color(0xFFB45309), const Color(0xFFF59E0B)],
+                      ? [const Color(0xFF065F46), const Color(0xFF10B981)]
+                      : [const Color(0xFFB45309), const Color(0xFFF59E0B)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -1643,7 +1655,8 @@ class _DealerHeroCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  if (dealer.kycStatus?.toLowerCase() == 'verified') ...[
+                                  if (dealer.kycStatus?.toLowerCase() ==
+                                      'verified') ...[
                                     const SizedBox(width: 6),
                                     const Icon(
                                       Icons.verified_rounded,
@@ -1670,11 +1683,13 @@ class _DealerHeroCard extends StatelessWidget {
                                   if (dealer.kycStatus != null)
                                     _buildStatusBadge(
                                       'KYC: ${dealer.kycStatus!.toUpperCase()}',
-                                      dealer.kycStatus!.toLowerCase() == 'verified'
+                                      dealer.kycStatus!.toLowerCase() ==
+                                              'verified'
                                           ? const Color(0xFF10B981)
-                                          : dealer.kycStatus!.toLowerCase() == 'rejected'
-                                              ? const Color(0xFFEF4444)
-                                              : const Color(0xFFF59E0B),
+                                          : dealer.kycStatus!.toLowerCase() ==
+                                                'rejected'
+                                          ? const Color(0xFFEF4444)
+                                          : const Color(0xFFF59E0B),
                                     ),
                                 ],
                               ),
@@ -1723,7 +1738,10 @@ class _DealerHeroCard extends StatelessWidget {
       children: [
         _buildContactItem(Icons.phone_outlined, dealer.phone),
         if (addressParts.isNotEmpty)
-          _buildContactItem(Icons.location_on_outlined, addressParts.join(', ')),
+          _buildContactItem(
+            Icons.location_on_outlined,
+            addressParts.join(', '),
+          ),
         _buildContactItem(Icons.person_outline, 'Agent: ${dealer.agent}'),
       ],
     );
@@ -1841,10 +1859,7 @@ class _DealerHeroCard extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -1958,12 +1973,12 @@ class _ActionButtonState extends State<_ActionButton> {
                       color: widget.isSolid ? Colors.white : widget.color,
                     )
                   : widget.icon is FaIconData
-                      ? FaIcon(
-                          widget.icon,
-                          size: isMobile ? 18 : 19,
-                          color: widget.isSolid ? Colors.white : widget.color,
-                        )
-                      : const SizedBox.shrink(),
+                  ? FaIcon(
+                      widget.icon,
+                      size: isMobile ? 18 : 19,
+                      color: widget.isSolid ? Colors.white : widget.color,
+                    )
+                  : const SizedBox.shrink(),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -2372,12 +2387,16 @@ class _DealerInformationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
-    final String dealerName = dealer.name.isNotEmpty ? dealer.name : 'Unnamed Dealer';
+    final String dealerName = dealer.name.isNotEmpty
+        ? dealer.name
+        : 'Unnamed Dealer';
     final String shopName = dealer.shopName?.toString().isNotEmpty == true
         ? dealer.shopName!
         : 'No Shop Registered';
     final String dealerSource = dealer.source;
-    final String initial = dealerName.isNotEmpty ? dealerName.substring(0, 1).toUpperCase() : 'D';
+    final String initial = dealerName.isNotEmpty
+        ? dealerName.substring(0, 1).toUpperCase()
+        : 'D';
 
     final String tier = dealer.isHighValue
         ? 'Platinum Distributor'
@@ -2528,7 +2547,10 @@ class _DealerInformationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSectionHeader('Location Details', Icons.pin_drop_outlined),
+                _buildSectionHeader(
+                  'Location Details',
+                  Icons.pin_drop_outlined,
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -2542,7 +2564,8 @@ class _DealerInformationCard extends StatelessWidget {
                       _buildLocationItem(
                         Icons.home_outlined,
                         'Village/Area',
-                        dealer.address?['villageArea']?.toString().isNotEmpty == true
+                        dealer.address?['villageArea']?.toString().isNotEmpty ==
+                                true
                             ? dealer.address!['villageArea']
                             : '-',
                       ),
@@ -2568,7 +2591,10 @@ class _DealerInformationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                _buildSectionHeader('Dealer Details', Icons.business_center_outlined),
+                _buildSectionHeader(
+                  'Dealer Details',
+                  Icons.business_center_outlined,
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -2610,7 +2636,10 @@ class _DealerInformationCard extends StatelessWidget {
                 const SizedBox(height: 24),
                 if (dealer.deepLinkUrl != null &&
                     dealer.deepLinkUrl!.trim().isNotEmpty) ...[
-                  _buildSectionHeader('Campaign & UTM Attribution', Icons.insights_outlined),
+                  _buildSectionHeader(
+                    'Campaign & UTM Attribution',
+                    Icons.insights_outlined,
+                  ),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -2684,7 +2713,9 @@ class _DealerInformationCard extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFE9D5FF)),
+                                    border: Border.all(
+                                      color: const Color(0xFFE9D5FF),
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -2717,10 +2748,16 @@ class _DealerInformationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                 ],
-                _buildSectionHeader('Operations & Team Assignment', Icons.assignment_ind_outlined),
+                _buildSectionHeader(
+                  'Operations & Team Assignment',
+                  Icons.assignment_ind_outlined,
+                ),
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
@@ -2752,7 +2789,10 @@ class _DealerInformationCard extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
@@ -2760,14 +2800,18 @@ class _DealerInformationCard extends StatelessWidget {
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: salesAgents.any(
-                              (agent) => agent['_id'] == currentAgentId,
-                            )
+                            value:
+                                salesAgents.any(
+                                  (agent) => agent['_id'] == currentAgentId,
+                                )
                                 ? currentAgentId
                                 : null,
                             isExpanded: false,
                             isDense: true,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                            ),
                             hint: Text(
                               'Select Agent',
                               style: GoogleFonts.outfit(
@@ -3440,8 +3484,9 @@ class _DealerKycDocumentsCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: onUpload,
                 icon: Icon(
-                    hasBoth ? Icons.edit_document : Icons.upload_rounded,
-                    size: 16),
+                  hasBoth ? Icons.edit_document : Icons.upload_rounded,
+                  size: 16,
+                ),
                 label: Text(hasBoth ? 'Edit Documents' : 'Upload Documents'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppTheme.primaryColor,
@@ -3724,12 +3769,12 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
                         color: const Color(0xFF2E7D32),
                       )
                     : widget.icon is FaIconData
-                        ? FaIcon(
-                            widget.icon,
-                            size: 16,
-                            color: const Color(0xFF2E7D32),
-                          )
-                        : const SizedBox.shrink(),
+                    ? FaIcon(
+                        widget.icon,
+                        size: 16,
+                        color: const Color(0xFF2E7D32),
+                      )
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -4291,34 +4336,37 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Text(
-                    'Live Activity & Events Feed',
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF111827),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(
+                      'Live Activity & Events Feed',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF111827),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (!widget.isLoading)
-                    IconButton(
-                      icon: const Icon(Icons.refresh_rounded,
-                          size: 18, color: AppTheme.primaryColor),
-                      onPressed: widget.onRefresh,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Refresh Activity Feed',
-                    ),
-                ],
+                    const SizedBox(width: 8),
+                    if (!widget.isLoading)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.refresh_rounded,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
+                        onPressed: widget.onRefresh,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Refresh Activity Feed',
+                      ),
+                  ],
+                ),
               ),
-            ),
-            if (totalEvents > 0)
+              if (totalEvents > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
