@@ -260,6 +260,8 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'mediumImages': p['mediumImages'] ?? [],
               'originalImages': p['originalImages'] ?? [],
               'isFeatured': p['isFeatured'] ?? false,
+              'order': p['order'] ?? 0,
+              'customOrders': p['customOrders'] ?? {},
             });
           }
           freshProducts = preparedProducts;

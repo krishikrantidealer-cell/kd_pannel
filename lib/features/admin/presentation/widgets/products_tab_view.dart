@@ -189,32 +189,47 @@ class _ProductsTabViewState extends State<ProductsTabView> {
 
   Widget _buildFiltersRow(bool isMobile) {
     final Widget searchField = Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Icon(
-            Icons.search,
-            size: 18,
+            Icons.search_rounded,
+            size: 20,
             color: AppTheme.textSecondary,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               onChanged: (val) => setState(() {
                 _searchQuery = val;
                 _currentPage = 1;
               }),
-              textAlignVertical: TextAlignVertical.center,
-              style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-              decoration: const InputDecoration(
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
                 hintText: 'Search SKU or name...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                hintStyle: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
@@ -310,13 +325,20 @@ class _ProductsTabViewState extends State<ProductsTabView> {
         : options.first;
 
     return Container(
-      height: 38,
+      height: 42,
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -337,9 +359,10 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                     val,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: GoogleFonts.outfit(
                       fontSize: 13,
                       color: AppTheme.textBody,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),

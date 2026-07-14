@@ -38,6 +38,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _vendorController = TextEditingController();
+  final _orderController = TextEditingController(text: '0');
+  final Map<String, TextEditingController> _customOrdersControllers = {};
   late final quill.QuillController _descriptionController;
   bool _isHtmlMode = false;
   final _htmlDescriptionController = TextEditingController();
@@ -160,6 +162,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
       );
       _nameController.text = data['name'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
+      _orderController.text = (data['order'] ?? 0).toString();
+      final customOrdersMap = data['customOrders'] as Map? ?? {};
+      customOrdersMap.forEach((key, val) {
+        _customOrdersControllers[key.toString()] = TextEditingController(text: val.toString());
+      });
       _htmlDescriptionController.text = data['description']?.toString() ?? '';
       _formCategories = [];
       _formSubCategories = [];
@@ -479,6 +486,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
   void dispose() {
     _nameController.dispose();
     _vendorController.dispose();
+    _orderController.dispose();
+    _customOrdersControllers.values.forEach((ctrl) => ctrl.dispose());
     _htmlDescriptionController.dispose();
     for (var variant in _formVariants) {
       variant['price']?.dispose();
@@ -1486,11 +1495,24 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
       final bool isEdit = widget.initialData != null;
 
+      final Map<String, int> customOrdersPayload = {};
+      _customOrdersControllers.forEach((key, controller) {
+        final bool isAssignedCategory = categoryIds.contains(key);
+        final bool isAssignedSubCategory = subCategoryIds.contains(key);
+        final bool isAssignedCollection = _assignedCollections.contains(key);
+
+        if (isAssignedCategory || isAssignedSubCategory || isAssignedCollection) {
+          customOrdersPayload[key] = int.tryParse(controller.text) ?? 0;
+        }
+      });
+
       final productData = {
         'title': _nameController.text.trim(),
         'brandName': _vendorController.text.trim(),
         'technicalName': _nameController.text.trim(),
         'vendor': _vendorController.text.trim(),
+        'order': int.tryParse(_orderController.text) ?? 0,
+        'customOrders': customOrdersPayload,
         'categoryId': categoryIds.first,
         'subCategoryId': subCategoryIds.isNotEmpty
             ? subCategoryIds.first
@@ -1950,6 +1972,23 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             return null;
                           },
                         ),
+                        const SizedBox(height: 16),
+                        _buildFormTextField(
+                          label: 'Display Order / Sorting Priority',
+                          hint: 'e.g. 0 (lower numbers appear first)',
+                          controller: _orderController,
+                          keyboardType: TextInputType.number,
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Order is required';
+                            }
+                            if (int.tryParse(val) == null) {
+                              return 'Please enter a valid number';
+                            }
+                            return null;
+                          },
+                        ),
+                        _buildContextSpecificFields(),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4345,6 +4384,122 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ],
       ),
+    );
+  }
+
+  String _extractId(dynamic item) {
+    if (item == null) return '';
+    if (item is String) return item;
+    if (item is Map) {
+      if (item['\$oid'] != null) return item['\$oid'].toString();
+      if (item['_id'] != null) return _extractId(item['_id']);
+      if (item['id'] != null) return _extractId(item['id']);
+    }
+    return item.toString();
+  }
+
+  String _normalizeName(String name) {
+    String n = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
+    if (n.endsWith('s')) {
+      n = n.substring(0, n.length - 1);
+    }
+    return n;
+  }
+
+  TextEditingController _getOrCreateContextController(String contextId, {String initialValue = '0'}) {
+    if (!_customOrdersControllers.containsKey(contextId)) {
+      _customOrdersControllers[contextId] = TextEditingController(text: initialValue);
+    }
+    return _customOrdersControllers[contextId]!;
+  }
+
+  Widget _buildContextSpecificFields() {
+    // 1. Resolve IDs for selected categories
+    final List<MapEntry<String, String>> categoryItems = [];
+    for (var catName in _formCategories) {
+      final matchingCat = _backendCategories.firstWhere(
+        (c) => _normalizeName(c['name']?.toString() ?? '') == _normalizeName(catName),
+        orElse: () => null,
+      );
+      if (matchingCat != null) {
+        final idStr = _extractId(matchingCat);
+        if (idStr.isNotEmpty) {
+          categoryItems.add(MapEntry(idStr, 'Order in Category: $catName'));
+        }
+      }
+    }
+
+    // 2. Resolve IDs for selected subcategories
+    final List<MapEntry<String, String>> subCategoryItems = [];
+    for (var subName in _formSubCategories) {
+      for (var cat in _backendCategories) {
+        final List subs = cat['subCategories'] ?? [];
+        final matchingSub = subs.firstWhere(
+          (s) => _normalizeName(s['name']?.toString() ?? '') == _normalizeName(subName),
+          orElse: () => null,
+        );
+        if (matchingSub != null) {
+          final idStr = _extractId(matchingSub);
+          if (idStr.isNotEmpty) {
+            subCategoryItems.add(MapEntry(idStr, 'Order in Subcategory: $subName'));
+          }
+          break;
+        }
+      }
+    }
+
+    // 3. Resolve IDs for selected collections
+    final List<MapEntry<String, String>> collectionItems = [];
+    for (var col in _assignedCollections) {
+      final displayName = _collectionIdToName[col] ?? col;
+      collectionItems.add(MapEntry(col, 'Order in Collection: $displayName'));
+    }
+
+    final allContexts = [...categoryItems, ...subCategoryItems, ...collectionItems];
+    if (allContexts.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text(
+          'Context-Specific Ordering',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Specify custom positions for this product within individual categories or collections (lower numbers appear first).',
+          style: GoogleFonts.outfit(
+            fontSize: 11,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...allContexts.map((entry) {
+          final contextId = entry.key;
+          final contextLabel = entry.value;
+          final ctrl = _getOrCreateContextController(contextId);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: _buildFormTextField(
+              label: contextLabel,
+              hint: 'e.g. 0, 1, 2...',
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              validator: (val) {
+                if (val != null && val.trim().isNotEmpty && int.tryParse(val) == null) {
+                  return 'Must be a valid integer';
+                }
+                return null;
+              },
+            ),
+          );
+        }),
+      ],
     );
   }
 }
