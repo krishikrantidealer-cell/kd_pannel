@@ -10,6 +10,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.da
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
@@ -45,6 +46,7 @@ class _MainLayoutState extends State<MainLayout> {
     const TeamManagementPage(),
     const UserEventsPage(),
     const AuditLogsContainerPage(),
+    const TrashPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -100,6 +102,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 7;
         } else if (routeName == '/logs' || routeName == '/admin/logs') {
           _currentIdx = 8;
+        } else if (routeName == '/trash') {
+          _currentIdx = 9;
         } else {
           _currentIdx = 0;
         }
@@ -139,6 +143,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 6) route = '/team';
       if (index == 7) route = '/marketing';
       if (index == 8) route = '/logs';
+      if (index == 9) route = '/trash';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/orders';

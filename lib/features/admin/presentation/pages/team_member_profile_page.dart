@@ -32,7 +32,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   bool _isActionLoading = false;
   int _activeTab = 0;
   int _activeLogSubTab = 0; // 0 for Sales, 1 for Admin
-  
+
   // Real-time agent status
   bool _isAgentActive = false;
   StreamSubscription? _presenceSubscription;
@@ -42,7 +42,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   final TextEditingController _leadSearchController = TextEditingController();
   final TextEditingController _orderSearchController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
-  
+
   String _leadSearchQuery = '';
   String _orderSearchQuery = '';
   String _clientSegmentFilter = 'All'; // 'All', 'Leads', 'Dealers'
@@ -156,7 +156,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
       final agentEmail = _agent!['email']?.toString().toLowerCase();
       if (agentEmail != null) {
         final isActive = activeUsers.any((u) {
-          final email = (u['user'] ?? u['userEmail'] ?? u['email'])?.toString().toLowerCase();
+          final email = (u['user'] ?? u['userEmail'] ?? u['email'])
+              ?.toString()
+              .toLowerCase();
           return email == agentEmail;
         });
         if (mounted) {
@@ -173,8 +175,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
       if (!mounted || _agent == null) return;
       final agentEmail = _agent!['email']?.toString().toLowerCase();
-      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])?.toString().toLowerCase();
-      if (agentEmail != null && incomingUser != null && agentEmail == incomingUser) {
+      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])
+          ?.toString()
+          .toLowerCase();
+      if (agentEmail != null &&
+          incomingUser != null &&
+          agentEmail == incomingUser) {
         setState(() {
           _isAgentActive = true;
         });
@@ -202,32 +208,37 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
         AnalyticsService().fetchEvents(userEmail: agentEmail),
         AnalyticsService().fetchAuditLogs(adminEmail: agentEmail),
       ]);
-      
+
       final events = (results[0] as List? ?? []).cast<Map<String, dynamic>>();
       final auditLogsData = results[1] as Map<String, dynamic>?;
       final auditLogs = (auditLogsData?['logs'] as List? ?? []);
 
       // Standardize audit logs to match event format for the timeline
-      final standardizedAudit = auditLogs.map((log) {
-        final m = log as Map;
-        return {
-          'event': m['action'] ?? 'system_audit',
-          'timestamp': m['timestamp'],
-          'isAudit': true,
-          'properties': {
-            'details': 'System Action on ${m['targetModel'] ?? 'Object'}',
-            'changes': m['changes'],
-            'targetId': m['targetId'],
-          }
-        };
-      }).toList().cast<Map<String, dynamic>>();
+      final standardizedAudit = auditLogs
+          .map((log) {
+            final m = log as Map;
+            return {
+              'event': m['action'] ?? 'system_audit',
+              'timestamp': m['timestamp'],
+              'isAudit': true,
+              'properties': {
+                'details': 'System Action on ${m['targetModel'] ?? 'Object'}',
+                'changes': m['changes'],
+                'targetId': m['targetId'],
+              },
+            };
+          })
+          .toList()
+          .cast<Map<String, dynamic>>();
 
       final combined = [...events, ...standardizedAudit];
-      
+
       // Sort combined list by timestamp descending
       combined.sort((a, b) {
-        final tA = DateTime.tryParse(a['timestamp']?.toString() ?? '') ?? DateTime(0);
-        final tB = DateTime.tryParse(b['timestamp']?.toString() ?? '') ?? DateTime(0);
+        final tA =
+            DateTime.tryParse(a['timestamp']?.toString() ?? '') ?? DateTime(0);
+        final tB =
+            DateTime.tryParse(b['timestamp']?.toString() ?? '') ?? DateTime(0);
         return tB.compareTo(tA);
       });
 
@@ -257,7 +268,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     setState(() => _isSavingNotes = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('agent_notes_${_agent!['_id']}', _notesController.text);
+      await prefs.setString(
+        'agent_notes_${_agent!['_id']}',
+        _notesController.text,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -266,7 +280,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
           ),
         );
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       if (mounted) setState(() => _isSavingNotes = false);
     }
   }
@@ -738,7 +753,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             backgroundColor: const Color(0xFFF8FAFC),
             body: Center(
               child: _isLoadingCache
-                  ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                  ? const CircularProgressIndicator(
+                      color: AppTheme.primaryColor,
+                    )
                   : const Text('No team member details found.'),
             ),
           );
@@ -795,14 +812,15 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
               (sum, o) => sum + o.totalAmount,
             );
 
-            final double averageOrderValue = agentOrders.isEmpty 
-                ? 0.0 
+            final double averageOrderValue = agentOrders.isEmpty
+                ? 0.0
                 : cumulativeRevenue / agentOrders.length;
 
             // Conversion rate (Dealers onboarding percentage)
-            final double totalPortfolio = (assignedLeads.length + assignedDealers.length).toDouble();
-            final double conversionRate = totalPortfolio == 0 
-                ? 0.0 
+            final double totalPortfolio =
+                (assignedLeads.length + assignedDealers.length).toDouble();
+            final double conversionRate = totalPortfolio == 0
+                ? 0.0
                 : (assignedDealers.length / totalPortfolio) * 100;
 
             // Group orders by userId to efficiently compute high-value dealers
@@ -810,7 +828,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             for (var o in ordersState.orders) {
               final uid = o.userId;
               if (uid != null) {
-                dealerSalesMap[uid] = (dealerSalesMap[uid] ?? 0.0) + o.totalAmount;
+                dealerSalesMap[uid] =
+                    (dealerSalesMap[uid] ?? 0.0) + o.totalAmount;
               }
             }
 
@@ -854,8 +873,14 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: _isAgentActive
-                                  ? [AppTheme.primaryColor, const Color(0xFF0D3E12)]
-                                  : [const Color(0xFF475569), const Color(0xFF1E293B)],
+                                  ? [
+                                      AppTheme.primaryColor,
+                                      const Color(0xFF0D3E12),
+                                    ]
+                                  : [
+                                      const Color(0xFF475569),
+                                      const Color(0xFF1E293B),
+                                    ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
@@ -893,7 +918,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                             gradient: LinearGradient(
                                               colors: [
                                                 AppTheme.primaryColor,
-                                                AppTheme.primaryColor.withOpacity(0.8),
+                                                AppTheme.primaryColor
+                                                    .withOpacity(0.8),
                                               ],
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
@@ -901,7 +927,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                             shape: BoxShape.circle,
                                             boxShadow: [
                                               BoxShadow(
-                                                color: AppTheme.primaryColor.withOpacity(0.2),
+                                                color: AppTheme.primaryColor
+                                                    .withOpacity(0.2),
                                                 blurRadius: 6,
                                                 offset: const Offset(0, 2),
                                               ),
@@ -933,7 +960,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                                 ? AppTheme.success
                                                 : AppTheme.textSecondary,
                                             shape: BoxShape.circle,
-                                            border: Border.all(color: Colors.white, width: 1.8),
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1.8,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -943,7 +973,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   // Name & Badges
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           agentName,
@@ -959,13 +990,16 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                           runSpacing: 4,
                                           children: [
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 3,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: AppTheme.primaryColor.withOpacity(0.08),
-                                                borderRadius: BorderRadius.circular(6),
+                                                color: AppTheme.primaryColor
+                                                    .withOpacity(0.08),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
                                               child: Text(
                                                 agentRole.toUpperCase(),
@@ -977,13 +1011,17 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 3,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: tierColor.withOpacity(0.08),
-                                                borderRadius: BorderRadius.circular(6),
+                                                color: tierColor.withOpacity(
+                                                  0.08,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
                                               child: Text(
                                                 tierLabel,
@@ -1001,8 +1039,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   ),
                                 ],
                               ),
-                              const Divider(height: 24, color: AppTheme.borderColor),
-                              
+                              const Divider(
+                                height: 24,
+                                color: AppTheme.borderColor,
+                              ),
+
                               // Contact Details in a responsive wrap/grid
                               Wrap(
                                 spacing: 20,
@@ -1010,11 +1051,19 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                 children: [
                                   SizedBox(
                                     width: isMobile ? double.infinity : 240,
-                                    child: _buildDetailRow('Email', agentEmail, Icons.email_outlined),
+                                    child: _buildDetailRow(
+                                      'Email',
+                                      agentEmail,
+                                      Icons.email_outlined,
+                                    ),
                                   ),
                                   SizedBox(
                                     width: isMobile ? double.infinity : 240,
-                                    child: _buildDetailRow('Phone', agentPhone, Icons.phone_outlined),
+                                    child: _buildDetailRow(
+                                      'Phone',
+                                      agentPhone,
+                                      Icons.phone_outlined,
+                                    ),
                                   ),
                                   SizedBox(
                                     width: isMobile ? double.infinity : 240,
@@ -1040,9 +1089,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   ),
                                 ],
                               ),
-                              
-                              const Divider(height: 24, color: AppTheme.borderColor),
-                              
+
+                              const Divider(
+                                height: 24,
+                                color: AppTheme.borderColor,
+                              ),
+
                               // Quick CTAs & Action buttons in a single Row
                               Row(
                                 children: [
@@ -1061,7 +1113,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                         RegExp(r'[^0-9]'),
                                         '',
                                       );
-                                      final waPhone = cleanPhone.startsWith('91')
+                                      final waPhone =
+                                          cleanPhone.startsWith('91')
                                           ? cleanPhone
                                           : '91$cleanPhone';
                                       _launchUrl('https://wa.me/$waPhone');
@@ -1078,8 +1131,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   const Spacer(),
                                   // Edit & Delete
                                   TextButton.icon(
-                                    onPressed: () => _showSalesAgentFormDialog(_agent!),
-                                    icon: const Icon(Icons.edit_outlined, size: 14),
+                                    onPressed: () =>
+                                        _showSalesAgentFormDialog(_agent!),
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      size: 14,
+                                    ),
                                     label: Text(
                                       'Edit',
                                       style: GoogleFonts.outfit(
@@ -1095,14 +1152,20 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(6),
-                                        side: const BorderSide(color: Colors.blue),
+                                        side: const BorderSide(
+                                          color: Colors.blue,
+                                        ),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   TextButton.icon(
-                                    onPressed: () => _deleteSalesAgent(agentId, agentName),
-                                    icon: const Icon(Icons.delete_outline, size: 14),
+                                    onPressed: () =>
+                                        _deleteSalesAgent(agentId, agentName),
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 14,
+                                    ),
                                     label: Text(
                                       'Delete',
                                       style: GoogleFonts.outfit(
@@ -1118,7 +1181,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(6),
-                                        side: const BorderSide(color: AppTheme.error),
+                                        side: const BorderSide(
+                                          color: AppTheme.error,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1152,8 +1217,14 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: _isAgentActive
-                                      ? [AppTheme.primaryColor, const Color(0xFF0D3E12)]
-                                      : [const Color(0xFF475569), const Color(0xFF1E293B)],
+                                      ? [
+                                          AppTheme.primaryColor,
+                                          const Color(0xFF0D3E12),
+                                        ]
+                                      : [
+                                          const Color(0xFF475569),
+                                          const Color(0xFF1E293B),
+                                        ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
@@ -1177,7 +1248,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                         gradient: LinearGradient(
                                           colors: [
                                             AppTheme.primaryColor,
-                                            AppTheme.primaryColor.withOpacity(0.8),
+                                            AppTheme.primaryColor.withOpacity(
+                                              0.8,
+                                            ),
                                           ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
@@ -1185,7 +1258,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
-                                            color: AppTheme.primaryColor.withOpacity(0.2),
+                                            color: AppTheme.primaryColor
+                                                .withOpacity(0.2),
                                             blurRadius: 8,
                                             offset: const Offset(0, 3),
                                           ),
@@ -1217,11 +1291,15 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                             ? AppTheme.success
                                             : AppTheme.textSecondary,
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2.5),
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2.5,
+                                        ),
                                         boxShadow: _isAgentActive
                                             ? [
                                                 BoxShadow(
-                                                  color: AppTheme.success.withOpacity(0.4),
+                                                  color: AppTheme.success
+                                                      .withOpacity(0.4),
                                                   blurRadius: 6,
                                                   spreadRadius: 2,
                                                 ),
@@ -1237,7 +1315,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         ),
                         const SizedBox(height: 50),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1254,7 +1335,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                     ),
                                     const SizedBox(height: 6),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -1262,8 +1344,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                             vertical: 3.5,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: AppTheme.primaryColor.withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: AppTheme.primaryColor
+                                                .withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
                                           ),
                                           child: Text(
                                             agentRole.toUpperCase(),
@@ -1283,12 +1368,18 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: tierColor.withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(6),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Icon(Icons.stars, size: 12, color: tierColor),
+                                              Icon(
+                                                Icons.stars,
+                                                size: 12,
+                                                color: tierColor,
+                                              ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 tierLabel,
@@ -1306,7 +1397,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   ],
                                 ),
                               ),
-                              const Divider(height: 32, color: AppTheme.borderColor),
+                              const Divider(
+                                height: 32,
+                                color: AppTheme.borderColor,
+                              ),
 
                               // Contact channels & values
                               _buildDetailRow(
@@ -1332,19 +1426,26 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               const SizedBox(height: 14),
                               _buildDetailRow(
                                 'Account Status',
-                                isAgentBlocked ? 'Suspended/Blocked' : 'Active/Healthy',
+                                isAgentBlocked
+                                    ? 'Suspended/Blocked'
+                                    : 'Active/Healthy',
                                 Icons.lock_outline,
                                 valueColor: isAgentBlocked
                                     ? AppTheme.error
                                     : AppTheme.success,
                               ),
                               const SizedBox(height: 14),
-                              _buildDetailRow('System Access', createdAtStr, Icons.history),
+                              _buildDetailRow(
+                                'System Access',
+                                createdAtStr,
+                                Icons.history,
+                              ),
 
                               const SizedBox(height: 24),
                               // CTA Communication actions
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
                                 children: [
                                   _buildRoundCtaButton(
                                     Icons.phone_in_talk_outlined,
@@ -1360,7 +1461,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                         RegExp(r'[^0-9]'),
                                         '',
                                       );
-                                      final waPhone = cleanPhone.startsWith('91')
+                                      final waPhone =
+                                          cleanPhone.startsWith('91')
                                           ? cleanPhone
                                           : '91$cleanPhone';
                                       _launchUrl('https://wa.me/$waPhone');
@@ -1381,16 +1483,27 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         const SizedBox(height: 4),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: const Divider(height: 36, color: AppTheme.borderColor),
+                          child: const Divider(
+                            height: 36,
+                            color: AppTheme.borderColor,
+                          ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                          padding: const EdgeInsets.only(
+                            left: 20,
+                            right: 20,
+                            bottom: 20,
+                          ),
                           child: Row(
                             children: [
                               Expanded(
                                 child: TextButton.icon(
-                                  onPressed: () => _showSalesAgentFormDialog(_agent!),
-                                  icon: const Icon(Icons.edit_outlined, size: 16),
+                                  onPressed: () =>
+                                      _showSalesAgentFormDialog(_agent!),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 16,
+                                  ),
                                   label: Text(
                                     'Edit Details',
                                     style: GoogleFonts.outfit(
@@ -1400,10 +1513,14 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   ),
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.blue,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      side: const BorderSide(color: Colors.blue),
+                                      side: const BorderSide(
+                                        color: Colors.blue,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1413,7 +1530,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                 child: TextButton.icon(
                                   onPressed: () =>
                                       _deleteSalesAgent(agentId, agentName),
-                                  icon: const Icon(Icons.delete_outline, size: 16),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 16,
+                                  ),
                                   label: Text(
                                     'Delete Agent',
                                     style: GoogleFonts.outfit(
@@ -1423,10 +1543,14 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   ),
                                   style: TextButton.styleFrom(
                                     foregroundColor: AppTheme.error,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      side: const BorderSide(color: AppTheme.error),
+                                      side: const BorderSide(
+                                        color: AppTheme.error,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1452,7 +1576,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                     columns = 4;
                   }
                   final double width =
-                      (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+                      (constraints.maxWidth - (spacing * (columns - 1))) /
+                      columns;
 
                   return Wrap(
                     spacing: spacing,
@@ -1481,7 +1606,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                       AdvancedStatCardWidget(
                         width: width,
                         title: 'Onboarded Portfolio',
-                        value: '${assignedLeads.length + assignedDealers.length} Clients',
+                        value:
+                            '${assignedLeads.length + assignedDealers.length} Clients',
                         color: Colors.blue,
                         trendLabel:
                             'Leads (${assignedLeads.length}) • Dealers (${assignedDealers.length})',
@@ -1490,18 +1616,16 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           width: 50,
                           height: 24,
                           child: CustomPaint(
-                            painter: SparklinePainter(
-                              [
-                                10,
-                                12,
-                                9,
-                                15,
-                                13,
-                                17,
-                                (assignedLeads.length + assignedDealers.length).toDouble()
-                              ],
-                              Colors.blue,
-                            ),
+                            painter: SparklinePainter([
+                              10,
+                              12,
+                              9,
+                              15,
+                              13,
+                              17,
+                              (assignedLeads.length + assignedDealers.length)
+                                  .toDouble(),
+                            ], Colors.blue),
                           ),
                         ),
                       ),
@@ -1510,7 +1634,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         title: 'Total Bookings',
                         value: '${agentOrders.length} Orders',
                         color: Colors.indigo,
-                        trendLabel: 'AOV: ${_formatCurrency(averageOrderValue)}',
+                        trendLabel:
+                            'AOV: ${_formatCurrency(averageOrderValue)}',
                         trendIcon: Icons.shopping_bag_outlined,
                         visualWidget: SizedBox(
                           width: 28,
@@ -1536,10 +1661,15 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           width: 50,
                           height: 24,
                           child: CustomPaint(
-                            painter: SparklinePainter(
-                              [0, 10, 20, 15, 30, 25, conversionRate],
-                              Colors.teal,
-                            ),
+                            painter: SparklinePainter([
+                              0,
+                              10,
+                              20,
+                              15,
+                              30,
+                              25,
+                              conversionRate,
+                            ], Colors.teal),
                           ),
                         ),
                       ),
@@ -1573,7 +1703,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.orange.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(6),
@@ -1590,25 +1723,16 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  
-                  // Target 1: Revenue (Target: 10L)
+
+                  // Target 1: Revenue (Target: 5L)
                   _buildLinearTargetTracker(
                     'Revenue Booking Target',
                     cumulativeRevenue,
-                    1000000.0, // 10 Lakh
+                    500000.0, // 5 Lakh
                     isCurrency: true,
                     barColor: AppTheme.primaryColor,
                   ),
                   const SizedBox(height: 18),
-                  
-                  // Target 2: Onboardings (Target: 15 dealers)
-                  _buildLinearTargetTracker(
-                    'Dealers Onboarding Target',
-                    assignedDealers.length.toDouble(),
-                    15.0,
-                    isCurrency: false,
-                    barColor: Colors.teal,
-                  ),
                 ],
               ),
             );
@@ -1626,9 +1750,21 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildTabItem(0, 'Overview & Analytics', Icons.analytics_outlined),
-                    _buildTabItem(1, 'Client Portfolio (${assignedLeads.length + assignedDealers.length})', Icons.groups_outlined),
-                    _buildTabItem(2, 'Orders History (${agentOrders.length})', Icons.shopping_bag_outlined),
+                    _buildTabItem(
+                      0,
+                      'Overview & Analytics',
+                      Icons.analytics_outlined,
+                    ),
+                    _buildTabItem(
+                      1,
+                      'Client Portfolio (${assignedLeads.length + assignedDealers.length})',
+                      Icons.groups_outlined,
+                    ),
+                    _buildTabItem(
+                      2,
+                      'Orders History (${agentOrders.length})',
+                      Icons.shopping_bag_outlined,
+                    ),
                     _buildTabItem(3, 'Activity Logs', Icons.history),
                     _buildTabItem(4, 'Admin Notes', Icons.rate_review_outlined),
                   ],
@@ -1645,7 +1781,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                   children: [
                     targetTrackerCard,
                     const SizedBox(height: 20),
-                    
+
                     // Sales Distribution insight row
                     Container(
                       padding: const EdgeInsets.all(20),
@@ -1659,7 +1795,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.insights, size: 18, color: AppTheme.primaryColor),
+                              const Icon(
+                                Icons.insights,
+                                size: 18,
+                                color: AppTheme.primaryColor,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'Performance Insights & Intelligence',
@@ -1673,7 +1813,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            _getAgentInsightText(cumulativeRevenue, conversionRate, assignedDealers.length),
+                            _getAgentInsightText(
+                              cumulativeRevenue,
+                              conversionRate,
+                              assignedDealers.length,
+                            ),
                             style: GoogleFonts.outfit(
                               fontSize: 12.5,
                               color: AppTheme.textBody,
@@ -1684,9 +1828,18 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _buildMiniInsightStat('Total Clients', '${assignedLeads.length + assignedDealers.length}'),
-                              _buildMiniInsightStat('High Value Dealers', '$highValueDealersCount'),
-                              _buildMiniInsightStat('Avg. Order Value', _formatCurrency(averageOrderValue)),
+                              _buildMiniInsightStat(
+                                'Total Clients',
+                                '${assignedLeads.length + assignedDealers.length}',
+                              ),
+                              _buildMiniInsightStat(
+                                'High Value Dealers',
+                                '$highValueDealersCount',
+                              ),
+                              _buildMiniInsightStat(
+                                'Avg. Order Value',
+                                _formatCurrency(averageOrderValue),
+                              ),
                             ],
                           ),
                         ],
@@ -1703,15 +1856,20 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
 
                 final filteredPortfolio = combinedPortfolio.where((u) {
                   final isVerified = u['kycStatus'] == 'verified';
-                  if (_clientSegmentFilter == 'Leads' && isVerified) return false;
-                  if (_clientSegmentFilter == 'Dealers' && !isVerified) return false;
+                  if (_clientSegmentFilter == 'Leads' && isVerified)
+                    return false;
+                  if (_clientSegmentFilter == 'Dealers' && !isVerified)
+                    return false;
 
-                  final name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.toLowerCase();
+                  final name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                      .toLowerCase();
                   final shop = (u['shopName'] ?? '').toLowerCase();
                   final phone = (u['phoneNumber'] ?? '').toLowerCase();
                   final query = _leadSearchQuery.toLowerCase();
-                  
-                  return name.contains(query) || shop.contains(query) || phone.contains(query);
+
+                  return name.contains(query) ||
+                      shop.contains(query) ||
+                      phone.contains(query);
                 }).toList();
 
                 return Column(
@@ -1742,7 +1900,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   style: GoogleFonts.outfit(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.bold,
-                                    color: isSel ? Colors.white : AppTheme.textSecondary,
+                                    color: isSel
+                                        ? Colors.white
+                                        : AppTheme.textSecondary,
                                   ),
                                 ),
                                 selected: isSel,
@@ -1756,7 +1916,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                 selectedColor: AppTheme.primaryColor,
                                 backgroundColor: const Color(0xFFF3F4F6),
                                 side: BorderSide.none,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
                             );
                           }).toList(),
@@ -1770,14 +1932,19 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: filteredPortfolio.length > _portfolioLimit ? _portfolioLimit : filteredPortfolio.length,
+                        itemCount: filteredPortfolio.length > _portfolioLimit
+                            ? _portfolioLimit
+                            : filteredPortfolio.length,
                         itemBuilder: (context, idx) {
                           final u = filteredPortfolio[idx];
-                          final name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+                          final name =
+                              '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                                  .trim();
                           final shop = u['shopName'] ?? '-';
                           final phone = u['phoneNumber'] ?? '-';
                           final isVerified = u['kycStatus'] == 'verified';
-                          final clientStatus = u['status'] ?? u['leadStatus'] ?? 'prospect';
+                          final clientStatus =
+                              u['status'] ?? u['leadStatus'] ?? 'prospect';
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
@@ -1785,35 +1952,55 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                             color: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
-                              side: const BorderSide(color: AppTheme.borderColor),
+                              side: const BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
                             ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: isVerified ? Colors.teal.withOpacity(0.08) : AppTheme.primaryColor.withOpacity(0.08),
+                                backgroundColor: isVerified
+                                    ? Colors.teal.withOpacity(0.08)
+                                    : AppTheme.primaryColor.withOpacity(0.08),
                                 radius: 18,
                                 child: Icon(
-                                  isVerified ? Icons.storefront : Icons.person_outline, 
-                                  size: 18, 
-                                  color: isVerified ? Colors.teal : AppTheme.primaryColor,
+                                  isVerified
+                                      ? Icons.storefront
+                                      : Icons.person_outline,
+                                  size: 18,
+                                  color: isVerified
+                                      ? Colors.teal
+                                      : AppTheme.primaryColor,
                                 ),
                               ),
                               title: Text(
                                 name.isNotEmpty ? name : 'Unnamed Client',
-                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                               subtitle: Text(
                                 'Shop: $shop • Phone: $phone',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  color: AppTheme.textSecondary,
+                                ),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _buildBadge(
-                                    isVerified ? 'DEALER' : clientStatus.toUpperCase(), 
+                                    isVerified
+                                        ? 'DEALER'
+                                        : clientStatus.toUpperCase(),
                                     isVerified ? Colors.teal : Colors.blue,
                                   ),
                                   const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    size: 16,
+                                    color: AppTheme.textSecondary,
+                                  ),
                                 ],
                               ),
                               onTap: () {
@@ -1821,7 +2008,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   Navigator.pushNamed(
                                     context,
                                     '/dealers/profile',
-                                    arguments: _mapUserToDealer(u, ordersState.orders),
+                                    arguments: _mapUserToDealer(
+                                      u,
+                                      ordersState.orders,
+                                    ),
                                   );
                                 } else {
                                   Navigator.pushNamed(
@@ -1845,7 +2035,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   _portfolioLimit += 15;
                                 });
                               },
-                              icon: const Icon(Icons.add, size: 16, color: AppTheme.primaryColor),
+                              icon: const Icon(
+                                Icons.add,
+                                size: 16,
+                                color: AppTheme.primaryColor,
+                              ),
                               label: Text(
                                 'Show More (${filteredPortfolio.length - _portfolioLimit} remaining)',
                                 style: GoogleFonts.outfit(
@@ -1885,17 +2079,22 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: filteredOrders.length > _ordersLimit ? _ordersLimit : filteredOrders.length,
+                        itemCount: filteredOrders.length > _ordersLimit
+                            ? _ordersLimit
+                            : filteredOrders.length,
                         itemBuilder: (context, idx) {
                           final o = filteredOrders[idx];
                           final orderNo = o.orderId;
                           final clientName = o.customerName;
                           final amount = o.totalAmount;
                           final status = o.orderStatus;
-                          final dateStr = _formatTimeAgo(o.placedAt.toIso8601String());
+                          final dateStr = _formatTimeAgo(
+                            o.placedAt.toIso8601String(),
+                          );
 
                           Color statusColor = Colors.orange;
-                          if (status.toLowerCase() == 'completed' || status.toLowerCase() == 'delivered') {
+                          if (status.toLowerCase() == 'completed' ||
+                              status.toLowerCase() == 'delivered') {
                             statusColor = Colors.green;
                           } else if (status.toLowerCase() == 'cancelled') {
                             statusColor = AppTheme.error;
@@ -1907,21 +2106,35 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                             color: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
-                              side: const BorderSide(color: AppTheme.borderColor),
+                              side: const BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
                             ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.indigo.withOpacity(0.08),
+                                backgroundColor: Colors.indigo.withOpacity(
+                                  0.08,
+                                ),
                                 radius: 18,
-                                child: const Icon(Icons.shopping_bag_outlined, size: 18, color: Colors.indigo),
+                                child: const Icon(
+                                  Icons.shopping_bag_outlined,
+                                  size: 18,
+                                  color: Colors.indigo,
+                                ),
                               ),
                               title: Text(
                                 'Order #$orderNo',
-                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                               subtitle: Text(
                                 'Client: $clientName • $dateStr',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  color: AppTheme.textSecondary,
+                                ),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -1932,14 +2145,25 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                     children: [
                                       Text(
                                         _formatCurrency(amount),
-                                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary),
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: AppTheme.textPrimary,
+                                        ),
                                       ),
                                       const SizedBox(height: 2),
-                                      _buildBadge(status.toUpperCase(), statusColor),
+                                      _buildBadge(
+                                        status.toUpperCase(),
+                                        statusColor,
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    size: 16,
+                                    color: AppTheme.textSecondary,
+                                  ),
                                 ],
                               ),
                               onTap: () {
@@ -1963,7 +2187,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                   _ordersLimit += 15;
                                 });
                               },
-                              icon: const Icon(Icons.add, size: 16, color: AppTheme.primaryColor),
+                              icon: const Icon(
+                                Icons.add,
+                                size: 16,
+                                color: AppTheme.primaryColor,
+                              ),
                               label: Text(
                                 'Show More (${filteredOrders.length - _ordersLimit} remaining)',
                                 style: GoogleFonts.outfit(
@@ -1980,9 +2208,15 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                 );
               } else if (_activeTab == 3) {
                 // ACTIVITY LOGS
-                final salesLogs = _agentEvents.where((e) => e['isAudit'] != true).toList();
-                final auditLogs = _agentEvents.where((e) => e['isAudit'] == true).toList();
-                final currentLogs = _activeLogSubTab == 0 ? salesLogs : auditLogs;
+                final salesLogs = _agentEvents
+                    .where((e) => e['isAudit'] != true)
+                    .toList();
+                final auditLogs = _agentEvents
+                    .where((e) => e['isAudit'] == true)
+                    .toList();
+                final currentLogs = _activeLogSubTab == 0
+                    ? salesLogs
+                    : auditLogs;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1998,17 +2232,22 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                 style: GoogleFonts.outfit(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.bold,
-                                  color: _activeLogSubTab == 0 ? Colors.white : AppTheme.textSecondary,
+                                  color: _activeLogSubTab == 0
+                                      ? Colors.white
+                                      : AppTheme.textSecondary,
                                 ),
                               ),
                               selected: _activeLogSubTab == 0,
                               onSelected: (selected) {
-                                if (selected) setState(() => _activeLogSubTab = 0);
+                                if (selected)
+                                  setState(() => _activeLogSubTab = 0);
                               },
                               selectedColor: AppTheme.primaryColor,
                               backgroundColor: const Color(0xFFF3F4F6),
                               side: BorderSide.none,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                             const SizedBox(width: 8),
                             ChoiceChip(
@@ -2017,22 +2256,31 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                 style: GoogleFonts.outfit(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.bold,
-                                  color: _activeLogSubTab == 1 ? Colors.white : AppTheme.textSecondary,
+                                  color: _activeLogSubTab == 1
+                                      ? Colors.white
+                                      : AppTheme.textSecondary,
                                 ),
                               ),
                               selected: _activeLogSubTab == 1,
                               onSelected: (selected) {
-                                if (selected) setState(() => _activeLogSubTab = 1);
+                                if (selected)
+                                  setState(() => _activeLogSubTab = 1);
                               },
                               selectedColor: AppTheme.primaryColor,
                               backgroundColor: const Color(0xFFF3F4F6),
                               side: BorderSide.none,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ],
                         ),
                         IconButton(
-                          icon: const Icon(Icons.refresh, size: 18, color: AppTheme.primaryColor),
+                          icon: const Icon(
+                            Icons.refresh,
+                            size: 18,
+                            color: AppTheme.primaryColor,
+                          ),
                           onPressed: _fetchAgentEvents,
                         ),
                       ],
@@ -2042,25 +2290,41 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                       const Center(
                         child: Padding(
                           padding: EdgeInsets.all(40.0),
-                          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                          child: CircularProgressIndicator(
+                            color: AppTheme.primaryColor,
+                          ),
                         ),
                       )
                     else if (currentLogs.isEmpty)
-                      _buildEmptyState(_activeLogSubTab == 0 ? 'No recent sales activities found' : 'No recent admin logs found')
+                      _buildEmptyState(
+                        _activeLogSubTab == 0
+                            ? 'No recent sales activities found'
+                            : 'No recent admin logs found',
+                      )
                     else
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: currentLogs.length > _eventsLimit ? _eventsLimit : currentLogs.length,
+                        itemCount: currentLogs.length > _eventsLimit
+                            ? _eventsLimit
+                            : currentLogs.length,
                         itemBuilder: (context, idx) {
-                          final displayCount = currentLogs.length > _eventsLimit ? _eventsLimit : currentLogs.length;
+                          final displayCount = currentLogs.length > _eventsLimit
+                              ? _eventsLimit
+                              : currentLogs.length;
                           final ev = currentLogs[idx];
-                          final eventName = ev['event'] ?? ev['eventType'] ?? 'system_action';
+                          final eventName =
+                              ev['event'] ?? ev['eventType'] ?? 'system_action';
                           final timestamp = ev['timestamp'] ?? '';
-                          final props = (ev['properties'] ?? ev['payload']) as Map? ?? {};
-                          final details = props['details'] ?? props['screen'] ?? ev['details'] ?? '';
+                          final props =
+                              (ev['properties'] ?? ev['payload']) as Map? ?? {};
+                          final details =
+                              props['details'] ??
+                              props['screen'] ??
+                              ev['details'] ??
+                              '';
                           final isAudit = ev['isAudit'] == true;
-                          
+
                           // Timeline visuals
                           IconData eventIcon = Icons.settings_ethernet;
                           Color eventColor = Colors.grey;
@@ -2069,13 +2333,21 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                             eventIcon = Icons.security_rounded;
                             eventColor = Colors.deepOrange;
                           } else {
-                            if (eventName.toString().toLowerCase().contains('login')) {
+                            if (eventName.toString().toLowerCase().contains(
+                              'login',
+                            )) {
                               eventIcon = Icons.login;
                               eventColor = Colors.green;
-                            } else if (eventName.toString().toLowerCase().contains('order')) {
+                            } else if (eventName
+                                .toString()
+                                .toLowerCase()
+                                .contains('order')) {
                               eventIcon = Icons.shopping_cart;
                               eventColor = Colors.teal;
-                            } else if (eventName.toString().toLowerCase().contains('profile')) {
+                            } else if (eventName
+                                .toString()
+                                .toLowerCase()
+                                .contains('profile')) {
                               eventIcon = Icons.visibility;
                               eventColor = Colors.blue;
                             }
@@ -2092,7 +2364,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                       color: eventColor.withOpacity(0.1),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(eventIcon, size: 16, color: eventColor),
+                                    child: Icon(
+                                      eventIcon,
+                                      size: 16,
+                                      color: eventColor,
+                                    ),
                                   ),
                                   if (idx != displayCount - 1)
                                     Container(
@@ -2110,7 +2386,10 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                     Row(
                                       children: [
                                         Text(
-                                          eventName.toString().toUpperCase().replaceAll('_', ' '),
+                                          eventName
+                                              .toString()
+                                              .toUpperCase()
+                                              .replaceAll('_', ' '),
                                           style: GoogleFonts.outfit(
                                             fontSize: 12.5,
                                             fontWeight: FontWeight.bold,
@@ -2120,10 +2399,15 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                         if (isAudit) ...[
                                           const SizedBox(width: 8),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.deepOrange.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(4),
+                                              color: Colors.deepOrange
+                                                  .withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                             ),
                                             child: Text(
                                               'AUDIT',
@@ -2148,7 +2432,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                       ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      timestamp.isNotEmpty ? _formatTimeAgo(timestamp) : '-',
+                                      timestamp.isNotEmpty
+                                          ? _formatTimeAgo(timestamp)
+                                          : '-',
                                       style: GoogleFonts.outfit(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
@@ -2163,28 +2449,32 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           );
                         },
                       ),
-                      if (currentLogs.length > _eventsLimit)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Center(
-                            child: TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _eventsLimit += 15;
-                                });
-                              },
-                              icon: const Icon(Icons.add, size: 16, color: AppTheme.primaryColor),
-                              label: Text(
-                                'Show More (${currentLogs.length - _eventsLimit} remaining)',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primaryColor,
-                                ),
+                    if (currentLogs.length > _eventsLimit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Center(
+                          child: TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _eventsLimit += 15;
+                              });
+                            },
+                            icon: const Icon(
+                              Icons.add,
+                              size: 16,
+                              color: AppTheme.primaryColor,
+                            ),
+                            label: Text(
+                              'Show More (${currentLogs.length - _eventsLimit} remaining)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primaryColor,
                               ),
                             ),
                           ),
                         ),
+                      ), // SelectionContainer.disabled
                   ],
                 );
               } else {
@@ -2212,19 +2502,29 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                     TextField(
                       controller: _notesController,
                       maxLines: 8,
-                      style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Enter notes here...',
-                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+                        hintStyle: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                        ),
                         fillColor: const Color(0xFFF9FAFB),
                         filled: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                          borderSide: const BorderSide(
+                            color: AppTheme.borderColor,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.primaryColor),
+                          borderSide: const BorderSide(
+                            color: AppTheme.primaryColor,
+                          ),
                         ),
                       ),
                     ),
@@ -2233,18 +2533,33 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                       alignment: Alignment.centerRight,
                       child: ElevatedButton.icon(
                         onPressed: _isSavingNotes ? null : _saveAgentNotes,
-                        icon: _isSavingNotes 
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        icon: _isSavingNotes
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Icon(Icons.save_outlined, size: 16),
                         label: Text(
                           'Save Private Notes',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -2285,7 +2600,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary),
+                          const Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             agentName,
@@ -2305,10 +2624,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(
-                              width: 320,
-                              child: profileHeroCard,
-                            ),
+                            SizedBox(width: 320, child: profileHeroCard),
                             const SizedBox(width: 24),
                             Expanded(
                               child: Column(
@@ -2323,7 +2639,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: AppTheme.borderColor),
+                                      border: Border.all(
+                                        color: AppTheme.borderColor,
+                                      ),
                                       boxShadow: AppTheme.cardShadow,
                                     ),
                                     child: buildTabDetails(),
@@ -2367,7 +2685,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, IconData icon, {Color? valueColor}) {
+  Widget _buildDetailRow(
+    String label,
+    String value,
+    IconData icon, {
+    Color? valueColor,
+  }) {
     return Row(
       children: [
         Icon(icon, size: 16, color: AppTheme.textSecondary),
@@ -2396,7 +2719,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     );
   }
 
-  Widget _buildRoundCtaButton(dynamic icon, Color color, VoidCallback onTap, String tooltip) {
+  Widget _buildRoundCtaButton(
+    dynamic icon,
+    Color color,
+    VoidCallback onTap,
+    String tooltip,
+  ) {
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -2410,14 +2738,13 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             child: icon is IconData
                 ? Icon(icon, size: 18, color: color)
                 : icon is FaIconData
-                    ? FaIcon(icon, size: 18, color: color)
-                    : const SizedBox.shrink(),
+                ? FaIcon(icon, size: 18, color: color)
+                : const SizedBox.shrink(),
           ),
         ),
       ),
     );
   }
-
 
   Widget _buildLinearTargetTracker(
     String label,
@@ -2448,7 +2775,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
               style: GoogleFonts.outfit(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: current >= target ? AppTheme.success : AppTheme.textSecondary,
+                color: current >= target
+                    ? AppTheme.success
+                    : AppTheme.textSecondary,
               ),
             ),
           ],
@@ -2509,7 +2838,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     );
   }
 
-  String _getAgentInsightText(double revenue, double convRate, int dealerCount) {
+  String _getAgentInsightText(
+    double revenue,
+    double convRate,
+    int dealerCount,
+  ) {
     if (revenue >= 1000000 && convRate >= 60) {
       return "Excellent performer. High portfolio conversion with stellar revenue contributions. Onboarding speed is optimal.";
     } else if (revenue >= 500000) {

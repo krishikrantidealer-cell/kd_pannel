@@ -9,6 +9,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.da
 import 'package:kd_pannel/features/admin/presentation/pages/admin_audit_logs_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_member_profile_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -198,6 +199,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
             const MainLayout(child: TeamMemberProfilePage()),
         '/logs': (context) => const MainLayout(),
         '/admin/logs': (context) => const MainLayout(),
+        '/trash': (context) => const MainLayout(child: TrashPage()),
         '/reports': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Reports'))),
         ),

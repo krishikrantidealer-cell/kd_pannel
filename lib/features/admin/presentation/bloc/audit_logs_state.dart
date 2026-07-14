@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 
 enum AuditLogsStatus { initial, loading, success, failure, loadingMore }
 
@@ -10,6 +11,10 @@ class AuditLogsState extends Equatable {
   final bool hasReachedMax;
   final String searchQuery;
   final String? currentRole;
+  final String actionFilter;
+  final String moduleFilter;
+  final String agentEmail;
+  final DateTimeRange? selectedDateRange;
   final String? errorMessage;
   final String? actionSuccessMessage;
 
@@ -21,6 +26,10 @@ class AuditLogsState extends Equatable {
     this.hasReachedMax = false,
     this.searchQuery = '',
     this.currentRole,
+    this.actionFilter = 'All',
+    this.moduleFilter = 'All',
+    this.agentEmail = 'All',
+    this.selectedDateRange,
     this.errorMessage,
     this.actionSuccessMessage,
   });
@@ -33,6 +42,10 @@ class AuditLogsState extends Equatable {
     bool? hasReachedMax,
     String? searchQuery,
     String? currentRole,
+    String? actionFilter,
+    String? moduleFilter,
+    String? agentEmail,
+    DateTimeRange? Function()? selectedDateRange,
     String? errorMessage,
     String? actionSuccessMessage,
   }) {
@@ -44,6 +57,10 @@ class AuditLogsState extends Equatable {
       hasReachedMax: hasReachedMax ?? this.hasReachedMax,
       searchQuery: searchQuery ?? this.searchQuery,
       currentRole: currentRole ?? this.currentRole,
+      actionFilter: actionFilter ?? this.actionFilter,
+      moduleFilter: moduleFilter ?? this.moduleFilter,
+      agentEmail: agentEmail ?? this.agentEmail,
+      selectedDateRange: selectedDateRange != null ? selectedDateRange() : this.selectedDateRange,
       errorMessage: errorMessage ?? this.errorMessage,
       actionSuccessMessage: actionSuccessMessage ?? this.actionSuccessMessage,
     );
@@ -58,6 +75,10 @@ class AuditLogsState extends Equatable {
     hasReachedMax,
     searchQuery,
     currentRole,
+    actionFilter,
+    moduleFilter,
+    agentEmail,
+    selectedDateRange,
     errorMessage,
     actionSuccessMessage,
   ];

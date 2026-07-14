@@ -8,6 +8,7 @@ class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
     on<FetchAuditLogsInitial>(_onFetchInitial);
     on<FetchAuditLogsMore>(_onFetchMore);
     on<SearchAuditLogs>(_onSearch);
+    on<ChangeAuditLogsFilters>(_onChangeFilters);
     on<NewAuditLogReceived>(_onNewLogReceived);
     on<ClearAuditLogsMessage>(_onClearMessage);
   }
@@ -27,11 +28,25 @@ class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
   ) async {
     if (!event.forceRefresh && state.status == AuditLogsStatus.success) return;
 
-    emit(state.copyWith(status: AuditLogsStatus.loading, logs: [], currentRole: event.role)); // Clear logs on role change/refresh
+    final String? activeRole = event.role ?? state.currentRole;
+    emit(state.copyWith(status: AuditLogsStatus.loading, logs: [], currentRole: activeRole)); // Clear logs on role change/refresh
     try {
+      String? startDate;
+      String? endDate;
+      if (state.selectedDateRange != null) {
+        startDate = state.selectedDateRange!.start.toUtc().toIso8601String();
+        endDate = state.selectedDateRange!.end.toUtc().toIso8601String();
+      }
+
       final result = await AnalyticsService().fetchAuditLogs(
         limit: 50,
-        role: event.role,
+        role: activeRole,
+        search: state.searchQuery,
+        action: state.actionFilter,
+        targetModel: state.moduleFilter,
+        adminEmail: state.agentEmail,
+        startDate: startDate,
+        endDate: endDate,
       );
       final List<Map<String, dynamic>> logs = (result['logs'] as List).cast<Map<String, dynamic>>();
       final int totalCount = result['totalCount'] ?? 0;
@@ -60,10 +75,23 @@ class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
 
     emit(state.copyWith(status: AuditLogsStatus.loadingMore));
     try {
+      String? startDate;
+      String? endDate;
+      if (state.selectedDateRange != null) {
+        startDate = state.selectedDateRange!.start.toUtc().toIso8601String();
+        endDate = state.selectedDateRange!.end.toUtc().toIso8601String();
+      }
+
       final result = await AnalyticsService().fetchAuditLogs(
         limit: 50,
         before: state.nextCursor,
         role: state.currentRole,
+        search: state.searchQuery,
+        action: state.actionFilter,
+        targetModel: state.moduleFilter,
+        adminEmail: state.agentEmail,
+        startDate: startDate,
+        endDate: endDate,
       );
       final List<Map<String, dynamic>> moreLogs = (result['logs'] as List).cast<Map<String, dynamic>>();
       final int totalCount = result['totalCount'] ?? state.totalCount;
@@ -85,7 +113,18 @@ class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
   }
 
   void _onSearch(SearchAuditLogs event, Emitter<AuditLogsState> emit) {
-    emit(state.copyWith(searchQuery: event.query));
+    add(ChangeAuditLogsFilters(searchQuery: event.query));
+  }
+
+  void _onChangeFilters(ChangeAuditLogsFilters event, Emitter<AuditLogsState> emit) {
+    emit(state.copyWith(
+      searchQuery: event.searchQuery,
+      actionFilter: event.actionFilter,
+      moduleFilter: event.moduleFilter,
+      agentEmail: event.agentEmail,
+      selectedDateRange: event.selectedDateRange,
+    ));
+    add(FetchAuditLogsInitial(forceRefresh: true, role: state.currentRole));
   }
 
   void _onClearMessage(ClearAuditLogsMessage event, Emitter<AuditLogsState> emit) {

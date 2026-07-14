@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 
 abstract class AuditLogsEvent extends Equatable {
   const AuditLogsEvent();
@@ -24,6 +25,31 @@ class SearchAuditLogs extends AuditLogsEvent {
 
   @override
   List<Object?> get props => [query];
+}
+
+class ChangeAuditLogsFilters extends AuditLogsEvent {
+  final String? searchQuery;
+  final String? actionFilter;
+  final String? moduleFilter;
+  final String? agentEmail;
+  final DateTimeRange? Function()? selectedDateRange;
+
+  const ChangeAuditLogsFilters({
+    this.searchQuery,
+    this.actionFilter,
+    this.moduleFilter,
+    this.agentEmail,
+    this.selectedDateRange,
+  });
+
+  @override
+  List<Object?> get props => [
+    searchQuery,
+    actionFilter,
+    moduleFilter,
+    agentEmail,
+    selectedDateRange,
+  ];
 }
 
 class NewAuditLogReceived extends AuditLogsEvent {

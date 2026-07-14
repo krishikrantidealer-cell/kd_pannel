@@ -26,14 +26,12 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   StreamSubscription? _auditSubscription;
-  
-  String _selectedActionFilter = 'All';
-  String _selectedModuleFilter = 'All';
-  String _selectedAgentEmail = 'All';
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     
     // Listen for real-time audit log creations
     _auditSubscription = WebSocketService().auditLogUpdates.listen((log) {
@@ -52,9 +50,11 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _auditSubscription?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -101,6 +101,15 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
     }
   }
 
+  void _onSearchChanged(String val) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        context.read<AuditLogsBloc>().add(SearchAuditLogs(val));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
@@ -117,62 +126,6 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
           }
         },
         builder: (context, state) {
-          final filteredLogs = state.logs.where((log) {
-            // 1. Role Filter (Admin vs Sales)
-            if (widget.roleFilter != null) {
-              final String logRole = (log['adminRole'] ?? log['role'] ?? '').toString().toLowerCase().trim();
-              if (widget.roleFilter == 'admin') {
-                if (logRole == 'sales') return false;
-              } else if (widget.roleFilter == 'sales') {
-                if (logRole != 'sales') return false;
-              }
-            }
-
-            // 2. Action Category Filter
-            final action = (log['action'] ?? '').toString().toLowerCase();
-            if (_selectedActionFilter != 'All') {
-              final filter = _selectedActionFilter.toLowerCase();
-              if (filter == 'create' && !action.contains('create') && !action.contains('add')) return false;
-              if (filter == 'update' && !action.contains('update') && !action.contains('edit')) return false;
-              if (filter == 'delete' && !action.contains('delete') && !action.contains('remove')) return false;
-              if (filter == 'security' && !action.contains('login') && !action.contains('security') && !action.contains('auth')) return false;
-            }
-
-            // 3. Module Filter
-            final target = (log['targetModel'] ?? '').toString().toLowerCase();
-            if (_selectedModuleFilter != 'All') {
-              final filter = _selectedModuleFilter.toLowerCase();
-              if (filter == 'kyc' && !target.contains('user') && !action.contains('kyc')) return false;
-              if (filter == 'user' && !target.contains('user')) return false;
-              if (filter == 'order' && !target.contains('order')) return false;
-              if (filter == 'product' && !target.contains('product')) return false;
-            }
-
-            // 4. Sales Person Filter
-            if (widget.roleFilter == 'sales' && _selectedAgentEmail != 'All') {
-              final logEmail = (log['adminEmail'] ?? '').toString().toLowerCase().trim();
-              if (logEmail != _selectedAgentEmail.toLowerCase().trim()) return false;
-            }
-
-            // 5. Text Search
-            if (state.searchQuery.isEmpty) return true;
-            final query = state.searchQuery.toLowerCase();
-            final email = (log['adminEmail'] ?? '').toString().toLowerCase();
-            
-            // Search in changes
-            String changesStr = '';
-            if (log['changes'] != null) {
-              try {
-                changesStr = jsonEncode(log['changes']).toLowerCase();
-              } catch (_) {}
-            }
-            
-            return email.contains(query) || 
-                   action.contains(query) || 
-                   target.contains(query) || 
-                   changesStr.contains(query);
-          }).toList();
-
           return Padding(
             padding: EdgeInsets.all(isDesktop ? 24 : 16),
             child: Column(
@@ -180,12 +133,12 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
               children: [
                 _buildHeader(context, state),
                 const SizedBox(height: 20),
-                _buildSearchAndFilters(context, state),
+                _buildSearchAndFilters(context, state, isDesktop),
                 const SizedBox(height: 12),
-                _buildActionAndModuleChips(),
+                _buildActionAndModuleChips(state),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: _buildLogsList(context, state, filteredLogs),
+                  child: _buildLogsList(context, state, state.logs),
                 ),
               ],
             ),
@@ -211,6 +164,18 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                     fontWeight: FontWeight.w800,
                     color: AppTheme.textPrimary,
                     letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const _LivePulsingBadge(color: AppTheme.success),
+                const SizedBox(width: 6),
+                Text(
+                  'LIVE MONITOR',
+                  style: GoogleFonts.outfit(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.success,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ],
@@ -251,10 +216,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
     );
   }
 
-  Widget _buildSearchAndFilters(BuildContext context, AuditLogsState state) {
-    return Container(
+  Widget _buildSearchAndFilters(BuildContext context, AuditLogsState state, bool isDesktop) {
+    final searchBar = Container(
       height: 44,
-      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -275,12 +239,12 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
           Expanded(
             child: TextField(
               controller: _searchController,
-              onChanged: (val) => context.read<AuditLogsBloc>().add(SearchAuditLogs(val)),
+              onChanged: _onSearchChanged,
               style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500),
               decoration: InputDecoration(
-                hintText: 'Filter by admin, action, target or specific data changes...',
+                hintText: 'Search by admin, action, target or changes...',
                 border: InputBorder.none,
-                hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.6)),
+                hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
                 isDense: true,
               ),
             ),
@@ -296,22 +260,132 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         ],
       ),
     );
+
+    final dateRangeButton = _buildDateRangeButton(context, state);
+
+    if (isDesktop) {
+      return Row(
+        children: [
+          Expanded(child: searchBar),
+          const SizedBox(width: 12),
+          dateRangeButton,
+        ],
+      );
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          searchBar,
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 44,
+            child: dateRangeButton,
+          ),
+        ],
+      );
+    }
   }
 
-  Widget _buildActionAndModuleChips() {
+  Widget _buildDateRangeButton(BuildContext context, AuditLogsState state) {
+    final bool hasRange = state.selectedDateRange != null;
+    final String label = hasRange
+        ? '${DateFormat('dd MMM').format(state.selectedDateRange!.start)} - ${DateFormat('dd MMM').format(state.selectedDateRange!.end)}'
+        : 'Select Date Range';
+
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: hasRange ? AppTheme.primaryColor.withValues(alpha: 0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasRange ? AppTheme.primaryColor : AppTheme.borderColor.withValues(alpha: 0.8),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            final picked = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2025),
+              lastDate: DateTime.now().add(const Duration(days: 1)),
+              initialDateRange: state.selectedDateRange,
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: AppTheme.primaryColor,
+                      onPrimary: Colors.white,
+                      onSurface: AppTheme.textPrimary,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                selectedDateRange: () => picked,
+              ));
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.calendar_month_rounded,
+                  size: 18,
+                  color: hasRange ? AppTheme.primaryColor : AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: hasRange ? AppTheme.primaryColor : AppTheme.textPrimary,
+                  ),
+                ),
+                if (hasRange) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                        selectedDateRange: () => null,
+                      ));
+                    },
+                    child: const Icon(
+                      Icons.cancel_rounded,
+                      size: 16,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionAndModuleChips(AuditLogsState state) {
     final actions = ['All', 'Create', 'Update', 'Delete', 'Security'];
     final modules = ['All', 'Order', 'Product', 'User', 'KYC'];
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       child: BlocBuilder<LeadsBloc, LeadsState>(
-        builder: (context, state) {
+        builder: (context, leadsState) {
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
@@ -321,9 +395,11 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 const SizedBox(width: 10),
                 ...actions.map((f) => _buildFilterChip(
                   label: f,
-                  isSelected: _selectedActionFilter == f,
+                  isSelected: state.actionFilter == f,
                   onSelected: (selected) {
-                    setState(() => _selectedActionFilter = f);
+                    context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                      actionFilter: f,
+                    ));
                   },
                 )),
                 const SizedBox(width: 16),
@@ -333,12 +409,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 const SizedBox(width: 10),
                 ...modules.map((f) => _buildFilterChip(
                   label: f,
-                  isSelected: _selectedModuleFilter == f,
+                  isSelected: state.moduleFilter == f,
                   onSelected: (selected) {
-                    setState(() => _selectedModuleFilter = f);
+                    context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                      moduleFilter: f,
+                    ));
                   },
                 )),
-                if (widget.roleFilter == 'sales' && state.salesAgents.isNotEmpty) ...[
+                if (widget.roleFilter == 'sales' && leadsState.salesAgents.isNotEmpty) ...[
                   const SizedBox(width: 16),
                   Container(width: 1, height: 24, color: AppTheme.borderColor.withValues(alpha: 0.5)),
                   const SizedBox(width: 16),
@@ -356,7 +434,7 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: _selectedAgentEmail,
+                          value: state.agentEmail,
                           icon: const Icon(Icons.unfold_more_rounded, size: 16, color: AppTheme.textSecondary),
                           isExpanded: true,
                           elevation: 2,
@@ -369,7 +447,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                           borderRadius: BorderRadius.circular(8),
                           onChanged: (String? newValue) {
                             if (newValue != null) {
-                              setState(() => _selectedAgentEmail = newValue);
+                              context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                                agentEmail: newValue,
+                              ));
                             }
                           },
                           items: [
@@ -377,7 +457,7 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                               value: 'All',
                               child: Text('All Registered Agents'),
                             ),
-                            ...state.salesAgents.map((agent) {
+                            ...leadsState.salesAgents.map((agent) {
                               final email = agent['email'] ?? '';
                               final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
                               final displayName = name.isNotEmpty ? name : email;
@@ -391,10 +471,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                       ),
                     ),
                   ),
-                  if (_selectedAgentEmail != 'All') ...[
+                  if (state.agentEmail != 'All') ...[
                     const SizedBox(width: 8),
                     GestureDetector(
-                      onTap: () => setState(() => _selectedAgentEmail = 'All'),
+                      onTap: () {
+                        context.read<AuditLogsBloc>().add(const ChangeAuditLogsFilters(
+                          agentEmail: 'All',
+                        ));
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
@@ -406,15 +490,18 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                     ),
                   ],
                 ],
-                if (_selectedActionFilter != 'All' || _selectedModuleFilter != 'All' || _selectedAgentEmail != 'All') ...[
+                if (state.actionFilter != 'All' || state.moduleFilter != 'All' || state.agentEmail != 'All' || state.selectedDateRange != null || state.searchQuery.isNotEmpty) ...[
                   const SizedBox(width: 16),
                   TextButton.icon(
                     onPressed: () {
-                      setState(() {
-                        _selectedActionFilter = 'All';
-                        _selectedModuleFilter = 'All';
-                        _selectedAgentEmail = 'All';
-                      });
+                      _searchController.clear();
+                      context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
+                        actionFilter: 'All',
+                        moduleFilter: 'All',
+                        agentEmail: 'All',
+                        selectedDateRange: () => null,
+                        searchQuery: '',
+                      ));
                     },
                     icon: const Icon(Icons.refresh_rounded, size: 14, color: AppTheme.error),
                     label: Text(
@@ -432,12 +519,13 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                     ),
                   ),
                 ],
-                const SizedBox(width: 32), // Trailing space to prevent blur/clipping at the end
+                const SizedBox(width: 32),
               ],
-            )
+            ),
           );
-          },
-        ));
+        },
+      ),
+    );
   }
 
   Widget _buildLabel(String text) {
@@ -749,102 +837,193 @@ class _AuditLogRow extends StatelessWidget {
     }
     final String displayTarget = targetIdentifier.isNotEmpty ? '$targetModel: $targetIdentifier' : targetModel;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3), width: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-                border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
-              ),
-              child: Icon(icon, color: color, size: 16),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _formatActionText(action),
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Timeline Node (Left side)
+          SizedBox(
+            width: 48,
+            child: Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                // Line connecting nodes
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 2,
+                    color: Colors.grey.shade200,
                   ),
-                  const SizedBox(height: 2),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                ),
+                // Glowing Node Circle
+                Positioned(
+                  top: 14,
+                  child: Container(
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(4),
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: color, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.15),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
-                    child: Text(
-                      displayTarget.toUpperCase(),
-                      style: GoogleFonts.outfit(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    email,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (role != null)
-                    Text(
-                      role.toUpperCase(),
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: role.toLowerCase() == 'admin' ? AppTheme.primaryColor : Colors.orange,
+                    child: Center(
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              flex: 1,
-              child: Text(
-                timeAgo,
-                style: GoogleFonts.outfit(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textSecondary,
+          ),
+          
+          // Log Card (Right side)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12, right: 16),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          // Action Icon & Details
+                          Expanded(
+                            flex: 3,
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
+                                  ),
+                                  child: Icon(icon, color: color, size: 18),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatActionText(action),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              displayTarget.toUpperCase(),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppTheme.textSecondary,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Performed By Email
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  email,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (role != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    role.toUpperCase(),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: role.toLowerCase() == 'admin' ? AppTheme.primaryColor : Colors.orange,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          
+                          // Time
+                          Text(
+                            timeAgo,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-            Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1216,71 +1395,157 @@ class _LogDetailDialog extends StatelessWidget {
         final newValue = entry.value['new'];
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.6)),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.01),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Diff Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9).withValues(alpha: 0.5),
+                  color: const Color(0xFFF8FAFC),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.edit_note_rounded, size: 14, color: AppTheme.textSecondary),
+                    const Icon(Icons.edit_note_rounded, size: 16, color: AppTheme.textSecondary),
                     const SizedBox(width: 8),
                     Text(
                       key,
-                      style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 0.5),
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ],
                 ),
               ),
+              
+              // Diff Body (Before / After cards)
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: IntrinsicHeight(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Old Value Card
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('ORIGINAL VALUE', style: _diffLabelStyle),
-                            const SizedBox(height: 6),
-                            Text(
-                              oldValue?.toString() ?? '(Empty)',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13, 
-                                color: AppTheme.textSecondary.withValues(alpha: 0.7), 
-                                fontWeight: FontWeight.w500,
-                                decoration: TextDecoration.lineThrough,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade100),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '- REMOVED',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Text(
+                                  oldValue?.toString() ?? '(Empty)',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: Colors.red.shade900,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      
+                      // Connector Arrow
                       Container(
                         width: 40,
                         alignment: Alignment.center,
-                        child: Icon(Icons.arrow_forward_rounded, color: AppTheme.primaryColor.withValues(alpha: 0.4), size: 20),
+                        child: Icon(
+                          Icons.arrow_forward_rounded,
+                          color: AppTheme.primaryColor.withValues(alpha: 0.4),
+                          size: 20,
+                        ),
                       ),
+                      
+                      // New Value Card
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('MODIFIED VALUE', style: _diffLabelStyle.copyWith(color: AppTheme.primaryColor)),
-                            const SizedBox(height: 6),
-                            Text(
-                              newValue?.toString() ?? '(Removed)',
-                              style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
-                            ),
-                          ],
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade100),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '+ ADDED',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Text(
+                                  newValue?.toString() ?? '(Removed)',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: Colors.green.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
