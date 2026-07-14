@@ -36,6 +36,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
   String _selectedCategory = 'All Categories';
   String _selectedSubCategory = 'All Sub-categories';
   String _selectedAvailability = 'All Availability';
+  String _selectedFeatured = 'All Products';
   int _currentPage = 1;
   int _rowsPerPage = 10;
 
@@ -45,12 +46,19 @@ class _ProductsTabViewState extends State<ProductsTabView> {
   String _lastCategory = '';
   String _lastSubCategory = '';
   String _lastAvailability = '';
+  String _lastFeatured = '';
   List<Map<String, dynamic>>? _lastProducts;
 
   final List<String> _availabilityOptions = [
     'All Availability',
     'In Stock',
     'Not in Stock',
+  ];
+
+  final List<String> _featuredOptions = [
+    'All Products',
+    'Featured Only',
+    'Non-Featured',
   ];
 
   List<String> get _categoryOptions {
@@ -100,7 +108,8 @@ class _ProductsTabViewState extends State<ProductsTabView> {
         _lastSearchQuery == _searchQuery &&
         _lastCategory == _selectedCategory &&
         _lastSubCategory == _selectedSubCategory &&
-        _lastAvailability == _selectedAvailability) {
+        _lastAvailability == _selectedAvailability &&
+        _lastFeatured == _selectedFeatured) {
       return _cachedFilteredProducts;
     }
 
@@ -119,6 +128,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
     _lastCategory = _selectedCategory;
     _lastSubCategory = _selectedSubCategory;
     _lastAvailability = _selectedAvailability;
+    _lastFeatured = _selectedFeatured;
 
     _cachedFilteredProducts = widget.products.where((prod) {
       final matchesSearch =
@@ -137,11 +147,15 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       final matchesAvailability =
           _selectedAvailability == 'All Availability' ||
           (prod['inStock'] as bool) == (_selectedAvailability == 'In Stock');
+      final isFeatured = prod['isFeatured'] as bool? ?? false;
+      final matchesFeatured = _selectedFeatured == 'All Products' ||
+          (isFeatured == (_selectedFeatured == 'Featured Only'));
 
       return matchesSearch &&
           matchesCategory &&
           matchesSubCategory &&
-          matchesAvailability;
+          matchesAvailability &&
+          matchesFeatured;
     }).toList();
 
     return _cachedFilteredProducts;
@@ -251,14 +265,23 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             (val) => _onCategoryChanged(val!),
           ),
           const SizedBox(height: 10),
+          _buildDropdown(
+            _subCategories,
+            _selectedSubCategory,
+            (val) => setState(() {
+              _selectedSubCategory = val!;
+              _currentPage = 1;
+            }),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: _buildDropdown(
-                  _subCategories,
-                  _selectedSubCategory,
+                  _availabilityOptions,
+                  _selectedAvailability,
                   (val) => setState(() {
-                    _selectedSubCategory = val!;
+                    _selectedAvailability = val!;
                     _currentPage = 1;
                   }),
                 ),
@@ -266,10 +289,10 @@ class _ProductsTabViewState extends State<ProductsTabView> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildDropdown(
-                  _availabilityOptions,
-                  _selectedAvailability,
+                  _featuredOptions,
+                  _selectedFeatured,
                   (val) => setState(() {
-                    _selectedAvailability = val!;
+                    _selectedFeatured = val!;
                     _currentPage = 1;
                   }),
                 ),
@@ -288,7 +311,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
           _categoryOptions,
           _selectedCategory,
           (val) => _onCategoryChanged(val!),
-          width: 160,
+          width: 150,
         ),
         const SizedBox(width: 12),
         _buildDropdown(
@@ -298,7 +321,7 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             _selectedSubCategory = val!;
             _currentPage = 1;
           }),
-          width: 160,
+          width: 150,
         ),
         const SizedBox(width: 12),
         _buildDropdown(
@@ -308,7 +331,17 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             _selectedAvailability = val!;
             _currentPage = 1;
           }),
-          width: 160,
+          width: 150,
+        ),
+        const SizedBox(width: 12),
+        _buildDropdown(
+          _featuredOptions,
+          _selectedFeatured,
+          (val) => setState(() {
+            _selectedFeatured = val!;
+            _currentPage = 1;
+          }),
+          width: 150,
         ),
       ],
     );

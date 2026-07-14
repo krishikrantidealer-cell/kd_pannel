@@ -1500,8 +1500,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final bool isAssignedCategory = categoryIds.contains(key);
         final bool isAssignedSubCategory = subCategoryIds.contains(key);
         final bool isAssignedCollection = _assignedCollections.contains(key);
+        final bool isFeaturedContext = key == 'featured' && _isFeatured;
 
-        if (isAssignedCategory || isAssignedSubCategory || isAssignedCollection) {
+        if (isAssignedCategory || isAssignedSubCategory || isAssignedCollection || isFeaturedContext) {
           customOrdersPayload[key] = int.tryParse(controller.text) ?? 0;
         }
       });
@@ -4427,6 +4428,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
           categoryItems.add(MapEntry(idStr, 'Order in Category: $catName'));
         }
       }
+    }
+
+    if (_isFeatured) {
+      categoryItems.add(const MapEntry('featured', 'Order in Featured Products'));
     }
 
     // 2. Resolve IDs for selected subcategories
