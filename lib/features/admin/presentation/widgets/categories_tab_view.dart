@@ -32,9 +32,19 @@ class CategoriesTabView extends StatefulWidget {
 class _CategoriesTabViewState extends State<CategoriesTabView> {
   String _categorySearchQuery = '';
   Map<String, int> _categoryProductCounts = {};
-  Map<String, int> _subCategoryProductCounts =
-      {}; // Key: "categoryName_subCategoryName"
+  Map<String, int> _subCategoryProductCounts = {};
   String? _selectedCategoryId;
+
+  String _extractId(dynamic val) {
+    if (val == null) return '';
+    if (val is String) return val;
+    if (val is Map) {
+      if (val['_id'] != null) return val['_id'].toString();
+      if (val['id'] != null) return val['id'].toString();
+      if (val['\$oid'] != null) return val['\$oid'].toString();
+    }
+    return val.toString();
+  }
 
   // Filter cache
   List<dynamic> _cachedFilteredCategories = [];
@@ -74,12 +84,94 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
     final subCatCounts = <String, int>{};
 
     for (final p in widget.products) {
-      final cat = p['category']?.toString() ?? '';
-      final sub = p['subCategory']?.toString() ?? '';
+      // 1. Gather all category identifiers for this product
+      final Set<String> prodCatIds = {};
+      final primaryCatId = _extractId(p['categoryId'] ?? p['category']);
+      if (primaryCatId.isNotEmpty) {
+        prodCatIds.add(primaryCatId);
+      }
+      
+      final List? pCatIds = p['categoryIds'] as List?;
+      if (pCatIds != null) {
+        for (final val in pCatIds) {
+          final id = _extractId(val);
+          if (id.isNotEmpty) {
+            prodCatIds.add(id);
+          }
+        }
+      }
+      
+      // Increment category counts for each unique category ID found in the product
+      for (final catId in prodCatIds) {
+        catCounts[catId] = (catCounts[catId] ?? 0) + 1;
+      }
+      
+      // Fallback matching by name
+      final catName = p['category']?.toString() ?? '';
+      final List<String> catNamesList = catName.isNotEmpty
+          ? catName.split(',').map((e) => e.trim()).toList()
+          : [];
+      if (catNamesList.isNotEmpty) {
+        for (final name in catNamesList) {
+          if (name.isNotEmpty) {
+            catCounts[name] = (catCounts[name] ?? 0) + 1;
+          }
+        }
+      }
 
-      catCounts[cat] = (catCounts[cat] ?? 0) + 1;
-      final subKey = '${cat}_$sub';
-      subCatCounts[subKey] = (subCatCounts[subKey] ?? 0) + 1;
+      // 2. Gather all subcategory identifiers for this product
+      final Set<String> prodSubCatIds = {};
+      final primarySubId = _extractId(p['subCategoryId'] ?? p['subCategory']);
+      if (primarySubId.isNotEmpty) {
+        prodSubCatIds.add(primarySubId);
+      }
+      
+      final List? pSubCatIds = p['subCategoryIds'] as List?;
+      if (pSubCatIds != null) {
+        for (final val in pSubCatIds) {
+          final id = _extractId(val);
+          if (id.isNotEmpty) {
+            prodSubCatIds.add(id);
+          }
+        }
+      }
+      
+      // Increment subcategory counts for each unique subcategory ID found in the product
+      for (final subId in prodSubCatIds) {
+        subCatCounts[subId] = (subCatCounts[subId] ?? 0) + 1;
+      }
+      
+      // Fallback matching by name
+      final subName = p['subCategory']?.toString() ?? '';
+      final List<String> subNamesList = subName.isNotEmpty
+          ? subName.split(',').map((e) => e.trim()).toList()
+          : [];
+      if (subNamesList.isNotEmpty) {
+        for (final sName in subNamesList) {
+          if (sName.isNotEmpty) {
+            for (final cName in (catNamesList.isNotEmpty ? catNamesList : [catName])) {
+              final subKey = '${cName}_$sName';
+              subCatCounts[subKey] = (subCatCounts[subKey] ?? 0) + 1;
+            }
+          }
+        }
+      }
+      
+      // Also index by combination for hybrid lookups
+      if (catNamesList.isNotEmpty && prodSubCatIds.isNotEmpty) {
+        for (final cName in catNamesList) {
+          for (final subId in prodSubCatIds) {
+            final subKeyId = '${cName}_$subId';
+            subCatCounts[subKeyId] = (subCatCounts[subKeyId] ?? 0) + 1;
+          }
+        }
+      }
+      for (final catId in prodCatIds) {
+        for (final subId in prodSubCatIds) {
+          final subKeyId = '${catId}_$subId';
+          subCatCounts[subKeyId] = (subCatCounts[subKeyId] ?? 0) + 1;
+        }
+      }
     }
 
     _categoryProductCounts = catCounts;
@@ -102,14 +194,27 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
     return _cachedFilteredCategories;
   }
 
-  int _getProductCountForCategory(String categoryName) {
+  int _getProductCountForCategory(String categoryName, String categoryId) {
+    if (categoryId.isNotEmpty && _categoryProductCounts.containsKey(categoryId)) {
+      return _categoryProductCounts[categoryId]!;
+    }
     return _categoryProductCounts[categoryName] ?? 0;
   }
 
   int _getProductCountForSubCategory(
     String categoryName,
     String subCategoryName,
+    String subCategoryId,
   ) {
+    if (subCategoryId.isNotEmpty) {
+      if (_subCategoryProductCounts.containsKey(subCategoryId)) {
+        return _subCategoryProductCounts[subCategoryId]!;
+      }
+      final keyWithCatName = '${categoryName}_$subCategoryId';
+      if (_subCategoryProductCounts.containsKey(keyWithCatName)) {
+        return _subCategoryProductCounts[keyWithCatName]!;
+      }
+    }
     return _subCategoryProductCounts['${categoryName}_$subCategoryName'] ?? 0;
   }
 
@@ -1510,7 +1615,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                 controller: controller,
                 child: _CategoryDetailsPanel(
                   category: cat,
-                  productCount: _getProductCountForCategory(cat['name'] ?? ''),
+                  productCount: _getProductCountForCategory(cat['name'] ?? '', cat['_id'].toString()),
                   onEditCategory: _editCategory,
                   onDeleteCategory: (c) async {
                     Navigator.pop(ctx);
@@ -1528,7 +1633,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                   ),
                   onReorderSubCategory: (sub) => _openReorderDialog(
                     sub['_id'].toString(),
-                    sub['name'] as String,
+                    '${cat['name']}_split_${sub['name']}',
                     'subcategory',
                   ),
                   isMobileSheet: true,
@@ -1619,35 +1724,44 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
           children: [
             Expanded(
               child: Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppTheme.borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const Icon(
-                      Icons.search,
-                      size: 18,
+                      Icons.search_rounded,
+                      size: 20,
                       color: AppTheme.textSecondary,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
                         onChanged: (val) =>
                             setState(() => _categorySearchQuery = val),
-                        textAlignVertical: TextAlignVertical.center,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
                           color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Search category name...',
-                          hintStyle: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 13,
+                          hintStyle: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w500,
                           ),
                           border: InputBorder.none,
                           isDense: true,
@@ -1721,6 +1835,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                         final catName = cat['name'] ?? '';
                         final productCount = _getProductCountForCategory(
                           catName,
+                          cat['_id'].toString(),
                         );
                         final subs = cat['subCategories'] as List? ?? [];
                         final isSelected = _selectedCategoryId == cat['_id'];
@@ -1761,6 +1876,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                     category: selectedCat,
                     productCount: _getProductCountForCategory(
                       selectedCat['name'] ?? '',
+                      selectedCat['_id'].toString(),
                     ),
                     onEditCategory: _editCategory,
                     onDeleteCategory: (c) async {
@@ -1781,7 +1897,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                     ),
                     onReorderSubCategory: (sub) => _openReorderDialog(
                       sub['_id'].toString(),
-                      sub['name'] as String,
+                      '${selectedCat['name']}_split_${sub['name']}',
                       'subcategory',
                     ),
                   ),
@@ -1930,12 +2046,16 @@ class _CategoryCompactCardWidgetState extends State<CategoryCompactCardWidget> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            '${widget.productCount} Product${widget.productCount != 1 ? 's' : ''}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11.5,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: Text(
+                              '${widget.productCount} Product${widget.productCount != 1 ? 's' : ''}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -1951,12 +2071,16 @@ class _CategoryCompactCardWidgetState extends State<CategoryCompactCardWidget> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            '${widget.subCategoriesCount} Sub-categor${widget.subCategoriesCount != 1 ? 'ies' : 'y'}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11.5,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: Text(
+                              '${widget.subCategoriesCount} Sub-categor${widget.subCategoriesCount != 1 ? 'ies' : 'y'}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -1990,7 +2114,7 @@ class _CategoryDetailsPanel extends StatefulWidget {
   final Function(dynamic, dynamic) onDeleteSubCategory;
   final Function(dynamic) onReorderCategory;
   final Function(dynamic) onReorderSubCategory;
-  final int Function(String, String) getSubProductCount;
+  final int Function(String, String, String) getSubProductCount;
   final VoidCallback onRefresh;
   final bool isMobileSheet;
 
@@ -2793,6 +2917,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                         final subCount = widget.getSubProductCount(
                           catName,
                           subName,
+                          sub['_id'].toString(),
                         );
                         final share = totalProds > 0
                             ? (subCount / totalProds)
@@ -2842,7 +2967,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                 itemBuilder: (context, index) {
                   final sub = subs[index];
                   final subName = sub['name'] ?? '';
-                  final subCount = widget.getSubProductCount(catName, subName);
+                  final subCount = widget.getSubProductCount(catName, subName, sub['_id'].toString());
                   final share = totalProds > 0 ? (subCount / totalProds) : 0.0;
 
                   return Padding(

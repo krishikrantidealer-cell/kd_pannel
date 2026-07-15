@@ -11,6 +11,7 @@ import 'package:animations/animations.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/reorder_products_dialog.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class ProductsTabView extends StatefulWidget {
@@ -201,6 +202,51 @@ class _ProductsTabViewState extends State<ProductsTabView> {
     );
   }
 
+  void _openFeaturedReorderDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ReorderProductsDialog(
+        contextId: 'featured',
+        contextName: 'Featured Products',
+        type: 'featured',
+        products: widget.products,
+        onSaveComplete: widget.onRefresh,
+      ),
+    );
+  }
+
+  Widget _buildArrangeFeaturedButton({bool isMobile = false}) {
+    return Container(
+      height: 42,
+      margin: isMobile ? EdgeInsets.zero : const EdgeInsets.only(left: 12),
+      child: OutlinedButton.icon(
+        onPressed: _openFeaturedReorderDialog,
+        icon: const Icon(
+          Icons.star_rounded,
+          size: 18,
+          color: AppTheme.warning,
+        ),
+        label: Text(
+          'Arrange Featured',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            color: AppTheme.warning,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: AppTheme.warning, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFiltersRow(bool isMobile) {
     final Widget searchField = Container(
       height: 42,
@@ -254,6 +300,8 @@ class _ProductsTabViewState extends State<ProductsTabView> {
       ),
     );
 
+    final hasFeatured = widget.products.any((p) => p['isFeatured'] as bool? ?? false);
+
     if (isMobile) {
       return Column(
         children: [
@@ -299,6 +347,14 @@ class _ProductsTabViewState extends State<ProductsTabView> {
               ),
             ],
           ),
+          if (hasFeatured) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: _buildArrangeFeaturedButton(isMobile: true),
+            ),
+          ],
         ],
       );
     }
@@ -343,6 +399,10 @@ class _ProductsTabViewState extends State<ProductsTabView> {
           }),
           width: 150,
         ),
+        if (hasFeatured) ...[
+          const Spacer(),
+          _buildArrangeFeaturedButton(),
+        ],
       ],
     );
   }

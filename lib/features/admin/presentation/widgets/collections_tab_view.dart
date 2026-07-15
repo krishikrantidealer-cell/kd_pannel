@@ -11,6 +11,7 @@ import 'package:animations/animations.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/reorder_products_dialog.dart';
 
+
 class CollectionsTabView extends StatefulWidget {
   // Each item: { id, name, slug, isActive, subCollections: [{id, parentId, name, slug, isActive}] }
   final List<Map<String, dynamic>> collections;
@@ -95,7 +96,6 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
     }
     return _cachedFilteredCollections;
   }
-
   void _openReorderDialog(String contextId, String contextName, String type) {
     showDialog(
       context: context,
@@ -109,7 +109,6 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
       ),
     );
   }
-
   void _startEditCollection(Map<String, dynamic> collection) {
     Navigator.push(
       context,
@@ -357,34 +356,43 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
             if (!isMobile) const SizedBox(width: 16),
             Expanded(
               child: Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppTheme.borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const Icon(
-                      Icons.search,
-                      size: 16,
+                      Icons.search_rounded,
+                      size: 20,
                       color: AppTheme.textSecondary,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
                         onChanged: (val) => setState(() => _searchQuery = val),
-                        textAlignVertical: TextAlignVertical.center,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
                           color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Search collections...',
-                          hintStyle: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 13,
+                          hintStyle: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w500,
                           ),
                           border: InputBorder.none,
                           isDense: true,
@@ -599,16 +607,7 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            _CircleActionButton(
-                                              icon: Icons.unfold_more_rounded,
-                                              tooltip: 'Reorder Products',
-                                              onTap: () => _openReorderDialog(
-                                                col['name'] as String,
-                                                col['name'] as String,
-                                                'collection',
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
+
                                             _CircleActionButton(
                                               icon: Icons.edit_outlined,
                                               tooltip: 'Edit Parent Collection',
@@ -699,11 +698,15 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                       children: subs.asMap().entries.map((
                                                         entry,
                                                       ) {
-                                                        final sub =
-                                                            Map<
-                                                              String,
-                                                              dynamic
-                                                            >.from(entry.value);
+                                                         final sub =
+                                                             Map<
+                                                               String,
+                                                               dynamic
+                                                             >.from(entry.value);
+                                                         final int prodCount = widget.products.where((p) {
+                                                           final collections = List<String>.from(p['assignedCollections'] ?? []);
+                                                           return collections.contains(sub['name'] as String);
+                                                         }).length;
                                                         final String subId =
                                                             (sub['id'] ??
                                                                     sub['_id'] ??
@@ -790,23 +793,54 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                       width: 8,
                                                                     ),
                                                                     Expanded(
-                                                                      child: Text(
-                                                                        sub['name']
-                                                                            as String,
-                                                                        style: GoogleFonts.outfit(
-                                                                          fontSize:
-                                                                              isMobile
-                                                                              ? 12
-                                                                              : 13,
-                                                                          fontWeight:
-                                                                              FontWeight.w600,
-                                                                          color:
-                                                                              AppTheme.textPrimary,
-                                                                        ),
-                                                                        maxLines:
-                                                                            1,
-                                                                        overflow:
-                                                                            TextOverflow.ellipsis,
+                                                                      child: Row(
+                                                                        children: [
+                                                                          Flexible(
+                                                                            child: Text(
+                                                                              sub['name']
+                                                                                  as String,
+                                                                              style: GoogleFonts.outfit(
+                                                                                fontSize:
+                                                                                    isMobile
+                                                                                    ? 12
+                                                                                    : 13,
+                                                                                fontWeight:
+                                                                                    FontWeight.w600,
+                                                                                color:
+                                                                                    AppTheme.textPrimary,
+                                                                              ),
+                                                                              maxLines:
+                                                                                  1,
+                                                                              overflow:
+                                                                                  TextOverflow.ellipsis,
+                                                                            ),
+                                                                          ),
+                                                                          const SizedBox(width: 6),
+                                                                          Tooltip(
+                                                                            message: 'Number of products',
+                                                                            child: Container(
+                                                                              padding: const EdgeInsets.symmetric(
+                                                                                horizontal: 6,
+                                                                                vertical: 2,
+                                                                              ),
+                                                                              decoration: BoxDecoration(
+                                                                                color: AppTheme.accentColor
+                                                                                    .withValues(alpha: 0.08),
+                                                                                borderRadius: BorderRadius.circular(
+                                                                                  8,
+                                                                                ),
+                                                                              ),
+                                                                              child: Text(
+                                                                                '${prodCount}P',
+                                                                                style: GoogleFonts.outfit(
+                                                                                  fontSize: 9.5,
+                                                                                  color: AppTheme.accentColor,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                        ],
                                                                       ),
                                                                     ),
                                                                     const SizedBox(
@@ -827,9 +861,6 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                               subActive,
                                                                         ),
                                                                       ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 6,
                                                                     ),
                                                                     _CircleActionButton(
                                                                       icon: Icons.unfold_more_rounded,
@@ -925,19 +956,8 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
       ],
     );
   }
-
-  Widget _headerText(String text) {
-    return Text(
-      text,
-      style: GoogleFonts.outfit(
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        color: AppTheme.textSecondary,
-        letterSpacing: 0.8,
-      ),
-    );
-  }
 }
+
 
 class _TreeLinePainter extends CustomPainter {
   final bool isLast;
