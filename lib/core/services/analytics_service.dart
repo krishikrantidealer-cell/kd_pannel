@@ -285,6 +285,8 @@ class AnalyticsService extends WidgetsBindingObserver {
     String? targetModel,
     String? startDate,
     String? endDate,
+    String? targetId,
+    String? sortOrder,
   }) async {
     String path = '/admin/audit-logs?limit=$limit';
     if (adminEmail != null && adminEmail != 'All') {
@@ -310,6 +312,12 @@ class AnalyticsService extends WidgetsBindingObserver {
     }
     if (endDate != null) {
       path += '&endDate=${Uri.encodeComponent(endDate)}';
+    }
+    if (targetId != null) {
+      path += '&targetId=${Uri.encodeComponent(targetId)}';
+    }
+    if (sortOrder != null) {
+      path += '&sortOrder=${Uri.encodeComponent(sortOrder)}';
     }
 
     final response = await _apiClient.get(path);
