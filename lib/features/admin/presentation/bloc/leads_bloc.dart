@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'leads_event.dart';
 import 'leads_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -86,7 +87,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         final agent = state.salesAgents.firstWhere(
           (a) => a['_id'] == event.agentId,
@@ -119,6 +120,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('assign_agent', properties: {
+            'targetUserId': event.userId,
+            'assignedAgentId': event.agentId,
+            'details': event.agentId != null 
+                ? 'Assigned agent to user' 
+                : 'Unassigned agent from user',
+          });
+          await AnalyticsService().flush();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
             actionSuccessMessage: 'Agent assigned successfully',
@@ -145,7 +156,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (event.userIds.contains(u['_id']) || event.userIds.contains(u['id'])) {
+      if (event.userIds.contains(u['_id'])) {
         final updatedUser = Map<String, dynamic>.from(u);
         final agent = state.salesAgents.firstWhere(
           (a) => a['_id'] == event.agentId,
@@ -188,6 +199,14 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         }
       }
 
+      // Log Activity
+      AnalyticsService().logEvent('bulk_assign_agent', properties: {
+        'count': successCount,
+        'assignedAgentId': event.agentId,
+        'details': 'Bulk assigned agent to $successCount leads',
+      });
+      await AnalyticsService().flush();
+
       emit(state.copyWith(
         status: LeadsStatus.success,
         actionSuccessMessage: 'Agent assigned to $successCount leads successfully',
@@ -214,11 +233,19 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         'email': event.email.trim(),
         'phoneNumber': event.phoneNumber.trim(),
         'password': event.password,
+        'monthlyTarget': event.monthlyTarget ?? 500000.0,
       });
 
       if (res.statusCode == 201) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('create_sales_agent', properties: {
+            'email': event.email.trim(),
+            'details': 'Created new sales agent: ${event.firstName}',
+          });
+          await AnalyticsService().flush();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
             actionSuccessMessage: 'Sales agent created successfully',
@@ -248,7 +275,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         updatedUser['kycStatus'] = 'verified';
         return updatedUser;
@@ -270,8 +297,15 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('kyc_verified', properties: {
+            'targetUserId': event.userId,
+            'details': 'Verified KYC for user',
+          });
+          await AnalyticsService().flush();
+
           try {
-            await ApiClient().post('/notifications', {
+            await ApiClient().post('/users/notifications/send', {
               'recipient': event.userId,
               'userId': event.userId,
               'title': 'KYC Verification Approved',
@@ -307,7 +341,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         updatedUser['kycStatus'] = 'rejected';
         return updatedUser;
@@ -329,8 +363,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('kyc_rejected', properties: {
+            'targetUserId': event.userId,
+            'reason': event.reason,
+            'details': 'Rejected KYC for user: ${event.reason}',
+          });
+          await AnalyticsService().flush();
+
           try {
-            await ApiClient().post('/notifications', {
+            await ApiClient().post('/users/notifications/send', {
               'recipient': event.userId,
               'userId': event.userId,
               'title': 'KYC Verification Rejected',
@@ -400,7 +442,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         final bool currentBlocked = updatedUser['isBlocked'] ?? false;
         updatedUser['isBlocked'] = !currentBlocked;
@@ -420,9 +462,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('toggle_block', properties: {
+            'targetUserId': event.userId,
+            'details': 'Toggled block status for user',
+          });
+          await AnalyticsService().flush();
+
           final String msg = data['message'] ?? 'Lead block status updated';
           final updatedRawUsers = state.allRawUsers.map((user) {
-            if (user['_id'] == event.userId || user['id'] == event.userId) {
+            if (user['_id'] == event.userId) {
               final updatedUser = Map<String, dynamic>.from(user);
               final bool currentBlocked = updatedUser['isBlocked'] ?? false;
               updatedUser['isBlocked'] = !currentBlocked;
@@ -458,7 +507,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     // Optimistic Update
     final updatedUsers =
         state.allRawUsers
-            .where((u) => u['_id'] != event.userId && u['id'] != event.userId)
+            .where((u) => u['_id'] != event.userId)
             .toList();
 
     emit(state.copyWith(
@@ -467,11 +516,26 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     ));
 
     try {
+      final Map<String, dynamic> targetUser = state.allRawUsers.firstWhere(
+        (u) => u['_id'] == event.userId,
+        orElse: () => <String, dynamic>{},
+      );
+      final String leadName = (targetUser['firstName'] != null || targetUser['lastName'] != null)
+          ? '${targetUser['firstName'] ?? ''} ${targetUser['lastName'] ?? ''}'.trim()
+          : (targetUser['shopName'] ?? targetUser['phoneNumber'] ?? 'Lead');
+
       final res = await ApiClient().delete('/users/${event.userId}');
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('delete_lead', properties: {
+            'targetUserId': event.userId,
+            'details': 'Permanently deleted lead account: $leadName',
+          });
+          await AnalyticsService().flush();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
             actionSuccessMessage: 'Lead deleted successfully',
@@ -499,7 +563,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     // Optimistic Update: Change the local state immediately for instant feedback
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         if (event.updateData.containsKey('firstName')) {
           updatedUser['firstName'] = event.updateData['firstName'];
@@ -527,6 +591,9 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           final existingAddress = Map<String, dynamic>.from(updatedUser['address'] ?? {});
           updatedUser['address'] = {...existingAddress, ...event.updateData['address']};
         }
+        if (event.updateData.containsKey('monthlyTarget')) {
+          updatedUser['monthlyTarget'] = event.updateData['monthlyTarget'];
+        }
         return updatedUser;
       }
       return u;
@@ -543,6 +610,32 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity: Discern between general edit vs status/note updates
+          String eventName = 'edit_lead';
+          String logDetails = 'Updated details for lead';
+          
+          if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status')) {
+            eventName = 'update_lead_status';
+            final status = event.updateData['leadStatus'] ?? event.updateData['status'];
+            logDetails = 'Changed lead status to $status';
+          } else if (event.updateData.containsKey('leadNotes') || event.updateData.containsKey('notes')) {
+            eventName = 'add_lead_note';
+            logDetails = 'Added follow-up notes to lead';
+          }
+
+          final String firstName = event.updateData['firstName'] ?? '';
+          final String lastName = event.updateData['lastName'] ?? '';
+          final String fullName = '$firstName $lastName'.trim();
+          
+          AnalyticsService().logEvent(eventName, properties: {
+            'targetUserId': event.userId,
+            'details': '$logDetails${fullName.isNotEmpty ? ': $fullName' : ''}',
+            'fields': event.updateData.keys.join(', '),
+            if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status'))
+              'newStatus': event.updateData['leadStatus'] ?? event.updateData['status'],
+          });
+          await AnalyticsService().flush();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
             actionSuccessMessage: 'Lead updated successfully',
@@ -610,6 +703,13 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('admin_kyc_submit', properties: {
+            'targetUserId': event.userId,
+            'details': 'Submitted KYC on behalf of user: ${event.shopName}',
+          });
+          await AnalyticsService().flush();
+
           emit(state.copyWith(
             status: LeadsStatus.success,
             actionSuccessMessage: 'KYC documents uploaded successfully',

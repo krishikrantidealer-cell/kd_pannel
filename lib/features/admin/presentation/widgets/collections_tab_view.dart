@@ -9,6 +9,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/create_collection_pa
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:animations/animations.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/reorder_products_dialog.dart';
 
 class CollectionsTabView extends StatefulWidget {
   // Each item: { id, name, slug, isActive, subCollections: [{id, parentId, name, slug, isActive}] }
@@ -93,6 +94,20 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
       }).toList();
     }
     return _cachedFilteredCollections;
+  }
+
+  void _openReorderDialog(String contextId, String contextName, String type) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ReorderProductsDialog(
+        contextId: contextId,
+        contextName: contextName,
+        type: type,
+        products: widget.products,
+        onSaveComplete: widget.onRefresh,
+      ),
+    );
   }
 
   void _startEditCollection(Map<String, dynamic> collection) {
@@ -585,6 +600,16 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             _CircleActionButton(
+                                              icon: Icons.unfold_more_rounded,
+                                              tooltip: 'Reorder Products',
+                                              onTap: () => _openReorderDialog(
+                                                col['name'] as String,
+                                                col['name'] as String,
+                                                'collection',
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            _CircleActionButton(
                                               icon: Icons.edit_outlined,
                                               tooltip: 'Edit Parent Collection',
                                               onTap: () =>
@@ -806,7 +831,16 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                     const SizedBox(
                                                                       width: 6,
                                                                     ),
-                                                                    // Action buttons
+                                                                    _CircleActionButton(
+                                                                      icon: Icons.unfold_more_rounded,
+                                                                      tooltip: 'Reorder Products',
+                                                                      onTap: () => _openReorderDialog(
+                                                                        sub['name'] as String,
+                                                                        sub['name'] as String,
+                                                                        'collection',
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(width: 6),
                                                                     _CircleActionButton(
                                                                       icon: Icons
                                                                           .edit_outlined,

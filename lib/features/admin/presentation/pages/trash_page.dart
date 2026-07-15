@@ -8,6 +8,8 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/services/analytics_service.dart';
+
 class TrashPage extends StatefulWidget {
   const TrashPage({super.key});
 
@@ -171,6 +173,11 @@ class _TrashPageState extends State<TrashPage> {
         final res = await ApiClient().put('/users/$userId/restore', {});
         final data = jsonDecode(res.body);
         if (res.statusCode == 200 && data['success'] == true) {
+          AnalyticsService().logEvent('restore_user', properties: {
+            'targetUserId': userId,
+            'userName': userName,
+            'details': 'Restored user account from trash: $userName',
+          });
           _showSnack('"$userName" has been restored successfully!');
           _fetchTrashData(isFirstLoad: true);
         } else {
@@ -219,6 +226,11 @@ class _TrashPageState extends State<TrashPage> {
         final res = await ApiClient().delete('/users/$userId/permanent');
         final data = jsonDecode(res.body);
         if (res.statusCode == 200 && data['success'] == true) {
+          AnalyticsService().logEvent('permanent_delete_user', properties: {
+            'targetUserId': userId,
+            'userName': userName,
+            'details': 'Permanently deleted user account: $userName',
+          });
           _showSnack('"$userName" has been permanently deleted.');
           _fetchTrashData(isFirstLoad: true);
         } else {

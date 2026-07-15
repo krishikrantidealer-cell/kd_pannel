@@ -1503,7 +1503,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
         final bool isFeaturedContext = key == 'featured' && _isFeatured;
 
         if (isAssignedCategory || isAssignedSubCategory || isAssignedCollection || isFeaturedContext) {
-          customOrdersPayload[key] = int.tryParse(controller.text) ?? 0;
+          final text = controller.text.trim();
+          if (text.isNotEmpty) {
+            final parsed = int.tryParse(text);
+            if (parsed != null) {
+              customOrdersPayload[key] = parsed;
+            }
+          }
         }
       });
 
@@ -4407,7 +4413,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     return n;
   }
 
-  TextEditingController _getOrCreateContextController(String contextId, {String initialValue = '0'}) {
+  TextEditingController _getOrCreateContextController(String contextId, {String initialValue = ''}) {
     if (!_customOrdersControllers.containsKey(contextId)) {
       _customOrdersControllers[contextId] = TextEditingController(text: initialValue);
     }

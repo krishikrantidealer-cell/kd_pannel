@@ -138,7 +138,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final email = (u['email'] ?? '').toString().toLowerCase();
         final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
-        final uid = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
+        final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
             email.contains(queryLower) ||
@@ -156,7 +156,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final email = (u['email'] ?? '').toString().toLowerCase();
         final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
-        final uid = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
+        final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
             email.contains(queryLower) ||

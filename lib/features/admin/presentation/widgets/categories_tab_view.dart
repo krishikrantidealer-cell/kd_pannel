@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/reorder_products_dialog.dart';
 
 class CategoriesTabView extends StatefulWidget {
   final List<dynamic> categories;
@@ -39,6 +40,20 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
   List<dynamic> _cachedFilteredCategories = [];
   String _lastSearchQuery = '';
   List<dynamic>? _lastCategories;
+
+  void _openReorderDialog(String contextId, String contextName, String type) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ReorderProductsDialog(
+        contextId: contextId,
+        contextName: contextName,
+        type: type,
+        products: widget.products,
+        onSaveComplete: widget.onRefresh,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -1506,6 +1521,16 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                   onDeleteSubCategory: _deleteSubCategory,
                   getSubProductCount: _getProductCountForSubCategory,
                   onRefresh: widget.onRefresh,
+                  onReorderCategory: (c) => _openReorderDialog(
+                    c['_id'].toString(),
+                    c['name'] as String,
+                    'category',
+                  ),
+                  onReorderSubCategory: (sub) => _openReorderDialog(
+                    sub['_id'].toString(),
+                    sub['name'] as String,
+                    'subcategory',
+                  ),
                   isMobileSheet: true,
                 ),
               ),
@@ -1749,6 +1774,16 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                     onDeleteSubCategory: _deleteSubCategory,
                     getSubProductCount: _getProductCountForSubCategory,
                     onRefresh: widget.onRefresh,
+                    onReorderCategory: (c) => _openReorderDialog(
+                      c['_id'].toString(),
+                      c['name'] as String,
+                      'category',
+                    ),
+                    onReorderSubCategory: (sub) => _openReorderDialog(
+                      sub['_id'].toString(),
+                      sub['name'] as String,
+                      'subcategory',
+                    ),
                   ),
                 ),
               ),
@@ -1953,6 +1988,8 @@ class _CategoryDetailsPanel extends StatefulWidget {
   final Function(dynamic) onAddSubCategory;
   final Function(dynamic, dynamic) onEditSubCategory;
   final Function(dynamic, dynamic) onDeleteSubCategory;
+  final Function(dynamic) onReorderCategory;
+  final Function(dynamic) onReorderSubCategory;
   final int Function(String, String) getSubProductCount;
   final VoidCallback onRefresh;
   final bool isMobileSheet;
@@ -1967,6 +2004,8 @@ class _CategoryDetailsPanel extends StatefulWidget {
     required this.onDeleteSubCategory,
     required this.getSubProductCount,
     required this.onRefresh,
+    required this.onReorderCategory,
+    required this.onReorderSubCategory,
     this.isMobileSheet = false,
   });
 
@@ -2515,6 +2554,20 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                   children: [
                     IconButton(
                       icon: const Icon(
+                        Icons.unfold_more_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black38,
+                        hoverColor: Colors.black54,
+                      ),
+                      tooltip: 'Arrange Products',
+                      onPressed: () => widget.onReorderCategory(widget.category),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(
                         Icons.edit_outlined,
                         color: Colors.white,
                         size: 18,
@@ -2753,6 +2806,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                             share: share,
                             onEdit: () => _showEditSubCategoryDialog(sub),
                             onDelete: () => _deleteSub(sub),
+                            onReorder: () => widget.onReorderSubCategory(sub),
                             isMobile: false,
                           ),
                         );
@@ -2799,6 +2853,7 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                       share: share,
                       onEdit: () => _showEditSubCategoryDialog(sub),
                       onDelete: () => _deleteSub(sub),
+                      onReorder: () => widget.onReorderSubCategory(sub),
                       isMobile: true,
                     ),
                   );
@@ -2817,6 +2872,7 @@ class _SubCategoryTileWidget extends StatefulWidget {
   final double share;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onReorder;
   final bool isMobile;
 
   const _SubCategoryTileWidget({
@@ -2825,6 +2881,7 @@ class _SubCategoryTileWidget extends StatefulWidget {
     required this.share,
     required this.onEdit,
     required this.onDelete,
+    required this.onReorder,
     this.isMobile = false,
   });
 
@@ -2948,6 +3005,22 @@ class _SubCategoryTileWidgetState extends State<_SubCategoryTileWidget> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           GestureDetector(
+                            onTap: widget.onReorder,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Icon(
+                                Icons.unfold_more_rounded,
+                                size: 15,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
                             onTap: widget.onEdit,
                             child: Container(
                               padding: const EdgeInsets.all(7),
@@ -2987,6 +3060,14 @@ class _SubCategoryTileWidgetState extends State<_SubCategoryTileWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.unfold_more_rounded, size: 14),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            color: AppTheme.textSecondary,
+                            onPressed: widget.onReorder,
+                          ),
+                          const SizedBox(width: 10),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 14),
                             padding: EdgeInsets.zero,

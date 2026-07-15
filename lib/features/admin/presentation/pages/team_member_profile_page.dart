@@ -20,6 +20,8 @@ import 'package:kd_pannel/features/admin/data/models/order_model.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 
+import '../../../../core/auth/auth_service.dart';
+
 class TeamMemberProfilePage extends StatefulWidget {
   const TeamMemberProfilePage({super.key});
 
@@ -31,7 +33,6 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   Map<String, dynamic>? _agent;
   bool _isActionLoading = false;
   int _activeTab = 0;
-  int _activeLogSubTab = 0; // 0 for Sales, 1 for Admin
 
   // Real-time agent status
   bool _isAgentActive = false;
@@ -42,6 +43,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   final TextEditingController _leadSearchController = TextEditingController();
   final TextEditingController _orderSearchController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _notesTitleController = TextEditingController();
 
   String _leadSearchQuery = '';
   String _orderSearchQuery = '';
@@ -55,6 +57,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   // Activity events
   List<Map<String, dynamic>> _agentEvents = [];
   bool _isLoadingEvents = false;
+
+  List<Map<String, dynamic>> _agentNotesHistory = [];
 
   @override
   void initState() {
@@ -122,6 +126,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     _leadSearchController.dispose();
     _orderSearchController.dispose();
     _notesController.dispose();
+    _notesTitleController.dispose();
     super.dispose();
   }
 
@@ -203,37 +208,46 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
 
     if (mounted) setState(() => _isLoadingEvents = true);
     try {
-      // Fetch both behavioral events and system audit logs
-      final results = await Future.wait([
-        AnalyticsService().fetchEvents(userEmail: agentEmail),
-        AnalyticsService().fetchAuditLogs(adminEmail: agentEmail),
-      ]);
+      // 1. Fetch behavioral events performed by this agent
+      final eventsFuture = AnalyticsService().fetchEvents(userEmail: agentEmail);
 
-      final events = (results[0] as List? ?? []).cast<Map<String, dynamic>>();
-      final auditLogsData = results[1] as Map<String, dynamic>?;
-      final auditLogs = (auditLogsData?['logs'] as List? ?? []);
+      // 2. Also fetch Audit Logs (administrative actions) performed by this agent
+      final auditLogsFuture = AnalyticsService().fetchAuditLogs(
+        adminEmail: agentEmail,
+        limit: 100,
+      );
 
-      // Standardize audit logs to match event format for the timeline
-      final standardizedAudit = auditLogs
-          .map((log) {
-            final m = log as Map;
-            return {
-              'event': m['action'] ?? 'system_audit',
-              'timestamp': m['timestamp'],
-              'isAudit': true,
-              'properties': {
-                'details': 'System Action on ${m['targetModel'] ?? 'Object'}',
-                'changes': m['changes'],
-                'targetId': m['targetId'],
-              },
-            };
-          })
-          .toList()
-          .cast<Map<String, dynamic>>();
+      final results = await Future.wait([eventsFuture, auditLogsFuture]);
 
-      final combined = [...events, ...standardizedAudit];
+      final List<Map<String, dynamic>> events =
+          results[0] as List<Map<String, dynamic>>;
+      final auditResult = results[1] as Map<String, dynamic>;
+      final List<Map<String, dynamic>> auditLogs =
+          (auditResult['logs'] as List).cast<Map<String, dynamic>>();
 
-      // Sort combined list by timestamp descending
+      // Merge and normalize
+      final List<Map<String, dynamic>> combined = [...events];
+
+      for (var log in auditLogs) {
+        // Prevent duplicates if already logged via logEvent
+        final bool alreadyExists = events.any((e) {
+          final props = (e['properties'] ?? e['payload']) as Map? ?? {};
+          return (e['event'] == log['action'] || e['event'] == 'audit_log') &&
+              (props['_id'] == log['_id'] || e['timestamp'] == log['timestamp']);
+        });
+
+        if (!alreadyExists) {
+          combined.add({
+            'event': log['action'] ?? 'audit_log',
+            'timestamp': log['timestamp'] ?? log['createdAt'],
+            'properties': log,
+            'details': log['details'] ?? '',
+            'isAuditLog': true,
+          });
+        }
+      }
+
+      // Sort list by timestamp descending
       combined.sort((a, b) {
         final tA =
             DateTime.tryParse(a['timestamp']?.toString() ?? '') ?? DateTime(0);
@@ -248,39 +262,167 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading agent events: $e');
+      debugPrint('Error loading agent activities: $e');
     } finally {
       if (mounted) setState(() => _isLoadingEvents = false);
     }
   }
 
-  Future<void> _loadAgentNotes() async {
-    if (_agent == null) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final notes = prefs.getString('agent_notes_${_agent!['_id']}') ?? '';
-      _notesController.text = notes;
-    } catch (_) {}
+  void _loadAgentNotes() {
+    if (_agent != null) {
+      setState(() {
+        _agentNotesHistory = List<Map<String, dynamic>>.from(_agent!['notesHistory'] ?? []);
+      });
+    }
   }
 
   Future<void> _saveAgentNotes() async {
-    if (_agent == null) return;
-    setState(() => _isSavingNotes = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'agent_notes_${_agent!['_id']}',
-        _notesController.text,
-      );
+    final noteTitle = _notesTitleController.text.trim();
+    final noteText = _notesController.text.trim();
+    if (_agent == null || (noteTitle.isEmpty && noteText.isEmpty)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Private notes saved successfully'),
-            backgroundColor: AppTheme.success,
+            content: Text('Please enter at least a title or a description'),
+            backgroundColor: AppTheme.error,
           ),
         );
       }
-    } catch (_) {
+      return;
+    }
+
+    final finalTitle = noteTitle.isNotEmpty ? noteTitle : 'Administrative Feedback';
+    final finalNoteText = noteText.isNotEmpty ? noteText : 'Feedback description not provided.';
+    
+    setState(() => _isSavingNotes = true);
+    try {
+      final newNote = {
+        'title': finalTitle,
+        'note': finalNoteText,
+        'timestamp': DateTime.now().toIso8601String(),
+        'author': AuthService().currentUserEmail ?? 'System Admin',
+      };
+
+      final List<Map<String, dynamic>> currentHistory = 
+          List<Map<String, dynamic>>.from(_agent!['notesHistory'] ?? []);
+      final List<Map<String, dynamic>> updatedHistory = [newNote, ...currentHistory];
+      
+      final res = await ApiClient().put('/users/${_agent!['_id']}', {
+        'notesHistory': updatedHistory,
+      });
+
+      if (res.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(res.body);
+        debugPrint('[AdminNotes] Notes saved successfully. Response: $data');
+        final Map<String, dynamic>? updatedUser = data['user'];
+
+        // Send notification to the agent
+        bool notificationSent = false;
+        try {
+          final notifRes = await ApiClient().post('/users/notifications/send', {
+            'recipient': _agent!['_id'],
+            'userId': _agent!['_id'],
+            'title': finalTitle,
+            'body': finalNoteText,
+            'message': finalNoteText,
+            'type': 'admin_note',
+          });
+          notificationSent = notifRes.statusCode == 200 || notifRes.statusCode == 201;
+          if (!notificationSent) {
+            debugPrint('[AdminNotes] Notification POST failed: ${notifRes.statusCode} - ${notifRes.body}');
+          }
+        } catch (e) {
+          debugPrint('[AdminNotes] Failed to send notification: $e');
+        }
+
+        if (mounted) {
+          _notesController.clear();
+          _notesTitleController.clear();
+          if (updatedUser != null) {
+            setState(() {
+              _agent = updatedUser;
+              _agentNotesHistory = List<Map<String, dynamic>>.from(updatedUser['notesHistory'] ?? []);
+            });
+          }
+          if (notificationSent) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Note saved and notification sent to agent'),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Note saved, but notification delivery failed. Please check server logs.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          _triggerBlocRefresh();
+        }
+      } else {
+        throw Exception('Failed to save note to server');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingNotes = false);
+    }
+  }
+
+  Future<void> _deleteNote(int index) async {
+    if (_agent == null) return;
+    
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: const Text('Delete Note'),
+        content: const Text('Are you sure you want to delete this administrative note?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSavingNotes = true);
+    try {
+      final List<Map<String, dynamic>> updatedHistory = 
+          List<Map<String, dynamic>>.from(_agent!['notesHistory'] ?? []);
+      updatedHistory.removeAt(index);
+      
+      final res = await ApiClient().put('/users/${_agent!['_id']}', {
+        'notesHistory': updatedHistory,
+      });
+
+      if (res.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note removed from history')),
+          );
+          _triggerBlocRefresh();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting note: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSavingNotes = false);
     }
@@ -353,6 +495,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          AnalyticsService().logEvent('delete_sales_agent', properties: {
+            'targetAgentId': agentId,
+            'agentName': agentName,
+            'details': 'Deleted sales agent account: $agentName',
+          });
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -391,6 +538,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     final emailController = TextEditingController(text: agent['email'] ?? '');
     final phoneController = TextEditingController(
       text: agent['phoneNumber'] ?? '',
+    );
+    final targetController = TextEditingController(
+      text: (agent['monthlyTarget'] ?? 500000).toString(),
     );
     final passwordController = TextEditingController();
     bool obscurePassword = true;
@@ -463,6 +613,20 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
+                      controller: targetController,
+                      decoration: _buildInputDecoration(
+                        'Monthly Sales Target (₹)',
+                        Icons.track_changes_outlined,
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) return 'Required';
+                        if (double.tryParse(val) == null) return 'Invalid amount';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
                       controller: passwordController,
                       decoration: _buildInputDecoration(
                         'New Password (Optional)',
@@ -517,6 +681,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               'lastName': lastNameController.text.trim(),
                               'email': emailController.text.trim(),
                               'phoneNumber': phoneController.text.trim(),
+                              'monthlyTarget': double.tryParse(targetController.text),
                             };
                             if (passwordController.text.isNotEmpty) {
                               payload['password'] = passwordController.text;
@@ -531,6 +696,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               final data = jsonDecode(res.body);
                               if (data['success'] == true) {
                                 if (mounted) {
+                                  setState(() {
+                                    _agent = data['user'];
+                                  });
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text(
@@ -740,12 +908,35 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     return BlocBuilder<LeadsBloc, LeadsState>(
       builder: (context, leadsState) {
         // Retrieve fresh details of agent if loaded in leadsState
-        if (_agent != null && leadsState.allRawUsers.isNotEmpty) {
-          final freshAgent = leadsState.allRawUsers.firstWhere(
-            (u) => u['_id'] == _agent!['_id'],
-            orElse: () => _agent!,
+        if (_agent != null) {
+          final agentId = _agent!['_id'];
+          
+          // Check in all users first
+          final foundInAll = leadsState.allRawUsers.where(
+            (u) => u['_id'] == agentId,
           );
-          _agent = freshAgent;
+          
+          if (foundInAll.isNotEmpty) {
+            final freshAgent = foundInAll.first;
+            final freshNotesHistory = List<Map<String, dynamic>>.from(freshAgent['notesHistory'] ?? []);
+            if (freshNotesHistory.length >= _agentNotesHistory.length) {
+              _agent = freshAgent;
+              _agentNotesHistory = freshNotesHistory;
+            }
+          } else {
+            // Then check in sales agents list
+            final foundInSales = leadsState.salesAgents.where(
+              (u) => u['_id'] == agentId,
+            );
+            if (foundInSales.isNotEmpty) {
+              final freshAgent = foundInSales.first;
+              final freshNotesHistory = List<Map<String, dynamic>>.from(freshAgent['notesHistory'] ?? []);
+              if (freshNotesHistory.length >= _agentNotesHistory.length) {
+                _agent = freshAgent;
+                _agentNotesHistory = freshNotesHistory;
+              }
+            }
+          }
         }
 
         if (_agent == null) {
@@ -1595,9 +1786,9 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           height: 28,
                           child: CustomPaint(
                             painter: FulfillmentProgressPainter(
-                              cumulativeRevenue >= 1000000.0
+                              cumulativeRevenue >= (_agent?['monthlyTarget'] ?? 500000).toDouble()
                                   ? 1.0
-                                  : cumulativeRevenue / 1000000.0,
+                                  : cumulativeRevenue / (_agent?['monthlyTarget'] ?? 500000).toDouble(),
                               Colors.green,
                             ),
                           ),
@@ -1694,13 +1885,29 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Monthly Performance Targets',
-                        style: GoogleFonts.outfit(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Monthly Performance Targets',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () => _showSalesAgentFormDialog(_agent!),
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              size: 16,
+                              color: AppTheme.primaryColor,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Update Target',
+                          ),
+                        ],
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1724,11 +1931,11 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Target 1: Revenue (Target: 5L)
+                  // Target 1: Revenue (Target: Dynamic)
                   _buildLinearTargetTracker(
                     'Revenue Booking Target',
                     cumulativeRevenue,
-                    500000.0, // 5 Lakh
+                    (_agent?['monthlyTarget'] ?? 500000).toDouble(),
                     isCurrency: true,
                     barColor: AppTheme.primaryColor,
                   ),
@@ -2208,15 +2415,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                 );
               } else if (_activeTab == 3) {
                 // ACTIVITY LOGS
-                final salesLogs = _agentEvents
-                    .where((e) => e['isAudit'] != true)
-                    .toList();
-                final auditLogs = _agentEvents
-                    .where((e) => e['isAudit'] == true)
-                    .toList();
-                final currentLogs = _activeLogSubTab == 0
-                    ? salesLogs
-                    : auditLogs;
+                final currentLogs = _agentEvents;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2224,56 +2423,13 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: Text(
-                                'Sales Activities',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeLogSubTab == 0
-                                      ? Colors.white
-                                      : AppTheme.textSecondary,
-                                ),
-                              ),
-                              selected: _activeLogSubTab == 0,
-                              onSelected: (selected) {
-                                if (selected)
-                                  setState(() => _activeLogSubTab = 0);
-                              },
-                              selectedColor: AppTheme.primaryColor,
-                              backgroundColor: const Color(0xFFF3F4F6),
-                              side: BorderSide.none,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(
-                                'Admin Logs',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: _activeLogSubTab == 1
-                                      ? Colors.white
-                                      : AppTheme.textSecondary,
-                                ),
-                              ),
-                              selected: _activeLogSubTab == 1,
-                              onSelected: (selected) {
-                                if (selected)
-                                  setState(() => _activeLogSubTab = 1);
-                              },
-                              selectedColor: AppTheme.primaryColor,
-                              backgroundColor: const Color(0xFFF3F4F6),
-                              side: BorderSide.none,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Agent Activity Feed',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(
@@ -2296,11 +2452,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         ),
                       )
                     else if (currentLogs.isEmpty)
-                      _buildEmptyState(
-                        _activeLogSubTab == 0
-                            ? 'No recent sales activities found'
-                            : 'No recent admin logs found',
-                      )
+                      _buildEmptyState('No recent activity found for this agent')
                     else
                       ListView.builder(
                         shrinkWrap: true,
@@ -2314,7 +2466,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               : currentLogs.length;
                           final ev = currentLogs[idx];
                           final eventName =
-                              ev['event'] ?? ev['eventType'] ?? 'system_action';
+                              ev['event'] ?? ev['eventType'] ?? 'app_event';
                           final timestamp = ev['timestamp'] ?? '';
                           final props =
                               (ev['properties'] ?? ev['payload']) as Map? ?? {};
@@ -2323,67 +2475,104 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               props['screen'] ??
                               ev['details'] ??
                               '';
-                          final isAudit = ev['isAudit'] == true;
 
                           // Timeline visuals
                           IconData eventIcon = Icons.settings_ethernet;
                           Color eventColor = Colors.grey;
 
-                          if (isAudit) {
-                            eventIcon = Icons.security_rounded;
-                            eventColor = Colors.deepOrange;
-                          } else {
-                            if (eventName.toString().toLowerCase().contains(
-                              'login',
-                            )) {
-                              eventIcon = Icons.login;
-                              eventColor = Colors.green;
-                            } else if (eventName
-                                .toString()
-                                .toLowerCase()
-                                .contains('order')) {
-                              eventIcon = Icons.shopping_cart;
-                              eventColor = Colors.teal;
-                            } else if (eventName
-                                .toString()
-                                .toLowerCase()
-                                .contains('profile')) {
-                              eventIcon = Icons.visibility;
-                              eventColor = Colors.blue;
-                            }
+                          if (eventName.toString().toLowerCase().contains(
+                            'login',
+                          )) {
+                            eventIcon = Icons.login;
+                            eventColor = Colors.green;
+                          } else if (eventName
+                              .toString()
+                              .toLowerCase()
+                              .contains('order')) {
+                            eventIcon = Icons.shopping_cart;
+                            eventColor = Colors.teal;
+                          } else if (eventName
+                              .toString()
+                              .toLowerCase()
+                              .contains('delete')) {
+                            eventIcon = Icons.delete_sweep_rounded;
+                            eventColor = Colors.redAccent;
+                          } else if (eventName
+                              .toString()
+                              .toLowerCase()
+                              .contains('profile')) {
+                            eventIcon = Icons.visibility;
+                            eventColor = Colors.blue;
+                          } else if (eventName
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains('lead') ||
+                              eventName
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains('dealer') ||
+                              eventName
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains('user') ||
+                              eventName
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains('edit') ||
+                              eventName
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains('update')) {
+                            eventIcon = Icons.edit_note_rounded;
+                            eventColor = Colors.orange;
+                          } else if (eventName
+                              .toString()
+                              .toLowerCase()
+                              .contains('kyc')) {
+                            eventIcon = Icons.verified_user_rounded;
+                            eventColor = Colors.indigo;
+                          } else if (eventName
+                              .toString()
+                              .toLowerCase()
+                              .contains('assign')) {
+                            eventIcon = Icons.person_add_alt_1_rounded;
+                            eventColor = Colors.purple;
                           }
 
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
+                          return InkWell(
+                            onTap: () => _showActivityDetails(ev),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: eventColor.withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      eventIcon,
-                                      size: 16,
-                                      color: eventColor,
-                                    ),
+                                  Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: eventColor.withOpacity(0.1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          eventIcon,
+                                          size: 16,
+                                          color: eventColor,
+                                        ),
+                                      ),
+                                      if (idx != displayCount - 1)
+                                        Container(
+                                          width: 2,
+                                          height: 48,
+                                          color: AppTheme.borderColor,
+                                        ),
+                                    ],
                                   ),
-                                  if (idx != displayCount - 1)
-                                    Container(
-                                      width: 2,
-                                      height: 48,
-                                      color: AppTheme.borderColor,
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           eventName
@@ -2396,56 +2585,36 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                                             color: AppTheme.textPrimary,
                                           ),
                                         ),
-                                        if (isAudit) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.deepOrange
-                                                  .withOpacity(0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'AUDIT',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.deepOrange,
-                                              ),
+                                        const SizedBox(height: 2),
+                                        if (details.toString().isNotEmpty)
+                                          Text(
+                                            details.toString(),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11.5,
+                                              color: AppTheme.textSecondary,
                                             ),
                                           ),
-                                        ],
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          timestamp.isNotEmpty
+                                              ? _formatTimeAgo(timestamp)
+                                              : '-',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
                                       ],
                                     ),
-                                    const SizedBox(height: 2),
-                                    if (details.toString().isNotEmpty)
-                                      Text(
-                                        details.toString(),
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 11.5,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      timestamp.isNotEmpty
-                                          ? _formatTimeAgo(timestamp)
-                                          : '-',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                  ],
-                                ),
+                                  ),
+                                  const Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary),
+                                ],
                               ),
-                            ],
+                            ),
                           );
                         },
                       ),
@@ -2479,91 +2648,217 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                 );
               } else {
                 // ADMIN NOTES & PRIVATE LOGS
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Private Administrative Notes',
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Write notes regarding commission rates, evaluations, tier adjustments, and internal audits. These notes are only visible to system admins.',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _notesController,
-                      maxLines: 8,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: AppTheme.textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter notes here...',
-                        hintStyle: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                        ),
-                        fillColor: const Color(0xFFF9FAFB),
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.borderColor,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.primaryColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton.icon(
-                        onPressed: _isSavingNotes ? null : _saveAgentNotes,
-                        icon: _isSavingNotes
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                return SelectionContainer.disabled(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Administrative Feedback & Notifications',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
                                 ),
-                              )
-                            : const Icon(Icons.save_outlined, size: 16),
-                        label: Text(
-                          'Save Private Notes',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                              ),
+                              Text(
+                                'Notes added here will be sent as a notification to the agent.',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
+                          _buildBadge('${_agentNotesHistory.length} Total', AppTheme.primaryColor),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _notesTitleController,
+                        maxLines: 1,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
+                        decoration: InputDecoration(
+                          hintText: 'Notification Title (e.g. Target Warning, System Update)...',
+                          hintStyle: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                          fillColor: const Color(0xFFF9FAFB),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.borderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.primaryColor,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _notesController,
+                        maxLines: 3,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppTheme.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Type feedback or internal notification for this agent...',
+                          hintStyle: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                          fillColor: const Color(0xFFF9FAFB),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.borderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSavingNotes ? null : _saveAgentNotes,
+                          icon: _isSavingNotes
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.add_comment_outlined, size: 16),
+                          label: Text(
+                            'Add Note',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 32),
+                      if (_agentNotesHistory.isEmpty)
+                        _buildEmptyState('No administrative notes recorded yet.')
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _agentNotesHistory.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final note = _agentNotesHistory[index];
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.person_pin_outlined, size: 14, color: AppTheme.textSecondary),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            note['author'] ?? note['adminName'] ?? 'Admin',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            _formatTimeAgo(note['timestamp'] ?? note['createdAt'] ?? ''),
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, size: 14, color: AppTheme.error),
+                                            onPressed: () => _deleteNote(index),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  if (note['title'] != null && note['title'].toString().isNotEmpty) ...[
+                                    Text(
+                                      note['title'].toString(),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                  ],
+                                  Text(
+                                    note['note'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12.5,
+                                      color: AppTheme.textBody,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 );
               }
             }
@@ -2967,6 +3262,109 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
           fontWeight: FontWeight.bold,
           color: color,
         ),
+      ),
+    );
+  }
+
+  void _showActivityDetails(Map<String, dynamic> ev) {
+    final eventName = ev['event'] ?? ev['eventType'] ?? 'app_event';
+    final timestamp = ev['timestamp'] ?? '';
+    final props = (ev['properties'] ?? ev['payload']) as Map? ?? {};
+    final details = props['details'] ?? props['screen'] ?? ev['details'] ?? '';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.info_outline, color: AppTheme.primaryColor),
+            const SizedBox(width: 12),
+            Text(
+              'Activity Details',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildPopupDetail('Action', eventName.toString().toUpperCase().replaceAll('_', ' ')),
+                _buildPopupDetail('Time', timestamp.isNotEmpty ? _formatTimeAgo(timestamp) : '-'),
+                _buildPopupDetail('Exact Timestamp', timestamp),
+                if (details.toString().isNotEmpty)
+                  _buildPopupDetail('Summary', details.toString()),
+                const Divider(height: 24),
+                Text(
+                  'Technical Data',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    const JsonEncoder.withIndent('  ').convert(props),
+                    style: GoogleFonts.firaCode(
+                      fontSize: 11,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Close',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPopupDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }

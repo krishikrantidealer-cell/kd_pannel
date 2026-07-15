@@ -18,6 +18,7 @@ import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'dart:async';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/analytics_service.dart';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
@@ -74,6 +75,10 @@ class _OrdersPageState extends State<OrdersPage> {
       final res = await ApiClient().post('/orders/admin/sheets/sync', {});
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
+        AnalyticsService().logEvent('sync_sheets', properties: {
+          'count': data['count'],
+          'details': 'Synchronized ${data['count']} orders to Google Sheets',
+        });
         _showSnack(
           'Successfully synced ${data['count']} orders to Google Sheets!',
         );

@@ -16,6 +16,8 @@ import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 
+import '../../../../core/services/analytics_service.dart';
+
 class LeadsPage extends StatefulWidget {
   final bool isStandalone;
   const LeadsPage({super.key, this.isStandalone = false});
@@ -76,6 +78,11 @@ class _LeadsPageState extends State<LeadsPage> {
     if (mounted) {
       // Trigger download using the platform export helper
       downloadCsv(buffer.toString(), 'leads_export.csv');
+
+      AnalyticsService().logEvent('export_leads_csv', properties: {
+        'count': leads.length,
+        'details': 'Exported ${leads.length} leads to CSV',
+      });
 
       setState(() => _isExporting = false);
       NavigationService.messengerKey.currentState?.showSnackBar(
@@ -226,7 +233,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
       _leadsBloc?.add(
         UpdateLeadDetailsEvent(
-          userId: lead['id'],
+          userId: lead['_id'],
           updateData: {
             'firstName': firstName,
             'lastName': lastName,
@@ -2270,18 +2277,18 @@ class _LeadsTableState extends State<_LeadsTable> {
 
   bool get isAllSelected =>
       widget.leads.isNotEmpty &&
-      widget.leads.every((l) => widget.selectedLeadIds.contains(l['id'] ?? ''));
+      widget.leads.every((l) => widget.selectedLeadIds.contains(l['_id'] ?? ''));
 
   void _toggleAll() {
     setState(() {
       if (isAllSelected) {
         for (var l in widget.leads) {
-          widget.selectedLeadIds.remove(l['id'] ?? '');
+          widget.selectedLeadIds.remove(l['_id'] ?? '');
         }
       } else {
         for (var l in widget.leads) {
-          if (l['id'] != null) {
-            widget.selectedLeadIds.add(l['id']);
+          if (l['_id'] != null) {
+            widget.selectedLeadIds.add(l['_id']);
           }
         }
       }
@@ -2438,7 +2445,7 @@ class _LeadsTableState extends State<_LeadsTable> {
           itemBuilder: (context, index) {
             final lead = widget.leads[index];
             final bool isAlternate = index % 2 == 1;
-            final String leadId = lead['id'] ?? '';
+            final String leadId = lead['_id'] ?? '';
             return _LeadRow(
               lead: lead,
               isAlternate: isAlternate,
@@ -2697,7 +2704,7 @@ class _LeadRowState extends State<_LeadRow> {
                         onTap: () {}, // Stop propagation for buttons
                         child: _ConnectedActionButtons(
                           onEdit: () => widget.onEdit(widget.lead),
-                          onDelete: () => widget.onDelete(widget.lead['id'], widget.lead['name']),
+                          onDelete: () => widget.onDelete(widget.lead['_id'], widget.lead['name']),
                         ),
                       ),
                     ),

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dealers_event.dart';
 import 'dealers_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   DealersBloc() : super(const DealersState()) {
@@ -100,7 +101,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     // Optimistic Update
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         final agent = state.salesAgents.firstWhere(
           (a) => a['_id'] == event.agentId,
@@ -125,6 +126,16 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('assign_agent', properties: {
+            'targetUserId': event.userId,
+            'assignedAgentId': event.agentId,
+            'details': event.agentId != null 
+                ? 'Assigned agent to dealer' 
+                : 'Unassigned agent from dealer',
+          });
+          await AnalyticsService().flush();
+
           emit(
             state.copyWithMessages(
               status: DealersStatus.success,
@@ -156,6 +167,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     Emitter<DealersState> emit,
   ) async {
     emit(state.copyWith(status: DealersStatus.submitting));
+    int successCount = 0;
     try {
       final client = ApiClient();
       final futures = event.userIds.map((userId) {
@@ -165,7 +177,6 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       }).toList();
 
       final responses = await Future.wait(futures);
-      int successCount = 0;
       for (final res in responses) {
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
@@ -175,6 +186,14 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         }
       }
 
+      // Log Activity
+      AnalyticsService().logEvent('bulk_assign_agent', properties: {
+        'count': successCount,
+        'assignedAgentId': event.agentId,
+        'details': 'Bulk assigned agent to $successCount dealers',
+      });
+      await AnalyticsService().flush();
+
       emit(state.copyWithMessages(
         status: DealersStatus.success,
         actionSuccessMessage:
@@ -182,6 +201,14 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       ));
       add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
+      // Log Activity
+      AnalyticsService().logEvent('bulk_assign_agent', properties: {
+        'count': successCount,
+        'assignedAgentId': event.agentId,
+        'details': 'Bulk assigned agent to $successCount dealers',
+      });
+      await AnalyticsService().flush();
+
       emit(state.copyWithMessages(
         status: DealersStatus.success,
         errorMessage: e.toString(),
@@ -206,6 +233,14 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 201) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('create_sales_agent', properties: {
+            'firstName': event.firstName,
+            'email': event.email,
+            'details': 'Created new sales agent: ${event.firstName} ${event.lastName}',
+          });
+          await AnalyticsService().flush();
+
           emit(
             state.copyWithMessages(
               status: DealersStatus.success,
@@ -271,6 +306,13 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('toggle_block', properties: {
+            'targetUserId': event.userId,
+            'details': 'Toggled block status for dealer',
+          });
+          await AnalyticsService().flush();
+
           final String msg = data['message'] ?? 'Dealer block status updated';
           emit(
             state.copyWithMessages(
@@ -302,7 +344,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     // Optimistic Update
     final updatedUsers =
         state.allRawUsers
-            .where((u) => u['_id'] != event.userId && u['id'] != event.userId)
+            .where((u) => u['_id'] != event.userId)
             .toList();
 
     emit(state.copyWith(
@@ -311,11 +353,28 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     ));
 
     try {
+      final Map<String, dynamic> targetUser = state.allRawUsers.firstWhere(
+        (u) => u['_id'] == event.userId,
+        orElse: () => <String, dynamic>{},
+      );
+      final String dealerName = (targetUser['shopName'] ?? '').toString().isNotEmpty 
+          ? targetUser['shopName'] 
+          : ((targetUser['firstName'] != null || targetUser['lastName'] != null)
+              ? '${targetUser['firstName'] ?? ''} ${targetUser['lastName'] ?? ''}'.trim()
+              : 'Dealer');
+
       final res = await ApiClient().delete('/users/${event.userId}');
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity
+          AnalyticsService().logEvent('delete_dealer', properties: {
+            'targetUserId': event.userId,
+            'details': 'Permanently deleted dealer account: $dealerName',
+          });
+          await AnalyticsService().flush();
+
           emit(
             state.copyWithMessages(
               status: DealersStatus.success,
@@ -347,7 +406,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     // Optimistic Update: Change the local state immediately for instant feedback
     final updatedUsers = state.allRawUsers.map((u) {
-      if (u['_id'] == event.userId || u['id'] == event.userId) {
+      if (u['_id'] == event.userId) {
         final updatedUser = Map<String, dynamic>.from(u);
         if (event.updateData.containsKey('firstName')) {
           updatedUser['firstName'] = event.updateData['firstName'];
@@ -395,6 +454,28 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
+          // Log Activity: Discern between general edit vs status/note updates
+          String eventName = 'edit_dealer';
+          String logDetails = 'Updated details for dealer';
+          
+          if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status')) {
+            eventName = 'update_dealer_status';
+            final status = event.updateData['leadStatus'] ?? event.updateData['status'];
+            logDetails = 'Changed dealer status to $status';
+          } else if (event.updateData.containsKey('leadNotes') || event.updateData.containsKey('notes')) {
+            eventName = 'add_dealer_note';
+            logDetails = 'Added follow-up notes to dealer';
+          }
+
+          AnalyticsService().logEvent(eventName, properties: {
+            'targetUserId': event.userId,
+            'details': logDetails,
+            'fields': event.updateData.keys.join(', '),
+            if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status'))
+              'newStatus': event.updateData['leadStatus'] ?? event.updateData['status'],
+          });
+          await AnalyticsService().flush();
+
           emit(
             state.copyWithMessages(
               status: DealersStatus.success,

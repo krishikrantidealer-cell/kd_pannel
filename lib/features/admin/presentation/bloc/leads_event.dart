@@ -42,6 +42,7 @@ class CreateSalesAgentFromLeadsEvent extends LeadsEvent {
   final String email;
   final String phoneNumber;
   final String password;
+  final double? monthlyTarget;
 
   const CreateSalesAgentFromLeadsEvent({
     required this.firstName,
@@ -49,10 +50,11 @@ class CreateSalesAgentFromLeadsEvent extends LeadsEvent {
     required this.email,
     required this.phoneNumber,
     required this.password,
+    this.monthlyTarget,
   });
 
   @override
-  List<Object?> get props => [firstName, lastName, email, phoneNumber, password];
+  List<Object?> get props => [firstName, lastName, email, phoneNumber, password, monthlyTarget];
 }
 
 class VerifyKYCEvent extends LeadsEvent {

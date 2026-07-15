@@ -93,7 +93,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         AnalyticsService().logEvent(
           'profile_view',
           properties: {
-            'leadId': _lead!['id'] ?? _lead!['_id'] ?? '',
+            'leadId': _lead!['_id'] ?? '',
             'leadName':
                 '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
                     .trim(),
@@ -169,7 +169,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     String? identifier;
     final email = _lead!['email']?.toString();
     final phone = (_lead!['phone'] ?? _lead!['phoneNumber'])?.toString();
-    final id = (_lead!['id'] ?? _lead!['_id'])?.toString();
+    final id = _lead!['_id']?.toString();
 
     if (email != null && email.trim().isNotEmpty) {
       identifier = email.trim();
@@ -1887,12 +1887,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         }
       },
       builder: (context, state) {
-        final String? leadId = _lead?['id'] ?? _lead?['_id'];
+        final String? leadId = _lead?['_id'];
         Map<String, dynamic>? currentLead = _lead;
 
         if (leadId != null && state.allRawUsers.isNotEmpty) {
           final rawUser = state.allRawUsers.firstWhere(
-            (u) => u['_id'] == leadId || u['id'] == leadId,
+            (u) => u['_id'] == leadId,
             orElse: () => <String, dynamic>{},
           );
           if (rawUser.isNotEmpty) {
@@ -2784,6 +2784,13 @@ class _LeadInformationCard extends StatelessWidget {
 
   Future<void> _makeCall(String phone, BuildContext context) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    
+    AnalyticsService().logEvent('agent_call_lead', properties: {
+      'leadId': lead['id'] ?? lead['_id'],
+      'leadName': lead['name'],
+      'details': 'Initiated phone call to lead: ${lead['name']}',
+    });
+
     final url = Uri.parse('tel:$cleanPhone');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
@@ -2804,6 +2811,13 @@ class _LeadInformationCard extends StatelessWidget {
     if (cleanPhone.length == 10) {
       cleanPhone = '91$cleanPhone';
     }
+
+    AnalyticsService().logEvent('agent_whatsapp_lead', properties: {
+      'leadId': lead['id'] ?? lead['_id'],
+      'leadName': lead['name'],
+      'details': 'Opened WhatsApp chat with lead: ${lead['name']}',
+    });
+
     final url = Uri.parse('https://wa.me/$cleanPhone');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);

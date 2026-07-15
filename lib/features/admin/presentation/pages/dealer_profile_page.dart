@@ -172,7 +172,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         if (data['success'] == true) {
           final users = List<Map<String, dynamic>>.from(data['users'] ?? []);
           final freshUser = users.firstWhere(
-            (u) => u['_id'] == userId || u['id'] == userId,
+            (u) => u['_id'] == userId,
             orElse: () => <String, dynamic>{},
           );
           if (freshUser.isNotEmpty) {
@@ -1148,6 +1148,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                         onEdit: _editDealer,
                         onDelete: _deleteDealer,
                         onCreateOrder: () async {
+                          AnalyticsService().logEvent('initiate_order_creation', properties: {
+                            'dealerId': currentDealer.id,
+                            'dealerName': currentDealer.name,
+                            'details': 'Started creating a new order for ${currentDealer.name}',
+                          });
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -1804,6 +1809,11 @@ class _DealerHeroCard extends StatelessWidget {
           color: const Color(0xFF2E7D32),
           isSolid: true,
           onTap: () async {
+            AnalyticsService().logEvent('agent_call_dealer', properties: {
+              'dealerId': dealer.id,
+              'dealerName': dealer.name,
+              'details': 'Initiated phone call to dealer: ${dealer.name}',
+            });
             final url = 'tel:${dealer.phone}';
             final Uri uri = Uri.parse(url);
             if (await canLaunchUrl(uri)) {
@@ -1818,6 +1828,13 @@ class _DealerHeroCard extends StatelessWidget {
           isSolid: true,
           onTap: () async {
             final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
+            
+            AnalyticsService().logEvent('agent_whatsapp_dealer', properties: {
+              'dealerId': dealer.id,
+              'dealerName': dealer.name,
+              'details': 'Opened WhatsApp chat with dealer: ${dealer.name}',
+            });
+
             final url = 'https://wa.me/$cleanPhone';
             final Uri uri = Uri.parse(url);
             if (await canLaunchUrl(uri)) {
