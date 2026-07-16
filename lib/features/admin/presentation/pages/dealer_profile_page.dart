@@ -1146,196 +1146,186 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           }
         }
       },
-      child: SelectionArea(
-        child: Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryColor,
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-                    vertical: isMobile ? 20 : 32,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. BACK HEADER
-                      _buildBreadcrumbs(context, isMobile, currentDealer.name),
-                      const SizedBox(height: 16),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primaryColor,
+                ),
+              )
+            : SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
+                  vertical: isMobile ? 20 : 32,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. BACK HEADER
+                    _buildBreadcrumbs(context, isMobile, currentDealer.name),
+                    const SizedBox(height: 16),
 
-                      // 2. HEADER SECTION
-                      _DealerHeroCard(
-                        dealer: currentDealer,
-                        onToggleBlock: _toggleBlockDealer,
-                        onEdit: _editDealer,
-                        onDelete: _deleteDealer,
-                        onCreateOrder: () async {
-                          AnalyticsService().logEvent(
-                            'initiate_order_creation',
-                            properties: {
-                              'dealerId': currentDealer.id,
-                              'dealerName': currentDealer.name,
-                              'details':
-                                  'Started creating a new order for ${currentDealer.name}',
-                            },
-                          );
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CreateOrderPage(dealer: currentDealer),
-                            ),
-                          );
-                          if (result == true && mounted) {
-                            if (currentDealer.id != null) {
-                              context.read<DealersBloc>().add(
-                                FetchDealerDetailsEvent(currentDealer.id!),
-                              );
-                              context.read<DealersBloc>().add(
-                                FetchDealerOrdersEvent(currentDealer.id!),
-                              );
-                            }
+                    // 2. HEADER SECTION
+                    _DealerHeroCard(
+                      dealer: currentDealer,
+                      onToggleBlock: _toggleBlockDealer,
+                      onEdit: _editDealer,
+                      onDelete: _deleteDealer,
+                      onCreateOrder: () async {
+                        AnalyticsService().logEvent('initiate_order_creation', properties: {
+                          'dealerId': currentDealer.id,
+                          'dealerName': currentDealer.name,
+                          'details': 'Started creating a new order for ${currentDealer.name}',
+                        });
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CreateOrderPage(dealer: currentDealer),
+                          ),
+                        );
+                        if (result == true && mounted) {
+                          if (currentDealer.id != null) {
+                            context.read<DealersBloc>().add(FetchDealerDetailsEvent(currentDealer.id!));
+                            context.read<DealersBloc>().add(FetchDealerOrdersEvent(currentDealer.id!));
                           }
-                        },
-                      ),
-                      const SizedBox(height: 24),
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 24),
 
-                      // 3. TAB CONTROLLER CHIPS SELECTOR
-                      _buildAdvancedProfileTabs(),
-                      const SizedBox(height: 24),
-                      // 4. TABBED CONTENT CHANNELS
-                      SelectionContainer.disabled(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          child: _activeTab == 0
-                              ? Column(
-                                  key: const ValueKey(0),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _StatsCardsSection(
+                    // 3. TAB CONTROLLER CHIPS SELECTOR
+                    _buildAdvancedProfileTabs(),
+                    const SizedBox(height: 24),
+                    // 4. TABBED CONTENT CHANNELS
+                    SelectionContainer.disabled(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: _activeTab == 0
+                            ? Column(
+                                key: const ValueKey(0),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _StatsCardsSection(
+                                    dealer: currentDealer,
+                                    orders: orders,
+                                  ),
+                                  const SizedBox(height: 24),
+                                  if (!isMobile) ...[
+                                    IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            flex: 1,
+                                            child: _DealerInformationCard(
+                                              dealer: currentDealer,
+                                              salesAgents: _salesAgents,
+                                              currentAgentId: _agentId,
+                                              onAssignAgent: _assignAgent,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 32),
+                                          Expanded(
+                                            flex: 1,
+                                            child: _DealerKycDocumentsCard(
+                                              dealer: currentDealer,
+                                              onViewDocument: _launchUrl,
+                                              onUpload: _showUploadKycDialog,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    _DealerInformationCard(
                                       dealer: currentDealer,
-                                      orders: orders,
+                                      salesAgents: _salesAgents,
+                                      currentAgentId: _agentId,
+                                      onAssignAgent: _assignAgent,
                                     ),
                                     const SizedBox(height: 24),
-                                    if (!isMobile) ...[
-                                      IntrinsicHeight(
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(
-                                              flex: 1,
-                                              child: _DealerInformationCard(
-                                                dealer: currentDealer,
-                                                salesAgents: _salesAgents,
-                                                currentAgentId: _agentId,
-                                                onAssignAgent: _assignAgent,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 32),
-                                            Expanded(
-                                              flex: 1,
-                                              child: _DealerKycDocumentsCard(
-                                                dealer: currentDealer,
-                                                onViewDocument: _launchUrl,
-                                                onUpload: _showUploadKycDialog,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      _DealerInformationCard(
-                                        dealer: currentDealer,
-                                        salesAgents: _salesAgents,
-                                        currentAgentId: _agentId,
-                                        onAssignAgent: _assignAgent,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      _DealerKycDocumentsCard(
-                                        dealer: currentDealer,
-                                        onViewDocument: _launchUrl,
-                                        onUpload: _showUploadKycDialog,
-                                      ),
-                                    ],
+                                    _DealerKycDocumentsCard(
+                                      dealer: currentDealer,
+                                      onViewDocument: _launchUrl,
+                                      onUpload: _showUploadKycDialog,
+                                    ),
                                   ],
-                                )
-                              : _activeTab == 1
-                              ? _OrderHistoryCard(
-                                  key: const ValueKey(1),
-                                  dealer: currentDealer,
-                                  orders: orders,
-                                  isLoading: isLoadingOrders,
-                                )
-                              : _activeTab == 2
-                              ? _UserEventsCard(
-                                  key: const ValueKey(2),
-                                  userIdentifier:
-                                      currentDealer.email ?? currentDealer.phone,
-                                  events: events,
-                                  isLoading: isLoadingEvents,
-                                  onRefresh: () =>
-                                      context.read<DealersBloc>().add(
-                                        FetchDealerEventsEvent(
-                                          currentDealer.email ??
-                                              currentDealer.phone ??
-                                              currentDealer.id ??
-                                              '',
-                                        ),
+                                ],
+                              )
+                            : _activeTab == 1
+                            ? _OrderHistoryCard(
+                                key: const ValueKey(1),
+                                dealer: currentDealer,
+                                orders: orders,
+                                isLoading: isLoadingOrders,
+                              )
+                            : _activeTab == 2
+                            ? _UserEventsCard(
+                                key: const ValueKey(2),
+                                userIdentifier:
+                                    currentDealer.email ?? currentDealer.phone,
+                                events: events,
+                                isLoading: isLoadingEvents,
+                                onRefresh: () =>
+                                    context.read<DealersBloc>().add(
+                                      FetchDealerEventsEvent(
+                                        currentDealer.email ??
+                                            currentDealer.phone ??
+                                            currentDealer.id ??
+                                            '',
                                       ),
-                                )
-                              : Column(
-                                  key: const ValueKey(3),
-                                  children: [
-                                    if (currentDealer.id != null)
-                                      SelectionContainer.disabled(
-                                        child: UserStatusNotesWidget(
-                                          userId: currentDealer.id!,
-                                          initialStatus:
-                                              currentDealer.status ?? 'prospect',
-                                          initialNotes: currentDealer.notes ?? '',
-                                          notesHistory:
-                                              currentDealer.notesHistory,
-                                          isSubmitting:
-                                              context
-                                                  .watch<DealersBloc>()
-                                                  .state
-                                                  .status ==
-                                              DealersStatus.submitting,
-                                          onSave:
-                                              (
-                                                status,
-                                                notes,
-                                                noteType,
-                                                notePriority,
-                                              ) {
-                                                context.read<DealersBloc>().add(
-                                                  UpdateDealerDetailsEvent(
-                                                    userId: currentDealer.id!,
-                                                    updateData: {
-                                                      'leadStatus': status,
-                                                      'leadNotes': notes,
-                                                      'noteType': noteType,
-                                                      'notePriority':
-                                                          notePriority,
-                                                    },
-                                                  ),
-                                                );
-                                              },
-                                        ),
+                                    ),
+                              )
+                            : Column(
+                                key: const ValueKey(3),
+                                children: [
+                                  if (currentDealer.id != null)
+                                    SelectionContainer.disabled(
+                                      child: UserStatusNotesWidget(
+                                        userId: currentDealer.id!,
+                                        initialStatus:
+                                            currentDealer.status ?? 'prospect',
+                                        initialNotes: currentDealer.notes ?? '',
+                                        notesHistory:
+                                            currentDealer.notesHistory,
+                                        isSubmitting:
+                                            context
+                                                .watch<DealersBloc>()
+                                                .state
+                                                .status ==
+                                            DealersStatus.submitting,
+                                        onSave:
+                                            (
+                                              status,
+                                              notes,
+                                              noteType,
+                                              notePriority,
+                                            ) {
+                                              context.read<DealersBloc>().add(
+                                                UpdateDealerDetailsEvent(
+                                                  userId: currentDealer.id!,
+                                                  updateData: {
+                                                    'leadStatus': status,
+                                                    'leadNotes': notes,
+                                                    'noteType': noteType,
+                                                    'notePriority':
+                                                        notePriority,
+                                                  },
+                                                ),
+                                              );
+                                            },
                                       ),
-                                  ],
-                                ),
-                        ),
+                                    ),
+                                ],
+                              ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-        ),
+              ),
       ),
     );
   }

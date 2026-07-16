@@ -1970,10 +1970,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         final isTablet = Responsive.isTablet(context);
         final isLoading = state.status == LeadsStatus.submitting;
 
-        return SelectionArea(
-          child: Scaffold(
-            backgroundColor: const Color(0xFFF8FAFC),
-            body: isLoading
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          body: SelectionArea(
+            child: isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
                       color: AppTheme.primaryColor,
