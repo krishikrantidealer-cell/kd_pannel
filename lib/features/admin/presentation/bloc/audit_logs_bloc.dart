@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'audit_logs_event.dart';
-import 'audit_logs_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_state.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
@@ -14,7 +14,101 @@ class AuditLogsBloc extends Bloc<AuditLogsEvent, AuditLogsState> {
   }
 
   void _onNewLogReceived(NewAuditLogReceived event, Emitter<AuditLogsState> emit) {
-    // Prevent duplicates (though WS should be reliable)
+    // 1. Role filtering: Check if the log's role matches the active tab's role
+    final String? logRole = event.log['adminRole'] ?? event.log['role'];
+    if (state.currentRole != null && logRole != null) {
+      if (logRole.toLowerCase() != state.currentRole!.toLowerCase()) {
+        return; // Mismatched tab role, ignore
+      }
+    }
+
+    // 2. Action filter check
+    if (state.actionFilter != 'All' && state.actionFilter.isNotEmpty) {
+      final action = (event.log['action'] ?? '').toString().toLowerCase();
+      // Action query mimics backend logic: regex matching create/update/delete/security
+      final filter = state.actionFilter.toLowerCase();
+      if (filter == 'create' && !action.contains('create') && !action.contains('add')) return;
+      if (filter == 'update' && !action.contains('update') && !action.contains('edit')) return;
+      if (filter == 'delete' && !action.contains('delete') && !action.contains('remove')) return;
+      if (filter == 'security' && !action.contains('login') && !action.contains('security') && !action.contains('auth')) return;
+    }
+
+    // 3. Module/TargetModel check
+    if (state.moduleFilter != 'All' && state.moduleFilter.isNotEmpty) {
+      final filter = state.moduleFilter.toLowerCase();
+      final targetModel = (event.log['targetModel'] ?? '').toString().toLowerCase();
+      final action = (event.log['action'] ?? '').toString().toLowerCase();
+      
+      if (filter == 'kyc') {
+        if (targetModel != 'user' || !action.contains('kyc')) return;
+      } else if (filter == 'user') {
+        if (targetModel != 'user' || action.contains('kyc')) return;
+      } else {
+        if (targetModel != filter) return;
+      }
+    }
+
+    // 4. Agent email check
+    if (state.agentEmail != 'All' && state.agentEmail.isNotEmpty) {
+      final email = (event.log['adminEmail'] ?? '').toString().toLowerCase();
+      if (email != state.agentEmail.toLowerCase()) return;
+    }
+
+    // 5. Date range check
+    if (state.selectedDateRange != null) {
+      final now = DateTime.now();
+      final start = state.selectedDateRange!.start;
+      // Add 1 day to end date to match backend's inclusive query
+      final end = state.selectedDateRange!.end.add(const Duration(days: 1));
+      if (now.isBefore(start) || now.isAfter(end)) return;
+    }
+
+    // 6. Search query check
+    if (state.searchQuery.isNotEmpty) {
+      final search = state.searchQuery.toLowerCase();
+      final email = (event.log['adminEmail'] ?? '').toString().toLowerCase();
+      final action = (event.log['action'] ?? '').toString().toLowerCase();
+      final targetModel = (event.log['targetModel'] ?? '').toString().toLowerCase();
+      final performer = (event.log['adminName'] ?? '').toString().toLowerCase();
+      
+      bool matchesChanges = false;
+      final changes = event.log['changes'];
+      if (changes != null && changes is Map) {
+        for (final key in ['before', 'after']) {
+          final data = changes[key];
+          if (data != null && data is Map) {
+            final firstName = (data['firstName'] ?? '').toString().toLowerCase();
+            final lastName = (data['lastName'] ?? '').toString().toLowerCase();
+            final shopName = (data['shopName'] ?? '').toString().toLowerCase();
+            final phone = (data['phoneNumber'] ?? data['phone'] ?? '').toString().toLowerCase();
+            final mail = (data['email'] ?? '').toString().toLowerCase();
+            final name = (data['name'] ?? '').toString().toLowerCase();
+            final title = (data['title'] ?? '').toString().toLowerCase();
+
+            if (firstName.contains(search) ||
+                lastName.contains(search) ||
+                shopName.contains(search) ||
+                phone.contains(search) ||
+                mail.contains(search) ||
+                name.contains(search) ||
+                title.contains(search)) {
+              matchesChanges = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!email.contains(search) &&
+          !action.contains(search) &&
+          !targetModel.contains(search) &&
+          !performer.contains(search) &&
+          !matchesChanges) {
+        return;
+      }
+    }
+
+    // 7. Prevent duplicates (though WS should be reliable)
     final exists = state.logs.any((l) => (l['_id'] ?? l['id']) == (event.log['_id'] ?? event.log['id']));
     if (exists) return;
 

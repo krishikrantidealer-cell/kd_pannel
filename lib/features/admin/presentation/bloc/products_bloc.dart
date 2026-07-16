@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'products_event.dart';
-import 'products_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 

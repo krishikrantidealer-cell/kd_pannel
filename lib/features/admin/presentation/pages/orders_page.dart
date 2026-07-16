@@ -50,10 +50,14 @@ class _OrdersPageState extends State<OrdersPage> {
       bloc.add(const FetchOrdersEvent());
     }
 
-    WebSocketService().connect();
+    DateTime? lastOrdersFetch;
     _ordersWsSubscription = WebSocketService().ordersUpdates.listen((_) {
       if (mounted) {
-        context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastOrdersFetch == null || now.difference(lastOrdersFetch!) > const Duration(seconds: 5)) {
+          lastOrdersFetch = now;
+          context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+        }
       }
     });
   }

@@ -15,14 +15,14 @@ import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import '../../../../util/dealers.dart';
-import '../bloc/dealers_bloc.dart';
-import '../bloc/dealers_event.dart';
-import '../bloc/dealers_state.dart';
-import '../bloc/leads_bloc.dart';
-import '../bloc/leads_event.dart';
-import '../bloc/orders_bloc.dart';
-import '../bloc/orders_event.dart';
-import '../bloc/orders_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 import 'user_events_page.dart';
 import 'orders_page.dart';
 import 'leads_page.dart';
@@ -177,25 +177,40 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Connect to WebSockets and listen to real-time updates
     WebSocketService().connect();
+    DateTime? lastDealersFetch;
     _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
       if (mounted) {
-        context.read<DealersBloc>().add(
-          const FetchDealersDataEvent(forceRefresh: true),
-        );
+        final now = DateTime.now();
+        if (lastDealersFetch == null || now.difference(lastDealersFetch!) > const Duration(seconds: 5)) {
+          lastDealersFetch = now;
+          context.read<DealersBloc>().add(
+            const FetchDealersDataEvent(forceRefresh: true),
+          );
+        }
       }
     });
+    DateTime? lastLeadsFetch;
     _leadsWsSubscription = WebSocketService().leadsUpdates.listen((_) {
       if (mounted) {
-        context.read<LeadsBloc>().add(
-          const FetchLeadsDataEvent(forceRefresh: true),
-        );
+        final now = DateTime.now();
+        if (lastLeadsFetch == null || now.difference(lastLeadsFetch!) > const Duration(seconds: 5)) {
+          lastLeadsFetch = now;
+          context.read<LeadsBloc>().add(
+            const FetchLeadsDataEvent(forceRefresh: true),
+          );
+        }
       }
     });
+    DateTime? lastOrdersFetch;
     _ordersWsSubscription = WebSocketService().ordersUpdates.listen((_) {
       if (mounted) {
-        context.read<OrdersBloc>().add(
-          const FetchOrdersEvent(forceRefresh: true),
-        );
+        final now = DateTime.now();
+        if (lastOrdersFetch == null || now.difference(lastOrdersFetch!) > const Duration(seconds: 5)) {
+          lastOrdersFetch = now;
+          context.read<OrdersBloc>().add(
+            const FetchOrdersEvent(forceRefresh: true),
+          );
+        }
       }
     });
   }

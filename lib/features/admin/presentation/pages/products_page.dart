@@ -9,9 +9,9 @@ import 'create_collection_page.dart';
 import '../widgets/products_tab_view.dart';
 import '../widgets/collections_tab_view.dart';
 import '../widgets/categories_tab_view.dart';
-import '../bloc/products_bloc.dart';
-import '../bloc/products_event.dart';
-import '../bloc/products_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_state.dart';
 import 'package:animations/animations.dart';
 
 class ProductsPage extends StatefulWidget {

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import '../../data/models/order_model.dart';
-import 'orders_event.dart';
-import 'orders_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 
 class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   OrdersBloc() : super(const OrdersState()) {

@@ -1121,78 +1121,102 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
                                     if (agentName != null && agentName.isNotEmpty) {
                                       detailLines.add('Agent: $agentName');
                                     }
+                                  } else if (changes != null) {
+                                    final changesBefore = changes['before'] as Map<String, dynamic>?;
+                                    if (changesBefore != null && changesAfter != null) {
+                                      final technicalKeys = {'updatedAt', 'createdAt', '__v', '_id', 'id', 'password', 'fcmToken', 'notesHistory', 'adminId', 'adminName'};
+                                      changesAfter.forEach((key, valAfter) {
+                                        if (technicalKeys.contains(key)) return;
+                                        final valBefore = changesBefore[key];
+                                        if (valBefore?.toString() != valAfter?.toString()) {
+                                          final friendlyKey = key.replaceAll(RegExp(r'(?=[A-Z])'), ' ').trim();
+                                          final capKey = friendlyKey.isNotEmpty
+                                              ? friendlyKey[0].toUpperCase() + friendlyKey.substring(1)
+                                              : key;
+                                          String beforeStr = valBefore?.toString() ?? '(Empty)';
+                                          String afterStr = valAfter?.toString() ?? '(Empty)';
+                                          if (key == 'assignedAgent') {
+                                            beforeStr = changesBefore['assignedAgentName']?.toString() ?? beforeStr;
+                                            afterStr = changesAfter['assignedAgentName']?.toString() ?? afterStr;
+                                          }
+                                          detailLines.add('$capKey: $beforeStr ➔ $afterStr');
+                                        }
+                                      });
+                                    }
                                   }
 
-                                  return IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        // Timeline line + dot
-                                        SizedBox(
-                                          width: 32,
-                                          child: Column(
-                                            children: [
-                                              Container(
-                                                width: 32,
-                                                height: 32,
-                                                decoration: BoxDecoration(
-                                                  color: color.withValues(alpha: 0.1),
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                      color: color.withValues(alpha: 0.4), width: 1.5),
-                                                ),
-                                                child: Icon(icon, size: 14, color: color),
-                                              ),
-                                              if (!isLast)
-                                                Expanded(
-                                                  child: Container(
-                                                    width: 1.5,
-                                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                                    color: Colors.grey.shade200,
-                                                  ),
-                                                ),
-                                            ],
+                                  return Stack(
+                                    children: [
+                                      if (!isLast)
+                                        Positioned(
+                                          left: 15.25,
+                                          top: 36,
+                                          bottom: 4,
+                                          child: Container(
+                                            width: 1.5,
+                                            color: Colors.grey.shade200,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
-                                        // Content
-                                        Expanded(
-                                          child: Padding(
-                                            padding: EdgeInsets.only(
-                                                bottom: isLast ? 0 : 20, top: 4),
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // Timeline dot
+                                          SizedBox(
+                                            width: 32,
+                                            child: Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: BoxDecoration(
+                                                color: color.withValues(alpha: 0.1),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: color.withValues(alpha: 0.4), width: 1.5),
+                                              ),
+                                              child: Icon(icon, size: 14, color: color),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          // Content
+                                          Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
+                                                const SizedBox(height: 4),
                                                 Text(label,
                                                     style: GoogleFonts.outfit(
                                                         fontWeight: FontWeight.w600,
                                                         fontSize: 13,
-                                                        color: color)),
+                                                        color: color,
+                                                        height: 1.2)),
                                                 const SizedBox(height: 2),
                                                 Text(timestamp,
                                                     style: GoogleFonts.outfit(
                                                         fontSize: 11,
-                                                        color: AppTheme.textSecondary)),
+                                                        color: AppTheme.textSecondary,
+                                                        height: 1.2)),
                                                 const SizedBox(height: 2),
                                                 Text('By: $adminName',
                                                     style: GoogleFonts.outfit(
                                                         fontSize: 11,
-                                                        color: Colors.grey.shade400)),
+                                                        color: Colors.grey.shade400,
+                                                        height: 1.2)),
                                                 for (final detail in detailLines) ...[
                                                   const SizedBox(height: 2),
                                                   Text(detail,
                                                       style: GoogleFonts.outfit(
                                                           fontSize: 11,
                                                           fontWeight: FontWeight.w500,
-                                                          color: Colors.grey.shade500)),
+                                                          color: Colors.grey.shade500,
+                                                          height: 1.2)),
                                                 ],
+                                                if (!isLast) const SizedBox(height: 20),
                                               ],
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                   );
+                                        ],
+                                      ),
+                                    ],
+                                  );
                                 },
                               ),
               ),

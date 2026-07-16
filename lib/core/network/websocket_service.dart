@@ -45,7 +45,7 @@ class WebSocketService {
 
   void _triggerLeadsUpdate() {
     _leadsDebounce?.cancel();
-    _leadsDebounce = Timer(const Duration(milliseconds: 500), () {
+    _leadsDebounce = Timer(const Duration(milliseconds: 1500), () {
       if (!_leadsUpdateController.isClosed) {
         _leadsUpdateController.add(null);
       }
@@ -54,7 +54,7 @@ class WebSocketService {
 
   void _triggerDealersUpdate() {
     _dealersDebounce?.cancel();
-    _dealersDebounce = Timer(const Duration(milliseconds: 500), () {
+    _dealersDebounce = Timer(const Duration(milliseconds: 1500), () {
       if (!_dealersUpdateController.isClosed) {
         _dealersUpdateController.add(null);
       }
@@ -63,7 +63,7 @@ class WebSocketService {
 
   void _triggerOrdersUpdate() {
     _ordersDebounce?.cancel();
-    _ordersDebounce = Timer(const Duration(milliseconds: 500), () {
+    _ordersDebounce = Timer(const Duration(milliseconds: 1000), () {
       if (!_ordersUpdateController.isClosed) {
         _ordersUpdateController.add(null);
       }
@@ -95,7 +95,7 @@ class WebSocketService {
     final wsHost = cleanUrl.replaceFirst(RegExp(r'https?://'), '');
     final wsUri = Uri.parse('$wsProtocol://$wsHost/?userId=$userId');
 
-    debugPrint('[WS] Connecting to $wsUri');
+    // debugPrint('[WS] Connecting to $wsUri');
 
     try {
       _channel = WebSocketChannel.connect(wsUri);
@@ -108,23 +108,19 @@ class WebSocketService {
             _isConnecting = false;
             _connectionStateController.add(true);
             _retryCount = 0;
-            debugPrint('[WS] Connection established.');
           }
           _handleMessage(message);
         },
         onDone: () {
-          debugPrint('[WS] Connection closed.');
           _handleDisconnect();
         },
         onError: (error) {
-          debugPrint('[WS] Connection error: $error');
           _handleDisconnect();
         },
       );
 
       _startHeartbeat();
     } catch (e) {
-      debugPrint('[WS] Connection exception: $e');
       _handleDisconnect();
     }
   }
@@ -177,17 +173,13 @@ class WebSocketService {
         return;
       }
 
-      if (type != 'PRESENCE_UPDATE') {
-        debugPrint('[WS] Message: $type');
-      }
-
       switch (type) {
         case 'CONNECTION_ACK':
           _isConnected = true;
           _isConnecting = false;
           _connectionStateController.add(true);
           _retryCount = 0;
-          debugPrint('[WS] Connection acknowledged by server.');
+          // debugPrint('[WS] Connection acknowledged by server.');
           break;
         case 'LEADS_UPDATE':
           _triggerLeadsUpdate();
@@ -241,14 +233,16 @@ class WebSocketService {
     final seconds = [5, 10, 20, 30][(_retryCount >= 4 ? 3 : _retryCount)];
     final delay = Duration(seconds: seconds);
     
-    debugPrint('[WS] Connection lost. Retrying in $seconds seconds...');
-    
     _reconnectTimer = Timer(delay, () {
       if (!_isConnected && !_isConnecting && AuthService().currentUserId != null) {
         _retryCount++;
         connect();
       }
     });
+  }
+
+  void triggerNotificationUpdate() {
+    _triggerNotificationUpdate();
   }
 
   void disconnect() {
@@ -263,6 +257,6 @@ class WebSocketService {
     _channel?.sink.close();
     _isConnected = false;
     _connectionStateController.add(false);
-    debugPrint('[WS] Disconnected');
+    // debugPrint('[WS] Disconnected');
   }
 }

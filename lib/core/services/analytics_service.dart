@@ -48,7 +48,7 @@ class AnalyticsService extends WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     await _loadFromDisk();
     _startHeartbeat();
-    debugPrint('[Analytics] Pipeline online. Adaptive heartbeat active.');
+    // debugPrint('[Analytics] Pipeline online. Adaptive heartbeat active.');
   }
 
   /// Sets the current context for the real-time heartbeat
@@ -173,7 +173,7 @@ class AnalyticsService extends WidgetsBindingObserver {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final latency = DateTime.now().difference(startTime).inMilliseconds;
-        debugPrint('[Analytics] Batch flushed. Size: ${batchToSend.length}, Latency: ${latency}ms');
+        // debugPrint('[Analytics] Batch flushed. Size: ${batchToSend.length}, Latency: ${latency}ms');
         _successCount++;
         _localQueue.removeRange(0, batchToSend.length);
         await _saveToDisk();

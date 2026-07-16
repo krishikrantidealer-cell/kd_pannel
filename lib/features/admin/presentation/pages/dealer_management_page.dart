@@ -10,9 +10,9 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
-import '../bloc/dealers_bloc.dart';
-import '../bloc/dealers_event.dart';
-import '../bloc/dealers_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -48,9 +48,14 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     WebSocketService().connect();
 
     // Listen to WebSocket signals to refresh Dealers
+    DateTime? lastDealersFetch;
     _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
       if (mounted && _dealersBloc != null) {
-        _dealersBloc!.add(const FetchDealersDataEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastDealersFetch == null || now.difference(lastDealersFetch!) > const Duration(seconds: 5)) {
+          lastDealersFetch = now;
+          _dealersBloc!.add(const FetchDealersDataEvent(forceRefresh: true));
+        }
       }
     });
   }

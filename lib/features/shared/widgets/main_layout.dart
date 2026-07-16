@@ -11,6 +11,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/team_management_page
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
@@ -47,6 +48,7 @@ class _MainLayoutState extends State<MainLayout> {
     const UserEventsPage(),
     const AuditLogsContainerPage(),
     const TrashPage(),
+    const AlertsPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -56,6 +58,7 @@ class _MainLayoutState extends State<MainLayout> {
     const LeadsPage(),
     const DealerManagementPage(),
     const SalesCouponPage(),
+    const AlertsPage(),
   ];
 
   @override
@@ -104,6 +107,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 8;
         } else if (routeName == '/trash') {
           _currentIdx = 9;
+        } else if (routeName == '/alerts') {
+          _currentIdx = 10;
         } else {
           _currentIdx = 0;
         }
@@ -118,6 +123,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 3;
         } else if (routeName == '/sales/coupons') {
           _currentIdx = 4;
+        } else if (routeName == '/alerts') {
+          _currentIdx = 5;
         } else {
           _currentIdx = 0;
         }
@@ -144,12 +151,14 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 7) route = '/marketing';
       if (index == 8) route = '/logs';
       if (index == 9) route = '/trash';
+      if (index == 10) route = '/alerts';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/orders';
       if (index == 2) route = '/leads';
       if (index == 3) route = '/dealers';
       if (index == 4) route = '/sales/coupons';
+      if (index == 5) route = '/alerts';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

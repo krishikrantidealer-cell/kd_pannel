@@ -182,6 +182,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
 
         // Admin Routes
         '/dashboard': (context) => const MainLayout(),
+        '/alerts': (context) => const MainLayout(),
         '/leads': (context) => const MainLayout(),
         '/leads/profile': (context) =>
             const MainLayout(child: LeadProfilePage()),

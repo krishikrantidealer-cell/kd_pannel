@@ -20,16 +20,26 @@ class _AuditLogsContainerPageState extends State<AuditLogsContainerPage> with Si
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabSelection);
+  }
+
+  void _handleTabSelection() {
+    if (!_tabController.indexIsChanging) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final int selectedIndex = _tabController.index;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: PreferredSize(
@@ -51,27 +61,83 @@ class _AuditLogsContainerPageState extends State<AuditLogsContainerPage> with Si
                     ),
                   ),
                   const SizedBox(width: 32),
-                  Expanded(
+                  Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(3),
                     child: TabBar(
                       controller: _tabController,
                       isScrollable: true,
                       tabAlignment: TabAlignment.start,
-                      indicatorColor: AppTheme.primaryColor,
-                      indicatorSize: TabBarIndicatorSize.label,
+                      indicator: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(7),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      indicatorSize: TabBarIndicatorSize.tab,
                       labelColor: AppTheme.primaryColor,
                       unselectedLabelColor: AppTheme.textSecondary,
-                      labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),
-                      unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+                      labelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                       dividerColor: Colors.transparent,
-                      tabs: const [
-                        Tab(text: 'Admin Activity'),
-                        Tab(text: 'Sales Activity'),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      tabs: [
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.point_of_sale_rounded,
+                                size: 15,
+                                color: selectedIndex == 0
+                                    ? AppTheme.primaryColor
+                                    : AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Sales Activity'),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.admin_panel_settings_rounded,
+                                size: 15,
+                                color: selectedIndex == 1
+                                    ? AppTheme.primaryColor
+                                    : AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Admin Activity'),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -79,8 +145,8 @@ class _AuditLogsContainerPageState extends State<AuditLogsContainerPage> with Si
       body: TabBarView(
         controller: _tabController,
         children: [
-          const AdminAuditLogsPage(roleFilter: 'admin'),
           const AdminAuditLogsPage(roleFilter: 'sales'),
+          const AdminAuditLogsPage(roleFilter: 'admin'),
         ],
       ),
     );

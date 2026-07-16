@@ -3300,6 +3300,74 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                 _buildPopupDetail('Exact Timestamp', timestamp),
                 if (details.toString().isNotEmpty)
                   _buildPopupDetail('Summary', details.toString()),
+                () {
+                  final changes = props['changes'];
+                  if (changes != null && changes is Map) {
+                    final before = changes['before'] as Map?;
+                    final after = changes['after'] as Map?;
+                    if (before != null && after != null) {
+                      final technicalKeys = {'updatedAt', 'createdAt', '__v', '_id', 'id', 'password', 'fcmToken', 'notesHistory', 'adminId', 'adminName'};
+                      final List<Widget> items = [];
+                      after.forEach((key, valAfter) {
+                        if (technicalKeys.contains(key)) return;
+                        final valBefore = before[key];
+                        if (valBefore?.toString() != valAfter?.toString()) {
+                          final friendlyKey = key.replaceAll(RegExp(r'(?=[A-Z])'), ' ').trim();
+                          final capKey = friendlyKey.isNotEmpty
+                              ? friendlyKey[0].toUpperCase() + friendlyKey.substring(1)
+                              : key;
+                          String beforeStr = valBefore?.toString() ?? '(Empty)';
+                          String afterStr = valAfter?.toString() ?? '(Empty)';
+                          if (key == 'assignedAgent') {
+                            beforeStr = before['assignedAgentName']?.toString() ?? beforeStr;
+                            afterStr = after['assignedAgentName']?.toString() ?? afterStr;
+                          }
+                          items.add(
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: GoogleFonts.outfit(fontSize: 12.5, color: AppTheme.textPrimary),
+                                  children: [
+                                    TextSpan(text: '$capKey: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    TextSpan(
+                                      text: beforeStr,
+                                      style: TextStyle(color: Colors.red.shade700, decoration: TextDecoration.lineThrough),
+                                    ),
+                                    const TextSpan(text: ' ➔ '),
+                                    TextSpan(
+                                      text: afterStr,
+                                      style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                      });
+                      if (items.isNotEmpty) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Divider(height: 24),
+                            Text(
+                              'Modifications Made',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...items,
+                          ],
+                        );
+                      }
+                    }
+                  }
+                  return const SizedBox.shrink();
+                }(),
                 const Divider(height: 24),
                 Text(
                   'Technical Data',

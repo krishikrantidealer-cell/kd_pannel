@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'dealers_event.dart';
-import 'dealers_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
@@ -17,6 +17,98 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<DeleteDealerEvent>(_onDeleteDealer);
     on<UpdateDealerDetailsEvent>(_onUpdateDealerDetails);
     on<ResetDealersEvent>(_onResetDealers);
+    on<FetchDealerDetailsEvent>(_onFetchDealerDetails);
+    on<FetchDealerOrdersEvent>(_onFetchDealerOrders);
+    on<FetchDealerEventsEvent>(_onFetchDealerEvents);
+  }
+
+  Future<void> _onFetchDealerDetails(
+    FetchDealerDetailsEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingProfile: true));
+    try {
+      final res = await ApiClient().get('/users/${event.userId}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['user'] != null) {
+          emit(state.copyWith(
+            isLoadingProfile: false,
+            currentDealerDetails: Map<String, dynamic>.from(data['user']),
+          ));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load dealer details');
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingProfile: false,
+        errorMessage: 'Error loading dealer: ${e.toString()}',
+      ));
+    }
+  }
+
+  Future<void> _onFetchDealerOrders(
+    FetchDealerOrdersEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingOrders: true));
+    try {
+      final res = await ApiClient().get(
+        '/orders/admin/all?userId=${event.userId}&user=${event.userId}',
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final List rawOrders = data['orders'] ?? [];
+          final filtered = rawOrders
+              .map((o) => Map<String, dynamic>.from(o))
+              .where(
+                (o) =>
+                    (o['user'] is Map && o['user']['_id'] == event.userId) ||
+                    o['user'] == event.userId,
+              )
+              .toList();
+
+          emit(state.copyWith(
+            isLoadingOrders: false,
+            currentDealerOrders: filtered,
+          ));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load orders');
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingOrders: false,
+        errorMessage: 'Error loading orders: ${e.toString()}',
+      ));
+    }
+  }
+
+  Future<void> _onFetchDealerEvents(
+    FetchDealerEventsEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingEvents: true));
+    try {
+      final events = await AnalyticsService().fetchEvents(
+        userEmail: event.identifier,
+      );
+      emit(state.copyWith(
+        isLoadingEvents: false,
+        currentDealerEvents: events,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingEvents: false,
+        errorMessage: 'Error loading events: ${e.toString()}',
+      ));
+    }
   }
 
   void _onResetDealers(ResetDealersEvent event, Emitter<DealersState> emit) {
@@ -142,8 +234,8 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               actionSuccessMessage: 'Agent assigned successfully',
             ),
           );
-          // Refresh list
-          add(const FetchDealersDataEvent(forceRefresh: true));
+          // Refresh only this dealer
+          add(FetchDealerDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to assign agent');
         }
@@ -320,7 +412,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               actionSuccessMessage: msg,
             ),
           );
-          add(const FetchDealersDataEvent(forceRefresh: true));
+          add(FetchDealerDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to update block status');
         }
@@ -482,7 +574,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               actionSuccessMessage: 'Dealer updated successfully',
             ),
           );
-          add(const FetchDealersDataEvent(forceRefresh: true));
+          add(FetchDealerDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to update dealer');
         }

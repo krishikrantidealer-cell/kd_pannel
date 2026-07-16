@@ -20,6 +20,12 @@ class LeadsState extends Equatable {
   final String? errorMessage;
   final String? actionSuccessMessage;
 
+  // Profile-specific states
+  final Map<String, dynamic>? currentLeadDetails;
+  final List<Map<String, dynamic>> currentLeadEvents;
+  final bool isLoadingProfile;
+  final bool isLoadingEvents;
+
   const LeadsState({
     this.status = LeadsStatus.initial,
     this.allRawUsers = const [],
@@ -32,6 +38,10 @@ class LeadsState extends Equatable {
     this.pageSize = 10,
     this.errorMessage,
     this.actionSuccessMessage,
+    this.currentLeadDetails,
+    this.currentLeadEvents = const [],
+    this.isLoadingProfile = false,
+    this.isLoadingEvents = false,
   });
 
   LeadsState copyWith({
@@ -46,6 +56,10 @@ class LeadsState extends Equatable {
     int? pageSize,
     String? errorMessage,
     String? actionSuccessMessage,
+    Map<String, dynamic>? currentLeadDetails,
+    List<Map<String, dynamic>>? currentLeadEvents,
+    bool? isLoadingProfile,
+    bool? isLoadingEvents,
   }) {
     return LeadsState(
       status: status ?? this.status,
@@ -59,6 +73,10 @@ class LeadsState extends Equatable {
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage, // Reset by default when copyWith is called unless explicitly set
       actionSuccessMessage: actionSuccessMessage, // Reset by default when copyWith is called unless explicitly set
+      currentLeadDetails: currentLeadDetails ?? this.currentLeadDetails,
+      currentLeadEvents: currentLeadEvents ?? this.currentLeadEvents,
+      isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
+      isLoadingEvents: isLoadingEvents ?? this.isLoadingEvents,
     );
   }
 
@@ -130,5 +148,9 @@ class LeadsState extends Equatable {
         pageSize,
         errorMessage,
         actionSuccessMessage,
+        currentLeadDetails,
+        currentLeadEvents,
+        isLoadingProfile,
+        isLoadingEvents,
       ];
 }

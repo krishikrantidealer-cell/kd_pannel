@@ -32,18 +32,20 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
+
     // Listen for real-time audit log creations
     _auditSubscription = WebSocketService().auditLogUpdates.listen((log) {
       if (mounted) {
         context.read<AuditLogsBloc>().add(NewAuditLogReceived(log));
       }
     });
-    
+
     // Ensure logs are loaded when page is mounted
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<AuditLogsBloc>().add(FetchAuditLogsInitial(role: widget.roleFilter, forceRefresh: true));
+        context.read<AuditLogsBloc>().add(
+          FetchAuditLogsInitial(role: widget.roleFilter, forceRefresh: true),
+        );
       }
     });
   }
@@ -120,7 +122,10 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         listener: (context, state) {
           if (state.errorMessage != null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.errorMessage!), backgroundColor: AppTheme.error),
+              SnackBar(
+                content: Text(state.errorMessage!),
+                backgroundColor: AppTheme.error,
+              ),
             );
             context.read<AuditLogsBloc>().add(ClearAuditLogsMessage());
           }
@@ -137,9 +142,7 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 const SizedBox(height: 12),
                 _buildActionAndModuleChips(state),
                 const SizedBox(height: 16),
-                Expanded(
-                  child: _buildLogsList(context, state, state.logs),
-                ),
+                Expanded(child: _buildLogsList(context, state, state.logs)),
               ],
             ),
           );
@@ -158,7 +161,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
             Row(
               children: [
                 Text(
-                  widget.roleFilter == 'sales' ? 'Sales Audit Trail' : 'Admin Audit Trail',
+                  widget.roleFilter == 'sales'
+                      ? 'Sales Audit Trail'
+                      : 'Admin Audit Trail',
                   style: GoogleFonts.outfit(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -181,9 +186,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
               ],
             ),
             Text(
-              widget.roleFilter == 'sales' 
-                ? 'Security ledger of all sales agent data modifications.'
-                : 'Security ledger of all administrative data modifications.',
+              widget.roleFilter == 'sales'
+                  ? 'Security ledger of all sales agent data modifications.'
+                  : 'Security ledger of all administrative data modifications.',
               style: GoogleFonts.outfit(
                 fontSize: 13,
                 color: AppTheme.textSecondary,
@@ -194,16 +199,26 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         ),
         Row(
           children: [
-            if (state.status == AuditLogsStatus.loadingMore || state.status == AuditLogsStatus.loading)
+            if (state.status == AuditLogsStatus.loadingMore ||
+                state.status == AuditLogsStatus.loading)
               const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.primaryColor,
+                ),
               ),
             const SizedBox(width: 12),
             IconButton(
-              onPressed: () => context.read<AuditLogsBloc>().add(const FetchAuditLogsInitial(forceRefresh: true)),
-              icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryColor, size: 22),
+              onPressed: () => context.read<AuditLogsBloc>().add(
+                const FetchAuditLogsInitial(forceRefresh: true),
+              ),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: AppTheme.primaryColor,
+                size: 22,
+              ),
               tooltip: 'Refresh Ledger',
               style: IconButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor.withOpacity(0.05),
@@ -216,7 +231,11 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
     );
   }
 
-  Widget _buildSearchAndFilters(BuildContext context, AuditLogsState state, bool isDesktop) {
+  Widget _buildSearchAndFilters(
+    BuildContext context,
+    AuditLogsState state,
+    bool isDesktop,
+  ) {
     final searchBar = Container(
       height: 44,
       decoration: BoxDecoration(
@@ -234,17 +253,27 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 18),
+          const Icon(
+            Icons.search_rounded,
+            color: AppTheme.textSecondary,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
               decoration: InputDecoration(
                 hintText: 'Search by admin, action, target or changes...',
                 border: InputBorder.none,
-                hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+                hintStyle: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                ),
                 isDense: true,
               ),
             ),
@@ -255,7 +284,11 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 _searchController.clear();
                 context.read<AuditLogsBloc>().add(const SearchAuditLogs(''));
               },
-              child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textSecondary),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
             ),
         ],
       ),
@@ -277,10 +310,7 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         children: [
           searchBar,
           const SizedBox(height: 12),
-          SizedBox(
-            height: 44,
-            child: dateRangeButton,
-          ),
+          SizedBox(height: 44, child: dateRangeButton),
         ],
       );
     }
@@ -295,10 +325,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: hasRange ? AppTheme.primaryColor.withValues(alpha: 0.05) : Colors.white,
+        color: hasRange
+            ? AppTheme.primaryColor.withValues(alpha: 0.05)
+            : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: hasRange ? AppTheme.primaryColor : AppTheme.borderColor.withValues(alpha: 0.8),
+          color: hasRange
+              ? AppTheme.primaryColor
+              : AppTheme.borderColor.withValues(alpha: 0.8),
         ),
       ),
       child: Material(
@@ -324,9 +358,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
               },
             );
             if (picked != null) {
-              context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                selectedDateRange: () => picked,
-              ));
+              context.read<AuditLogsBloc>().add(
+                ChangeAuditLogsFilters(selectedDateRange: () => picked),
+              );
             }
           },
           borderRadius: BorderRadius.circular(10),
@@ -339,7 +373,9 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 Icon(
                   Icons.calendar_month_rounded,
                   size: 18,
-                  color: hasRange ? AppTheme.primaryColor : AppTheme.textSecondary,
+                  color: hasRange
+                      ? AppTheme.primaryColor
+                      : AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -347,16 +383,18 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: hasRange ? AppTheme.primaryColor : AppTheme.textPrimary,
+                    color: hasRange
+                        ? AppTheme.primaryColor
+                        : AppTheme.textPrimary,
                   ),
                 ),
                 if (hasRange) ...[
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () {
-                      context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                        selectedDateRange: () => null,
-                      ));
+                      context.read<AuditLogsBloc>().add(
+                        ChangeAuditLogsFilters(selectedDateRange: () => null),
+                      );
                     },
                     child: const Icon(
                       Icons.cancel_rounded,
@@ -377,209 +415,239 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
     final actions = ['All', 'Create', 'Update', 'Delete', 'Security'];
     final modules = ['All', 'Order', 'Product', 'User', 'KYC'];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return BlocBuilder<LeadsBloc, LeadsState>(
+      builder: (context, leadsState) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          child: Row(
+            children: [
+              if (widget.roleFilter == 'sales' &&
+                  leadsState.salesAgents.isNotEmpty) ...[
+                _buildDropdownFilter(
+                  label: 'Agent',
+                  selectedValue: state.agentEmail,
+                  displayValue: state.agentEmail == 'All'
+                      ? 'All Agents'
+                      : (() {
+                          final agent = leadsState.salesAgents.firstWhere(
+                            (a) => a['email'] == state.agentEmail,
+                            orElse: () => {},
+                          );
+                          final name =
+                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                  .trim();
+                          return name.isNotEmpty ? name : state.agentEmail;
+                        })(),
+                  options: [
+                    {'email': 'All', 'name': 'All Agents'},
+                    ...leadsState.salesAgents.map((agent) {
+                      final email = agent['email'] ?? '';
+                      final name =
+                          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                              .trim();
+                      return {
+                        'email': email,
+                        'name': name.isNotEmpty ? name : email
+                      };
+                    }),
+                  ],
+                  optionLabel: (opt) => opt['name']!,
+                  optionValue: (opt) => opt['email']!,
+                  icon: Icons.person_rounded,
+                  onSelected: (newValue) {
+                    context.read<AuditLogsBloc>().add(
+                          ChangeAuditLogsFilters(agentEmail: newValue),
+                        );
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+              _buildDropdownFilter(
+                label: 'Action',
+                selectedValue: state.actionFilter,
+                displayValue: state.actionFilter == 'All'
+                    ? 'All Actions'
+                    : state.actionFilter,
+                options: actions,
+                optionLabel: (opt) => opt == 'All' ? 'All Actions' : opt,
+                optionValue: (opt) => opt,
+                icon: Icons.bolt_rounded,
+                onSelected: (newValue) {
+                  context.read<AuditLogsBloc>().add(
+                        ChangeAuditLogsFilters(actionFilter: newValue),
+                      );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildDropdownFilter(
+                label: 'Module',
+                selectedValue: state.moduleFilter,
+                displayValue: state.moduleFilter == 'All'
+                    ? 'All Modules'
+                    : state.moduleFilter,
+                options: modules,
+                optionLabel: (opt) => opt == 'All' ? 'All Modules' : opt,
+                optionValue: (opt) => opt,
+                icon: Icons.grid_view_rounded,
+                onSelected: (newValue) {
+                  context.read<AuditLogsBloc>().add(
+                        ChangeAuditLogsFilters(moduleFilter: newValue),
+                      );
+                },
+              ),
+              if (state.actionFilter != 'All' ||
+                  state.moduleFilter != 'All' ||
+                  state.agentEmail != 'All' ||
+                  state.selectedDateRange != null ||
+                  state.searchQuery.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: () {
+                    _searchController.clear();
+                    context.read<AuditLogsBloc>().add(
+                          const ChangeAuditLogsFilters(
+                            actionFilter: 'All',
+                            moduleFilter: 'All',
+                            agentEmail: 'All',
+                            selectedDateRange: null,
+                            searchQuery: '',
+                          ),
+                        );
+                  },
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    size: 14,
+                    color: AppTheme.error,
+                  ),
+                  label: Text(
+                    'Reset All Filters',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.error,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    backgroundColor: AppTheme.error.withValues(alpha: 0.05),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 32),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownFilter<T>({
+    required String label,
+    required String selectedValue,
+    required String displayValue,
+    required List<T> options,
+    required String Function(T) optionLabel,
+    required String Function(T) optionValue,
+    required IconData icon,
+    required void Function(String) onSelected,
+  }) {
+    final bool isActive = selectedValue != 'All';
+    return PopupMenuButton<String>(
+      onSelected: onSelected,
+      tooltip: 'Filter by $label',
+      offset: const Offset(0, 42),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
-      child: BlocBuilder<LeadsBloc, LeadsState>(
-        builder: (context, leadsState) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
+      elevation: 4,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      color: Colors.white,
+      itemBuilder: (context) {
+        return options.map((option) {
+          final val = optionValue(option);
+          final lbl = optionLabel(option);
+          final bool isCurrent = val == selectedValue;
+          return PopupMenuItem<String>(
+            value: val,
+            height: 38,
             child: Row(
               children: [
-                _buildLabel('Action'),
-                const SizedBox(width: 10),
-                ...actions.map((f) => _buildFilterChip(
-                  label: f,
-                  isSelected: state.actionFilter == f,
-                  onSelected: (selected) {
-                    context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                      actionFilter: f,
-                    ));
-                  },
-                )),
-                const SizedBox(width: 16),
-                Container(width: 1, height: 24, color: AppTheme.borderColor.withValues(alpha: 0.5)),
-                const SizedBox(width: 16),
-                _buildLabel('Module'),
-                const SizedBox(width: 10),
-                ...modules.map((f) => _buildFilterChip(
-                  label: f,
-                  isSelected: state.moduleFilter == f,
-                  onSelected: (selected) {
-                    context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                      moduleFilter: f,
-                    ));
-                  },
-                )),
-                if (widget.roleFilter == 'sales' && leadsState.salesAgents.isNotEmpty) ...[
+                if (isCurrent)
+                  const Icon(Icons.check_rounded, size: 16, color: AppTheme.primaryColor)
+                else
                   const SizedBox(width: 16),
-                  Container(width: 1, height: 24, color: AppTheme.borderColor.withValues(alpha: 0.5)),
-                  const SizedBox(width: 16),
-                  _buildLabel('Agent'),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 250,
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.3)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: state.agentEmail,
-                          icon: const Icon(Icons.unfold_more_rounded, size: 16, color: AppTheme.textSecondary),
-                          isExpanded: true,
-                          elevation: 2,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                          dropdownColor: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          onChanged: (String? newValue) {
-                            if (newValue != null) {
-                              context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                                agentEmail: newValue,
-                              ));
-                            }
-                          },
-                          items: [
-                            const DropdownMenuItem(
-                              value: 'All',
-                              child: Text('All Registered Agents'),
-                            ),
-                            ...leadsState.salesAgents.map((agent) {
-                              final email = agent['email'] ?? '';
-                              final name = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-                              final displayName = name.isNotEmpty ? name : email;
-                              return DropdownMenuItem(
-                                value: email,
-                                child: Text(displayName),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
+                const SizedBox(width: 8),
+                Text(
+                  lbl,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                    color: isCurrent ? AppTheme.primaryColor : AppTheme.textPrimary,
                   ),
-                  if (state.agentEmail != 'All') ...[
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        context.read<AuditLogsBloc>().add(const ChangeAuditLogsFilters(
-                          agentEmail: 'All',
-                        ));
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.error.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.close_rounded, size: 14, color: AppTheme.error),
-                      ),
-                    ),
-                  ],
-                ],
-                if (state.actionFilter != 'All' || state.moduleFilter != 'All' || state.agentEmail != 'All' || state.selectedDateRange != null || state.searchQuery.isNotEmpty) ...[
-                  const SizedBox(width: 16),
-                  TextButton.icon(
-                    onPressed: () {
-                      _searchController.clear();
-                      context.read<AuditLogsBloc>().add(ChangeAuditLogsFilters(
-                        actionFilter: 'All',
-                        moduleFilter: 'All',
-                        agentEmail: 'All',
-                        selectedDateRange: () => null,
-                        searchQuery: '',
-                      ));
-                    },
-                    icon: const Icon(Icons.refresh_rounded, size: 14, color: AppTheme.error),
-                    label: Text(
-                      'Reset All',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.error,
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      backgroundColor: AppTheme.error.withValues(alpha: 0.05),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 32),
+                ),
               ],
             ),
           );
-        },
-      ),
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: GoogleFonts.outfit(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: AppTheme.textSecondary,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip({
-    required String label,
-    required bool isSelected,
-    required Function(bool) onSelected,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: onSelected,
-        selectedColor: AppTheme.primaryColor,
-        backgroundColor: const Color(0xFFF8FAFC),
-        labelStyle: GoogleFonts.outfit(
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-          color: isSelected ? Colors.white : AppTheme.textSecondary,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(
-            color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor.withValues(alpha: 0.5),
-            width: 1,
+        }).toList();
+      },
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.primaryColor.withValues(alpha: 0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
+            width: isActive ? 1.5 : 1,
           ),
         ),
-        showCheckmark: false,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isActive ? AppTheme.primaryColor : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$label: ',
+              style: GoogleFonts.outfit(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            Text(
+              displayValue,
+              style: GoogleFonts.outfit(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: isActive ? AppTheme.primaryColor : AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 16,
+              color: isActive ? AppTheme.primaryColor : AppTheme.textSecondary.withValues(alpha: 0.8),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildLogsList(BuildContext context, AuditLogsState state, List<Map<String, dynamic>> filteredLogs) {
+  Widget _buildLogsList(
+    BuildContext context,
+    AuditLogsState state,
+    List<Map<String, dynamic>> filteredLogs,
+  ) {
     if (state.status == AuditLogsStatus.loading && state.logs.isEmpty) {
       return _buildShimmerLogs();
     }
@@ -589,9 +657,19 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history_toggle_off_rounded, size: 48, color: AppTheme.textSecondary.withOpacity(0.3)),
+            Icon(
+              Icons.history_toggle_off_rounded,
+              size: 48,
+              color: AppTheme.textSecondary.withOpacity(0.3),
+            ),
             const SizedBox(height: 16),
-            Text('No audit entries found.', style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+            Text(
+              'No audit entries found.',
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       );
@@ -602,16 +680,26 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.filter_list_off_rounded, size: 48, color: AppTheme.textSecondary.withOpacity(0.2)),
+            Icon(
+              Icons.filter_list_off_rounded,
+              size: 48,
+              color: AppTheme.textSecondary.withOpacity(0.2),
+            ),
             const SizedBox(height: 16),
             Text(
               'No ${widget.roleFilter ?? "matching"} activity logs found.',
-              style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Try switching tabs or adjusting your search.',
-              style: GoogleFonts.outfit(color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 12),
+              style: GoogleFonts.outfit(
+                color: AppTheme.textSecondary.withOpacity(0.7),
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -639,30 +727,35 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: state.status == AuditLogsStatus.loadingMore
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: () => context.read<AuditLogsBloc>().add(FetchAuditLogsMore()),
-                    icon: const Icon(Icons.arrow_downward_rounded, size: 14),
-                    label: Text(
-                      'Load More History',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () => context.read<AuditLogsBloc>().add(
+                        FetchAuditLogsMore(),
+                      ),
+                      icon: const Icon(Icons.arrow_downward_rounded, size: 14),
+                      label: Text(
+                        'Load More History',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                        side: const BorderSide(color: AppTheme.primaryColor),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                       ),
                     ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primaryColor,
-                      side: const BorderSide(color: AppTheme.primaryColor),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
             ),
           );
         }
@@ -696,15 +789,21 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(child: Divider(color: AppTheme.borderColor.withValues(alpha: 0.3))),
+                  Expanded(
+                    child: Divider(
+                      color: AppTheme.borderColor.withValues(alpha: 0.3),
+                    ),
+                  ),
                 ],
               ),
             ),
-            ...logsInGroup.map((log) => _AuditLogRow(
-              log: log, 
-              onTap: () => _showLogDetails(context, log),
-              timeAgo: _formatTimeAgo(log['timestamp'] ?? ''),
-            )),
+            ...logsInGroup.map(
+              (log) => _AuditLogRow(
+                log: log,
+                onTap: () => _showLogDetails(context, log),
+                timeAgo: _formatTimeAgo(log['timestamp'] ?? ''),
+              ),
+            ),
           ],
         );
       },
@@ -738,7 +837,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
               Shimmer.fromColors(
                 baseColor: Colors.grey[200]!,
                 highlightColor: Colors.white,
-                child: Container(width: 32, height: 32, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -749,13 +855,27 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                     Shimmer.fromColors(
                       baseColor: Colors.grey[200]!,
                       highlightColor: Colors.white,
-                      child: Container(width: 140, height: 14, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                      child: Container(
+                        width: 140,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Shimmer.fromColors(
                       baseColor: Colors.grey[200]!,
                       highlightColor: Colors.white,
-                      child: Container(width: 100, height: 10, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                      child: Container(
+                        width: 100,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -765,7 +885,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 child: Shimmer.fromColors(
                   baseColor: Colors.grey[200]!,
                   highlightColor: Colors.white,
-                  child: Container(width: 120, height: 12, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                  child: Container(
+                    width: 120,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
@@ -773,7 +900,14 @@ class _AdminAuditLogsPageState extends State<AdminAuditLogsPage> {
                 child: Shimmer.fromColors(
                   baseColor: Colors.grey[200]!,
                   highlightColor: Colors.white,
-                  child: Container(width: 60, height: 10, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                  child: Container(
+                    width: 60,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -789,15 +923,19 @@ class _AuditLogRow extends StatelessWidget {
   final VoidCallback onTap;
   final String timeAgo;
 
-  const _AuditLogRow({required this.log, required this.onTap, required this.timeAgo});
+  const _AuditLogRow({
+    required this.log,
+    required this.onTap,
+    required this.timeAgo,
+  });
 
   @override
   Widget build(BuildContext context) {
     final String action = (log['action'] ?? 'UNKNOWN').toString();
     final String targetModel = (log['targetModel'] ?? 'System').toString();
-    final String email = (log['adminEmail'] ?? 'System').toString();
+    final String performerName = (log['adminName'] ?? log['adminEmail'] ?? 'System').toString();
     final String? role = log['adminRole'] ?? log['role'];
-    
+
     final Color color = _getActionColor(action);
     final IconData icon = _getActionIcon(action);
 
@@ -818,7 +956,8 @@ class _AuditLogRow extends StatelessWidget {
         String fullName = '';
         if (name != null && name.toString().isNotEmpty) {
           fullName = name.toString();
-        } else if ((firstName != null && firstName.toString().isNotEmpty) || (lastName != null && lastName.toString().isNotEmpty)) {
+        } else if ((firstName != null && firstName.toString().isNotEmpty) ||
+            (lastName != null && lastName.toString().isNotEmpty)) {
           fullName = '${firstName ?? ''} ${lastName ?? ''}'.trim();
         }
 
@@ -835,7 +974,9 @@ class _AuditLogRow extends StatelessWidget {
         }
       }
     }
-    final String displayTarget = targetIdentifier.isNotEmpty ? '$targetModel: $targetIdentifier' : targetModel;
+    final String displayTarget = targetIdentifier.isNotEmpty
+        ? '$targetModel: $targetIdentifier'
+        : targetModel;
 
     return IntrinsicHeight(
       child: Row(
@@ -851,10 +992,7 @@ class _AuditLogRow extends StatelessWidget {
                 Positioned(
                   top: 0,
                   bottom: 0,
-                  child: Container(
-                    width: 2,
-                    color: Colors.grey.shade200,
-                  ),
+                  child: Container(width: 2, color: const Color(0xFFE2E8F0)),
                 ),
                 // Glowing Node Circle
                 Positioned(
@@ -889,7 +1027,7 @@ class _AuditLogRow extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Log Card (Right side)
           Expanded(
             child: Padding(
@@ -898,10 +1036,10 @@ class _AuditLogRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade100),
+                  border: Border.all(color: const Color(0xFFE2E8F0).withValues(alpha: 0.7)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
+                      color: Colors.black.withValues(alpha: 0.015),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -922,18 +1060,24 @@ class _AuditLogRow extends StatelessWidget {
                             child: Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(8),
+                                  width: 36,
+                                  height: 36,
                                   decoration: BoxDecoration(
                                     color: color.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: color.withValues(alpha: 0.15),
+                                      width: 1.5,
+                                    ),
                                   ),
-                                  child: Icon(icon, color: color, size: 18),
+                                  child: Icon(icon, color: color, size: 16),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
                                         _formatActionText(action),
@@ -941,16 +1085,21 @@ class _AuditLogRow extends StatelessWidget {
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
                                           color: AppTheme.textPrimary,
+                                          height: 1.1,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
                                       Row(
                                         children: [
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: const Color(0xFFF1F5F9),
-                                              borderRadius: BorderRadius.circular(4),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                             ),
                                             child: Text(
                                               displayTarget.toUpperCase(),
@@ -959,6 +1108,7 @@ class _AuditLogRow extends StatelessWidget {
                                                 fontWeight: FontWeight.w800,
                                                 color: AppTheme.textSecondary,
                                                 letterSpacing: 0.5,
+                                                height: 1.1,
                                               ),
                                             ),
                                           ),
@@ -970,8 +1120,8 @@ class _AuditLogRow extends StatelessWidget {
                               ],
                             ),
                           ),
-                          
-                          // Performed By Email
+
+                          // Performed By (Name + Role)
                           Expanded(
                             flex: 2,
                             child: Column(
@@ -979,7 +1129,7 @@ class _AuditLogRow extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  email,
+                                  performerName,
                                   style: GoogleFonts.outfit(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
@@ -990,31 +1140,70 @@ class _AuditLogRow extends StatelessWidget {
                                 ),
                                 if (role != null) ...[
                                   const SizedBox(height: 2),
-                                  Text(
-                                    role.toUpperCase(),
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      color: role.toLowerCase() == 'admin' ? AppTheme.primaryColor : Colors.orange,
-                                      letterSpacing: 0.5,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: (role.toLowerCase() == 'admin'
+                                              ? AppTheme.primaryColor
+                                              : Colors.orange)
+                                          .withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: (role.toLowerCase() == 'admin'
+                                                ? AppTheme.primaryColor
+                                                : Colors.orange)
+                                            .withValues(alpha: 0.2),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      role.toUpperCase(),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
+                                        color: role.toLowerCase() == 'admin'
+                                            ? AppTheme.primaryColor
+                                            : Colors.orange,
+                                        letterSpacing: 0.5,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ],
                             ),
                           ),
-                          
+
                           // Time
-                          Text(
-                            timeAgo,
-                            style: GoogleFonts.outfit(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 12,
+                                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                timeAgo,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(width: 8),
-                          Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1029,17 +1218,23 @@ class _AuditLogRow extends StatelessWidget {
   }
 
   String _formatActionText(String action) {
-    return action.split('_').map((word) {
-      if (word.isEmpty) return "";
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return action
+        .split('_')
+        .map((word) {
+          if (word.isEmpty) return "";
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   IconData _getActionIcon(String action) {
     action = action.toLowerCase();
-    if (action.contains('delete') || action.contains('remove')) return Icons.delete_forever_rounded;
-    if (action.contains('create') || action.contains('add')) return Icons.add_task_rounded;
-    if (action.contains('update') || action.contains('edit')) return Icons.app_registration_rounded;
+    if (action.contains('delete') || action.contains('remove'))
+      return Icons.delete_forever_rounded;
+    if (action.contains('create') || action.contains('add'))
+      return Icons.add_task_rounded;
+    if (action.contains('update') || action.contains('edit'))
+      return Icons.app_registration_rounded;
     if (action.contains('login')) return Icons.login_rounded;
     if (action.contains('security')) return Icons.security_rounded;
     return Icons.radio_button_checked_rounded;
@@ -1047,9 +1242,12 @@ class _AuditLogRow extends StatelessWidget {
 
   Color _getActionColor(String action) {
     action = action.toLowerCase();
-    if (action.contains('delete') || action.contains('remove')) return AppTheme.error;
-    if (action.contains('create') || action.contains('add')) return AppTheme.success;
-    if (action.contains('update') || action.contains('edit')) return AppTheme.warning;
+    if (action.contains('delete') || action.contains('remove'))
+      return AppTheme.error;
+    if (action.contains('create') || action.contains('add'))
+      return AppTheme.success;
+    if (action.contains('update') || action.contains('edit'))
+      return AppTheme.warning;
     return AppTheme.info;
   }
 }
@@ -1062,7 +1260,7 @@ class _LogDetailDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final String action = (log['action'] ?? 'UNKNOWN').toString();
     final String target = (log['targetModel'] ?? 'System').toString();
-    final String email = (log['adminEmail'] ?? 'System').toString();
+    final String performerName = (log['adminName'] ?? log['adminEmail'] ?? 'System').toString();
     final String? role = log['adminRole'] ?? log['role'];
     final Color actionColor = _getActionColor(action);
 
@@ -1083,7 +1281,8 @@ class _LogDetailDialog extends StatelessWidget {
         String fullName = '';
         if (name != null && name.toString().isNotEmpty) {
           fullName = name.toString();
-        } else if ((firstName != null && firstName.toString().isNotEmpty) || (lastName != null && lastName.toString().isNotEmpty)) {
+        } else if ((firstName != null && firstName.toString().isNotEmpty) ||
+            (lastName != null && lastName.toString().isNotEmpty)) {
           fullName = '${firstName ?? ''} ${lastName ?? ''}'.trim();
         }
 
@@ -1112,7 +1311,11 @@ class _LogDetailDialog extends StatelessWidget {
         decoration: BoxDecoration(
           color: actionColor.withValues(alpha: 0.04),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(bottom: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5))),
+          border: Border(
+            bottom: BorderSide(
+              color: AppTheme.borderColor.withValues(alpha: 0.5),
+            ),
+          ),
         ),
         child: Column(
           children: [
@@ -1120,8 +1323,15 @@ class _LogDetailDialog extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: actionColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                  child: Icon(_getActionIcon(action), color: actionColor, size: 24),
+                  decoration: BoxDecoration(
+                    color: actionColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _getActionIcon(action),
+                    color: actionColor,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1132,14 +1342,25 @@ class _LogDetailDialog extends StatelessWidget {
                         children: [
                           Text(
                             _formatActionText(action),
-                            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           if (role != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: (role.toLowerCase() == 'admin' ? AppTheme.primaryColor : Colors.orange).withValues(alpha: 0.1),
+                                color:
+                                    (role.toLowerCase() == 'admin'
+                                            ? AppTheme.primaryColor
+                                            : Colors.orange)
+                                        .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -1147,7 +1368,9 @@ class _LogDetailDialog extends StatelessWidget {
                                 style: GoogleFonts.outfit(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
-                                  color: role.toLowerCase() == 'admin' ? AppTheme.primaryColor : Colors.orange,
+                                  color: role.toLowerCase() == 'admin'
+                                      ? AppTheme.primaryColor
+                                      : Colors.orange,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -1156,16 +1379,32 @@ class _LogDetailDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _buildNarrativeSummary(email, action, target, targetIdentifier),
-                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary),
+                        _buildNarrativeSummary(
+                          performerName,
+                          action,
+                          target,
+                          targetIdentifier,
+                        ),
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary, size: 24),
-                  style: IconButton.styleFrom(backgroundColor: Colors.white, elevation: 1),
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: AppTheme.textSecondary,
+                    size: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    elevation: 1,
+                  ),
                 ),
               ],
             ),
@@ -1191,7 +1430,12 @@ class _LogDetailDialog extends StatelessWidget {
     );
   }
 
-  String _buildNarrativeSummary(String email, String action, String target, String targetId) {
+  String _buildNarrativeSummary(
+    String email,
+    String action,
+    String target,
+    String targetId,
+  ) {
     final actionText = _formatActionText(action).toLowerCase();
     final displayTarget = targetId.isNotEmpty ? '$target ($targetId)' : target;
     return '$email $actionText $displayTarget'.trim();
@@ -1233,14 +1477,34 @@ class _LogDetailDialog extends StatelessWidget {
         spacing: 32,
         runSpacing: 20,
         children: [
-          _metaItem('Performed By', log['adminEmail'], Icons.person_rounded),
+          _metaItem('Performed By', log['adminName'] ?? log['adminEmail'] ?? 'System', Icons.person_rounded),
           if (targetIdentifier.isNotEmpty)
-            _metaItem('Affected Entity', targetIdentifier, Icons.adjust_rounded),
-          _metaItem('Resource Type', log['targetModel'], Icons.category_rounded),
+            _metaItem(
+              'Affected Entity',
+              targetIdentifier,
+              Icons.adjust_rounded,
+            ),
+          _metaItem(
+            'Resource Type',
+            log['targetModel'],
+            Icons.category_rounded,
+          ),
           _metaItem('Resource ID', log['targetId'], Icons.fingerprint_rounded),
-          _metaItem('Event Time', _formatDate(log['timestamp'] ?? ''), Icons.access_time_filled_rounded),
-          _metaItem('Network IP', log['ipAddress'] ?? 'System Process', Icons.lan_rounded),
-          _metaItem('User Agent', log['userAgent'] ?? 'N/A', Icons.devices_rounded),
+          _metaItem(
+            'Event Time',
+            _formatDate(log['timestamp'] ?? ''),
+            Icons.access_time_filled_rounded,
+          ),
+          _metaItem(
+            'Network IP',
+            log['ipAddress'] ?? 'System Process',
+            Icons.lan_rounded,
+          ),
+          _metaItem(
+            'User Agent',
+            log['userAgent'] ?? 'N/A',
+            Icons.devices_rounded,
+          ),
         ],
       ),
     );
@@ -1258,14 +1522,22 @@ class _LogDetailDialog extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 label.toUpperCase(),
-                style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.textSecondary),
+                style: GoogleFonts.outfit(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textSecondary,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             value?.toString() ?? '-',
-            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1279,27 +1551,39 @@ class _LogDetailDialog extends StatelessWidget {
     if (changes == null) return const SizedBox.shrink();
 
     final List<Widget> changeWidgets = [];
-    
+
     // CASE 1: Update (Before and After exists)
     if (changes['before'] != null && changes['after'] != null) {
       try {
-        final Map<String, dynamic> before = Map<String, dynamic>.from(changes['before'] as Map);
-        final Map<String, dynamic> after = Map<String, dynamic>.from(changes['after'] as Map);
-        
+        final Map<String, dynamic> before = Map<String, dynamic>.from(
+          changes['before'] as Map,
+        );
+        final Map<String, dynamic> after = Map<String, dynamic>.from(
+          changes['after'] as Map,
+        );
+
         final diff = _computeDiff(before, after);
         if (diff.isNotEmpty) {
           changeWidgets.add(_buildSectionTitle('MODIFICATIONS MADE'));
           changeWidgets.add(_buildDiffTable(diff));
         }
       } catch (_) {}
-    } 
+    }
     // CASE 2: Create or Single State (Only After or Before exists)
     else if (changes['after'] != null || changes['before'] != null) {
-      final Map<String, dynamic> data = Map<String, dynamic>.from((changes['after'] ?? changes['before']) as Map);
+      final Map<String, dynamic> data = Map<String, dynamic>.from(
+        (changes['after'] ?? changes['before']) as Map,
+      );
       final filteredData = _filterTechnicalKeys(data);
-      
+
       if (filteredData.isNotEmpty) {
-        changeWidgets.add(_buildSectionTitle(changes['after'] != null ? 'NEW ENTITY DETAILS' : 'DELETED ENTITY DATA'));
+        changeWidgets.add(
+          _buildSectionTitle(
+            changes['after'] != null
+                ? 'NEW ENTITY DETAILS'
+                : 'DELETED ENTITY DATA',
+          ),
+        );
         changeWidgets.add(_buildFriendlyDataGrid(filteredData));
       }
     }
@@ -1309,15 +1593,29 @@ class _LogDetailDialog extends StatelessWidget {
       changeWidgets.add(_codeBlock(changes, AppTheme.primaryColor));
     }
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: changeWidgets);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: changeWidgets,
+    );
   }
 
   Map<String, dynamic> _filterTechnicalKeys(Map<String, dynamic> data) {
     final Map<String, dynamic> filtered = {};
-    final technicalKeys = {'updatedAt', 'createdAt', '__v', '_id', 'id', 'password', 'salt', 'fcmToken'};
-    
+    final technicalKeys = {
+      'updatedAt',
+      'createdAt',
+      '__v',
+      '_id',
+      'id',
+      'password',
+      'salt',
+      'fcmToken',
+    };
+
     data.forEach((key, value) {
-      if (!technicalKeys.contains(key) && value != null && value.toString().isNotEmpty) {
+      if (!technicalKeys.contains(key) &&
+          value != null &&
+          value.toString().isNotEmpty) {
         filtered[key] = value;
       }
     });
@@ -1336,15 +1634,20 @@ class _LogDetailDialog extends StatelessWidget {
       child: Wrap(
         spacing: 40,
         runSpacing: 20,
-        children: data.entries.map((e) => _friendlyItem(e.key, e.value)).toList(),
+        children: data.entries
+            .map((e) => _friendlyItem(e.key, e.value))
+            .toList(),
       ),
     );
   }
 
   Widget _friendlyItem(String key, dynamic value) {
-    final friendlyKey = key.replaceAll(RegExp(r'(?=[A-Z])'), ' ').trim().toUpperCase();
+    final friendlyKey = key
+        .replaceAll(RegExp(r'(?=[A-Z])'), ' ')
+        .trim()
+        .toUpperCase();
     String displayValue = value.toString();
-    
+
     // Handle nested maps/lists briefly
     if (value is Map || value is List) {
       displayValue = 'Contains multiple items';
@@ -1357,29 +1660,48 @@ class _LogDetailDialog extends StatelessWidget {
         children: [
           Text(
             friendlyKey,
-            style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+            style: GoogleFonts.outfit(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textSecondary.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             displayValue,
-            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Map<String, dynamic> _computeDiff(Map<String, dynamic> before, Map<String, dynamic> after) {
+  Map<String, dynamic> _computeDiff(
+    Map<String, dynamic> before,
+    Map<String, dynamic> after,
+  ) {
     final Map<String, dynamic> diff = {};
     final keys = {...before.keys, ...after.keys};
-    final technicalKeys = {'updatedAt', 'createdAt', '__v', '_id', 'id', 'password', 'fcmToken'};
-    
+    final technicalKeys = {
+      'updatedAt',
+      'createdAt',
+      '__v',
+      '_id',
+      'id',
+      'password',
+      'fcmToken',
+    };
+
     for (final key in keys) {
       if (technicalKeys.contains(key)) continue;
-      
+
       final valBefore = before[key];
       final valAfter = after[key];
-      
+
       if (valBefore.toString() != valAfter.toString()) {
         diff[key] = {'old': valBefore, 'new': valAfter};
       }
@@ -1390,7 +1712,10 @@ class _LogDetailDialog extends StatelessWidget {
   Widget _buildDiffTable(Map<String, dynamic> diff) {
     return Column(
       children: diff.entries.map((entry) {
-        final key = entry.key.replaceAll(RegExp(r'(?=[A-Z])'), ' ').trim().toUpperCase();
+        final key = entry.key
+            .replaceAll(RegExp(r'(?=[A-Z])'), ' ')
+            .trim()
+            .toUpperCase();
         final oldValue = entry.value['old'];
         final newValue = entry.value['new'];
 
@@ -1413,15 +1738,26 @@ class _LogDetailDialog extends StatelessWidget {
             children: [
               // Diff Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade100),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.edit_note_rounded, size: 16, color: AppTheme.textSecondary),
+                    const Icon(
+                      Icons.edit_note_rounded,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       key,
@@ -1435,7 +1771,7 @@ class _LogDetailDialog extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Diff Body (Before / After cards)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -1458,7 +1794,10 @@ class _LogDetailDialog extends StatelessWidget {
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade100,
                                       borderRadius: BorderRadius.circular(4),
@@ -1490,7 +1829,7 @@ class _LogDetailDialog extends StatelessWidget {
                           ),
                         ),
                       ),
-                      
+
                       // Connector Arrow
                       Container(
                         width: 40,
@@ -1501,7 +1840,7 @@ class _LogDetailDialog extends StatelessWidget {
                           size: 20,
                         ),
                       ),
-                      
+
                       // New Value Card
                       Expanded(
                         child: Container(
@@ -1517,7 +1856,10 @@ class _LogDetailDialog extends StatelessWidget {
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.green.shade100,
                                       borderRadius: BorderRadius.circular(4),
@@ -1584,23 +1926,33 @@ class _LogDetailDialog extends StatelessWidget {
       ),
       child: Text(
         content,
-        style: GoogleFonts.firaCode(fontSize: 10.5, color: const Color(0xFFE2E8F0), height: 1.4),
+        style: GoogleFonts.firaCode(
+          fontSize: 10.5,
+          color: const Color(0xFFE2E8F0),
+          height: 1.4,
+        ),
       ),
     );
   }
 
   String _formatActionText(String action) {
-    return action.split('_').map((word) {
-      if (word.isEmpty) return "";
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return action
+        .split('_')
+        .map((word) {
+          if (word.isEmpty) return "";
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   IconData _getActionIcon(String action) {
     action = action.toLowerCase();
-    if (action.contains('delete') || action.contains('remove')) return Icons.delete_forever_rounded;
-    if (action.contains('create') || action.contains('add')) return Icons.add_task_rounded;
-    if (action.contains('update') || action.contains('edit')) return Icons.app_registration_rounded;
+    if (action.contains('delete') || action.contains('remove'))
+      return Icons.delete_forever_rounded;
+    if (action.contains('create') || action.contains('add'))
+      return Icons.add_task_rounded;
+    if (action.contains('update') || action.contains('edit'))
+      return Icons.app_registration_rounded;
     if (action.contains('login')) return Icons.login_rounded;
     if (action.contains('security')) return Icons.security_rounded;
     return Icons.radio_button_checked_rounded;
@@ -1608,9 +1960,12 @@ class _LogDetailDialog extends StatelessWidget {
 
   Color _getActionColor(String action) {
     action = action.toLowerCase();
-    if (action.contains('delete') || action.contains('remove')) return AppTheme.error;
-    if (action.contains('create') || action.contains('add')) return AppTheme.success;
-    if (action.contains('update') || action.contains('edit')) return AppTheme.warning;
+    if (action.contains('delete') || action.contains('remove'))
+      return AppTheme.error;
+    if (action.contains('create') || action.contains('add'))
+      return AppTheme.success;
+    if (action.contains('update') || action.contains('edit'))
+      return AppTheme.warning;
     return AppTheme.info;
   }
 }
@@ -1623,7 +1978,8 @@ class _LivePulsingBadge extends StatefulWidget {
   State<_LivePulsingBadge> createState() => _LivePulsingBadgeState();
 }
 
-class _LivePulsingBadgeState extends State<_LivePulsingBadge> with SingleTickerProviderStateMixin {
+class _LivePulsingBadgeState extends State<_LivePulsingBadge>
+    with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -1661,7 +2017,10 @@ class _LivePulsingBadgeState extends State<_LivePulsingBadge> with SingleTickerP
                 width: 6 * _pulseAnimation.value,
                 height: 6 * _pulseAnimation.value,
                 decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: (1.0 - (_pulseController.value)).clamp(0.0, 1.0) * 0.5),
+                  color: badgeColor.withValues(
+                    alpha:
+                        (1.0 - (_pulseController.value)).clamp(0.0, 1.0) * 0.5,
+                  ),
                   shape: BoxShape.circle,
                 ),
               );

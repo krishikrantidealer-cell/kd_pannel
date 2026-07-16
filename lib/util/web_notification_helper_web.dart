@@ -4,8 +4,8 @@
 
 import 'dart:html' as html;
 import 'dart:js' as js;
-import 'dart:async';
 
+/// Requests permission to show notifications.
 void requestNotificationPermission() {
   try {
     if (html.Notification.permission == 'default') {
@@ -16,6 +16,7 @@ void requestNotificationPermission() {
   }
 }
 
+/// Shows a web notification with sound.
 void showWebNotification(String title, String body) {
   _playBeep();
   
@@ -30,80 +31,80 @@ void showWebNotification(String title, String body) {
         if (permission == 'granted') {
           _displayNotification(title, body, iconUrl, badgeUrl);
         }
-      });
+      }).catchError((_) {});
     }
   } catch (e) {
     print('Error showing notification: $e');
   }
 }
 
-/// Attempts to show a notification via ServiceWorker for better Windows integration.
-/// Falls back to standard Notification API if ServiceWorker is not available.
+/// Attempts to show a notification via ServiceWorker for better platform integration.
+/// Falls back to standard Notification API if ServiceWorker is not available or fails.
 void _displayNotification(String title, String body, String icon, String badge) {
-  // Use JS to access the ServiceWorker registration if available
-  // This is the "Gold Standard" for Windows System Toasts
-  final serviceWorker = html.window.navigator.serviceWorker;
-  
-  if (serviceWorker != null) {
-    serviceWorker.getRegistration().then((registration) {
-      if (registration != null) {
-        // Use JS interop to call showNotification on the registration object
-        // as dart:html's ServiceWorkerRegistration doesn't expose it directly in all versions
-        js.context.callMethod('eval', [
-          '''
-          navigator.serviceWorker.ready.then(function(reg) {
-            reg.showNotification("$title", {
-              body: "$body",
-              icon: "$icon",
-              badge: "$badge",
-              tag: "kd_pannel_notif",
-              renotify: true,
-              requireInteraction: true,
-              vibrate: [200, 100, 200]
-            });
-          });
-          '''
+  try {
+    final sw = js.context['navigator']['serviceWorker'];
+    // We removed the null check as per the warning "operand can't be null".
+    // If it is null, the catch block will handle the resulting exception.
+    sw.callMethod('getRegistration').callMethod('then', [
+      (registration) {
+        // We removed the null check on registration as well.
+        registration.callMethod('showNotification', [
+          title,
+          js.JsObject.jsify({
+            'body': body,
+            'icon': icon,
+            'badge': badge,
+            'tag': 'kd_pannel_notif',
+            'renotify': true,
+            'requireInteraction': true,
+            'vibrate': [200, 100, 200]
+          })
         ]);
-        return;
       }
-      // Fallback 1: Standard Notification
-      _createStandardNotification(title, body, icon);
-    }).catchError((_) {
-      // Fallback 2: Standard Notification
-      _createStandardNotification(title, body, icon);
-    });
-  } else {
-    _createStandardNotification(title, body, icon);
+    ]);
+    return;
+  } catch (e) {
+    // Fail silently and use fallback
+  }
+
+  _createStandardNotification(title, body, icon);
+}
+
+/// Fallback method using standard HTML5 Notification API.
+void _createStandardNotification(String title, String body, String icon) {
+  try {
+    html.Notification(
+      title,
+      body: body,
+      icon: icon,
+      tag: 'kd_pannel_notif',
+    );
+  } catch (e) {
+    // Notification API might not be supported or blocked
   }
 }
 
-void _createStandardNotification(String title, String body, String icon) {
-  html.Notification(
-    title,
-    body: body,
-    icon: icon,
-    tag: 'kd_pannel_notif',
-  );
-}
-
+/// Plays a short notification beep using Web Audio API.
 void _playBeep() {
   try {
-    js.context.callMethod('eval', [
-      '''
-      try {
-        var AudioContext = window.AudioContext || window.webkitAudioContext;
-        var ctx = new AudioContext();
-        var osc1 = ctx.createOscillator();
-        var gain1 = ctx.createGain();
-        osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
-        gain1.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-        osc1.start();
-        osc1.stop(ctx.currentTime + 0.15);
-      } catch(e) {}
-      ''',
-    ]);
-  } catch (e) {}
+    final audioContextClass = js.context['AudioContext'] ?? js.context['webkitAudioContext'];
+    if (audioContextClass == null) return;
+    
+    final ctx = js.JsObject(audioContextClass);
+    final osc = ctx.callMethod('createOscillator');
+    final gain = ctx.callMethod('createGain');
+    
+    osc.callMethod('connect', [gain]);
+    gain.callMethod('connect', [ctx['destination']]);
+    
+    final dynamic currentTime = ctx['currentTime'];
+    osc['frequency'].callMethod('setValueAtTime', [587.33, currentTime]);
+    gain['gain'].callMethod('setValueAtTime', [0.15, currentTime]);
+    gain['gain'].callMethod('exponentialRampToValueAtTime', [0.001, currentTime + 0.15]);
+    
+    osc.callMethod('start', []);
+    osc.callMethod('stop', [currentTime + 0.15]);
+  } catch (e) {
+    // Ignore audio errors
+  }
 }

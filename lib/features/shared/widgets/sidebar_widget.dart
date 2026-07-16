@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 
 class SidebarWidget extends StatefulWidget {
   final int currentIdx;
@@ -28,6 +32,43 @@ class SidebarWidget extends StatefulWidget {
 class _SidebarWidgetState extends State<SidebarWidget> {
   bool _isHovered = false;
   bool _tempDisableHover = false;
+  int _unreadCount = 0;
+  StreamSubscription? _notificationSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUnreadCount();
+    _notificationSub = WebSocketService().notificationUpdates.listen((_) {
+      _fetchUnreadCount();
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchUnreadCount() async {
+    try {
+      final res = await ApiClient().get('/users/notifications');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          final list = List<Map<String, dynamic>>.from(data['notifications'] ?? []);
+          final count = list.where((n) => n['isRead'] == false || n['isRead'] == null).length;
+          if (mounted) {
+            setState(() {
+              _unreadCount = count;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SidebarWidget] Error fetching notifications: $e');
+    }
+  }
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
     {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
@@ -44,6 +85,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.insights_rounded, 'title': 'Marketing', 'index': 7},
     {'icon': Icons.history_rounded, 'title': 'Logs', 'index': 8},
     {'icon': Icons.delete_sweep_rounded, 'title': 'Trash Bin', 'index': 9},
+    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 10},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [
@@ -52,6 +94,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 2},
     {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 3},
     {'icon': Icons.price_change_rounded, 'title': 'My Price Coupons', 'index': 4},
+    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 5},
   ];
 
   @override
@@ -191,6 +234,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             isActive: isActive,
                             isExpanded: isExpanded,
                             onTap: () => widget.onTabSelected(targetIdx),
+                            badgeCount: item['title'] == 'Alerts' ? _unreadCount : 0,
                           ),
                         );
                       },
@@ -416,6 +460,7 @@ class _SidebarItem extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onTap;
   final bool isLogout;
+  final int badgeCount;
 
   const _SidebarItem({
     required this.icon,
@@ -424,6 +469,7 @@ class _SidebarItem extends StatefulWidget {
     required this.isExpanded,
     required this.onTap,
     this.isLogout = false,
+    this.badgeCount = 0,
   });
 
   @override
@@ -516,16 +562,34 @@ class _SidebarItemState extends State<_SidebarItem> {
                         child: AnimatedScale(
                           duration: const Duration(milliseconds: 200),
                           scale: _isHovered ? 1.05 : 1.0,
-                          child: Icon(
-                            widget.icon,
-                            size: 19,
-                            color: showActive
-                                ? (widget.isLogout
-                                      ? AppTheme.error
-                                      : AppTheme.accentColor)
-                                : Colors.white.withValues(
-                                    alpha: _isHovered ? 1.0 : 0.65,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(
+                                widget.icon,
+                                size: 19,
+                                color: showActive
+                                    ? (widget.isLogout
+                                          ? AppTheme.error
+                                          : AppTheme.accentColor)
+                                    : Colors.white.withValues(
+                                        alpha: _isHovered ? 1.0 : 0.65,
+                                      ),
+                              ),
+                              if (!widget.isExpanded && widget.badgeCount > 0)
+                                Positioned(
+                                  top: -2,
+                                  right: -2,
+                                  child: Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.error,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
+                                ),
+                            ],
                           ),
                         ),
                       ),
@@ -544,21 +608,49 @@ class _SidebarItemState extends State<_SidebarItem> {
                           child: Container(
                             width: 160,
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              widget.title,
-                              style: AppTheme.bodyLG.copyWith(
-                                color: Colors.white.withValues(
-                                  alpha: showActive || _isHovered ? 1.0 : 0.75,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.title,
+                                    style: AppTheme.bodyLG.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: showActive || _isHovered ? 1.0 : 0.75,
+                                      ),
+                                      fontWeight: showActive
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
+                                      fontSize: 13.5,
+                                      letterSpacing: -0.2,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
+                                  ),
                                 ),
-                                fontWeight: showActive
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                                fontSize: 13.5,
-                                letterSpacing: -0.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              softWrap: false,
+                                if (widget.isExpanded && widget.badgeCount > 0) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.error,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '${widget.badgeCount}',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                              ],
                             ),
                           ),
                         ),

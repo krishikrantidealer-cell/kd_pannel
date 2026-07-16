@@ -159,9 +159,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   }
 
   void _refreshLeadDetails() {
-    context.read<LeadsBloc>().add(
-      const FetchLeadsDataEvent(forceRefresh: true),
-    );
+    final id = _lead?['_id'] ?? _lead?['id'];
+    if (id != null) {
+      context.read<LeadsBloc>().add(FetchLeadDetailsEvent(id.toString()));
+    }
   }
 
   Future<void> _fetchEvents({bool silent = false}) async {
@@ -522,6 +523,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         : '';
     return {
       'id': u['_id'],
+      '_id': u['_id'],
       'name': personName.isNotEmpty
           ? personName
           : (u['phoneNumber'] ?? 'Unnamed Lead'),
@@ -534,10 +536,15 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       'pincode': u['address']?['pincode'] ?? '',
       'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
       'agent': u['assignedAgent'] != null
-          ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
-                .trim()
+          ? (u['assignedAgent'] is Map
+              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
+              : u['assignedAgent'].toString())
           : '-',
-      'agentId': u['assignedAgent']?['_id'],
+      'agentId': u['assignedAgent'] != null
+          ? (u['assignedAgent'] is Map
+              ? (u['assignedAgent']['_id'] ?? u['assignedAgent']['\$oid'] ?? u['assignedAgent']).toString()
+              : u['assignedAgent'].toString())
+          : null,
       'source': u['source'] ?? 'App',
       'deepLinkUrl': u['deepLinkUrl'],
       'processingStatus':
@@ -1887,8 +1894,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         }
       },
       builder: (context, state) {
-        final String? leadId = _lead?['_id'];
-        Map<String, dynamic>? currentLead = _lead;
+        final String? leadId = _lead?['_id'] ?? _lead?['id'];
+        Map<String, dynamic>? currentLead = state.currentLeadDetails != null
+            ? _mapUserToLead(state.currentLeadDetails!)
+            : _lead;
+
+        final events = state.currentLeadEvents.isNotEmpty
+            ? state.currentLeadEvents
+            : _events;
+
+        final isLoadingEvents = state.isLoadingEvents || _isLoadingEvents;
 
         if (leadId != null && state.allRawUsers.isNotEmpty) {
           final rawUser = state.allRawUsers.firstWhere(
@@ -2072,103 +2087,109 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         const SizedBox(height: 24),
 
                         // 3. TABBED CONTENT CHANNELS
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          child: _activeTab == 0
-                              ? Column(
-                                  key: const ValueKey(0),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (!isMobile) ...[
-                                      IntrinsicHeight(
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(
-                                              flex: 1,
-                                              child: _LeadInformationCard(
-                                                lead: currentLead,
-                                                salesAgents: state.salesAgents,
-                                                onAssignAgent: _assignAgent,
+                        SelectionContainer.disabled(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: _activeTab == 0
+                                ? Column(
+                                    key: const ValueKey(0),
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (!isMobile) ...[
+                                        IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Expanded(
+                                                flex: 1,
+                                                child: _LeadInformationCard(
+                                                  lead: currentLead,
+                                                  salesAgents: state.salesAgents,
+                                                  onAssignAgent: _assignAgent,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 32),
-                                            Expanded(
-                                              flex: 1,
-                                              child: _DealerKycDocumentsCard(
-                                                lead: currentLead,
-                                                onViewDocument: _launchUrl,
-                                                onUpload: _showUploadKycDialog,
-                                                isVertical: true,
+                                              const SizedBox(width: 32),
+                                              Expanded(
+                                                flex: 1,
+                                                child: _DealerKycDocumentsCard(
+                                                  lead: currentLead,
+                                                  onViewDocument: _launchUrl,
+                                                  onUpload: _showUploadKycDialog,
+                                                  isVertical: true,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ] else ...[
-                                      _LeadInformationCard(
-                                        lead: currentLead,
-                                        salesAgents: state.salesAgents,
-                                        onAssignAgent: _assignAgent,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      _DealerKycDocumentsCard(
-                                        lead: currentLead,
-                                        onViewDocument: _launchUrl,
-                                        onUpload: _showUploadKycDialog,
-                                      ),
+                                      ] else ...[
+                                        _LeadInformationCard(
+                                          lead: currentLead,
+                                          salesAgents: state.salesAgents,
+                                          onAssignAgent: _assignAgent,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        _DealerKycDocumentsCard(
+                                          lead: currentLead,
+                                          onViewDocument: _launchUrl,
+                                          onUpload: _showUploadKycDialog,
+                                        ),
+                                      ],
                                     ],
-                                  ],
-                                )
-                              : _activeTab == 1
-                              ? Column(
-                                  key: const ValueKey(1),
-                                  children: [
-                                    if (leadId != null)
-                                      _UserEventsCard(
-                                        userIdentifier:
-                                            currentLead['email'] ??
-                                            currentLead['phone'] ??
-                                            currentLead['phoneNumber'] ??
-                                            leadId,
-                                        events: _events,
-                                        isLoading: _isLoadingEvents,
-                                        onRefresh: () => _fetchEvents(),
-                                      ),
-                                  ],
-                                )
-                              : Column(
-                                  key: const ValueKey(2),
-                                  children: [
-                                    if (leadId != null)
-                                      UserStatusNotesWidget(
-                                        userId: leadId,
-                                        initialStatus:
-                                            currentLead['status'] ?? 'prospect',
-                                        initialNotes:
-                                            currentLead['notes'] ?? '',
-                                        notesHistory:
-                                            currentLead['notesHistory'] != null
-                                            ? List<Map<String, dynamic>>.from(
-                                                currentLead['notesHistory'],
-                                              )
-                                            : null,
-                                        isSubmitting: isLoading,
-                                        onSave: (status, notes) {
-                                          context.read<LeadsBloc>().add(
-                                            UpdateLeadDetailsEvent(
-                                              userId: leadId,
-                                              updateData: {
-                                                'leadStatus': status,
-                                                'leadNotes': notes,
-                                              },
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                  ],
-                                ),
+                                  )
+                                : _activeTab == 1
+                                ? Column(
+                                    key: const ValueKey(1),
+                                    children: [
+                                      if (leadId != null)
+                                        _UserEventsCard(
+                                          userIdentifier:
+                                              currentLead?['email'] ??
+                                              currentLead?['phone'] ??
+                                              currentLead?['phoneNumber'] ??
+                                              leadId,
+                                          events: events,
+                                          isLoading: isLoadingEvents,
+                                          onRefresh: () => context.read<LeadsBloc>().add(FetchLeadEventsEvent(currentLead?['email'] ?? currentLead?['phone'] ?? currentLead?['phoneNumber'] ?? leadId ?? '')),
+                                        ),
+                                    ],
+                                  )
+                                : Column(
+                                    key: const ValueKey(2),
+                                    children: [
+                                      if (leadId != null)
+                                        SelectionContainer.disabled(
+                                          child: UserStatusNotesWidget(
+                                            userId: leadId,
+                                            initialStatus:
+                                                currentLead?['status'] ?? 'prospect',
+                                            initialNotes:
+                                                currentLead?['notes'] ?? '',
+                                            notesHistory:
+                                                currentLead?['notesHistory'] != null
+                                                ? List<Map<String, dynamic>>.from(
+                                                    currentLead!['notesHistory'],
+                                                  )
+                                                : null,
+                                            isSubmitting: isLoading,
+                                            onSave: (status, notes, noteType, notePriority) {
+                                              context.read<LeadsBloc>().add(
+                                                UpdateLeadDetailsEvent(
+                                                  userId: leadId,
+                                                  updateData: {
+                                                    'leadStatus': status,
+                                                    'leadNotes': notes,
+                                                    'noteType': noteType,
+                                                    'notePriority': notePriority,
+                                                  },
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                          ),
                         ),
                       ],
                     ),

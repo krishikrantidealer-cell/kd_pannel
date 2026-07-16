@@ -25,6 +25,14 @@ class DealersState extends Equatable {
   final String? errorMessage;
   final String? actionSuccessMessage;
 
+  // Profile-specific states
+  final Map<String, dynamic>? currentDealerDetails;
+  final List<Map<String, dynamic>> currentDealerOrders;
+  final List<Map<String, dynamic>> currentDealerEvents;
+  final bool isLoadingProfile;
+  final bool isLoadingOrders;
+  final bool isLoadingEvents;
+
   const DealersState({
     this.status = DealersStatus.initial,
     this.allRawUsers = const [],
@@ -43,6 +51,12 @@ class DealersState extends Equatable {
     this.pageSize = 10,
     this.errorMessage,
     this.actionSuccessMessage,
+    this.currentDealerDetails,
+    this.currentDealerOrders = const [],
+    this.currentDealerEvents = const [],
+    this.isLoadingProfile = false,
+    this.isLoadingOrders = false,
+    this.isLoadingEvents = false,
   });
 
   DealersState copyWith({
@@ -63,6 +77,12 @@ class DealersState extends Equatable {
     int? pageSize,
     String? errorMessage,
     String? actionSuccessMessage,
+    Map<String, dynamic>? currentDealerDetails,
+    List<Map<String, dynamic>>? currentDealerOrders,
+    List<Map<String, dynamic>>? currentDealerEvents,
+    bool? isLoadingProfile,
+    bool? isLoadingOrders,
+    bool? isLoadingEvents,
   }) {
     return DealersState(
       status: status ?? this.status,
@@ -82,6 +102,12 @@ class DealersState extends Equatable {
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage, // Reset by default when copyWith is called unless set
       actionSuccessMessage: actionSuccessMessage, // Reset by default when copyWith is called unless set
+      currentDealerDetails: currentDealerDetails ?? this.currentDealerDetails,
+      currentDealerOrders: currentDealerOrders ?? this.currentDealerOrders,
+      currentDealerEvents: currentDealerEvents ?? this.currentDealerEvents,
+      isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
+      isLoadingOrders: isLoadingOrders ?? this.isLoadingOrders,
+      isLoadingEvents: isLoadingEvents ?? this.isLoadingEvents,
     );
   }
 
@@ -145,5 +171,11 @@ class DealersState extends Equatable {
         pageSize,
         errorMessage,
         actionSuccessMessage,
+        currentDealerDetails,
+        currentDealerOrders,
+        currentDealerEvents,
+        isLoadingProfile,
+        isLoadingOrders,
+        isLoadingEvents,
       ];
 }

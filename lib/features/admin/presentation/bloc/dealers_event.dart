@@ -136,6 +136,30 @@ class UpdateDealerDetailsEvent extends DealersEvent {
   List<Object?> get props => [userId, updateData];
 }
 
+class FetchDealerDetailsEvent extends DealersEvent {
+  final String userId;
+  const FetchDealerDetailsEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}
+
+class FetchDealerOrdersEvent extends DealersEvent {
+  final String userId;
+  const FetchDealerOrdersEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}
+
+class FetchDealerEventsEvent extends DealersEvent {
+  final String identifier;
+  const FetchDealerEventsEvent(this.identifier);
+
+  @override
+  List<Object?> get props => [identifier];
+}
+
 class ResetDealersEvent extends DealersEvent {
   const ResetDealersEvent();
 }

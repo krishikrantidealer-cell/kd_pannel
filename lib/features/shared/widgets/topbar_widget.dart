@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element, unused_field
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'dart:ui' as ui;
@@ -737,42 +738,6 @@ class _TopbarWidgetState extends State<TopbarWidget> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CompositedTransformTarget(
-                    link: _layerLink,
-                    child: _TopbarIconButton(
-                      tooltip: 'Notifications',
-                      size: isMobile ? 36 : 40,
-                      onTap: _toggleDropdown,
-                      icon: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Icon(
-                            Icons.notifications_none_rounded,
-                            color: const Color(0xFF334155),
-                            size: isMobile ? 20 : 22,
-                          ),
-                          if (_unreadCount > 0)
-                            Positioned(
-                              top: -1,
-                              right: -1,
-                              child: Container(
-                                width: 9,
-                                height: 9,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.error,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.9),
-                                    width: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
                   CompositedTransformTarget(
                     link: _profileLayerLink,
                     child: GestureDetector(

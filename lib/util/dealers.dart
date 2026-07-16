@@ -93,21 +93,43 @@ class Dealer {
   }
 
   factory Dealer.fromMap(Map<String, dynamic> map) {
+    final String personName = (map['firstName'] != null || map['lastName'] != null)
+        ? '${map['firstName'] ?? ''} ${map['lastName'] ?? ''}'.trim()
+        : (map['name'] ?? '');
+
+    final assignedAgent = map['assignedAgent'];
+    String? resolvedAgentId = map['agentId'];
+    String agentName = map['agent'] ?? '-';
+
+    if (assignedAgent != null) {
+      if (assignedAgent is Map) {
+        resolvedAgentId = (assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent).toString();
+        agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
+        if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
+      } else {
+        resolvedAgentId = assignedAgent.toString();
+        agentName = resolvedAgentId;
+      }
+    }
+
+    if (resolvedAgentId == 'null' || resolvedAgentId == '-') resolvedAgentId = null;
+    if (agentName.isEmpty || agentName == 'null') agentName = '-';
+
     return Dealer(
-      name: map['name'] ?? '',
-      phone: map['phone'] ?? '',
-      city: map['city'] ?? '',
-      state: map['state'] ?? '',
-      agent: map['agent'] ?? '',
-      gstStatus: map['gstStatus'] ?? '',
+      name: personName.isNotEmpty ? personName : (map['phoneNumber'] ?? 'Unnamed Dealer'),
+      phone: map['phoneNumber'] ?? map['phone'] ?? '',
+      city: map['address']?['cityTehsil'] ?? map['city'] ?? '',
+      state: map['address']?['state'] ?? map['state'] ?? '',
+      agent: agentName,
+      gstStatus: map['gstStatus'] ?? 'Verified',
       totalOrders: map['totalOrders'] ?? 0,
-      purchaseValue: map['purchaseValue'] ?? '',
+      purchaseValue: map['purchaseValue'] ?? '₹0',
       isHighValue: map['isHighValue'] ?? false,
       isInactive: map['isInactive'] ?? false,
       source: map['source'] ?? 'App',
       deepLinkUrl: map['deepLinkUrl'],
-      id: map['id'],
-      agentId: map['agentId'],
+      id: (map['id'] ?? map['_id'])?.toString(),
+      agentId: resolvedAgentId,
       licenceImage: map['licenceImage'],
       shopImage: map['shopImage'],
       gstNumber: map['gstNumber'],

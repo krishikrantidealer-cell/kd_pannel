@@ -92,7 +92,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         _agentName = args.agent;
         _isCacheLoaded = true;
         _saveDealerToCache(_dealer!);
-        _refreshDealerDetails();
+
+        final bloc = context.read<DealersBloc>();
+        bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
+        bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
+        final identifier = _dealer!.email ?? _dealer!.phone ?? _dealer!.id!;
+        bloc.add(FetchDealerEventsEvent(identifier));
 
         // Track profile view event
         AnalyticsService().logEvent(
@@ -106,17 +111,17 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       } else {
         _loadDealerFromCache();
       }
-      _fetchOrders();
       WebSocketService().connect();
       _dealersWsSubscription?.cancel();
       _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
-        if (mounted) {
-          _refreshDealerDetails();
+        if (mounted && _dealer?.id != null) {
+          final bloc = context.read<DealersBloc>();
+          bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
+          bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
         }
       });
       if (AuthService().isAdmin) {
         _fetchSalesAgents();
-        _fetchEvents();
         _listenToRealTimeEvents();
       }
     }
@@ -143,10 +148,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             _agentName = _dealer?.agent;
           });
         }
-        _refreshDealerDetails();
-        _fetchOrders();
+        final bloc = context.read<DealersBloc>();
+        bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
+        bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
+        final identifier = _dealer!.email ?? _dealer!.phone ?? _dealer!.id!;
+        bloc.add(FetchDealerEventsEvent(identifier));
+
         if (AuthService().isAdmin) {
-          _fetchEvents();
           _listenToRealTimeEvents();
         }
       }
@@ -688,7 +696,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         );
         // Wait for bloc to finish and refresh locally
         await Future.delayed(const Duration(milliseconds: 500));
-        _refreshDealerDetails();
+        if (userId != null) {
+          context.read<DealersBloc>().add(FetchDealerDetailsEvent(userId));
+        }
       }
     }
   }
@@ -1062,34 +1072,49 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     final isMobile = Responsive.isMobile(context);
     final isTablet = Responsive.isTablet(context);
 
+    final dealersState = context.watch<DealersBloc>().state;
+
     // Dynamic dealer updated by agent selection
-    final currentDealer = Dealer(
-      name: _dealer!.name,
-      phone: _dealer!.phone,
-      city: _dealer!.city,
-      state: _dealer!.state,
-      agent: _agentName ?? _dealer!.agent,
-      gstStatus: _dealer!.gstStatus,
-      totalOrders: _orders.length,
-      purchaseValue: _dealer!.purchaseValue,
-      isHighValue: _dealer!.isHighValue,
-      isInactive: _orders.isEmpty,
-      source: _dealer?.source ?? 'App',
-      deepLinkUrl: _dealer?.deepLinkUrl,
-      id: _dealer!.id,
-      agentId: _agentId ?? _dealer!.agentId,
-      licenceImage: _dealer!.licenceImage,
-      shopImage: _dealer!.shopImage,
-      gstNumber: _dealer!.gstNumber,
-      email: _dealer!.email,
-      userType: _dealer!.userType,
-      kycStatus: _dealer!.kycStatus,
-      address: _dealer!.address,
-      isBlocked: _dealer!.isBlocked,
-      status: _dealer!.status,
-      notes: _dealer!.notes,
-      notesHistory: _dealer!.notesHistory,
-    );
+    final currentDealer = dealersState.currentDealerDetails != null
+        ? Dealer.fromMap(dealersState.currentDealerDetails!)
+        : Dealer(
+            name: _dealer!.name,
+            phone: _dealer!.phone,
+            city: _dealer!.city,
+            state: _dealer!.state,
+            agent: _agentName ?? _dealer!.agent,
+            gstStatus: _dealer!.gstStatus,
+            totalOrders: _orders.length,
+            purchaseValue: _dealer!.purchaseValue,
+            isHighValue: _dealer!.isHighValue,
+            isInactive: _orders.isEmpty,
+            source: _dealer?.source ?? 'App',
+            deepLinkUrl: _dealer?.deepLinkUrl,
+            id: _dealer!.id,
+            agentId: _agentId ?? _dealer!.agentId,
+            licenceImage: _dealer!.licenceImage,
+            shopImage: _dealer!.shopImage,
+            gstNumber: _dealer!.gstNumber,
+            email: _dealer!.email,
+            userType: _dealer!.userType,
+            kycStatus: _dealer!.kycStatus,
+            address: _dealer!.address,
+            isBlocked: _dealer!.isBlocked,
+            status: _dealer!.status,
+            notes: _dealer!.notes,
+            notesHistory: _dealer!.notesHistory,
+          );
+
+    final orders = dealersState.currentDealerOrders.isNotEmpty
+        ? dealersState.currentDealerOrders
+        : _orders;
+
+    final events = dealersState.currentDealerEvents.isNotEmpty
+        ? dealersState.currentDealerEvents
+        : _events;
+
+    final isLoadingOrders = dealersState.isLoadingOrders || _isLoadingOrders;
+    final isLoadingEvents = dealersState.isLoadingEvents || _isLoadingEvents;
 
     return BlocListener<LeadsBloc, LeadsState>(
       listener: (context, state) {
@@ -1113,10 +1138,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           context.read<LeadsBloc>().add(const ClearLeadsMessageEvent());
           if (msg.contains('KYC documents uploaded successfully') ||
               msg.contains('KYC submitted successfully')) {
-            _refreshDealerDetails();
-            context.read<DealersBloc>().add(
-              const FetchDealersDataEvent(forceRefresh: true),
-            );
+            if (currentDealer.id != null) {
+              context.read<DealersBloc>().add(
+                FetchDealerDetailsEvent(currentDealer.id!),
+              );
+            }
           }
         }
       },
@@ -1148,11 +1174,15 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                         onEdit: _editDealer,
                         onDelete: _deleteDealer,
                         onCreateOrder: () async {
-                          AnalyticsService().logEvent('initiate_order_creation', properties: {
-                            'dealerId': currentDealer.id,
-                            'dealerName': currentDealer.name,
-                            'details': 'Started creating a new order for ${currentDealer.name}',
-                          });
+                          AnalyticsService().logEvent(
+                            'initiate_order_creation',
+                            properties: {
+                              'dealerId': currentDealer.id,
+                              'dealerName': currentDealer.name,
+                              'details':
+                                  'Started creating a new order for ${currentDealer.name}',
+                            },
+                          );
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -1161,8 +1191,14 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                             ),
                           );
                           if (result == true && mounted) {
-                            _fetchOrders();
-                            _refreshDealerDetails();
+                            if (currentDealer.id != null) {
+                              context.read<DealersBloc>().add(
+                                FetchDealerDetailsEvent(currentDealer.id!),
+                              );
+                              context.read<DealersBloc>().add(
+                                FetchDealerOrdersEvent(currentDealer.id!),
+                              );
+                            }
                           }
                         },
                       ),
@@ -1172,110 +1208,129 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       _buildAdvancedProfileTabs(),
                       const SizedBox(height: 24),
                       // 4. TABBED CONTENT CHANNELS
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        child: _activeTab == 0
-                            ? Column(
-                                key: const ValueKey(0),
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _StatsCardsSection(
-                                    dealer: currentDealer,
-                                    orders: _orders,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  if (!isMobile) ...[
-                                    IntrinsicHeight(
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          Expanded(
-                                            flex: 1,
-                                            child: _DealerInformationCard(
-                                              dealer: currentDealer,
-                                              salesAgents: _salesAgents,
-                                              currentAgentId: _agentId,
-                                              onAssignAgent: _assignAgent,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 32),
-                                          Expanded(
-                                            flex: 1,
-                                            child: _DealerKycDocumentsCard(
-                                              dealer: currentDealer,
-                                              onViewDocument: _launchUrl,
-                                              onUpload: _showUploadKycDialog,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ] else ...[
-                                    _DealerInformationCard(
+                      SelectionContainer.disabled(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _activeTab == 0
+                              ? Column(
+                                  key: const ValueKey(0),
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _StatsCardsSection(
                                       dealer: currentDealer,
-                                      salesAgents: _salesAgents,
-                                      currentAgentId: _agentId,
-                                      onAssignAgent: _assignAgent,
+                                      orders: orders,
                                     ),
                                     const SizedBox(height: 24),
-                                    _DealerKycDocumentsCard(
-                                      dealer: currentDealer,
-                                      onViewDocument: _launchUrl,
-                                      onUpload: _showUploadKycDialog,
-                                    ),
+                                    if (!isMobile) ...[
+                                      IntrinsicHeight(
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(
+                                              flex: 1,
+                                              child: _DealerInformationCard(
+                                                dealer: currentDealer,
+                                                salesAgents: _salesAgents,
+                                                currentAgentId: _agentId,
+                                                onAssignAgent: _assignAgent,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 32),
+                                            Expanded(
+                                              flex: 1,
+                                              child: _DealerKycDocumentsCard(
+                                                dealer: currentDealer,
+                                                onViewDocument: _launchUrl,
+                                                onUpload: _showUploadKycDialog,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      _DealerInformationCard(
+                                        dealer: currentDealer,
+                                        salesAgents: _salesAgents,
+                                        currentAgentId: _agentId,
+                                        onAssignAgent: _assignAgent,
+                                      ),
+                                      const SizedBox(height: 24),
+                                      _DealerKycDocumentsCard(
+                                        dealer: currentDealer,
+                                        onViewDocument: _launchUrl,
+                                        onUpload: _showUploadKycDialog,
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              )
-                            : _activeTab == 1
-                            ? _OrderHistoryCard(
-                                key: const ValueKey(1),
-                                dealer: currentDealer,
-                                orders: _orders,
-                                isLoading: _isLoadingOrders,
-                              )
-                            : _activeTab == 2
-                            ? _UserEventsCard(
-                                key: const ValueKey(2),
-                                userIdentifier:
-                                    currentDealer.email ??
-                                    currentDealer.phone ??
-                                    currentDealer.id ??
-                                    '',
-                                events: _events,
-                                isLoading: _isLoadingEvents,
-                                onRefresh: () => _fetchEvents(),
-                              )
-                            : Column(
-                                key: const ValueKey(3),
-                                children: [
-                                  if (currentDealer.id != null)
-                                    UserStatusNotesWidget(
-                                      userId: currentDealer.id!,
-                                      initialStatus:
-                                          currentDealer.status ?? 'prospect',
-                                      initialNotes: currentDealer.notes ?? '',
-                                      notesHistory: currentDealer.notesHistory,
-                                      isSubmitting:
-                                          context
-                                              .watch<DealersBloc>()
-                                              .state
-                                              .status ==
-                                          DealersStatus.submitting,
-                                      onSave: (status, notes) {
-                                        context.read<DealersBloc>().add(
-                                          UpdateDealerDetailsEvent(
-                                            userId: currentDealer.id!,
-                                            updateData: {
-                                              'leadStatus': status,
-                                              'leadNotes': notes,
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                ],
-                              ),
+                                )
+                              : _activeTab == 1
+                              ? _OrderHistoryCard(
+                                  key: const ValueKey(1),
+                                  dealer: currentDealer,
+                                  orders: orders,
+                                  isLoading: isLoadingOrders,
+                                )
+                              : _activeTab == 2
+                              ? _UserEventsCard(
+                                  key: const ValueKey(2),
+                                  userIdentifier:
+                                      currentDealer.email ?? currentDealer.phone,
+                                  events: events,
+                                  isLoading: isLoadingEvents,
+                                  onRefresh: () =>
+                                      context.read<DealersBloc>().add(
+                                        FetchDealerEventsEvent(
+                                          currentDealer.email ??
+                                              currentDealer.phone ??
+                                              currentDealer.id ??
+                                              '',
+                                        ),
+                                      ),
+                                )
+                              : Column(
+                                  key: const ValueKey(3),
+                                  children: [
+                                    if (currentDealer.id != null)
+                                      SelectionContainer.disabled(
+                                        child: UserStatusNotesWidget(
+                                          userId: currentDealer.id!,
+                                          initialStatus:
+                                              currentDealer.status ?? 'prospect',
+                                          initialNotes: currentDealer.notes ?? '',
+                                          notesHistory:
+                                              currentDealer.notesHistory,
+                                          isSubmitting:
+                                              context
+                                                  .watch<DealersBloc>()
+                                                  .state
+                                                  .status ==
+                                              DealersStatus.submitting,
+                                          onSave:
+                                              (
+                                                status,
+                                                notes,
+                                                noteType,
+                                                notePriority,
+                                              ) {
+                                                context.read<DealersBloc>().add(
+                                                  UpdateDealerDetailsEvent(
+                                                    userId: currentDealer.id!,
+                                                    updateData: {
+                                                      'leadStatus': status,
+                                                      'leadNotes': notes,
+                                                      'noteType': noteType,
+                                                      'notePriority':
+                                                          notePriority,
+                                                    },
+                                                  ),
+                                                );
+                                              },
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ],
                   ),
@@ -1809,11 +1864,14 @@ class _DealerHeroCard extends StatelessWidget {
           color: const Color(0xFF2E7D32),
           isSolid: true,
           onTap: () async {
-            AnalyticsService().logEvent('agent_call_dealer', properties: {
-              'dealerId': dealer.id,
-              'dealerName': dealer.name,
-              'details': 'Initiated phone call to dealer: ${dealer.name}',
-            });
+            AnalyticsService().logEvent(
+              'agent_call_dealer',
+              properties: {
+                'dealerId': dealer.id,
+                'dealerName': dealer.name,
+                'details': 'Initiated phone call to dealer: ${dealer.name}',
+              },
+            );
             final url = 'tel:${dealer.phone}';
             final Uri uri = Uri.parse(url);
             if (await canLaunchUrl(uri)) {
@@ -1828,12 +1886,15 @@ class _DealerHeroCard extends StatelessWidget {
           isSolid: true,
           onTap: () async {
             final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
-            
-            AnalyticsService().logEvent('agent_whatsapp_dealer', properties: {
-              'dealerId': dealer.id,
-              'dealerName': dealer.name,
-              'details': 'Opened WhatsApp chat with dealer: ${dealer.name}',
-            });
+
+            AnalyticsService().logEvent(
+              'agent_whatsapp_dealer',
+              properties: {
+                'dealerId': dealer.id,
+                'dealerName': dealer.name,
+                'details': 'Opened WhatsApp chat with dealer: ${dealer.name}',
+              },
+            );
 
             final url = 'https://wa.me/$cleanPhone';
             final Uri uri = Uri.parse(url);
@@ -2765,118 +2826,120 @@ class _DealerInformationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                 ],
-                _buildSectionHeader(
-                  'Operations & Team Assignment',
-                  Icons.assignment_ind_outlined,
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+                if (!AuthService().isSales) ...[
+                  _buildSectionHeader(
+                    'Operations & Team Assignment',
+                    Icons.assignment_ind_outlined,
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.withOpacity(0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.badge_outlined,
-                          size: 16,
-                          color: Colors.indigo,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Assigned Representative',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF4B5563),
-                            fontWeight: FontWeight.w600,
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.badge_outlined,
+                            size: 16,
+                            color: Colors.indigo,
                           ),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value:
-                                salesAgents.any(
-                                  (agent) => agent['_id'] == currentAgentId,
-                                )
-                                ? currentAgentId
-                                : null,
-                            isExpanded: false,
-                            isDense: true,
-                            icon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 18,
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Assigned Representative',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF4B5563),
+                              fontWeight: FontWeight.w600,
                             ),
-                            hint: Text(
-                              'Select Agent',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12.5,
-                                color: const Color(0xFF6B7280),
-                                fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value:
+                                  salesAgents.any(
+                                    (agent) => agent['_id'] == currentAgentId,
+                                  )
+                                  ? currentAgentId
+                                  : null,
+                              isExpanded: false,
+                              isDense: true,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 18,
                               ),
-                            ),
-                            onChanged: (String? newAgentId) {
-                              onAssignAgent(newAgentId);
-                            },
-                            items: [
-                              DropdownMenuItem<String>(
-                                value: null,
-                                child: Text(
-                                  'Unassigned',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12.5,
-                                    color: const Color(0xFFEF4444),
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              hint: Text(
+                                'Select Agent',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: const Color(0xFF6B7280),
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              ...salesAgents.map((agent) {
-                                final agentName =
-                                    '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                        .trim();
-                                return DropdownMenuItem<String>(
-                                  value: agent['_id'],
+                              onChanged: (String? newAgentId) {
+                                onAssignAgent(newAgentId);
+                              },
+                              items: [
+                                DropdownMenuItem<String>(
+                                  value: null,
                                   child: Text(
-                                    agentName.isNotEmpty
-                                        ? agentName
-                                        : (agent['phoneNumber'] ?? ''),
+                                    'Unassigned',
                                     style: GoogleFonts.outfit(
                                       fontSize: 12.5,
-                                      color: const Color(0xFF1F2937),
+                                      color: const Color(0xFFEF4444),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                );
-                              }),
-                            ],
+                                ),
+                                ...salesAgents.map((agent) {
+                                  final agentName =
+                                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                          .trim();
+                                  return DropdownMenuItem<String>(
+                                    value: agent['_id'],
+                                    child: Text(
+                                      agentName.isNotEmpty
+                                          ? agentName
+                                          : (agent['phoneNumber'] ?? ''),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12.5,
+                                        color: const Color(0xFF1F2937),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

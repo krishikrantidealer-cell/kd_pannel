@@ -55,22 +55,34 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
     });
 
     WebSocketService().connect();
-
+    DateTime? lastLeadsFetch;
     _leadsSubscription = WebSocketService().leadsUpdates.listen((_) {
       if (mounted) {
-        context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastLeadsFetch == null || now.difference(lastLeadsFetch!) > const Duration(seconds: 5)) {
+          lastLeadsFetch = now;
+          context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+        }
       }
     });
-
+    DateTime? lastDealersFetch;
     _dealersSubscription = WebSocketService().dealersUpdates.listen((_) {
       if (mounted) {
-        context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastDealersFetch == null || now.difference(lastDealersFetch!) > const Duration(seconds: 5)) {
+          lastDealersFetch = now;
+          context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+        }
       }
     });
-
+    DateTime? lastOrdersFetch;
     _ordersSubscription = WebSocketService().ordersUpdates.listen((_) {
       if (mounted) {
-        context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastOrdersFetch == null || now.difference(lastOrdersFetch!) > const Duration(seconds: 5)) {
+          lastOrdersFetch = now;
+          context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+        }
       }
     });
   }

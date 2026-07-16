@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'leads_event.dart';
-import 'leads_state.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:http/http.dart' as http;
@@ -22,6 +22,57 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<UpdateLeadDetailsEvent>(_onUpdateLeadDetails);
     on<AdminSubmitKycEvent>(_onAdminSubmitKyc);
     on<ResetLeadsEvent>(_onResetLeads);
+    on<FetchLeadDetailsEvent>(_onFetchLeadDetails);
+    on<FetchLeadEventsEvent>(_onFetchLeadEvents);
+  }
+
+  Future<void> _onFetchLeadDetails(
+    FetchLeadDetailsEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingProfile: true));
+    try {
+      final res = await ApiClient().get('/users/${event.userId}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['user'] != null) {
+          emit(state.copyWith(
+            isLoadingProfile: false,
+            currentLeadDetails: Map<String, dynamic>.from(data['user']),
+          ));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load lead details');
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingProfile: false,
+        errorMessage: 'Error loading lead: ${e.toString()}',
+      ));
+    }
+  }
+
+  Future<void> _onFetchLeadEvents(
+    FetchLeadEventsEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingEvents: true));
+    try {
+      final events = await AnalyticsService().fetchEvents(
+        userEmail: event.identifier,
+      );
+      emit(state.copyWith(
+        isLoadingEvents: false,
+        currentLeadEvents: events,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingEvents: false,
+        errorMessage: 'Error loading events: ${e.toString()}',
+      ));
+    }
   }
 
   void _onResetLeads(ResetLeadsEvent event, Emitter<LeadsState> emit) {
@@ -134,7 +185,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             status: LeadsStatus.success,
             actionSuccessMessage: 'Agent assigned successfully',
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to assign agent');
         }
@@ -320,7 +371,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             status: LeadsStatus.success,
             actionSuccessMessage: 'KYC Approved! User is now a Dealer.',
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to verify KYC');
         }
@@ -387,7 +438,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             status: LeadsStatus.success,
             actionSuccessMessage: 'KYC Rejected successfully.',
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to reject KYC');
         }
@@ -485,7 +536,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             allRawUsers: updatedRawUsers,
             actionSuccessMessage: msg,
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to update block status');
         }
@@ -640,7 +691,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             status: LeadsStatus.success,
             actionSuccessMessage: 'Lead updated successfully',
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to update lead');
         }
@@ -714,7 +765,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
             status: LeadsStatus.success,
             actionSuccessMessage: 'KYC documents uploaded successfully',
           ));
-          add(const FetchLeadsDataEvent(forceRefresh: true));
+          add(FetchLeadDetailsEvent(event.userId));
         } else {
           throw Exception(data['message'] ?? 'Failed to upload KYC');
         }

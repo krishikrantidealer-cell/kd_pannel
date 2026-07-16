@@ -167,6 +167,22 @@ class AdminSubmitKycEvent extends LeadsEvent {
       ];
 }
 
+class FetchLeadDetailsEvent extends LeadsEvent {
+  final String userId;
+  const FetchLeadDetailsEvent(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}
+
+class FetchLeadEventsEvent extends LeadsEvent {
+  final String identifier;
+  const FetchLeadEventsEvent(this.identifier);
+
+  @override
+  List<Object?> get props => [identifier];
+}
+
 class ResetLeadsEvent extends LeadsEvent {
   const ResetLeadsEvent();
 }

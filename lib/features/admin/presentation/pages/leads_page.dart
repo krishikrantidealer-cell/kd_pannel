@@ -121,9 +121,14 @@ class _LeadsPageState extends State<LeadsPage> {
 
     WebSocketService().connect();
 
-    _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
+    DateTime? lastLeadsFetch;
+    _wsSubscription = WebSocketService().leadsUpdates.listen((unused) {
       if (mounted && _leadsBloc != null) {
-        _leadsBloc!.add(const FetchLeadsDataEvent(forceRefresh: true));
+        final now = DateTime.now();
+        if (lastLeadsFetch == null || now.difference(lastLeadsFetch!) > const Duration(seconds: 5)) {
+          lastLeadsFetch = now;
+          _leadsBloc!.add(FetchLeadsDataEvent(forceRefresh: true));
+        }
       }
     });
   }
@@ -697,8 +702,7 @@ class _LeadsPageState extends State<LeadsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
 
-    return SelectionArea(
-      child: BlocConsumer<LeadsBloc, LeadsState>(
+    return BlocConsumer<LeadsBloc, LeadsState>(
         listener: (context, state) {
           if (_searchController.text != state.searchQuery) {
             _searchController.text = state.searchQuery;
@@ -979,7 +983,6 @@ class _LeadsPageState extends State<LeadsPage> {
 
           return body;
         },
-      ),
     );
   }
 
