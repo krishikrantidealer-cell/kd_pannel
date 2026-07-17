@@ -1972,14 +1972,13 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
         return Scaffold(
           backgroundColor: const Color(0xFFF8FAFC),
-          body: SelectionArea(
-            child: isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  )
-                : SingleChildScrollView(
+          body: isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryColor,
+                  ),
+                )
+              : SingleChildScrollView(
                     padding: EdgeInsets.symmetric(
                       horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
                       vertical: isMobile ? 20 : 32,
@@ -2143,11 +2142,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                     children: [
                                       if (leadId != null)
                                         _UserEventsCard(
-                                          userIdentifier:
-                                              currentLead?['email'] ??
-                                              currentLead?['phone'] ??
-                                              currentLead?['phoneNumber'] ??
-                                              leadId,
+                                          userIdentifiers: [
+                                            leadId!,
+                                            if (currentLead?['email'] != null) currentLead!['email'].toString(),
+                                            if (currentLead?['phone'] != null) currentLead!['phone'].toString(),
+                                            if (currentLead?['phoneNumber'] != null) currentLead!['phoneNumber'].toString(),
+                                          ],
                                           events: events,
                                           isLoading: isLoadingEvents,
                                           onRefresh: () => context.read<LeadsBloc>().add(FetchLeadEventsEvent(currentLead?['email'] ?? currentLead?['phone'] ?? currentLead?['phoneNumber'] ?? leadId ?? '')),
@@ -2194,7 +2194,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       ],
                     ),
                   ),
-          ),
         );
       },
     );
@@ -3938,14 +3937,14 @@ class _KycDocumentCardState extends State<_KycDocumentCard> {
 }
 
 class _UserEventsCard extends StatefulWidget {
-  final String userIdentifier;
+  final List<String> userIdentifiers;
   final List<Map<String, dynamic>> events;
   final bool isLoading;
   final VoidCallback onRefresh;
 
   const _UserEventsCard({
     super.key,
-    required this.userIdentifier,
+    required this.userIdentifiers,
     required this.events,
     required this.isLoading,
     required this.onRefresh,
@@ -4415,6 +4414,14 @@ class _UserEventsCardState extends State<_UserEventsCard> {
 
     final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
+      final actorId = e['user']?.toString() ?? '';
+
+      // Only display events where the lead was the actor
+      final bool isUserActor = widget.userIdentifiers.any(
+        (id) => id.toLowerCase() == actorId.toLowerCase(),
+      );
+      if (!isUserActor) return false;
+
       return _matchesCategory(type, _selectedCategory);
     }).toList();
 

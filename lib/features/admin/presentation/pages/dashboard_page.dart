@@ -14,6 +14,7 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/features/shared/widgets/stat_card_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import '../../../../core/auth/auth_service.dart';
 import '../../../../util/dealers.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
@@ -171,6 +172,14 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _refreshData();
     _updateClock(shouldSetState: false);
+
+    // Refresh profile if data is incomplete
+    if (AuthService().currentUserName == null || AuthService().currentUserName!.isEmpty) {
+      AuthService().refreshProfile().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+
     _clockTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _updateClock(shouldSetState: true);
     });

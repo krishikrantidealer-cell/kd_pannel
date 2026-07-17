@@ -108,7 +108,10 @@ class Dealer {
         if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
       } else {
         resolvedAgentId = assignedAgent.toString();
-        agentName = resolvedAgentId;
+        // Only use ID as name if we don't already have a name from 'agent' field
+        if (agentName == '-' || agentName == 'null' || agentName.isEmpty) {
+          agentName = resolvedAgentId;
+        }
       }
     }
 

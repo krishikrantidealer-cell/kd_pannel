@@ -39,6 +39,14 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     super.initState();
     requestNotificationPermission();
     _fetchNotifications(isInitial: true);
+    
+    // Refresh profile if data is incomplete
+    if (AuthService().currentUserName == null || AuthService().currentUserName!.isEmpty) {
+      AuthService().refreshProfile().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+
     _notificationSub = WebSocketService().notificationUpdates.listen((_) {
       _fetchNotifications(isInitial: false);
     });
@@ -398,7 +406,9 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     final overlay = Overlay.of(context);
     final isSales = AuthService().isSales;
     final email = AuthService().currentUserEmail ?? (isSales ? 'sales@krishikranti.com' : 'admin@krishikranti.com');
-    final initials = email.isNotEmpty ? email[0].toUpperCase() : (isSales ? 'S' : 'A');
+    final rawName = AuthService().currentUserName ?? '';
+    final name = rawName.isNotEmpty ? rawName : (isSales ? 'Sales Agent' : 'Administrator');
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : (isSales ? 'S' : 'A');
 
     _profileOverlayEntry = OverlayEntry(
       builder: (context) {
@@ -469,7 +479,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        isSales ? 'Sales Agent' : 'Administrator',
+                                        name,
                                         style: GoogleFonts.outfit(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w700,
@@ -638,8 +648,9 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     final bool isMobile = Responsive.isMobile(context);
 
     final isSales = AuthService().isSales;
-    final email = AuthService().currentUserEmail ?? '';
-    final initials = email.isNotEmpty ? email[0].toUpperCase() : (isSales ? 'S' : 'A');
+    final rawName = AuthService().currentUserName ?? '';
+    final name = rawName.isNotEmpty ? rawName : (isSales ? 'Sales Agent' : 'Administrator');
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : (isSales ? 'S' : 'A');
 
     final double height = isMobile ? 60 : 72;
     final String? currentRoute = ModalRoute.of(context)?.settings.name;

@@ -52,7 +52,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
       if (mounted && _dealersBloc != null) {
         final now = DateTime.now();
-        if (lastDealersFetch == null || now.difference(lastDealersFetch!) > const Duration(seconds: 5)) {
+        if (lastDealersFetch == null ||
+            now.difference(lastDealersFetch!) > const Duration(seconds: 5)) {
           lastDealersFetch = now;
           _dealersBloc!.add(const FetchDealersDataEvent(forceRefresh: true));
         }
@@ -274,14 +275,21 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
           if (assignedAgent != null) {
             if (assignedAgent is Map) {
-              resolvedAgentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
-              agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
-              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
+              resolvedAgentId = _normalizeId(
+                assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent,
+              );
+              agentName =
+                  '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'
+                      .trim();
+              if (agentName.isEmpty)
+                agentName = (assignedAgent['phoneNumber'] ?? '').toString();
             } else {
               resolvedAgentId = assignedAgent.toString();
             }
 
-            if (resolvedAgentId == null || resolvedAgentId.trim().isEmpty || resolvedAgentId == '-') {
+            if (resolvedAgentId == null ||
+                resolvedAgentId.trim().isEmpty ||
+                resolvedAgentId == '-') {
               resolvedAgentId = null;
               agentName = '-';
             } else if (agentName.isEmpty || agentName == '-') {
@@ -291,8 +299,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 orElse: () => {},
               );
               if (agentUser.isNotEmpty) {
-                agentName = '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'.trim();
-                if (agentName.isEmpty) agentName = (agentUser['phoneNumber'] ?? '-').toString();
+                agentName =
+                    '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'
+                        .trim();
+                if (agentName.isEmpty)
+                  agentName = (agentUser['phoneNumber'] ?? '-').toString();
               } else {
                 agentName = 'Assigned';
               }
@@ -776,7 +787,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 ? 1300.0
                 : (AuthService().isAdmin ? 1220.0 : 1020.0);
 
-            final Widget body = (state.status == DealersStatus.loading && state.allRawUsers.isEmpty)
+            final Widget body =
+                (state.status == DealersStatus.loading &&
+                    state.allRawUsers.isEmpty)
                 ? _buildSkeletonLoading(isDesktop, isMobile)
                 : CustomScrollView(
                     slivers: [
@@ -791,16 +804,27 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                             children: [
                               _buildHeader(context, state, isMobile),
                               const SizedBox(height: 16),
-                              _buildStatsCardsInternal(allCalculated, state, context),
+                              _buildStatsCardsInternal(
+                                allCalculated,
+                                state,
+                                context,
+                              ),
                               const SizedBox(height: 24),
-                              _buildFiltersRow(context, state, isMobile, isDesktop),
+                              _buildFiltersRow(
+                                context,
+                                state,
+                                isMobile,
+                                isDesktop,
+                              ),
                               const SizedBox(height: 16),
                             ],
                           ),
                         ),
                       ),
                       SliverPadding(
-                        padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isDesktop ? 28 : 16,
+                        ),
                         sliver: SliverToBoxAdapter(
                           child: _DealerTableCard(
                             dealers: filteredDealers,
@@ -824,7 +848,8 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                             },
                             onEditDealer: _editDealer,
                             onDeleteDealer: _deleteDealer,
-                            isSubmitting: state.status == DealersStatus.submitting,
+                            isSubmitting:
+                                state.status == DealersStatus.submitting,
                           ),
                         ),
                       ),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,7 @@ class AuthService {
   String? _currentUserId;
   String? _currentUserEmail;
   String? _currentUserName;
+  double? _monthlyTarget;
   String? _lastError;
   String? _sessionId;
   bool _isInitialized = false;
@@ -23,6 +25,7 @@ class AuthService {
   String? get currentUserId => _currentUserId;
   String? get currentUserEmail => _currentUserEmail;
   String? get currentUserName => _currentUserName;
+  double? get monthlyTarget => _monthlyTarget;
   String? get lastError => _lastError;
   String? get sessionId => _sessionId;
   bool get isInitialized => _isInitialized;
@@ -40,6 +43,7 @@ class AuthService {
       _currentUserId = prefs.getString('kd_user_id');
       _currentUserEmail = prefs.getString('kd_user_email');
       _currentUserName = prefs.getString('kd_user_name');
+      _monthlyTarget = prefs.getDouble('kd_monthly_target');
     } catch (_) {}
     _isInitialized = true;
   }
@@ -71,10 +75,12 @@ class AuthService {
           final firstName = data['user']['firstName'] ?? '';
           final lastName = data['user']['lastName'] ?? '';
           final userName = '$firstName $lastName'.trim();
+          final monthlyTarget = (data['user']['monthlyTarget'] as num?)?.toDouble();
 
           _currentUserId = userIdStr;
           _currentUserEmail = userEmailStr;
           _currentUserName = userName;
+          _monthlyTarget = monthlyTarget;
 
           final prefs = await SharedPreferences.getInstance();
           if (userIdStr != null) {
@@ -85,6 +91,9 @@ class AuthService {
           }
           if (userName.isNotEmpty) {
             await prefs.setString('kd_user_name', userName);
+          }
+          if (monthlyTarget != null) {
+            await prefs.setDouble('kd_monthly_target', monthlyTarget);
           }
           if (rememberMe) {
             await prefs.setString('kd_user_role', userRoleStr);
@@ -165,4 +174,33 @@ class AuthService {
 
   bool get isAdmin => _currentUserRole == UserRole.admin;
   bool get isSales => _currentUserRole == UserRole.sales;
+
+  Future<void> refreshProfile() async {
+    try {
+      final res = await ApiClient().get('/users/profile');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && data['user'] != null) {
+          final user = data['user'];
+          final firstName = user['firstName'] ?? '';
+          final lastName = user['lastName'] ?? '';
+          final userName = '$firstName $lastName'.trim();
+          final monthlyTarget = (user['monthlyTarget'] as num?)?.toDouble();
+          
+          _currentUserName = userName;
+          _monthlyTarget = monthlyTarget;
+          
+          final prefs = await SharedPreferences.getInstance();
+          if (userName.isNotEmpty) {
+            await prefs.setString('kd_user_name', userName);
+          }
+          if (monthlyTarget != null) {
+            await prefs.setDouble('kd_monthly_target', monthlyTarget);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthService] Failed to refresh profile: $e');
+    }
+  }
 }

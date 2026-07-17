@@ -20,6 +20,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<FetchDealerDetailsEvent>(_onFetchDealerDetails);
     on<FetchDealerOrdersEvent>(_onFetchDealerOrders);
     on<FetchDealerEventsEvent>(_onFetchDealerEvents);
+    on<FetchDealerEventsMoreEvent>(_onFetchDealerEventsMore);
   }
 
   Future<void> _onFetchDealerDetails(
@@ -94,19 +95,67 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     FetchDealerEventsEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(isLoadingEvents: true));
+    if (!event.forceRefresh && state.currentDealerEvents.isNotEmpty) return;
+
+    emit(state.copyWith(
+      isLoadingEvents: true,
+      currentDealerEvents: [],
+      eventsNextCursor: null,
+      hasReachedMaxEvents: false,
+    ));
     try {
-      final events = await AnalyticsService().fetchEvents(
+      final result = await AnalyticsService().fetchEventsPaged(
         userEmail: event.identifier,
+        limit: 50,
+        actorOnly: true,
       );
+      final List<Map<String, dynamic>> events =
+          (result['events'] as List).cast<Map<String, dynamic>>();
+      final String? nextCursor = result['nextCursor'];
+
       emit(state.copyWith(
         isLoadingEvents: false,
         currentDealerEvents: events,
+        eventsNextCursor: nextCursor,
+        hasReachedMaxEvents: nextCursor == null,
       ));
     } catch (e) {
       emit(state.copyWith(
         isLoadingEvents: false,
         errorMessage: 'Error loading events: ${e.toString()}',
+      ));
+    }
+  }
+
+  Future<void> _onFetchDealerEventsMore(
+    FetchDealerEventsMoreEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    if (state.hasReachedMaxEvents || state.isLoadingMoreEvents) return;
+
+    emit(state.copyWith(isLoadingMoreEvents: true));
+    try {
+      final result = await AnalyticsService().fetchEventsPaged(
+        userEmail: event.identifier,
+        limit: 50,
+        before: state.eventsNextCursor,
+        actorOnly: true,
+      );
+      final List<Map<String, dynamic>> moreEvents =
+          (result['events'] as List).cast<Map<String, dynamic>>();
+      final String? nextCursor = result['nextCursor'];
+
+      emit(state.copyWith(
+        isLoadingMoreEvents: false,
+        currentDealerEvents: List.of(state.currentDealerEvents)
+          ..addAll(moreEvents),
+        eventsNextCursor: nextCursor,
+        hasReachedMaxEvents: nextCursor == null,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingMoreEvents: false,
+        errorMessage: 'Error loading more events: ${e.toString()}',
       ));
     }
   }

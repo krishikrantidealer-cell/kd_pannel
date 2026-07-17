@@ -196,9 +196,15 @@ class AnalyticsService extends WidgetsBindingObserver {
 
   // --- Dashboard Data Fetching (Admin Use) ---
 
-  Future<List<Map<String, dynamic>>> fetchEvents({String? userEmail}) async {
+  Future<List<Map<String, dynamic>>> fetchEvents({
+    String? userEmail,
+    bool actorOnly = false,
+  }) async {
     try {
-      final path = userEmail != null ? '/events?user=${Uri.encodeComponent(userEmail)}' : '/events';
+      String path = userEmail != null ? '/events?user=${Uri.encodeComponent(userEmail)}' : '/events';
+      if (actorOnly) {
+        path += userEmail != null ? '&actorOnly=true' : '?actorOnly=true';
+      }
       final response = await _apiClient.get(path);
       if (response.statusCode == 200) {
         final dynamic data = jsonDecode(response.body);
@@ -217,6 +223,7 @@ class AnalyticsService extends WidgetsBindingObserver {
     int limit = 150,
     String? before,
     String? filter,
+    bool actorOnly = false,
   }) async {
     try {
       String path = '/events?limit=$limit';
@@ -228,6 +235,9 @@ class AnalyticsService extends WidgetsBindingObserver {
       }
       if (filter != null && filter != 'All') {
         path += '&filter=${Uri.encodeComponent(filter)}';
+      }
+      if (actorOnly) {
+        path += '&actorOnly=true';
       }
       final response = await _apiClient.get(path);
       if (response.statusCode == 200) {

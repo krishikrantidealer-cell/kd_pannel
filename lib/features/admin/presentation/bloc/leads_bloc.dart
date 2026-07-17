@@ -62,6 +62,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     try {
       final events = await AnalyticsService().fetchEvents(
         userEmail: event.identifier,
+        actorOnly: true,
       );
       emit(state.copyWith(
         isLoadingEvents: false,

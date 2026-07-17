@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
@@ -41,7 +43,11 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Refresh profile to get the latest target and name
+      await AuthService().refreshProfile();
+      if (mounted) setState(() {});
+
       final leadsBloc = context.read<LeadsBloc>();
       leadsBloc.add(const FetchLeadsDataEvent(forceRefresh: true));
 
@@ -206,7 +212,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
-    final double gap = AppTheme.getResponsiveGap(context);
+    final double gap = AppTheme.getResponsiveGap(context) * 0.5;
 
     return BlocBuilder<LeadsBloc, LeadsState>(
       builder: (context, leadsState) {
@@ -222,8 +228,12 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                     dealersState.status == DealersStatus.loading ||
                     ordersState.status == OrdersStatus.loading;
 
+                final double cumulativeRevenue = ordersState.orders
+                    .where((o) => o.orderStatus != 'Cancelled')
+                    .fold(0.0, (sum, o) => sum + o.totalAmount);
+
                 return SingleChildScrollView(
-                  padding: AppTheme.getResponsivePadding(context),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -233,7 +243,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                         isLoading: isLoading,
                       ),
                       
-                      SizedBox(height: gap * 2),
+                      SizedBox(height: gap),
 
                       // Sales Stats Grid - No Revenue
                       _SalesStatsGrid(
@@ -241,7 +251,13 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                         dealersCount: dealers.length,
                         ordersCount: orders.length,
                       ),
-                      SizedBox(height: gap * 2),
+                      SizedBox(height: gap),
+
+                      // Monthly Performance Target
+                      if (AuthService().monthlyTarget != null) ...[
+                        _buildTargetProgressCard(cumulativeRevenue, AuthService().monthlyTarget!),
+                        SizedBox(height: gap),
+                      ],
 
                       // Operations Terminal
                       _buildOperationsTerminal(
@@ -251,7 +267,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                         leads,
                         dealers,
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 );
@@ -275,7 +291,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusXLarge),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: AppTheme.cardShadow,
         border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
@@ -284,17 +300,17 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
         children: [
           // Terminal Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: isMobile
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildTerminalTitle(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       _buildTerminalSearchField(isMobile),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       _buildTerminalStatusFilter(isMobile),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       _buildViewAllButton(context),
                     ],
                   )
@@ -303,9 +319,9 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                       _buildTerminalTitle(),
                       const Spacer(),
                       _buildTerminalSearchField(isMobile),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       _buildTerminalStatusFilter(isMobile),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       _buildViewAllButton(context),
                     ],
                   ),
@@ -313,16 +329,16 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
 
           // Tabs Row
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               child: Row(
                 children: [
                   _buildTab(0, 'Orders', Icons.shopping_bag_outlined, orders.length, AppTheme.primaryColor),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   _buildTab(1, 'Leads', Icons.person_add_outlined, leads.length, AppTheme.info),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   _buildTab(2, 'Dealers', Icons.storefront_outlined, dealers.length, AppTheme.accentColor),
                 ],
               ),
@@ -330,7 +346,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
           ),
 
           const Padding(
-            padding: EdgeInsets.only(top: 16),
+            padding: EdgeInsets.only(top: 12),
             child: Divider(height: 1, color: AppTheme.lightBorderColor),
           ),
 
@@ -589,15 +605,15 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
   }) {
     if (data.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
+        padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: Column(
             children: [
-              Icon(Icons.layers_clear_outlined, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
-              const SizedBox(height: 16),
+              Icon(Icons.layers_clear_outlined, size: 40, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
+              const SizedBox(height: 12),
               Text(
                 emptyText,
-                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
+                style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -608,10 +624,10 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: columns.map((c) => Expanded(
-              child: Text(c.toUpperCase(), style: AppTheme.tableHeader),
+              child: Text(c.toUpperCase(), style: AppTheme.tableHeader.copyWith(fontSize: 11)),
             )).toList(),
           ),
         ),
@@ -697,6 +713,164 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
       ],
     );
   }
+
+  Widget _buildTargetProgressCard(double current, double target) {
+    final double pct = current >= target ? 1.0 : current / target;
+    final int pctInt = (pct * 100).toInt();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.track_changes_outlined, color: AppTheme.primaryColor, size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Monthly Performance Target',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  DateFormat('MMMM yyyy').format(DateTime.now()),
+                  style: GoogleFonts.outfit(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildLinearTargetTracker(
+            'Revenue Booking Progress',
+            current,
+            target,
+            isCurrency: true,
+            barColor: AppTheme.primaryColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinearTargetTracker(
+    String label,
+    double current,
+    double target, {
+    required bool isCurrency,
+    required Color barColor,
+  }) {
+    final double pct = current >= target ? 1.0 : current / target;
+    final int pctInt = (pct * 100).toInt();
+
+    String formatCurrency(double amount) {
+      return '₹${amount.toStringAsFixed(0)}';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            Text(
+              '${isCurrency ? formatCurrency(current) : current.toInt()} / ${isCurrency ? formatCurrency(target) : target.toInt()} ($pctInt%)',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: current >= target ? AppTheme.success : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Stack(
+          children: [
+            Container(
+              height: 10,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            AnimatedFractionallySizedBox(
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeInOut,
+              widthFactor: pct,
+              child: Container(
+                height: 10,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [barColor, barColor.withOpacity(0.7)],
+                  ),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (current < target) ...[
+          const SizedBox(height: 8),
+          Text(
+            'You are ${formatCurrency(target - current)} away from your monthly goal. Keep going!',
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'Congratulations! You have exceeded your monthly target. 🚀',
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: AppTheme.success,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _AgentProfileHero extends StatefulWidget {
@@ -735,6 +909,147 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
     super.dispose();
   }
 
+  void _showResetPasswordDialog() {
+    final formKey = GlobalKey<FormState>();
+    final currentPasswordController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              'Reset Password',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            ),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Verify your identity by entering your current password followed by the new one.',
+                      style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: currentPasswordController,
+                      obscureText: obscureCurrent,
+                      style: GoogleFonts.outfit(fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Current Password',
+                        labelStyle: GoogleFonts.outfit(fontSize: 13),
+                        prefixIcon: const Icon(Icons.lock_person_outlined, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureCurrent ? Icons.visibility : Icons.visibility_off, size: 20),
+                          onPressed: () => setStateDialog(() => obscureCurrent = !obscureCurrent),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => (val == null || val.isEmpty) ? 'Current password is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(height: 32),
+                    TextFormField(
+                      controller: passwordController,
+                      obscureText: obscureNew,
+                      style: GoogleFonts.outfit(fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'New Password',
+                        labelStyle: GoogleFonts.outfit(fontSize: 13),
+                        prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility : Icons.visibility_off, size: 20),
+                          onPressed: () => setStateDialog(() => obscureNew = !obscureNew),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => (val == null || val.length < 6) ? 'Min 6 characters' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: confirmPasswordController,
+                      obscureText: obscureNew,
+                      style: GoogleFonts.outfit(fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Confirm New Password',
+                        labelStyle: GoogleFonts.outfit(fontSize: 13),
+                        prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => val != passwordController.text ? 'Passwords do not match' : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text('Cancel', style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+              ),
+              ElevatedButton(
+                onPressed: isSaving ? null : () async {
+                  if (formKey.currentState!.validate()) {
+                    setStateDialog(() => isSaving = true);
+                    try {
+                      final res = await ApiClient().post('/auth/reset-password', {
+                        'currentPassword': currentPasswordController.text.trim(),
+                        'newPassword': passwordController.text.trim(),
+                      });
+                      if (res.statusCode == 200) {
+                        final data = jsonDecode(res.body);
+                        if (data['success'] == true) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password reset successfully'), backgroundColor: AppTheme.success),
+                            );
+                          }
+                          Navigator.pop(dialogCtx);
+                        } else {
+                          throw Exception(data['message'] ?? 'Failed to reset password');
+                        }
+                      } else {
+                        final data = jsonDecode(res.body);
+                        throw Exception(data['message'] ?? 'Incorrect current password or server error');
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'), backgroundColor: AppTheme.error),
+                        );
+                      }
+                    } finally {
+                      setStateDialog(() => isSaving = false);
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: isSaving 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                  : Text('Update Password', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
   String _getTimeBasedGreeting() {
     final hour = _currentTime.hour;
     if (hour < 12) return 'Good Morning';
@@ -745,7 +1060,8 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
   @override
   Widget build(BuildContext context) {
     final AuthService auth = AuthService();
-    final String name = auth.currentUserName ?? 'Sales Agent';
+    final String rawName = auth.currentUserName ?? '';
+    final String name = rawName.isNotEmpty ? rawName : 'Sales Agent';
     final String email = auth.currentUserEmail ?? '-';
     final String initials = name.isNotEmpty
         ? name.split(' ').map((e) => e[0]).take(2).join().toUpperCase()
@@ -918,7 +1234,37 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
                           letterSpacing: 0.5,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _showResetPasswordDialog,
+                        icon: const Icon(Icons.lock_reset_rounded, size: 16),
+                        label: Text(
+                          'Reset Password',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          minimumSize: const Size(0, 32),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                          ),
+                        ),
+                      ),
                     ],
+                  ),
+                ] else ...[
+                  // Mobile Reset Password Icon
+                  IconButton(
+                    onPressed: _showResetPasswordDialog,
+                    icon: const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 24),
+                    tooltip: 'Reset Password',
                   ),
                 ],
               ],
@@ -994,7 +1340,7 @@ class _InteractiveRowState extends State<_InteractiveRow> {
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: _isHovered
                 ? AppTheme.primaryColor.withValues(alpha: 0.04)
@@ -1126,7 +1472,7 @@ class _SalesStatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double spacing = 16.0;
+        final double spacing = 12.0;
         int columns = 1;
         if (constraints.maxWidth >= 1100) {
           columns = 3;
@@ -1148,8 +1494,8 @@ class _SalesStatsGrid extends StatelessWidget {
               trendLabel: 'Assigned to you',
               trendIcon: Icons.shopping_bag_outlined,
               visualWidget: SizedBox(
-                width: 28,
-                height: 28,
+                width: 24,
+                height: 24,
                 child: CustomPaint(
                   painter: FulfillmentProgressPainter(0.75, AppTheme.accentColor),
                 ),

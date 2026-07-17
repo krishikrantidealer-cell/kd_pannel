@@ -154,7 +154,16 @@ class FetchDealerOrdersEvent extends DealersEvent {
 
 class FetchDealerEventsEvent extends DealersEvent {
   final String identifier;
-  const FetchDealerEventsEvent(this.identifier);
+  final bool forceRefresh;
+  const FetchDealerEventsEvent(this.identifier, {this.forceRefresh = false});
+
+  @override
+  List<Object?> get props => [identifier, forceRefresh];
+}
+
+class FetchDealerEventsMoreEvent extends DealersEvent {
+  final String identifier;
+  const FetchDealerEventsMoreEvent(this.identifier);
 
   @override
   List<Object?> get props => [identifier];

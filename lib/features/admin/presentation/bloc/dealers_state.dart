@@ -29,9 +29,12 @@ class DealersState extends Equatable {
   final Map<String, dynamic>? currentDealerDetails;
   final List<Map<String, dynamic>> currentDealerOrders;
   final List<Map<String, dynamic>> currentDealerEvents;
+  final String? eventsNextCursor;
+  final bool hasReachedMaxEvents;
   final bool isLoadingProfile;
   final bool isLoadingOrders;
   final bool isLoadingEvents;
+  final bool isLoadingMoreEvents;
 
   const DealersState({
     this.status = DealersStatus.initial,
@@ -54,9 +57,12 @@ class DealersState extends Equatable {
     this.currentDealerDetails,
     this.currentDealerOrders = const [],
     this.currentDealerEvents = const [],
+    this.eventsNextCursor,
+    this.hasReachedMaxEvents = false,
     this.isLoadingProfile = false,
     this.isLoadingOrders = false,
     this.isLoadingEvents = false,
+    this.isLoadingMoreEvents = false,
   });
 
   DealersState copyWith({
@@ -80,9 +86,12 @@ class DealersState extends Equatable {
     Map<String, dynamic>? currentDealerDetails,
     List<Map<String, dynamic>>? currentDealerOrders,
     List<Map<String, dynamic>>? currentDealerEvents,
+    String? eventsNextCursor,
+    bool? hasReachedMaxEvents,
     bool? isLoadingProfile,
     bool? isLoadingOrders,
     bool? isLoadingEvents,
+    bool? isLoadingMoreEvents,
   }) {
     return DealersState(
       status: status ?? this.status,
@@ -105,9 +114,12 @@ class DealersState extends Equatable {
       currentDealerDetails: currentDealerDetails ?? this.currentDealerDetails,
       currentDealerOrders: currentDealerOrders ?? this.currentDealerOrders,
       currentDealerEvents: currentDealerEvents ?? this.currentDealerEvents,
+      eventsNextCursor: eventsNextCursor ?? this.eventsNextCursor,
+      hasReachedMaxEvents: hasReachedMaxEvents ?? this.hasReachedMaxEvents,
       isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
       isLoadingOrders: isLoadingOrders ?? this.isLoadingOrders,
       isLoadingEvents: isLoadingEvents ?? this.isLoadingEvents,
+      isLoadingMoreEvents: isLoadingMoreEvents ?? this.isLoadingMoreEvents,
     );
   }
 
@@ -174,8 +186,11 @@ class DealersState extends Equatable {
         currentDealerDetails,
         currentDealerOrders,
         currentDealerEvents,
+        eventsNextCursor,
+        hasReachedMaxEvents,
         isLoadingProfile,
         isLoadingOrders,
         isLoadingEvents,
+        isLoadingMoreEvents,
       ];
 }

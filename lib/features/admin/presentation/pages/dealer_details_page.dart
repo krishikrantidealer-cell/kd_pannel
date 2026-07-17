@@ -33,7 +33,20 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
   String get _phone => widget.dealer.phone;
   String get _city => widget.dealer.city;
   String get _state => widget.dealer.state;
-  String get _agent => _agentName ?? widget.dealer.agent;
+  String get _agent {
+    final value = _agentName ?? widget.dealer.agent;
+    if (value != '-' && value.length == 24) {
+      final matchedAgent = _salesAgents.firstWhere(
+        (a) => a['_id'] == value,
+        orElse: () => <String, dynamic>{},
+      );
+      if (matchedAgent.isNotEmpty) {
+        final name = '${matchedAgent['firstName'] ?? ''} ${matchedAgent['lastName'] ?? ''}'.trim();
+        return name.isNotEmpty ? name : (matchedAgent['phoneNumber'] ?? '-').toString();
+      }
+    }
+    return value;
+  }
   String get _gstStatus => widget.dealer.gstStatus;
   int get _totalOrders => widget.dealer.totalOrders;
   String get _purchaseValue => widget.dealer.purchaseValue;

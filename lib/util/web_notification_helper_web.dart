@@ -43,23 +43,35 @@ void showWebNotification(String title, String body) {
 void _displayNotification(String title, String body, String icon, String badge) {
   try {
     final sw = js.context['navigator']['serviceWorker'];
-    // We removed the null check as per the warning "operand can't be null".
-    // If it is null, the catch block will handle the resulting exception.
+    // Guard: ServiceWorker API may not be available (e.g. dev server, HTTP).
+    if (sw == null) {
+      _createStandardNotification(title, body, icon);
+      return;
+    }
+
     sw.callMethod('getRegistration').callMethod('then', [
       (registration) {
-        // We removed the null check on registration as well.
-        registration.callMethod('showNotification', [
-          title,
-          js.JsObject.jsify({
-            'body': body,
-            'icon': icon,
-            'badge': badge,
-            'tag': 'kd_pannel_notif',
-            'renotify': true,
-            'requireInteraction': true,
-            'vibrate': [200, 100, 200]
-          })
-        ]);
+        // Guard: getRegistration() resolves to undefined when no SW is active.
+        if (registration == null) {
+          _createStandardNotification(title, body, icon);
+          return;
+        }
+        try {
+          registration.callMethod('showNotification', [
+            title,
+            js.JsObject.jsify({
+              'body': body,
+              'icon': icon,
+              'badge': badge,
+              'tag': 'kd_pannel_notif',
+              'renotify': true,
+              'requireInteraction': true,
+              'vibrate': [200, 100, 200],
+            }),
+          ]);
+        } catch (_) {
+          _createStandardNotification(title, body, icon);
+        }
       }
     ]);
     return;
