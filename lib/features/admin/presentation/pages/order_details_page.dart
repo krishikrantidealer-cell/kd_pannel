@@ -124,6 +124,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   String _formatDate(DateTime dt) {
+    final localDt = dt.toLocal();
     final months = [
       'Jan',
       'Feb',
@@ -138,13 +139,14 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       'Nov',
       'Dec',
     ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    return '${localDt.day} ${months[localDt.month - 1]} ${localDt.year}';
   }
 
   String _formatTime(DateTime dt) {
-    final hr = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
+    final localDt = dt.toLocal();
+    final hr = localDt.hour > 12 ? localDt.hour - 12 : (localDt.hour == 0 ? 12 : localDt.hour);
+    final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+    final min = localDt.minute < 10 ? '0${localDt.minute}' : '${localDt.minute}';
     return '$hr:$min $ampm';
   }
 

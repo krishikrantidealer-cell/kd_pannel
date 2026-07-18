@@ -449,9 +449,9 @@ class _OrdersPageState extends State<OrdersPage> {
     final placedToday = filteredOrders
         .where(
           (o) =>
-              o.placedAt.year == now.year &&
-              o.placedAt.month == now.month &&
-              o.placedAt.day == now.day,
+              o.placedAt.toLocal().year == now.year &&
+              o.placedAt.toLocal().month == now.month &&
+              o.placedAt.toLocal().day == now.day,
         )
         .length;
 
@@ -1347,6 +1347,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   String _formatDate(DateTime dt) {
+    final localDt = dt.toLocal();
     final months = [
       'Jan',
       'Feb',
@@ -1361,13 +1362,14 @@ class _OrdersPageState extends State<OrdersPage> {
       'Nov',
       'Dec',
     ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    return '${localDt.day} ${months[localDt.month - 1]} ${localDt.year}';
   }
 
   String _formatTime(DateTime dt) {
-    final hr = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
+    final localDt = dt.toLocal();
+    final hr = localDt.hour > 12 ? localDt.hour - 12 : (localDt.hour == 0 ? 12 : localDt.hour);
+    final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+    final min = localDt.minute < 10 ? '0${localDt.minute}' : '${localDt.minute}';
     return '$hr:$min $ampm';
   }
 

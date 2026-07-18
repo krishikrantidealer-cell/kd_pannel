@@ -3013,7 +3013,7 @@ class _OrderHistoryCardState extends State<_OrderHistoryCard> {
   String _formatDate(dynamic dateString) {
     if (dateString == null) return '-';
     try {
-      final dt = DateTime.parse(dateString.toString());
+      final dt = DateTime.parse(dateString.toString()).toLocal();
       final months = [
         'Jan',
         'Feb',

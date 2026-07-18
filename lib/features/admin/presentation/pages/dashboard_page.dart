@@ -2966,9 +2966,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   String _formatTime(DateTime dt) {
-    final hr = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
+    final localDt = dt.toLocal();
+    final hr = localDt.hour > 12 ? localDt.hour - 12 : (localDt.hour == 0 ? 12 : localDt.hour);
+    final ampm = localDt.hour >= 12 ? 'PM' : 'AM';
+    final min = localDt.minute < 10 ? '0${localDt.minute}' : '${localDt.minute}';
     return '$hr:$min $ampm';
   }
 
@@ -3054,7 +3055,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     if (dt == null) return '-';
-    return '${dt.day}/${dt.month}/${dt.year}';
+    final localDt = dt.toLocal();
+    return '${localDt.day}/${localDt.month}/${localDt.year}';
   }
 
   Widget _buildTerminalTable(List<Map<String, dynamic>> rows) {
