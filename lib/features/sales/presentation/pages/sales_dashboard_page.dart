@@ -232,43 +232,45 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                     .where((o) => o.orderStatus != 'Cancelled')
                     .fold(0.0, (sum, o) => sum + o.totalAmount);
 
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // High Impact Hero Header - Full Width & Compact
-                      _AgentProfileHero(
-                        ordersCount: orders.length,
-                        isLoading: isLoading,
-                      ),
-                      
-                      SizedBox(height: gap),
-
-                      // Sales Stats Grid - No Revenue
-                      _SalesStatsGrid(
-                        leadsCount: leads.length,
-                        dealersCount: dealers.length,
-                        ordersCount: orders.length,
-                      ),
-                      SizedBox(height: gap),
-
-                      // Monthly Performance Target
-                      if (AuthService().monthlyTarget != null) ...[
-                        _buildTargetProgressCard(cumulativeRevenue, AuthService().monthlyTarget!),
+                return SelectionArea(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // High Impact Hero Header - Full Width & Compact
+                        _AgentProfileHero(
+                          ordersCount: orders.length,
+                          isLoading: isLoading,
+                        ),
+                        
                         SizedBox(height: gap),
+                
+                        // Sales Stats Grid - No Revenue
+                        _SalesStatsGrid(
+                          leadsCount: leads.length,
+                          dealersCount: dealers.length,
+                          ordersCount: orders.length,
+                        ),
+                        SizedBox(height: gap),
+                
+                        // Monthly Performance Target
+                        if (AuthService().monthlyTarget != null) ...[
+                          _buildTargetProgressCard(cumulativeRevenue, AuthService().monthlyTarget!),
+                          SizedBox(height: gap),
+                        ],
+                
+                        // Operations Terminal
+                        _buildOperationsTerminal(
+                          context,
+                          isDesktop,
+                          orders,
+                          leads,
+                          dealers,
+                        ),
+                        const SizedBox(height: 16),
                       ],
-
-                      // Operations Terminal
-                      _buildOperationsTerminal(
-                        context,
-                        isDesktop,
-                        orders,
-                        leads,
-                        dealers,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+                    ),
                   ),
                 );
               },
@@ -307,22 +309,22 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                     children: [
                       _buildTerminalTitle(),
                       const SizedBox(height: 12),
-                      _buildTerminalSearchField(isMobile),
+                      SelectionContainer.disabled(child: _buildTerminalSearchField(isMobile)),
                       const SizedBox(height: 8),
-                      _buildTerminalStatusFilter(isMobile),
+                      SelectionContainer.disabled(child: _buildTerminalStatusFilter(isMobile)),
                       const SizedBox(height: 8),
-                      _buildViewAllButton(context),
+                      SelectionContainer.disabled(child: _buildViewAllButton(context)),
                     ],
                   )
                 : Row(
                     children: [
                       _buildTerminalTitle(),
                       const Spacer(),
-                      _buildTerminalSearchField(isMobile),
+                      SelectionContainer.disabled(child: _buildTerminalSearchField(isMobile)),
                       const SizedBox(width: 8),
-                      _buildTerminalStatusFilter(isMobile),
+                      SelectionContainer.disabled(child: _buildTerminalStatusFilter(isMobile)),
                       const SizedBox(width: 8),
-                      _buildViewAllButton(context),
+                      SelectionContainer.disabled(child: _buildViewAllButton(context)),
                     ],
                   ),
           ),
@@ -330,17 +332,19 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
           // Tabs Row
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: [
-                  _buildTab(0, 'Orders', Icons.shopping_bag_outlined, orders.length, AppTheme.primaryColor),
-                  const SizedBox(width: 8),
-                  _buildTab(1, 'Leads', Icons.person_add_outlined, leads.length, AppTheme.info),
-                  const SizedBox(width: 8),
-                  _buildTab(2, 'Dealers', Icons.storefront_outlined, dealers.length, AppTheme.accentColor),
-                ],
+            child: SelectionContainer.disabled(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    _buildTab(0, 'Orders', Icons.shopping_bag_outlined, orders.length, AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    _buildTab(1, 'Leads', Icons.person_add_outlined, leads.length, AppTheme.info),
+                    const SizedBox(width: 8),
+                    _buildTab(2, 'Dealers', Icons.storefront_outlined, dealers.length, AppTheme.accentColor),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1235,25 +1239,27 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _showResetPasswordDialog,
-                        icon: const Icon(Icons.lock_reset_rounded, size: 16),
-                        label: Text(
-                          'Reset Password',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                      SelectionContainer.disabled(
+                        child: ElevatedButton.icon(
+                          onPressed: _showResetPasswordDialog,
+                          icon: const Icon(Icons.lock_reset_rounded, size: 16),
+                          label: Text(
+                            'Reset Password',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.15),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: const Size(0, 32),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.15),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(0, 32),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                            ),
                           ),
                         ),
                       ),
@@ -1261,10 +1267,12 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
                   ),
                 ] else ...[
                   // Mobile Reset Password Icon
-                  IconButton(
-                    onPressed: _showResetPasswordDialog,
-                    icon: const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 24),
-                    tooltip: 'Reset Password',
+                  SelectionContainer.disabled(
+                    child: IconButton(
+                      onPressed: _showResetPasswordDialog,
+                      icon: const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 24),
+                      tooltip: 'Reset Password',
+                    ),
                   ),
                 ],
               ],

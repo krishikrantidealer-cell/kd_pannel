@@ -475,57 +475,59 @@ class _DashboardPageState extends State<DashboardPage> {
     final bool isDesktop = Responsive.isDesktop(context);
     final double gap = isDesktop ? 20.0 : 14.0;
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_isStatsRefreshing) ...[
-            const LinearProgressIndicator(
-              minHeight: 2,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
-            ),
-            const SizedBox(height: 6),
+    return SelectionArea(
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 28 : 16,
+          vertical: isDesktop ? 20 : 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_isStatsRefreshing) ...[
+              const LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              ),
+              const SizedBox(height: 6),
+            ],
+            // 1. Sleek Modern Welcome Header Card
+            _buildWelcomeHeader(isDesktop),
+            SizedBox(height: gap),
+      
+            // 2. Custom Elite Visual Stats Grid
+            _buildVisualStatsGrid(isDesktop),
+            SizedBox(height: gap),
+      
+            // 3. Interactive Operations Terminal in Full Width
+            _buildInteractiveOperationsTable(),
+            SizedBox(height: gap),
+      
+            // 5. Graphical Analytics Layer
+            if (MediaQuery.of(context).size.width >= 850)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  _buildInteractiveBezierTrendCard(),
+                  SizedBox(height: gap),
+                  _buildLeadPipelineBreakdownCard(),
+                ],
+              ),
           ],
-          // 1. Sleek Modern Welcome Header Card
-          _buildWelcomeHeader(isDesktop),
-          SizedBox(height: gap),
-
-          // 2. Custom Elite Visual Stats Grid
-          _buildVisualStatsGrid(isDesktop),
-          SizedBox(height: gap),
-
-          // 3. Interactive Operations Terminal in Full Width
-          _buildInteractiveOperationsTable(),
-          SizedBox(height: gap),
-
-          // 5. Graphical Analytics Layer
-          if (MediaQuery.of(context).size.width >= 850)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildInteractiveBezierTrendCard()),
-                const SizedBox(width: 20),
-                Expanded(flex: 2, child: _buildLeadPipelineBreakdownCard()),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _buildInteractiveBezierTrendCard(),
-                SizedBox(height: gap),
-                _buildLeadPipelineBreakdownCard(),
-              ],
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -596,34 +598,36 @@ class _DashboardPageState extends State<DashboardPage> {
         SizedBox(height: isDesktop ? 16 : 8),
         // Live administrative operational stats (desktop/tablet only)
         if (!isMobile) ...[
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _buildSystemPill(
-                icon: Icons.check_circle_outline,
-                label: 'Fulfillment',
-                value: '85% Success',
-                statusColor: Colors.greenAccent,
-                onTap: () => _scrollToTerminalAndSwitchTab(0), // Orders tab
-              ),
-              _buildSystemPill(
-                icon: Icons.track_changes_outlined,
-                label: 'Target',
-                value: '74% Achieved',
-                statusColor: Colors.cyanAccent,
-                onTap: () =>
-                    _scrollToPosition(820.0), // Focuses graphical trends card
-              ),
-              _buildSystemPill(
-                icon: Icons.speed_outlined,
-                label: 'Processing',
-                value: '4.2 Hours',
-                statusColor: Colors.orangeAccent,
-                onTap: () =>
-                    _scrollToPosition(820.0), // Focuses metrics pipeline
-              ),
-            ],
+          SelectionContainer.disabled(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _buildSystemPill(
+                  icon: Icons.check_circle_outline,
+                  label: 'Fulfillment',
+                  value: '85% Success',
+                  statusColor: Colors.greenAccent,
+                  onTap: () => _scrollToTerminalAndSwitchTab(0), // Orders tab
+                ),
+                _buildSystemPill(
+                  icon: Icons.track_changes_outlined,
+                  label: 'Target',
+                  value: '74% Achieved',
+                  statusColor: Colors.cyanAccent,
+                  onTap: () =>
+                      _scrollToPosition(820.0), // Focuses graphical trends card
+                ),
+                _buildSystemPill(
+                  icon: Icons.speed_outlined,
+                  label: 'Processing',
+                  value: '4.2 Hours',
+                  statusColor: Colors.orangeAccent,
+                  onTap: () =>
+                      _scrollToPosition(820.0), // Focuses metrics pipeline
+                ),
+              ],
+            ),
           ),
         ],
       ],
@@ -663,7 +667,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         if (!isMobile) const SizedBox(height: 20),
         // Glassmorphic Filter Row
-        _buildFilterRow(true),
+        SelectionContainer.disabled(child: _buildFilterRow(true)),
       ],
     );
 
@@ -738,7 +742,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               ],
                             ),
                           ),
-                          _buildFilterRow(true),
+                          SelectionContainer.disabled(child: _buildFilterRow(true)),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -2595,9 +2599,9 @@ class _DashboardPageState extends State<DashboardPage> {
                               const SizedBox(height: 12),
                               Row(
                                 children: [
-                                  Expanded(child: searchField),
+                                  Expanded(child: SelectionContainer.disabled(child: searchField)),
                                   const SizedBox(width: 8),
-                                  viewAllButton,
+                                  SelectionContainer.disabled(child: viewAllButton),
                                 ],
                               ),
                             ],
@@ -2607,9 +2611,9 @@ class _DashboardPageState extends State<DashboardPage> {
                             children: [
                               titleAndBadge,
                               const Spacer(),
-                              searchField,
+                              SelectionContainer.disabled(child: searchField),
                               const SizedBox(width: 10),
-                              viewAllButton,
+                              SelectionContainer.disabled(child: viewAllButton),
                             ],
                           ),
                   ),
@@ -2617,117 +2621,119 @@ class _DashboardPageState extends State<DashboardPage> {
                   // ── Tab row ──────────────────────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
-                            child: Row(
-                              children: List.generate(tabs.length, (idx) {
-                                final isSelected = activeTableTab == idx;
-                                final tabColor = [
-                                  AppTheme.primaryColor,
-                                  AppTheme.info,
-                                  AppTheme.accentColor,
-                                ][idx];
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: GestureDetector(
-                                      onTap: () => setState(() {
-                                        activeTableTab = idx;
-                                      }),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 200,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 7,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? tabColor.withOpacity(0.08)
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                    child: SelectionContainer.disabled(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                children: List.generate(tabs.length, (idx) {
+                                  final isSelected = activeTableTab == idx;
+                                  final tabColor = [
+                                    AppTheme.primaryColor,
+                                    AppTheme.info,
+                                    AppTheme.accentColor,
+                                  ][idx];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: GestureDetector(
+                                        onTap: () => setState(() {
+                                          activeTableTab = idx;
+                                        }),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 200,
                                           ),
-                                          border: Border.all(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 7,
+                                          ),
+                                          decoration: BoxDecoration(
                                             color: isSelected
-                                                ? tabColor.withOpacity(0.3)
-                                                : AppTheme.borderColor,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              tabs[idx]['icon'] as IconData,
-                                              size: 14,
-                                              color: isSelected
-                                                  ? tabColor
-                                                  : AppTheme.textSecondary,
+                                                ? tabColor.withOpacity(0.08)
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              tabs[idx]['label'] as String,
-                                              style: AppTheme.labelMD.copyWith(
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? tabColor.withOpacity(0.3)
+                                                  : AppTheme.borderColor,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                tabs[idx]['icon'] as IconData,
+                                                size: 14,
                                                 color: isSelected
                                                     ? tabColor
                                                     : AppTheme.textSecondary,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w600,
                                               ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 1,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: isSelected
-                                                    ? tabColor.withOpacity(0.15)
-                                                    : AppTheme.backgroundColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                tabs[idx]['label'] as String,
+                                                style: AppTheme.labelMD.copyWith(
+                                                  color: isSelected
+                                                      ? tabColor
+                                                      : AppTheme.textSecondary,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w600,
+                                                ),
                                               ),
-                                              child: Text(
-                                                tabs[idx]['count'] as String,
-                                                style: AppTheme.labelSM
-                                                    .copyWith(
-                                                      color: isSelected
-                                                          ? tabColor
-                                                          : AppTheme
-                                                                .textSecondary,
-                                                      fontSize: 9.5,
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1,
                                                     ),
+                                                decoration: BoxDecoration(
+                                                  color: isSelected
+                                                      ? tabColor.withOpacity(0.15)
+                                                      : AppTheme.backgroundColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  tabs[idx]['count'] as String,
+                                                  style: AppTheme.labelSM
+                                                      .copyWith(
+                                                        color: isSelected
+                                                            ? tabColor
+                                                            : AppTheme
+                                                                  .textSecondary,
+                                                        fontSize: 9.5,
+                                                      ),
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              }),
+                                  );
+                                }),
+                              ),
                             ),
                           ),
-                        ),
-                        if (!isMobile) ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            _terminalSearch.isNotEmpty
-                                ? 'Showing ${rows.length > 10 ? 10 : rows.length} of ${rows.length} records'
-                                : '${rows.length} records',
-                            style: AppTheme.hint,
-                          ),
+                          if (!isMobile) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              _terminalSearch.isNotEmpty
+                                  ? 'Showing ${rows.length > 10 ? 10 : rows.length} of ${rows.length} records'
+                                  : '${rows.length} records',
+                              style: AppTheme.hint,
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
 
@@ -4109,41 +4115,43 @@ class _HoverableRowState extends State<_HoverableRow> {
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               )
-                            : GestureDetector(
-                                onTap: _assignAgent,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF9FAFB),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: const Color(0xFFE5E7EB),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          cell,
-                                          style: AppTheme.tableCell.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                            : SelectionContainer.disabled(
+                                child: GestureDetector(
+                                    onTap: _assignAgent,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF9FAFB),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFFE5E7EB),
                                         ),
                                       ),
-                                      const Icon(
-                                        Icons.arrow_drop_down,
-                                        size: 14,
-                                        color: AppTheme.textSecondary,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              cell,
+                                              style: AppTheme.tableCell.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.primaryColor,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.arrow_drop_down,
+                                            size: 14,
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
                               ),
                       ),
                     );
@@ -4163,41 +4171,43 @@ class _HoverableRowState extends State<_HoverableRow> {
                   child: AnimatedOpacity(
                     opacity: _hovered ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 150),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        _ActionIconBtn(
-                          icon: Icons.open_in_new_rounded,
-                          tooltip: 'View details',
-                          onTap: () {
-                            if (widget.tabIndex == 0) {
-                              Navigator.pushNamed(
-                                context,
-                                '/orders/details',
-                                arguments: widget.rowData['_raw'],
-                              );
-                            } else if (widget.tabIndex == 1) {
-                              Navigator.pushNamed(
-                                context,
-                                '/leads/profile',
-                                arguments: widget.rowData['_raw'],
-                              );
-                            } else {
-                              Navigator.pushNamed(
-                                context,
-                                '/dealers/profile',
-                                arguments: widget.rowData['_raw'],
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        _ActionIconBtn(
-                          icon: Icons.more_horiz_rounded,
-                          tooltip: 'More actions',
-                          onTap: () {},
-                        ),
-                      ],
+                    child: SelectionContainer.disabled(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          _ActionIconBtn(
+                            icon: Icons.open_in_new_rounded,
+                            tooltip: 'View details',
+                            onTap: () {
+                              if (widget.tabIndex == 0) {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/orders/details',
+                                  arguments: widget.rowData['_raw'],
+                                );
+                              } else if (widget.tabIndex == 1) {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/leads/profile',
+                                  arguments: widget.rowData['_raw'],
+                                );
+                              } else {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/dealers/profile',
+                                  arguments: widget.rowData['_raw'],
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          _ActionIconBtn(
+                            icon: Icons.more_horiz_rounded,
+                            tooltip: 'More actions',
+                            onTap: () {},
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

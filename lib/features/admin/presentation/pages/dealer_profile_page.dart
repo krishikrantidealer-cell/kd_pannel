@@ -1818,7 +1818,8 @@ class _DealerHeroCard extends StatelessWidget {
             Icons.location_on_outlined,
             addressParts.join(', '),
           ),
-        _buildContactItem(Icons.person_outline, 'Agent: ${_resolveAgentName(dealer.agent)}'),
+        if (!AuthService().isSales)
+          _buildContactItem(Icons.person_outline, 'Agent: ${_resolveAgentName(dealer.agent)}'),
       ],
     );
   }

@@ -702,8 +702,9 @@ class _LeadsPageState extends State<LeadsPage> {
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
 
-    return BlocConsumer<LeadsBloc, LeadsState>(
-        listener: (context, state) {
+    return SelectionArea(
+      child: BlocConsumer<LeadsBloc, LeadsState>(
+          listener: (context, state) {
           if (_searchController.text != state.searchQuery) {
             _searchController.text = state.searchQuery;
           }
@@ -814,43 +815,47 @@ class _LeadsPageState extends State<LeadsPage> {
                                           Row(
                                             children: [
                                               Expanded(
-                                                child: _buildTimeframeRow(
-                                                  isMobile,
-                                                  state,
+                                                child: SelectionContainer.disabled(
+                                                  child: _buildTimeframeRow(
+                                                    isMobile,
+                                                    state,
+                                                  ),
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              Container(
-                                                height: 38,
-                                                width: 38,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                    color: AppTheme.borderColor,
+                                              SelectionContainer.disabled(
+                                                child: Container(
+                                                  height: 38,
+                                                  width: 38,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                      color: AppTheme.borderColor,
+                                                    ),
                                                   ),
-                                                ),
-                                                child: IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: _isExporting
-                                                      ? null
-                                                      : _exportLeadsToCSV,
-                                                  icon: _isExporting
-                                                      ? const SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                                strokeWidth: 2,
-                                                                color:
-                                                                    AppTheme.primaryColor,
-                                                              ),
-                                                        )
-                                                      : const Icon(
-                                                          Icons.download_rounded,
-                                                          size: 18,
-                                                          color: AppTheme.primaryColor,
-                                                        ),
+                                                  child: IconButton(
+                                                    padding: EdgeInsets.zero,
+                                                    onPressed: _isExporting
+                                                        ? null
+                                                        : _exportLeadsToCSV,
+                                                    icon: _isExporting
+                                                        ? const SizedBox(
+                                                            width: 16,
+                                                            height: 16,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth: 2,
+                                                                  color:
+                                                                      AppTheme.primaryColor,
+                                                                ),
+                                                          )
+                                                        : const Icon(
+                                                            Icons.download_rounded,
+                                                            size: 18,
+                                                            color: AppTheme.primaryColor,
+                                                          ),
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -876,63 +881,67 @@ class _LeadsPageState extends State<LeadsPage> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              OutlinedButton.icon(
-                                                onPressed: _isExporting
-                                                    ? null
-                                                    : _exportLeadsToCSV,
-                                                icon: _isExporting
-                                                    ? const SizedBox(
-                                                        width: 14,
-                                                        height: 14,
-                                                        child: CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                          color: AppTheme.primaryColor,
+                                              SelectionContainer.disabled(
+                                                child: OutlinedButton.icon(
+                                                  onPressed: _isExporting
+                                                      ? null
+                                                      : _exportLeadsToCSV,
+                                                  icon: _isExporting
+                                                      ? const SizedBox(
+                                                          width: 14,
+                                                          height: 14,
+                                                          child: CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: AppTheme.primaryColor,
+                                                          ),
+                                                        )
+                                                      : const Icon(
+                                                          Icons.download,
+                                                          size: 16,
                                                         ),
-                                                      )
-                                                    : const Icon(
-                                                        Icons.download,
-                                                        size: 16,
+                                                  label: Text(
+                                                    _isExporting
+                                                        ? 'Exporting...'
+                                                        : 'Export CSV',
+                                                    style: GoogleFonts.outfit(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppTheme.primaryColor,
+                                                    ),
+                                                  ),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(
+                                                      color: AppTheme.primaryColor,
+                                                      width: 1.5,
+                                                    ),
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 12,
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(
+                                                        12,
                                                       ),
-                                                label: Text(
-                                                  _isExporting
-                                                      ? 'Exporting...'
-                                                      : 'Export CSV',
-                                                  style: GoogleFonts.outfit(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: AppTheme.primaryColor,
-                                                  ),
-                                                ),
-                                                style: OutlinedButton.styleFrom(
-                                                  side: const BorderSide(
-                                                    color: AppTheme.primaryColor,
-                                                    width: 1.5,
-                                                  ),
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 12,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(
-                                                      12,
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                               const SizedBox(width: 12),
-                                              _buildTimeframeRow(isMobile, state),
+                                              SelectionContainer.disabled(child: _buildTimeframeRow(isMobile, state)),
                                             ],
                                           ),
                                         ],
                                       ),
                                     const SizedBox(height: 16),
-                                    _LeadsStatsGrid(
-                                      leads: dateFilteredLeads,
-                                      verifiedDealersCount: (state.selectedTimeframe == 'All Time' || (state.selectedTimeframe.isEmpty && state.selectedRange == null))
-                                          ? verifiedDealersCount
-                                          : dateFilteredLeads.where((l) => l['kycStatus'] == 'verified').length,
+                                    SelectionContainer.disabled(
+                                      child: _LeadsStatsGrid(
+                                        leads: dateFilteredLeads,
+                                        verifiedDealersCount: (state.selectedTimeframe == 'All Time' || (state.selectedTimeframe.isEmpty && state.selectedRange == null))
+                                            ? verifiedDealersCount
+                                            : dateFilteredLeads.where((l) => l['kycStatus'] == 'verified').length,
+                                      ),
                                     ),
                                     const SizedBox(height: 24),
-                                    _buildFilterChips(isMobile, state),
+                                    SelectionContainer.disabled(child: _buildFilterChips(isMobile, state)),
                                     const SizedBox(height: 16),
                                   ],
                                 ),
@@ -983,6 +992,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
           return body;
         },
+      ),
     );
   }
 
@@ -1834,8 +1844,8 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                         ),
                       ),
                       _selectedLeadIds.isNotEmpty
-                          ? _buildBulkActionsControls()
-                          : _buildCombinedControls(),
+                          ? SelectionContainer.disabled(child: _buildBulkActionsControls())
+                          : SelectionContainer.disabled(child: _buildCombinedControls()),
                     ],
                   )
                 : Column(
@@ -1853,9 +1863,11 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                       const SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        child: _selectedLeadIds.isNotEmpty
-                            ? _buildBulkActionsControls()
-                            : _buildCombinedControls(),
+                        child: SelectionContainer.disabled(
+                          child: _selectedLeadIds.isNotEmpty
+                              ? _buildBulkActionsControls()
+                              : _buildCombinedControls(),
+                        ),
                       ),
                     ],
                   ),
@@ -1890,7 +1902,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
               );
             },
           ),
-          _buildTableFooter(widget.isMobile, currentPage, total),
+          SelectionContainer.disabled(child: _buildTableFooter(widget.isMobile, currentPage, total)),
         ],
       ),
     );
@@ -2412,9 +2424,11 @@ class _LeadsTableState extends State<_LeadsTable> {
                 SizedBox(
                   width: 40,
                   child: Center(
-                    child: _CustomCheckbox(
-                      isSelected: isAllSelected,
-                      onTap: _toggleAll,
+                    child: SelectionContainer.disabled(
+                      child: _CustomCheckbox(
+                        isSelected: isAllSelected,
+                        onTap: _toggleAll,
+                      ),
                     ),
                   ),
                 ),
@@ -2560,11 +2574,13 @@ class _LeadRowState extends State<_LeadRow> {
                     width: 40,
                     child: Center(
                       child: (isHovered || widget.isSelected)
-                          ? GestureDetector(
-                              onTap: () {}, // Prevent row tap
-                              child: _CustomCheckbox(
-                                isSelected: widget.isSelected,
-                                onTap: widget.onToggleSelection,
+                          ? SelectionContainer.disabled(
+                              child: GestureDetector(
+                                onTap: () {}, // Prevent row tap
+                                child: _CustomCheckbox(
+                                  isSelected: widget.isSelected,
+                                  onTap: widget.onToggleSelection,
+                                ),
                               ),
                             )
                           : const SizedBox.shrink(),
@@ -2624,68 +2640,70 @@ class _LeadRowState extends State<_LeadRow> {
                         top: 8,
                         bottom: 8,
                       ),
-                      child: GestureDetector(
-                        onTap: () {}, // Prevent row tap from triggering when clicking interactive element
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: const Color(0xFFE5E7EB),
+                      child: SelectionContainer.disabled(
+                        child: GestureDetector(
+                          onTap: () {}, // Prevent row tap from triggering when clicking interactive element
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
                             ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value:
-                                  widget.salesAgents.any(
-                                    (agent) =>
-                                        agent['_id'] == widget.lead['agentId'],
-                                  )
-                                  ? widget.lead['agentId']
-                                  : null,
-                              isExpanded: true,
-                              isDense: true,
-                              icon: const Icon(
-                                Icons.arrow_drop_down,
-                                size: 16,
-                                color: AppTheme.textSecondary,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFE5E7EB),
                               ),
-                              hint: Text('-', style: _subStyle),
-                              onChanged: (String? newAgentId) {
-                                if (widget.lead['id'] != null) {
-                                  widget.onAssignAgent(
-                                    widget.lead['id'],
-                                    newAgentId,
-                                  );
-                                }
-                              },
-                              items: [
-                                DropdownMenuItem<String>(
-                                  value: null,
-                                  child: Text('-', style: _subStyle),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value:
+                                    widget.salesAgents.any(
+                                      (agent) =>
+                                          agent['_id'] == widget.lead['agentId'],
+                                    )
+                                    ? widget.lead['agentId']
+                                    : null,
+                                isExpanded: true,
+                                isDense: true,
+                                icon: const Icon(
+                                  Icons.arrow_drop_down,
+                                  size: 16,
+                                  color: AppTheme.textSecondary,
                                 ),
-                                ...widget.salesAgents.map((agent) {
-                                  final agentName =
-                                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                          .trim();
-                                  return DropdownMenuItem<String>(
-                                    value: agent['_id'],
-                                    child: Text(
-                                      agentName.isNotEmpty
-                                          ? agentName
-                                          : (agent['phoneNumber'] ?? ''),
-                                      style: _cellStyleText.copyWith(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w700,
+                                hint: Text('-', style: _subStyle),
+                                onChanged: (String? newAgentId) {
+                                  if (widget.lead['id'] != null) {
+                                    widget.onAssignAgent(
+                                      widget.lead['id'],
+                                      newAgentId,
+                                    );
+                                  }
+                                },
+                                items: [
+                                  DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('-', style: _subStyle),
+                                  ),
+                                  ...widget.salesAgents.map((agent) {
+                                    final agentName =
+                                        '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                            .trim();
+                                    return DropdownMenuItem<String>(
+                                      value: agent['_id'],
+                                      child: Text(
+                                        agentName.isNotEmpty
+                                            ? agentName
+                                            : (agent['phoneNumber'] ?? ''),
+                                        style: _cellStyleText.copyWith(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                }),
-                              ],
+                                    );
+                                  }),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -2703,11 +2721,13 @@ class _LeadRowState extends State<_LeadRow> {
                         top: 10,
                         bottom: 10,
                       ),
-                      child: GestureDetector(
-                        onTap: () {}, // Stop propagation for buttons
-                        child: _ConnectedActionButtons(
-                          onEdit: () => widget.onEdit(widget.lead),
-                          onDelete: () => widget.onDelete(widget.lead['_id'], widget.lead['name']),
+                      child: SelectionContainer.disabled(
+                        child: GestureDetector(
+                          onTap: () {}, // Stop propagation for buttons
+                          child: _ConnectedActionButtons(
+                            onEdit: () => widget.onEdit(widget.lead),
+                            onDelete: () => widget.onDelete(widget.lead['_id'], widget.lead['name']),
+                          ),
                         ),
                       ),
                     ),
