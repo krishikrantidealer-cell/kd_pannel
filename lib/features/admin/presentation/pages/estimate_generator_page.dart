@@ -281,7 +281,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     };
   }
 
-  void _saveEstimate() async {
+  void _saveEstimate({bool goBack = false}) async {
     if (_clientNameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -307,7 +307,12 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     });
 
     await _saveHistory();
-    setState(() => _isSaving = false);
+    setState(() {
+      _isSaving = false;
+      if (goBack) {
+        _activeEstimate = null;
+      }
+    });
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -655,7 +660,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
             )
           else ...[
             TextButton.icon(
-              onPressed: _saveEstimate,
+              onPressed: () => _saveEstimate(goBack: true),
               icon: _isSaving
                   ? const SizedBox(
                       width: 14,
@@ -925,11 +930,52 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 'Estimate Number',
                 _estimateNoCtrl,
                 hint: 'e.g. EBS/25-26/EST/02689',
+                prefixIcon: Icons.tag_rounded,
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildField('Date', _estimateDateCtrl, hint: 'DD/MM/YYYY'),
+              child: _buildField(
+                'Date',
+                _estimateDateCtrl,
+                hint: 'DD/MM/YYYY',
+                prefixIcon: Icons.calendar_today_rounded,
+                suffixIcon: IconButton(
+                  icon: const Icon(
+                    Icons.date_range_rounded,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                      builder: (context, child) {
+                        return Theme(
+                          data: Theme.of(context).copyWith(
+                            colorScheme: const ColorScheme.light(
+                              primary: AppTheme.primaryColor,
+                              onPrimary: Colors.white,
+                              onSurface: AppTheme.textPrimary,
+                            ),
+                          ),
+                           child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      final day = picked.day.toString().padLeft(2, '0');
+                      final month = picked.month.toString().padLeft(2, '0');
+                      final year = picked.year;
+                      setState(() {
+                        _estimateDateCtrl.text = '$day/$month/$year';
+                      });
+                    }
+                  },
+                ),
+              ),
             ),
           ],
         ),
@@ -937,19 +983,26 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
 
         // Section: Customer Info
         _buildSectionHeader('2. Customer / Client Info'),
-        _buildField('Customer Name', _clientNameCtrl, hint: 'e.g. Abraham Ali'),
+        _buildField(
+          'Customer Name',
+          _clientNameCtrl,
+          hint: 'e.g. Abraham Ali',
+          prefixIcon: Icons.person_outline_rounded,
+        ),
         const SizedBox(height: 12),
         _buildField(
           'Customer Address',
           _clientAddressCtrl,
           hint: 'Full delivery / billing address',
           maxLines: 2,
+          prefixIcon: Icons.location_on_outlined,
         ),
         const SizedBox(height: 12),
         _buildField(
           'Customer Phone',
           _clientPhoneCtrl,
           hint: 'e.g. 9933617561',
+          prefixIcon: Icons.phone_outlined,
         ),
         const SizedBox(height: 24),
 
@@ -974,25 +1027,58 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
             ),
             tilePadding: EdgeInsets.zero,
             children: [
-              _buildField('Company Name', _companyNameCtrl),
+              _buildField(
+                'Company Name',
+                _companyNameCtrl,
+                prefixIcon: Icons.business_rounded,
+              ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _buildField('GSTIN', _companyGstCtrl)),
+                  Expanded(
+                    child: _buildField(
+                      'GSTIN',
+                      _companyGstCtrl,
+                      prefixIcon: Icons.receipt_long_rounded,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildField('State', _companyStateCtrl)),
+                  Expanded(
+                    child: _buildField(
+                      'State',
+                      _companyStateCtrl,
+                      prefixIcon: Icons.map_rounded,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _buildField('Phone', _companyPhoneCtrl)),
+                  Expanded(
+                    child: _buildField(
+                      'Phone',
+                      _companyPhoneCtrl,
+                      prefixIcon: Icons.phone_rounded,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildField('Email', _companyEmailCtrl)),
+                  Expanded(
+                    child: _buildField(
+                      'Email',
+                      _companyEmailCtrl,
+                      prefixIcon: Icons.email_outlined,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              _buildField('Address', _companyAddressCtrl, maxLines: 2),
+              _buildField(
+                'Address',
+                _companyAddressCtrl,
+                maxLines: 2,
+                prefixIcon: Icons.home_work_outlined,
+              ),
               const SizedBox(height: 12),
             ],
           ),
@@ -1061,6 +1147,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     TextEditingController ctrl, {
     String? hint,
     int maxLines = 1,
+    IconData? prefixIcon,
+    Widget? suffixIcon,
+    VoidCallback? onTap,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1068,36 +1158,78 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         Text(
           label,
           style: GoogleFonts.outfit(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary.withOpacity(0.8),
           ),
         ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: ctrl,
-          maxLines: maxLines,
-          style: GoogleFonts.outfit(fontSize: 13),
-          onChanged: (_) => setState(() {}), // Trigger live update in preview
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: GoogleFonts.outfit(
-              fontSize: 12,
-              color: Colors.grey.shade400,
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.015),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: ctrl,
+            maxLines: maxLines,
+            readOnly: readOnly,
+            onTap: onTap,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
             ),
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.primaryColor),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: GoogleFonts.outfit(
+                fontSize: 12,
+                color: Colors.grey.shade400,
+              ),
+              prefixIcon: prefixIcon != null
+                  ? Icon(
+                      prefixIcon,
+                      size: 18,
+                      color: AppTheme.primaryColor.withOpacity(0.7),
+                    )
+                  : null,
+              suffixIcon: suffixIcon ??
+                  (ctrl.text.isNotEmpty && !readOnly
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.cancel_rounded,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                          onPressed: () {
+                            ctrl.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: maxLines > 1 ? 14 : 12,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: AppTheme.primaryColor,
+                  width: 1.8,
+                ),
+              ),
             ),
           ),
         ),
