@@ -10,6 +10,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/admin_audit_logs_pag
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_member_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -210,6 +211,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         // Sales Routes
         '/sales/dashboard': (context) => const MainLayout(),
         '/sales/coupons': (context) => const MainLayout(child: SalesCouponPage()),
+        '/sales/estimates': (context) => const MainLayout(child: EstimateGeneratorPage()),
       },
     );
   }

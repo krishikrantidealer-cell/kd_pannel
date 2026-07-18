@@ -24,6 +24,48 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<ResetLeadsEvent>(_onResetLeads);
     on<FetchLeadDetailsEvent>(_onFetchLeadDetails);
     on<FetchLeadEventsEvent>(_onFetchLeadEvents);
+    on<ImportLeadsEvent>(_onImportLeads);
+  }
+
+  Future<void> _onImportLeads(
+    ImportLeadsEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(status: LeadsStatus.submitting));
+    try {
+      final res = await ApiClient().post('/users/bulk', {
+        'users': event.leads,
+      });
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWith(
+            status: LeadsStatus.success,
+            actionSuccessMessage: data['message'] ?? 'Leads imported successfully',
+          ));
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to import leads');
+        }
+      } else {
+        // Handle non-JSON responses (like HTML 404/500 pages)
+        if (res.body.contains('<!DOCTYPE html>') || res.body.contains('<html>')) {
+          throw Exception('Server returned an HTML error (${res.statusCode}). Please ensure the backend is running and the route is deployed.');
+        }
+        final data = jsonDecode(res.body);
+        throw Exception(data['message'] ?? 'Failed to import leads: ${res.statusCode}');
+      }
+    } catch (e) {
+      String userMessage = e.toString().replaceAll('Exception: ', '');
+      if (e is FormatException) {
+        userMessage = 'Invalid server response format. The backend might be returning an HTML error page instead of JSON.';
+      }
+      emit(state.copyWithKeepMessages(
+        status: LeadsStatus.failure,
+        errorMessage: userMessage,
+      ));
+    }
   }
 
   Future<void> _onFetchLeadDetails(

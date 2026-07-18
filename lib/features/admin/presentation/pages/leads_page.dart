@@ -1,5 +1,6 @@
-import 'dart:ui' as ui;
+import 'dart:convert';
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -29,7 +30,109 @@ class LeadsPage extends StatefulWidget {
 class _LeadsPageState extends State<LeadsPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isExporting = false;
+  bool _isImporting = false;
   LeadsBloc? _leadsBloc;
+
+  void _downloadSampleCSV() {
+    final headers = [
+      'firstName',
+      'lastName',
+      'phoneNumber',
+      'email',
+      'shopName',
+      'city',
+      'state',
+      'source',
+      'status',
+      'notes',
+    ];
+
+    final sampleData = [
+      'John,Doe,9876543210,john@example.com,Doe Agro,Indore,Madhya Pradesh,CSV Import,prospect,Interested in seeds',
+      'Jane,Smith,8765432109,jane@example.com,Smith Seeds,Ujjain,Madhya Pradesh,CSV Import,new,Follow up next week',
+    ];
+
+    final buffer = StringBuffer();
+    buffer.writeln(headers.join(','));
+    for (final row in sampleData) {
+      buffer.writeln(row);
+    }
+
+    downloadCsv(buffer.toString(), 'leads_sample.csv');
+  }
+
+  void _importLeadsFromCSV() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      setState(() => _isImporting = true);
+
+      final file = result.files.first;
+      String content = '';
+
+      if (file.bytes != null) {
+        content = utf8.decode(file.bytes!);
+      } else {
+        throw Exception('Failed to read file content');
+      }
+
+      final lines = content.split(RegExp(r'\r?\n'));
+      if (lines.isEmpty) throw Exception('File is empty');
+
+      final headers = lines[0].split(',').map((e) => e.trim()).toList();
+      final List<Map<String, dynamic>> leadsToImport = [];
+
+      for (int i = 1; i < lines.length; i++) {
+        if (lines[i].trim().isEmpty) continue;
+        
+        final values = lines[i].split(',');
+        final Map<String, dynamic> lead = {};
+        final Map<String, dynamic> address = {};
+
+        for (int j = 0; j < headers.length && j < values.length; j++) {
+          final header = headers[j];
+          final value = values[j].trim();
+
+          if (header == 'city') {
+            address['cityTehsil'] = value;
+          } else if (header == 'state') {
+            address['state'] = value;
+          } else if (header == 'notes') {
+             lead['notes'] = value;
+          } else {
+            lead[header] = value;
+          }
+        }
+
+        if (address.isNotEmpty) {
+          lead['address'] = address;
+        }
+        
+        if (lead.containsKey('phoneNumber') && lead['phoneNumber'].toString().isNotEmpty) {
+          leadsToImport.add(lead);
+        }
+      }
+
+      if (leadsToImport.isEmpty) {
+        throw Exception('No valid leads found in CSV');
+      }
+
+      _leadsBloc?.add(ImportLeadsEvent(leadsToImport));
+      setState(() => _isImporting = false);
+      
+    } catch (e) {
+      setState(() => _isImporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: ${e.toString()}'), backgroundColor: AppTheme.error),
+      );
+    }
+  }
 
   void _exportLeadsToCSV() async {
     setState(() => _isExporting = true);
@@ -836,6 +939,34 @@ class _LeadsPageState extends State<LeadsPage> {
                                                   ),
                                                   child: IconButton(
                                                     padding: EdgeInsets.zero,
+                                                    onPressed: _isImporting ? null : _importLeadsFromCSV,
+                                                    icon: _isImporting
+                                                        ? const SizedBox(
+                                                            width: 16,
+                                                            height: 16,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: AppTheme.primaryColor,
+                                                            ),
+                                                          )
+                                                        : const Icon(Icons.upload_file, size: 18, color: AppTheme.primaryColor),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              SelectionContainer.disabled(
+                                                child: Container(
+                                                  height: 38,
+                                                  width: 38,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                      color: AppTheme.borderColor,
+                                                    ),
+                                                  ),
+                                                  child: IconButton(
+                                                    padding: EdgeInsets.zero,
                                                     onPressed: _isExporting
                                                         ? null
                                                         : _exportLeadsToCSV,
@@ -881,6 +1012,61 @@ class _LeadsPageState extends State<LeadsPage> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
+                                              SelectionContainer.disabled(
+                                                child: TextButton.icon(
+                                                  onPressed: _downloadSampleCSV,
+                                                  icon: const Icon(Icons.help_outline, size: 16),
+                                                  label: Text(
+                                                    'Sample',
+                                                    style: GoogleFonts.outfit(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppTheme.primaryColor,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: AppTheme.primaryColor,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              SelectionContainer.disabled(
+                                                child: OutlinedButton.icon(
+                                                  onPressed: _isImporting ? null : _importLeadsFromCSV,
+                                                  icon: _isImporting
+                                                      ? const SizedBox(
+                                                          width: 14,
+                                                          height: 14,
+                                                          child: CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: AppTheme.primaryColor,
+                                                          ),
+                                                        )
+                                                      : const Icon(Icons.upload_file, size: 16),
+                                                  label: Text(
+                                                    _isImporting ? 'Importing...' : 'Import',
+                                                    style: GoogleFonts.outfit(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppTheme.primaryColor,
+                                                    ),
+                                                  ),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(
+                                                      color: AppTheme.primaryColor,
+                                                      width: 1.5,
+                                                    ),
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 12,
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
                                               SelectionContainer.disabled(
                                                 child: OutlinedButton.icon(
                                                   onPressed: _isExporting

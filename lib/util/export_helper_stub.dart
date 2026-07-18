@@ -5,3 +5,7 @@ void saveCsvFile(String csvContent, String fileName) {
   // In a simulated or admin dashboard running on Web, this acts as the stub.
   debugPrint('Native export of CSV file $fileName: ${csvContent.length} bytes.');
 }
+
+void printQuotation(Map<String, dynamic> data) {
+  debugPrint('Native print of quotation: ${data['estimateNo']}');
+}

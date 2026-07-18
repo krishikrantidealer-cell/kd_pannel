@@ -9,3 +9,8 @@ import 'export_helper_stub.dart'
 void downloadCsv(String csvContent, String fileName) {
   helper.saveCsvFile(csvContent, fileName);
 }
+
+/// Triggers a printer/PDF view of the generated Estimate/Quotation.
+void printQuotation(Map<String, dynamic> data) {
+  helper.printQuotation(data);
+}

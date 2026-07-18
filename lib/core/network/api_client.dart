@@ -21,10 +21,12 @@ class ApiClient {
     } catch (_) {}
   }
 
-  // The local Node.js server runs on port 5000 by default.
-  // Using localhost is correct for Web.
-  final String baseUrl =
-      'https://krishi-backend-123180953109.asia-south1.run.app/api';
+  // Toggle between Local and Production backend
+  static const bool _useLocalBackend = false; // Set to true for local testing
+
+  final String baseUrl = _useLocalBackend
+      ? 'http://localhost:5000/api'
+      : 'https://krishi-backend-123180953109.asia-south1.run.app/api';
 
   String? _accessToken;
   String? _refreshToken;

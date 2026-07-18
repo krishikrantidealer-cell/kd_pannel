@@ -13,6 +13,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -49,6 +50,7 @@ class _MainLayoutState extends State<MainLayout> {
     const AuditLogsContainerPage(),
     const TrashPage(),
     const AlertsPage(),
+    const EstimateGeneratorPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -59,6 +61,7 @@ class _MainLayoutState extends State<MainLayout> {
     const DealerManagementPage(),
     const SalesCouponPage(),
     const AlertsPage(),
+    const EstimateGeneratorPage(),
   ];
 
   @override
@@ -109,6 +112,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 9;
         } else if (routeName == '/alerts') {
           _currentIdx = 10;
+        } else if (routeName == '/sales/estimates') {
+          _currentIdx = 11;
         } else {
           _currentIdx = 0;
         }
@@ -125,6 +130,8 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 4;
         } else if (routeName == '/alerts') {
           _currentIdx = 5;
+        } else if (routeName == '/sales/estimates') {
+          _currentIdx = 6;
         } else {
           _currentIdx = 0;
         }
@@ -152,6 +159,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 8) route = '/logs';
       if (index == 9) route = '/trash';
       if (index == 10) route = '/alerts';
+      if (index == 11) route = '/sales/estimates';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/orders';
@@ -159,6 +167,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 3) route = '/dealers';
       if (index == 4) route = '/sales/coupons';
       if (index == 5) route = '/alerts';
+      if (index == 6) route = '/sales/estimates';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

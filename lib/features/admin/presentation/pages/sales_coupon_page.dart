@@ -733,57 +733,265 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
 
   @override
   Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(2)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    if (_step != 0)
+                      GestureDetector(
+                        onTap: () => setState(() => _step = _step == 1 ? 0 : 2),
+                        child: const Padding(
+                          padding: EdgeInsets.only(right: 12),
+                          child: Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        _step == 0 ? 'Select Product' : (_step == 1 ? 'Configure Price' : 'Review & Confirm'),
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17, color: AppTheme.textPrimary),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(), 
+                      icon: const Icon(Icons.close_rounded, size: 22, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              if (_errorMsg != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade100),
+                  ),
+                  child: Text(
+                    _errorMsg!, 
+                    style: GoogleFonts.outfit(color: Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              const Divider(height: 1),
+              _buildStepIndicator(),
+              const Divider(height: 1),
+              Expanded(
+                child: _step == 0 
+                  ? _buildProductSearch() 
+                  : (_step == 1 ? _buildPriceForm() : _buildReviewList()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator() {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+      color: const Color(0xFFF9FAFB),
+      child: Row(
+        children: [
+          _buildStepNode(0, 'Products'),
+          _buildStepConnector(0),
+          _buildStepNode(1, 'Pricing'),
+          _buildStepConnector(1),
+          _buildStepNode(2, 'Review'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepNode(int stepIndex, String label) {
+    final isActive = _step == stepIndex;
+    final isDone = _step > stepIndex;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isActive 
+                ? AppTheme.primaryColor 
+                : (isDone ? AppTheme.primaryColor.withValues(alpha: 0.1) : Colors.grey.shade200),
+            border: Border.all(
+              color: isActive 
+                  ? AppTheme.primaryColor 
+                  : (isDone ? AppTheme.primaryColor : Colors.grey.shade300),
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: isDone
+                ? const Icon(Icons.check_rounded, size: 14, color: AppTheme.primaryColor)
+                : Text(
+                    '${stepIndex + 1}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.white : Colors.grey.shade600,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive 
+                ? AppTheme.textPrimary 
+                : (isDone ? AppTheme.primaryColor : AppTheme.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepConnector(int stepIndex) {
+    final isDone = _step > stepIndex;
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        height: 2,
+        color: isDone ? AppTheme.primaryColor : Colors.grey.shade200,
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> product) {
+    final title = product['title'] ?? product['name'] ?? '';
+    final vendor = product['vendor'] ?? '';
+    final variants = product['variants'] as List? ?? [];
+    final variantCount = variants.length;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 4),
-              width: 36, height: 4,
-              decoration: BoxDecoration(color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(2)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  if (_step != 0)
-                    GestureDetector(
-                      onTap: () => setState(() => _step = _step == 1 ? 0 : 2),
-                      child: const Padding(
-                        padding: EdgeInsets.only(right: 12),
-                        child: Icon(Icons.arrow_back_ios_new_rounded, size: 16),
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      _step == 0 ? 'Add Product' : (_step == 1 ? 'Set Price' : 'Review Overrides'),
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            setState(() {
+              _selectedProduct = product;
+              // Pre-select first variant if available
+              if (variants.isNotEmpty) {
+                _selectedVariant = variants[0];
+              }
+              _step = 1;
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.inventory_2_rounded,
+                      color: AppTheme.primaryColor.withValues(alpha: 0.8),
+                      size: 20,
                     ),
                   ),
-                  IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close_rounded, size: 20)),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (vendor.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                vendor,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            '$variantCount ${variantCount == 1 ? 'variant' : 'variants'}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ],
             ),
-            if (_errorMsg != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: Colors.red.shade50,
-                child: Text(_errorMsg!, style: GoogleFonts.outfit(color: Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
-            const Divider(height: 1),
-            Expanded(
-              child: _step == 0 
-                ? _buildProductSearch() 
-                : (_step == 1 ? _buildPriceForm() : _buildReviewList()),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -793,38 +1001,83 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: TextField(
             controller: _searchCtrl,
+            style: GoogleFonts.outfit(fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'Search product…',
-              prefixIcon: const Icon(Icons.search_rounded, size: 18),
-              filled: true, fillColor: const Color(0xFFF3F4F6),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              hintText: 'Search product by name or vendor…',
+              hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF9CA3AF)),
+              prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF6B7280)),
+              suffixIcon: _searchCtrl.text.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 18), 
+                      onPressed: () => _searchCtrl.clear(),
+                    ) 
+                  : null,
+              filled: true,
+              fillColor: const Color(0xFFF3F4F6),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+              ),
             ),
           ),
         ),
         Expanded(
           child: _loadingProducts
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: _filtered.length,
-                itemBuilder: (_, i) {
-                  final p = _filtered[i];
-                  return ListTile(
-                    title: Text(p['title'] ?? p['name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold)),
-                    subtitle: Text(p['vendor'] ?? '', style: GoogleFonts.outfit(fontSize: 11)),
-                    onTap: () => setState(() { _selectedProduct = p; _step = 1; }),
-                  );
-                },
-              ),
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+              : _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off_rounded, size: 44, color: Colors.grey.shade300),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No products found matching "${_searchCtrl.text}"',
+                            style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: _filtered.length,
+                      itemBuilder: (_, i) => _buildProductCard(_filtered[i]),
+                    ),
         ),
         if (_draftOverrides.isNotEmpty)
-          Padding(
+          Container(
             padding: const EdgeInsets.all(16),
-            child: OutlinedButton(
-              onPressed: () => setState(() => _step = 2),
-              child: Text('View Saved (${_draftOverrides.length})'),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => setState(() => _step = 2),
+                icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                label: Text(
+                  'View Draft List (${_draftOverrides.length})',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
             ),
           ),
       ],
@@ -839,47 +1092,176 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryColor.withValues(alpha: 0.08),
+                  AppTheme.primaryColor.withValues(alpha: 0.03),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.12)),
+            ),
             child: Row(
               children: [
-                const Icon(Icons.inventory_2_outlined, size: 20, color: AppTheme.primaryColor),
-                const SizedBox(width: 10),
-                Expanded(child: Text(_selectedProduct?['title'] ?? '', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14))),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                      )
+                    ]
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.inventory_2_outlined, size: 22, color: AppTheme.primaryColor),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedProduct?['title'] ?? _selectedProduct?['name'] ?? '',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      if (_selectedProduct?['vendor'] != null && _selectedProduct!['vendor'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _selectedProduct!['vendor'],
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          Text('Select Variant', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
-          ...variants.map((v) {
-            final isSel = _selectedVariant?['_id'] == v['_id'];
-            return Card(
-              elevation: 0,
-              color: isSel ? AppTheme.primaryColor.withValues(alpha: 0.08) : Colors.grey.shade50,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(color: isSel ? AppTheme.primaryColor : Colors.transparent),
-              ),
-              child: ListTile(
-                title: Text(v['size'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
-                trailing: Text('₹${v['price']}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                onTap: () => setState(() => _selectedVariant = v),
-              ),
-            );
-          }),
           const SizedBox(height: 24),
-          Text('Custom Override Price (₹)', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          Text(
+            'Select Variant Size / Type',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: variants.length,
+            itemBuilder: (_, idx) {
+              final v = variants[idx];
+              final isSel = _selectedVariant?['_id'] == v['_id'];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSel ? AppTheme.primaryColor.withValues(alpha: 0.04) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSel ? AppTheme.primaryColor : const Color(0xFFE5E7EB),
+                    width: isSel ? 1.8 : 1,
+                  ),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  title: Text(
+                    v['size'] ?? '',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                      color: isSel ? AppTheme.primaryColor : AppTheme.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Original Price: ₹${v['price']}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '₹${v['price']}',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isSel ? AppTheme.primaryColor : AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSel ? AppTheme.primaryColor : Colors.transparent,
+                          border: Border.all(
+                            color: isSel ? AppTheme.primaryColor : const Color(0xFFD1D5DB),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: isSel
+                            ? const Icon(Icons.check, size: 11, color: Colors.white)
+                            : null,
+                      ),
+                    ],
+                  ),
+                  onTap: () => setState(() => _selectedVariant = v),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'New Custom Price Override',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold),
             decoration: InputDecoration(
-              hintText: 'e.g. 450',
+              hintText: 'Enter new discount price (e.g. 450)',
+              hintStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.normal, color: const Color(0xFF9CA3AF)),
               filled: true,
-              fillColor: Colors.grey.shade50,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-              prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18),
+              fillColor: const Color(0xFFF9FAFB),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: AppTheme.textSecondary),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+              ),
             ),
           ),
           const SizedBox(height: 32),
@@ -891,8 +1273,12 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                 backgroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 1,
               ),
-              child: const Text('Add to Coupon List', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                'Add to Coupon List',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ),
         ],
@@ -904,29 +1290,142 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
     return Column(
       children: [
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _draftOverrides.length,
-            itemBuilder: (_, i) {
-              final ov = _draftOverrides[i];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                child: ListTile(
-                  title: Text(ov['productTitle'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${ov['variantSize']} · ₹${ov['originalPrice']} → ₹${ov['overridePrice']}'),
-                  trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => setState(() => _draftOverrides.removeAt(i))),
+          child: _draftOverrides.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No products added yet',
+                        style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _step = 0),
+                        icon: const Icon(Icons.add_rounded),
+                        label: Text('Select a Product', style: GoogleFonts.outfit()),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _draftOverrides.length,
+                  itemBuilder: (_, i) {
+                    final ov = _draftOverrides[i];
+                    final orig = ov['originalPrice'] as double;
+                    final over = ov['overridePrice'] as double;
+                    final savings = orig - over;
+                    final savingsPercent = orig > 0 ? (savings / orig * 100).round() : 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.sell_outlined, size: 18, color: AppTheme.primaryColor),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    ov['productTitle'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Size: ${ov['variantSize']}',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '₹$orig',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: AppTheme.textSecondary,
+                                          decoration: TextDecoration.lineThrough,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '₹$over',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (savingsPercent > 0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '-$savingsPercent%',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                              onPressed: () => setState(() => _draftOverrides.removeAt(i)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
-        const Divider(),
-        Padding(
+        const Divider(height: 1),
+        Container(
           padding: const EdgeInsets.all(16),
+          color: const Color(0xFFF9FAFB),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Expiry Picker
               InkWell(
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -934,39 +1433,85 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                     initialDate: DateTime.now().add(const Duration(days: 7)),
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 365)),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: AppTheme.primaryColor,
+                            onPrimary: Colors.white,
+                            onSurface: AppTheme.textPrimary,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
                   );
                   if (picked != null && mounted) setState(() => _expiresAt = picked);
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_rounded, size: 16),
-                      const SizedBox(width: 8),
-                      Text(_expiresAt == null ? 'Optional Expiry Date' : 'Expires: ${_expiresAt!.day}/${_expiresAt!.month}/${_expiresAt!.year}'),
+                      const Icon(Icons.calendar_today_rounded, size: 16, color: AppTheme.textSecondary),
+                      const SizedBox(width: 10),
+                      Text(
+                        _expiresAt == null 
+                            ? 'Set Expiration Date (Optional)' 
+                            : 'Expires: ${_expiresAt!.day}/${_expiresAt!.month}/${_expiresAt!.year}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: _expiresAt == null ? FontWeight.normal : FontWeight.bold,
+                          color: _expiresAt == null ? AppTheme.textSecondary : AppTheme.textPrimary,
+                        ),
+                      ),
                       const Spacer(),
-                      if (_expiresAt != null) GestureDetector(onTap: () => setState(() => _expiresAt = null), child: const Icon(Icons.close, size: 16)),
+                      if (_expiresAt != null)
+                        GestureDetector(
+                          onTap: () => setState(() => _expiresAt = null),
+                          child: const Icon(Icons.cancel_rounded, size: 18, color: AppTheme.textSecondary),
+                        )
+                      else
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppTheme.textSecondary),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              TextButton.icon(onPressed: () => setState(() => _step = 0), icon: const Icon(Icons.add), label: const Text('Add Another Product')),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _isSubmitting ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => setState(() => _step = 0),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: Text('Add Another', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textPrimary,
+                        side: const BorderSide(color: Color(0xFFD1D5DB)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
                   ),
-                  child: _isSubmitting 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Generate Multi-Product Coupon', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: (_isSubmitting || _draftOverrides.isEmpty) ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: _isSubmitting 
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text('Generate Coupon', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

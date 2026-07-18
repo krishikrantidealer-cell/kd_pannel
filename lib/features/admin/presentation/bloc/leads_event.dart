@@ -186,3 +186,11 @@ class FetchLeadEventsEvent extends LeadsEvent {
 class ResetLeadsEvent extends LeadsEvent {
   const ResetLeadsEvent();
 }
+
+class ImportLeadsEvent extends LeadsEvent {
+  final List<Map<String, dynamic>> leads;
+  const ImportLeadsEvent(this.leads);
+
+  @override
+  List<Object?> get props => [leads];
+}
