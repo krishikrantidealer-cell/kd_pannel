@@ -341,7 +341,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
       _leadsBloc?.add(
         UpdateLeadDetailsEvent(
-          userId: lead['_id'],
+          userId: lead['id'] ?? '',
           updateData: {
             'firstName': firstName,
             'lastName': lastName,
@@ -2478,18 +2478,18 @@ class _LeadsTableState extends State<_LeadsTable> {
 
   bool get isAllSelected =>
       widget.leads.isNotEmpty &&
-      widget.leads.every((l) => widget.selectedLeadIds.contains(l['_id'] ?? ''));
+      widget.leads.every((l) => widget.selectedLeadIds.contains(l['id'] ?? ''));
 
   void _toggleAll() {
     setState(() {
       if (isAllSelected) {
         for (var l in widget.leads) {
-          widget.selectedLeadIds.remove(l['_id'] ?? '');
+          widget.selectedLeadIds.remove(l['id'] ?? '');
         }
       } else {
         for (var l in widget.leads) {
-          if (l['_id'] != null) {
-            widget.selectedLeadIds.add(l['_id']);
+          if (l['id'] != null) {
+            widget.selectedLeadIds.add(l['id']);
           }
         }
       }
@@ -2648,7 +2648,7 @@ class _LeadsTableState extends State<_LeadsTable> {
           itemBuilder: (context, index) {
             final lead = widget.leads[index];
             final bool isAlternate = index % 2 == 1;
-            final String leadId = lead['_id'] ?? '';
+            final String leadId = lead['id'] ?? '';
             return _LeadRow(
               lead: lead,
               isAlternate: isAlternate,
@@ -2912,7 +2912,7 @@ class _LeadRowState extends State<_LeadRow> {
                           onTap: () {}, // Stop propagation for buttons
                           child: _ConnectedActionButtons(
                             onEdit: () => widget.onEdit(widget.lead),
-                            onDelete: () => widget.onDelete(widget.lead['_id'], widget.lead['name']),
+                            onDelete: () => widget.onDelete(widget.lead['id'] ?? '', widget.lead['name'] ?? ''),
                           ),
                         ),
                       ),

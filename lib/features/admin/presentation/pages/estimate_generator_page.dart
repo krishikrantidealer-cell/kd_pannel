@@ -159,7 +159,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         {
           'name': '',
           'quantity': 1.0,
-          'unit': 'Ltr',
+          'unit': 'liter',
           'price': 0.0,
           'amount': 0.0,
         },
@@ -571,7 +571,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                                 ((v['price'] ?? 0.0) as num)
                                                     .toDouble();
                                             _editingItems[itemIdx]['unit'] =
-                                                'Ltr';
+                                                _parseUnitFromSize(v['size']?.toString() ?? '');
                                             _editingItems[itemIdx]['amount'] =
                                                 _editingItems[itemIdx]['price'] *
                                                 _editingItems[itemIdx]['quantity'];
@@ -1096,7 +1096,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   _editingItems.add({
                     'name': '',
                     'quantity': 1.0,
-                    'unit': 'Ltr',
+                    'unit': 'liter',
                     'price': 0.0,
                     'amount': 0.0,
                   });
@@ -1378,7 +1378,15 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
               Expanded(
                 flex: 3,
                 child: DropdownButtonFormField<String>(
-                  value: item['unit'] ?? 'Ltr',
+                  value: (() {
+                    final current = (item['unit'] ?? 'liter').toString().toLowerCase();
+                    if (current == 'ltr') return 'liter';
+                    if (current == 'gm') return 'g';
+                    if (['kg', 'g', 'liter', 'ml', 'pcs'].contains(current)) {
+                      return current;
+                    }
+                    return 'liter';
+                  })(),
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: AppTheme.textPrimary,
@@ -1395,11 +1403,11 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     ),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'Ltr', child: Text('Ltr')),
-                    DropdownMenuItem(value: 'Kg', child: Text('Kg')),
-                    DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
-                    DropdownMenuItem(value: 'Box', child: Text('Box')),
-                    DropdownMenuItem(value: 'Bag', child: Text('Bag')),
+                    DropdownMenuItem(value: 'kg', child: Text('kg')),
+                    DropdownMenuItem(value: 'g', child: Text('g')),
+                    DropdownMenuItem(value: 'liter', child: Text('liter')),
+                    DropdownMenuItem(value: 'ml', child: Text('ml')),
+                    DropdownMenuItem(value: 'pcs', child: Text('pcs')),
                   ],
                   onChanged: (val) {
                     setState(() {
@@ -1904,7 +1912,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                           SizedBox(
                             width: 60,
                             child: Text(
-                              it['unit'] ?? 'Ltr',
+                              it['unit'] ?? 'liter',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.outfit(
                                 fontSize: 12,
@@ -2294,7 +2302,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 setState(() {
                   _editingItems[itemIdx]['name'] = sugg['displayName'];
                   _editingItems[itemIdx]['price'] = sugg['price'];
-                  _editingItems[itemIdx]['unit'] = 'Ltr';
+                  _editingItems[itemIdx]['unit'] =
+                      _parseUnitFromSize(sugg['variant']?['size']?.toString() ?? '');
                   _editingItems[itemIdx]['amount'] =
                       sugg['price'] * _editingItems[itemIdx]['quantity'];
                   _focusedItemIdx = null;
@@ -2305,6 +2314,22 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         ),
       ),
     );
+  }
+
+  String _parseUnitFromSize(String size) {
+    final sizeStr = size.toLowerCase().trim();
+    if (sizeStr.contains('kg')) {
+      return 'kg';
+    } else if (sizeStr.contains('gm') || sizeStr.endsWith(' g') || sizeStr.contains(' g ')) {
+      return 'g';
+    } else if (sizeStr.contains('ml')) {
+      return 'ml';
+    } else if (sizeStr.contains('pcs') || sizeStr.contains('pc')) {
+      return 'pcs';
+    } else if (sizeStr.contains('ltr') || sizeStr.contains('lit') || sizeStr.contains('liter')) {
+      return 'liter';
+    }
+    return 'liter'; // Default fallback
   }
 }
 

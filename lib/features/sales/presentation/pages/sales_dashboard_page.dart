@@ -30,7 +30,6 @@ class SalesDashboardPage extends StatefulWidget {
 }
 
 class _SalesDashboardPageState extends State<SalesDashboardPage> {
-  final AuthService _auth = AuthService();
   StreamSubscription? _leadsSubscription;
   StreamSubscription? _dealersSubscription;
   StreamSubscription? _ordersSubscription;
@@ -228,9 +227,20 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                     dealersState.status == DealersStatus.loading ||
                     ordersState.status == OrdersStatus.loading;
 
-                final double cumulativeRevenue = ordersState.orders
-                    .where((o) => o.orderStatus != 'Cancelled')
+                final DateTime now = DateTime.now();
+                final double currentMonthRevenue = ordersState.orders
+                    .where((o) =>
+                        o.orderStatus != 'Cancelled' &&
+                        o.placedAt.year == now.year &&
+                        o.placedAt.month == now.month)
                     .fold(0.0, (sum, o) => sum + o.totalAmount);
+
+                final activeOrdersCount = orders.where((o) {
+                  final status = o.orderStatus.toLowerCase();
+                  return status != 'delivered' &&
+                      status != 'cancelled' &&
+                      status != 'rto';
+                }).length;
 
                 return SelectionArea(
                   child: SingleChildScrollView(
@@ -250,13 +260,17 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                         _SalesStatsGrid(
                           leadsCount: leads.length,
                           dealersCount: dealers.length,
-                          ordersCount: orders.length,
+                          ordersCount: activeOrdersCount,
                         ),
                         SizedBox(height: gap),
                 
                         // Monthly Performance Target
                         if (AuthService().monthlyTarget != null) ...[
-                          _buildTargetProgressCard(cumulativeRevenue, AuthService().monthlyTarget!),
+                          _buildTargetProgressCard(
+                            currentMonthRevenue,
+                            AuthService().monthlyTarget!,
+                            ordersState.orders,
+                          ),
                           SizedBox(height: gap),
                         ],
                 
@@ -718,10 +732,232 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
     );
   }
 
-  Widget _buildTargetProgressCard(double current, double target) {
-    final double pct = current >= target ? 1.0 : current / target;
-    final int pctInt = (pct * 100).toInt();
+  String _formatCurrency(double amount) {
+    return '₹${amount.toStringAsFixed(0)}';
+  }
 
+  void _showTargetHistoryDialog(BuildContext context, List<OrderModel> allOrders, double currentTarget) {
+    final DateTime now = DateTime.now();
+    final List<Map<String, dynamic>> historyData = [];
+
+    // Find the oldest order date to determine when operations started
+    DateTime oldestDate = now;
+    for (var o in allOrders) {
+      if (o.placedAt.isBefore(oldestDate)) {
+        oldestDate = o.placedAt;
+      }
+    }
+
+    // Determine how many months to show (from oldestDate's month to now, max 6 months)
+    int monthDifference = ((now.year - oldestDate.year) * 12) + now.month - oldestDate.month;
+    if (monthDifference < 0) monthDifference = 0;
+    int monthsToShow = monthDifference + 1;
+    if (monthsToShow > 6) monthsToShow = 6;
+
+    // Calculate history
+    for (int i = 0; i < monthsToShow; i++) {
+      final monthDate = DateTime(now.year, now.month - i, 1);
+      final monthName = DateFormat('MMMM yyyy').format(monthDate);
+      
+      final double achieved = allOrders
+          .where((o) =>
+              o.orderStatus != 'Cancelled' &&
+              o.placedAt.year == monthDate.year &&
+              o.placedAt.month == monthDate.month)
+          .fold(0.0, (sum, o) => sum + o.totalAmount);
+
+      historyData.add({
+        'month': monthName,
+        'target': currentTarget,
+        'achieved': achieved,
+        'isCurrent': i == 0,
+      });
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.track_changes_outlined, color: AppTheme.primaryColor, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Sales Target History',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20),
+                onPressed: () => Navigator.pop(dialogCtx),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Monthly sales target achievements over the last 6 months.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ...historyData.map((data) {
+                    final double target = data['target'];
+                    final double achieved = data['achieved'];
+                    final bool isCurrent = data['isCurrent'];
+                    
+                    final double pct = target > 0 ? (achieved >= target ? 1.0 : achieved / target) : 0.0;
+                    final int pctInt = (pct * 100).toInt();
+
+                    Color statusColor;
+                    String statusLabel;
+                    if (isCurrent) {
+                      statusColor = AppTheme.accentColor;
+                      statusLabel = 'In Progress';
+                    } else if (achieved >= target) {
+                      statusColor = AppTheme.success;
+                      statusLabel = 'Achieved';
+                    } else {
+                      statusColor = AppTheme.error;
+                      statusLabel = 'Missed';
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.lightBorderColor.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isCurrent 
+                              ? AppTheme.accentColor.withOpacity(0.3) 
+                              : AppTheme.borderColor.withOpacity(0.3),
+                          width: isCurrent ? 1.2 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                data['month'],
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  statusLabel,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: statusColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Achieved: ${_formatCurrency(achieved)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textBody,
+                                ),
+                              ),
+                              Text(
+                                'Target: ${_formatCurrency(target)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              backgroundColor: const Color(0xFFF3F4F6),
+                              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                              minHeight: 5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '$pctInt% Completed',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text(
+                'Close',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTargetProgressCard(double current, double target, List<OrderModel> allOrders) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -757,20 +993,42 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  DateFormat('MMMM yyyy').format(DateTime.now()),
-                  style: GoogleFonts.outfit(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      DateFormat('MMMM yyyy').format(DateTime.now()),
+                      style: GoogleFonts.outfit(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => _showTargetHistoryDialog(context, allOrders, target),
+                    icon: const Icon(Icons.history, size: 14, color: AppTheme.primaryColor),
+                    label: Text(
+                      'History',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -797,10 +1055,6 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
     final double pct = current >= target ? 1.0 : current / target;
     final int pctInt = (pct * 100).toInt();
 
-    String formatCurrency(double amount) {
-      return '₹${amount.toStringAsFixed(0)}';
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -816,7 +1070,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
               ),
             ),
             Text(
-              '${isCurrency ? formatCurrency(current) : current.toInt()} / ${isCurrency ? formatCurrency(target) : target.toInt()} ($pctInt%)',
+              '${isCurrency ? _formatCurrency(current) : current.toInt()} / ${isCurrency ? _formatCurrency(target) : target.toInt()} ($pctInt%)',
               style: GoogleFonts.outfit(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -854,7 +1108,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
         if (current < target) ...[
           const SizedBox(height: 8),
           Text(
-            'You are ${formatCurrency(target - current)} away from your monthly goal. Keep going!',
+            'You are ${_formatCurrency(target - current)} away from your monthly goal. Keep going!',
             style: GoogleFonts.outfit(
               fontSize: 11,
               color: AppTheme.textSecondary,
