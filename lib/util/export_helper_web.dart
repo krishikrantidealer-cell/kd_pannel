@@ -108,18 +108,32 @@ String numberToWords(double amount) {
   ];
 
   String convertLessThanOneThousand(int number) {
+    if (number <= 0) return '';
     String soFar = '';
     if (number % 100 < 20) {
-      soFar = units[number % 100];
+      final idx = (number % 100).toInt();
+      if (idx >= 0 && idx < units.length) {
+        soFar = units[idx];
+      }
       number = number ~/ 100;
     } else {
-      soFar = units[number % 10];
+      final unitIdx = (number % 10).toInt();
+      if (unitIdx >= 0 && unitIdx < units.length) {
+        soFar = units[unitIdx];
+      }
       number = number ~/ 10;
-      soFar = tens[number % 10] + (soFar.isNotEmpty ? ' $soFar' : '');
+      final tenIdx = (number % 10).toInt();
+      if (tenIdx >= 0 && tenIdx < tens.length) {
+        soFar = tens[tenIdx] + (soFar.isNotEmpty ? ' $soFar' : '');
+      }
       number = number ~/ 10;
     }
     if (number == 0) return soFar;
-    return units[number] + ' Hundred' + (soFar.isNotEmpty ? ' and $soFar' : '');
+    final hundredIdx = number.toInt();
+    if (hundredIdx >= 0 && hundredIdx < units.length) {
+      return units[hundredIdx] + ' Hundred' + (soFar.isNotEmpty ? ' and $soFar' : '');
+    }
+    return soFar;
   }
 
   int numVal = amount.floor();
@@ -161,14 +175,14 @@ String numberToWords(double amount) {
 }
 
 String generateQuotationHtml(Map<String, dynamic> data) {
-  final companyName = data['companyName'] ?? 'Essential Biosciences';
-  final companyGst = data['companyGst'] ?? '23AISPG5645B2ZE';
+  final companyName = data['companyName'] ?? 'KRISHIKRANTI ORGANICS';
+  final companyGst = data['companyGst'] ?? '23ABEFK9255G1Z9';
   final companyState = data['companyState'] ?? '23-Madhya Pradesh';
   final companyPhone = data['companyPhone'] ?? '9399022060';
-  final companyEmail = data['companyEmail'] ?? 'essentialbioscience2@gmail.com';
+  final companyEmail = data['companyEmail'] ?? 'krishikrantiorganics@gmail.com';
   final companyAddress =
       data['companyAddress'] ??
-      'HIG-3/554 Arvind Vihar, Housing Board Colony , Bagmugaliya, Bhopal 462043';
+      'EWS - 101, The Bellaire Appartment, Gondermau Gandhi Nagar, Bhopal 462036, Madhya Pradesh';
 
   final estimateNo = data['estimateNo'] ?? 'EBS/25-26/EST/02689';
   final date = data['estimateDate'] ?? '18/07/2026';
@@ -179,7 +193,8 @@ String generateQuotationHtml(Map<String, dynamic> data) {
   final logoBase64 = data['logoBase64'] as String?;
 
   final List items = data['items'] ?? [];
-  double grandTotal = 0.0;
+  double baseSubtotal = 0.0;
+  double gstTotal = 0.0;
   int totalQuantity = 0;
 
   final List<String> tableRows = [];
@@ -187,8 +202,13 @@ String generateQuotationHtml(Map<String, dynamic> data) {
     final item = items[i];
     final double price = ((item['price'] ?? 0.0) as num).toDouble();
     final int qty = ((item['quantity'] ?? 0) as num).toInt();
-    final double amt = price * qty;
-    grandTotal += amt;
+    final double gst = ((item['gst'] ?? 18.0) as num).toDouble();
+    final double subtotal = price * qty;
+    final double gstAmt = subtotal * (gst / 100);
+    final double amt = subtotal + gstAmt;
+    
+    baseSubtotal += subtotal;
+    gstTotal += gstAmt;
     totalQuantity += qty;
 
     final isOdd = i % 2 == 1;
@@ -199,19 +219,28 @@ String generateQuotationHtml(Map<String, dynamic> data) {
         <td class="center">${i + 1}</td>
         <td class="bold">${item['name'] ?? ''}</td>
         <td class="center">${qty}</td>
-        <td class="center">${item['unit'] ?? 'Ltr'}</td>
+        <td class="center">${item['unit'] ?? 'liter'}</td>
         <td class="num">${formatCurrency(price)}</td>
+        <td class="center">${gst.toStringAsFixed(0)}%</td>
         <td class="num">${formatCurrency(amt)}</td>
       </tr>
     ''');
   }
 
+  final grandTotal = baseSubtotal + gstTotal;
   final grandTotalWords = numberToWords(grandTotal);
 
   final formattedEmail = companyEmail.replaceFirst('@', '@<br>');
-  final formattedAddress = companyAddress
-      .replaceFirst('Arvind Vihar, ', 'Arvind Vihar,<br>')
-      .replaceFirst('Colony , ', 'Colony ,<br>');
+  String formattedAddress = companyAddress;
+  if (formattedAddress.contains('Arvind Vihar')) {
+    formattedAddress = formattedAddress
+        .replaceFirst('Arvind Vihar, ', 'Arvind Vihar,<br>')
+        .replaceFirst('Colony , ', 'Colony ,<br>');
+  } else if (formattedAddress.contains('Bellaire')) {
+    formattedAddress = formattedAddress
+        .replaceFirst('Bellaire Appartment, ', 'Bellaire Appartment,<br>')
+        .replaceFirst('Gandhi Nagar, ', 'Gandhi Nagar,<br>');
+  }
 
   return '''
 <!DOCTYPE html>
@@ -750,10 +779,11 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       <thead>
         <tr>
           <th class="center" style="width: 5%">#</th>
-          <th style="width: 50%">Item name</th>
+          <th style="width: 40%">Item name</th>
           <th class="center" style="width: 10%">Quantity</th>
           <th class="center" style="width: 10%">Unit</th>
-          <th class="num" style="width: 12%">Price/Unit</th>
+          <th class="num" style="width: 11%">Price/Unit</th>
+          <th class="center" style="width: 11%">GST</th>
           <th class="num" style="width: 13%">Amount</th>
         </tr>
       </thead>
@@ -765,6 +795,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
           <td class="center">$totalQuantity</td>
           <td class="center"></td>
           <td class="num"></td>
+          <td class="center"></td>
           <td class="num">${formatCurrency(grandTotal)}</td>
         </tr>
       </tbody>
@@ -780,11 +811,15 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       <div class="totals-box">
         <table class="totals-table">
           <tr>
-            <td class="label">Sub Total</td>
-            <td class="val">${formatCurrency(grandTotal)}</td>
+            <td class="label">Sub Total (Excl. GST)</td>
+            <td class="val">${formatCurrency(baseSubtotal)}</td>
+          </tr>
+          <tr>
+            <td class="label">GST Total</td>
+            <td class="val">${formatCurrency(gstTotal)}</td>
           </tr>
           <tr class="grand-total">
-            <td class="label">Total</td>
+            <td class="label">Grand Total</td>
             <td class="val">${formatCurrency(grandTotal)}</td>
           </tr>
         </table>
