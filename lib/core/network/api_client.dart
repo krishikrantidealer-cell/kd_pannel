@@ -487,7 +487,7 @@ class ApiClient {
   }
 
   void _handleTerminalAuthFailure(http.Response response) {
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.statusCode == 401) {
       final path = response.request?.url.path ?? '';
       if (!path.endsWith('/auth/admin/login')) {
         // Only log and redirect if we aren't already doing so

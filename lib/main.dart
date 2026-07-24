@@ -214,6 +214,8 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/sales/dashboard': (context) => const MainLayout(),
         '/sales/coupons': (context) => const MainLayout(child: SalesCouponPage()),
         '/sales/estimates': (context) => const MainLayout(child: EstimateGeneratorPage()),
+        '/sales/customer': (context) => const MainLayout(),
+        '/customer': (context) => const MainLayout(),
       },
     );
   }

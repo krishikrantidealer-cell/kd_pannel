@@ -64,6 +64,7 @@ class _MainLayoutState extends State<MainLayout> {
     const LeadsPage(),
     const DealerManagementPage(),
     const SalesCouponPage(),
+    const UserEventsPage(),
     const AlertsPage(),
     const EstimateGeneratorPage(),
     const WhatsAppCrmPage(),
@@ -138,14 +139,16 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 3;
         } else if (routeName == '/sales/coupons') {
           _currentIdx = 4;
-        } else if (routeName == '/alerts') {
+        } else if (routeName == '/customer' || routeName == '/sales/customer' || routeName == '/marketing') {
           _currentIdx = 5;
-        } else if (routeName == '/sales/estimates') {
+        } else if (routeName == '/alerts') {
           _currentIdx = 6;
-        } else if (routeName == '/support') {
+        } else if (routeName == '/sales/estimates') {
           _currentIdx = 7;
-        } else if (routeName == '/calls') {
+        } else if (routeName == '/support') {
           _currentIdx = 8;
+        } else if (routeName == '/calls') {
+          _currentIdx = 9;
         } else {
           _currentIdx = 0;
         }
@@ -182,10 +185,11 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 2) route = '/leads';
       if (index == 3) route = '/dealers';
       if (index == 4) route = '/sales/coupons';
-      if (index == 5) route = '/alerts';
-      if (index == 6) route = '/sales/estimates';
-      if (index == 7) route = '/support';
-      if (index == 8) route = '/calls';
+      if (index == 5) route = '/sales/customer';
+      if (index == 6) route = '/alerts';
+      if (index == 7) route = '/sales/estimates';
+      if (index == 8) route = '/support';
+      if (index == 9) route = '/calls';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
