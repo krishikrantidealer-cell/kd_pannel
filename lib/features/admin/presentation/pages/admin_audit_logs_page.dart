@@ -1091,24 +1091,28 @@ class _AuditLogRow extends StatelessWidget {
                                       const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFF1F5F9),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              displayTarget.toUpperCase(),
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppTheme.textSecondary,
-                                                letterSpacing: 0.5,
-                                                height: 1.1,
+                                          Flexible(
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF1F5F9),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                displayTarget.toUpperCase(),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppTheme.textSecondary,
+                                                  letterSpacing: 0.5,
+                                                  height: 1.1,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
                                           ),

@@ -733,6 +733,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final String initialCompare = data?['compareAtPrice'] != null
         ? data!['compareAtPrice'].toString()
         : '';
+    final String initialFarmerPrice = data?['farmerPrice'] != null
+        ? data!['farmerPrice'].toString()
+        : (data?['farmer_price'] != null ? data!['farmer_price'].toString() : '');
     // 'packSize' is the carton/booking total string (new field).
     // Old products store the same value as a number in 'packVolume' (always in litres).
     String initialPackSize = '';
@@ -790,8 +793,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     final priceCtrl = TextEditingController(text: initialPrice);
     final compareCtrl = TextEditingController(text: initialCompare);
+    final farmerCtrl = TextEditingController(text: initialFarmerPrice);
     final packValCtrl = TextEditingController(text: packVal);
     final compareRateCtrl = TextEditingController();
+    final farmerRateCtrl = TextEditingController();
     final basePackingValCtrl = TextEditingController(text: basePackVal);
 
     // Resolve variant-level pricing tiers with proper fallbacks
@@ -912,9 +917,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
           .toStringAsFixed(2);
     }
 
+    final double? finalFarmerPrice = double.tryParse(initialFarmerPrice);
+    if (farmerRateCtrl.text.isEmpty &&
+        finalFarmerPrice != null &&
+        initialCanonicalVolume > 0) {
+      farmerRateCtrl.text = (finalFarmerPrice / initialCanonicalVolume)
+          .toStringAsFixed(2);
+    }
+
     // Setup listeners to calculate prices on the fly!
     void recalculate() {
       final double? cRateVal = double.tryParse(compareRateCtrl.text);
+      final double? fRateVal = double.tryParse(farmerRateCtrl.text);
       final double? bpVal = double.tryParse(basePackingValCtrl.text);
       final String bpUnit = variantRef.isNotEmpty
           ? (variantRef[0]['basePackingUnit'] as String? ?? basePackUnit)
@@ -928,6 +942,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
           compareCtrl.text = computedMRP % 1 == 0
               ? computedMRP.toStringAsFixed(0)
               : computedMRP.toStringAsFixed(2);
+        }
+
+        if (fRateVal != null) {
+          final computedFarmerPrice = fRateVal * canonicalVolume;
+          farmerCtrl.text = computedFarmerPrice % 1 == 0
+              ? computedFarmerPrice.toStringAsFixed(0)
+              : computedFarmerPrice.toStringAsFixed(2);
         }
 
         for (var tier in variantPriceTiers) {
@@ -955,6 +976,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     }
 
     compareRateCtrl.addListener(recalculate);
+    farmerRateCtrl.addListener(recalculate);
     packValCtrl.addListener(recalculate);
     basePackingValCtrl.addListener(recalculate);
     for (var controller in rates.values) {
@@ -967,6 +989,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
         if (variantId != null) '_id': variantId,
         'price': priceCtrl,
         'compareAtPrice': compareCtrl,
+        'farmerPrice': farmerCtrl,
+        'farmerRate': farmerRateCtrl,
         'packSizeVal': packValCtrl,
         'packSizeUnit': packUnit,
         'compareRate': compareRateCtrl,
@@ -988,6 +1012,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final variant = _formVariants[index];
     variant['price']?.dispose();
     variant['compareAtPrice']?.dispose();
+    variant['farmerPrice']?.dispose();
+    variant['farmerRate']?.dispose();
     variant['packSizeVal']?.dispose();
     variant['compareRate']?.dispose();
     variant['basePackingVal']?.dispose();
@@ -1393,6 +1419,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ? '$mrpRateVal$suffix'
             : '';
 
+        final String farmerRateVal = (v['farmerRate'] as TextEditingController?)?.text.trim() ?? '';
+        final String farmerRateWithSuffix = farmerRateVal.isNotEmpty
+            ? '$farmerRateVal$suffix'
+            : '';
+
         final variantPriceTiers = v['priceTiers'] as List<Map<String, String>>;
 
         variantsData.add({
@@ -1400,6 +1431,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
           if (v['_id'] != null) '_id': v['_id'],
           'price': primaryRateWithSuffix,
           'compareAtPrice': mrpRateWithSuffix,
+          'farmerPrice': (v['farmerPrice'] as TextEditingController?)?.text.trim() ?? '',
+          'farmerRate': farmerRateWithSuffix,
           'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
           'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
           'unitCompareRate': mrpRateWithSuffix,
@@ -1471,6 +1504,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
               v['compareAtPrice'].replaceAll(RegExp(r'[^0-9.]'), ''),
             ) ??
             0.0;
+        final farmerPriceVal =
+            double.tryParse(
+              (v['farmerPrice'] ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
 
         return {
           if (v['id'] != null) 'id': v['id'],
@@ -1478,6 +1516,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'size': v['packSize'],
           'price': priceVal,
           'compareAtPrice': compareVal,
+          'farmerPrice': farmerPriceVal,
           // packVolume: legacy numeric field = total base-packing in canonical unit
           // e.g. 10lit → 10.0, 5000ml → 5.0, 2kg → 2.0, 500gm → 0.5, 10pcs → 10.0
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),
@@ -1979,23 +2018,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                             return null;
                           },
                         ),
-                        const SizedBox(height: 16),
-                        _buildFormTextField(
-                          label: 'Display Order / Sorting Priority',
-                          hint: 'e.g. 0 (lower numbers appear first)',
-                          controller: _orderController,
-                          keyboardType: TextInputType.number,
-                          validator: (val) {
-                            if (val == null || val.trim().isEmpty) {
-                              return 'Order is required';
-                            }
-                            if (int.tryParse(val) == null) {
-                              return 'Please enter a valid number';
-                            }
-                            return null;
-                          },
-                        ),
-                        _buildContextSpecificFields(),
+
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3722,7 +3745,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       variant['basePackingUnit'] as String? ?? 'lit',
     );
 
-    // MRP rate is always first
+    // MRP rate and Farmer rate
     final List<Widget> rateRowChildren = [
       Expanded(
         child: _buildFormTextField(
@@ -3737,22 +3760,36 @@ class _CreateProductPageState extends State<CreateProductPage> {
             if (val == null || val.trim().isEmpty) return 'Required';
             final numVal = double.tryParse(val);
             if (numVal == null || numVal <= 0) return 'Must be > 0';
-            // MRP rate must be >= Tier 1 selling rate
-            final t1RateVal = double.tryParse(
-              (variant['rates'] as Map<String, TextEditingController>)['1']
-                      ?.text
-                      .trim() ??
-                  '',
-            );
-            if (t1RateVal != null && numVal < t1RateVal) {
-              return 'MRP ≥ Tier 1';
-            }
             return null;
           },
           prefixIcon: const Icon(
             Icons.currency_rupee_rounded,
             size: 14,
             color: AppTheme.textSecondary,
+          ),
+          isCompact: true,
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: _buildFormTextField(
+          label: 'Farmer Rate (₹$liveSuffix)',
+          hint: 'e.g. 260',
+          controller: variant['farmerRate'],
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (val) {
+            if (val == null || val.trim().isEmpty) return null;
+            final numVal = double.tryParse(val);
+            if (numVal == null || numVal <= 0) return 'Must be > 0';
+            return null;
+          },
+          prefixIcon: const Icon(
+            Icons.currency_rupee_rounded,
+            size: 14,
+            color: Color(0xFF059669),
           ),
           isCompact: true,
         ),
@@ -3818,15 +3855,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
     // Lay out the fields in rows of 2
     final List<Widget> rateRows = [];
 
-    // First row: MRP + Primary Tier (Tier 1)
-    if (dynamicTierFields.isNotEmpty) {
-      rateRowChildren.add(const SizedBox(width: 12));
-      rateRowChildren.add(Expanded(child: dynamicTierFields[0]));
-    }
+    // First row: MRP Rate + Farmer Rate
     rateRows.add(Row(children: rateRowChildren));
 
     // Next rows: 2 tiers per row
-    for (int i = 1; i < dynamicTierFields.length; i += 2) {
+    for (int i = 0; i < dynamicTierFields.length; i += 2) {
       final List<Widget> rowItems = [];
       rowItems.add(Expanded(child: dynamicTierFields[i]));
       if (i + 1 < dynamicTierFields.length) {

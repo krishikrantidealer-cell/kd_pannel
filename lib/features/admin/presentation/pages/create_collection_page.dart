@@ -121,7 +121,6 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
 
   void _onNameChanged() {
     if (widget.initialData != null) return; // Only apply for new creations
-    if (_isParentCollection) return; // Only for sub-collections
 
     final newName = _nameController.text.trim();
     if (newName.isEmpty) return;
@@ -294,8 +293,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           }
         }
 
-        // Sync products with this collection only if it's a sub-collection
-        if (!_isParentCollection) {
+        // Sync products with this collection
+        {
           final String colId = (savedCol['_id'] ?? savedCol['id'] ?? '')
               .toString();
 
@@ -303,7 +302,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
             // Fallback: If we STILL can't find the ID, we might have a data structure issue.
             // We should print/log this, but for now we fallback to the name so it doesn't break entirely.
             print(
-              'WARNING: Could not extract sub-collection ID from response: $resData',
+              'WARNING: Could not extract collection ID from response: $resData',
             );
           }
           final String colName = name;
@@ -426,22 +425,18 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(flex: 3, child: _buildLeftForm()),
-                            if (!_isParentCollection) ...[
-                              const SizedBox(width: 24),
-                              Expanded(
-                                flex: 2,
-                                child: _buildRightProductsSelector(),
-                              ),
-                            ],
+                            const SizedBox(width: 24),
+                            Expanded(
+                              flex: 2,
+                              child: _buildRightProductsSelector(),
+                            ),
                           ],
                         )
                       : Column(
                           children: [
                             _buildLeftForm(),
-                            if (!_isParentCollection) ...[
-                              const SizedBox(height: 24),
-                              _buildRightProductsSelector(),
-                            ],
+                            const SizedBox(height: 24),
+                            _buildRightProductsSelector(),
                           ],
                         ),
                 ),

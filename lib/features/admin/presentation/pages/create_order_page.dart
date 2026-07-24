@@ -1003,6 +1003,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                         final v = variants[idx];
                         final vSize = v['size'] ?? v['packSize'] ?? '';
                         final isSelected = (safeIdx == idx);
+                        final fp = v['farmerPrice'] ?? v['farmer_price'];
+                        final fpNum = fp != null ? double.tryParse(fp.toString()) : null;
+                        final fpLabel = (fpNum != null && fpNum > 0) ? ' • FP: ₹${fpNum % 1 == 0 ? fpNum.toInt() : fpNum.toStringAsFixed(0)}' : '';
+
                         return GestureDetector(
                           onTap: () => setState(
                             () => _selectedVariantIndex[productId] = idx,
@@ -1029,7 +1033,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                               ),
                             ),
                             child: Text(
-                              vSize.toString(),
+                              '${vSize.toString()}$fpLabel',
                               style: AppTheme.labelSM.copyWith(
                                 fontSize: 10.5,
                                 color: isSelected

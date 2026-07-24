@@ -75,11 +75,31 @@ class _ReorderProductsDialogState extends State<ReorderProductsDialog> {
     final List<Map<String, dynamic>> filtered = [];
     final Set<String> seenIds = {};
 
+    final String safeContextId = widget.contextId.replaceAll('.', '_dot_');
+    final String safeContextName = widget.contextName.replaceAll('.', '_dot_');
+    String safeSubName = '';
+    if (widget.contextName.contains('_split_')) {
+      safeSubName = widget.contextName.split('_split_').last.replaceAll('.', '_dot_');
+    }
+
+    final candidateKeys = [
+      safeContextId,
+      safeContextName,
+      if (safeSubName.isNotEmpty) safeSubName,
+      widget.contextId,
+      widget.contextName,
+    ].where((k) => k.isNotEmpty).toList();
+
     for (final p in widget.products) {
       bool isMatch = false;
       if (widget.type == 'collection') {
         final collections = List<String>.from(p['assignedCollections'] ?? []);
-        isMatch = collections.contains(widget.contextName);
+        final targetName = widget.contextName.trim().toLowerCase();
+        final targetId = widget.contextId.trim().toLowerCase();
+        isMatch = collections.any((c) {
+          final cl = c.trim().toLowerCase();
+          return cl == targetName || cl == targetId;
+        });
       } else if (widget.type == 'category') {
         final catId = _extractId(p['categoryId'] ?? p['category']);
         final List<String> catIds = List<String>.from(
@@ -136,15 +156,25 @@ class _ReorderProductsDialogState extends State<ReorderProductsDialog> {
     }
 
     // 2. Sort them by customOrders for this context
-    final String safeKey = widget.contextId.replaceAll('.', '_dot_');
-    filtered.sort((a, b) {
-      final customOrdersA = a['customOrders'] as Map? ?? {};
-      final customOrdersB = b['customOrders'] as Map? ?? {};
+    int getCustomOrder(Map<String, dynamic> p) {
+      final customOrders = p['customOrders'] as Map? ?? {};
+      if (customOrders.isEmpty) return 1000000;
 
-      final orderA =
-          int.tryParse(customOrdersA[safeKey]?.toString() ?? '') ?? 1000000;
-      final orderB =
-          int.tryParse(customOrdersB[safeKey]?.toString() ?? '') ?? 1000000;
+      for (final key in candidateKeys) {
+        if (customOrders.containsKey(key)) {
+          final val = customOrders[key];
+          if (val != null) {
+            final parsed = int.tryParse(val.toString());
+            if (parsed != null) return parsed;
+          }
+        }
+      }
+      return 1000000;
+    }
+
+    filtered.sort((a, b) {
+      final orderA = getCustomOrder(a);
+      final orderB = getCustomOrder(b);
 
       if (orderA != orderB) {
         return orderA.compareTo(orderB);
@@ -384,6 +414,7 @@ class _ReorderProductsDialogState extends State<ReorderProductsDialog> {
           .toList();
       final res = await ApiClient().post('/products/reorder', {
         'contextId': widget.contextId,
+        'contextName': widget.contextName,
         'productIds': productIds,
       });
 

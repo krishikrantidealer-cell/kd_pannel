@@ -191,6 +191,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
   final clientAddress = data['clientAddress'] ?? '';
   final clientPhone = data['clientPhone'] ?? '';
   final logoBase64 = data['logoBase64'] as String?;
+  final sealBase64 = data['sealBase64'] as String?;
 
   final List items = data['items'] ?? [];
   double baseSubtotal = 0.0;
@@ -586,12 +587,23 @@ String generateQuotationHtml(Map<String, dynamic> data) {
     }
     
     .stamp-area {
-      height: 70px;
+      height: 100px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 10px;
       position: relative;
+    }
+    
+    .stamp-area img {
+      width: 200px;
+      height: auto;
+      max-width: 200px;
+      object-fit: contain;
+      image-rendering: auto;
+      display: block;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     
     .seal-stamp {
@@ -703,6 +715,14 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       }
       .bottom-accent::after {
         border-radius: 48px 0 0 0;
+      }
+      .stamp-area img {
+        width: 200px !important;
+        height: auto !important;
+        max-width: 200px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        image-rendering: auto !important;
       }
     }
   </style>
@@ -835,10 +855,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       <div class="sign-box">
         <p>For : $companyName</p>
         <div class="stamp-area">
-          <div class="seal-stamp">
-            <span>SEAL</span>
-            EBS
-          </div>
+          ${sealBase64 != null ? '<img src="data:image/png;base64,$sealBase64" alt="Official Seal" />' : '<img src="assets/images/sign.png" alt="Official Seal" />'}
         </div>
         <div class="signatory-label">Authorized Signatory</div>
       </div>

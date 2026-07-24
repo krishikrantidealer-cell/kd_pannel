@@ -6,11 +6,12 @@ import 'package:kd_pannel/features/admin/presentation/pages/dealer_profile_page.
 import 'package:kd_pannel/features/admin/presentation/pages/lead_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/admin_audit_logs_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_member_profile_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/call_logs_page.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -195,7 +196,8 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
             const MainLayout(child: OrderDetailsPage()),
         '/products': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(),
-        '/support': (context) => const MainLayout(),
+        '/support': (context) => const MainLayout(child: WhatsAppCrmPage()),
+        '/calls': (context) => const MainLayout(child: CallLogsPage()),
         '/team': (context) => const MainLayout(),
         '/team/profile': (context) =>
             const MainLayout(child: TeamMemberProfilePage()),

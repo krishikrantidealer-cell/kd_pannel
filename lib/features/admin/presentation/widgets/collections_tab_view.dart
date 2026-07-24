@@ -607,7 +607,18 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-
+                                            if (subs.isEmpty) ...[
+                                              _CircleActionButton(
+                                                icon: Icons.unfold_more_rounded,
+                                                tooltip: 'Reorder Products',
+                                                onTap: () => _openReorderDialog(
+                                                  colId,
+                                                  col['name'] as String,
+                                                  'collection',
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                            ],
                                             _CircleActionButton(
                                               icon: Icons.edit_outlined,
                                               tooltip: 'Edit Parent Collection',
@@ -673,28 +684,138 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                     vertical: 8,
                                                   ),
                                               child: subs.isEmpty
-                                                  ? Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            left: 64,
-                                                            right: 16,
-                                                            top: 12,
-                                                            bottom: 12,
-                                                          ),
-                                                      child: Text(
-                                                        'No sub-collections yet. Add sub-collections via product edits.',
-                                                        style:
-                                                            GoogleFonts.outfit(
-                                                              fontSize: 12,
-                                                              color: AppTheme
-                                                                  .textSecondary,
-                                                              fontStyle:
-                                                                  FontStyle
-                                                                      .italic,
-                                                            ),
-                                                      ),
-                                                    )
-                                                  : Column(
+                                                   ? (() {
+                                                       final String colName = col['name'] as String;
+                                                       final List<Map<String, dynamic>> parentProducts = widget.products.where((p) {
+                                                         final collections = List<String>.from(p['assignedCollections'] ?? []);
+                                                         return collections.contains(colName) || collections.contains(colId);
+                                                       }).toList();
+
+                                                       if (parentProducts.isEmpty) {
+                                                         return Padding(
+                                                           padding: const EdgeInsets.only(
+                                                             left: 64,
+                                                             right: 16,
+                                                             top: 12,
+                                                             bottom: 12,
+                                                           ),
+                                                           child: Text(
+                                                             'No sub-collections or direct products yet.',
+                                                             style: GoogleFonts.outfit(
+                                                               fontSize: 12,
+                                                               color: AppTheme.textSecondary,
+                                                               fontStyle: FontStyle.italic,
+                                                             ),
+                                                           ),
+                                                         );
+                                                       }
+
+                                                       return Column(
+                                                         children: parentProducts.asMap().entries.map((entry) {
+                                                           final prod = entry.value;
+                                                           final bool isLast = entry.key == parentProducts.length - 1;
+                                                           final String prodName = (prod['name'] ?? '').toString();
+                                                           final String prodSku = (prod['sku'] ?? '').toString();
+                                                           final bool inStock = prod['inStock'] as bool? ?? true;
+
+                                                           String? imageUrl;
+                                                           if (prod['mediumImages'] is List && (prod['mediumImages'] as List).isNotEmpty) {
+                                                             imageUrl = prod['mediumImages'][0]?.toString();
+                                                           } else if (prod['originalImages'] is List && (prod['originalImages'] as List).isNotEmpty) {
+                                                             imageUrl = prod['originalImages'][0]?.toString();
+                                                           }
+
+                                                           return Row(
+                                                             children: [
+                                                               SizedBox(
+                                                                 width: isMobile ? 12 : 24,
+                                                               ),
+                                                               CustomPaint(
+                                                                 size: Size(
+                                                                   isMobile ? 14 : 20,
+                                                                   48,
+                                                                 ),
+                                                                 painter: _TreeLinePainter(
+                                                                   isLast: isLast,
+                                                                 ),
+                                                               ),
+                                                               const SizedBox(width: 6),
+                                                               Expanded(
+                                                                 child: Container(
+                                                                   padding: EdgeInsets.symmetric(
+                                                                     vertical: 8,
+                                                                     horizontal: isMobile ? 8 : 12,
+                                                                   ),
+                                                                   margin: EdgeInsets.only(
+                                                                     right: isMobile ? 8 : 16,
+                                                                     bottom: 4,
+                                                                   ),
+                                                                   decoration: BoxDecoration(
+                                                                     color: Colors.white,
+                                                                     borderRadius: BorderRadius.circular(8),
+                                                                     border: Border.all(
+                                                                       color: const Color(0xFFEDF2F7),
+                                                                     ),
+                                                                   ),
+                                                                   child: Row(
+                                                                     children: [
+                                                                       _CollectionAvatar(
+                                                                         name: prodName,
+                                                                         isParent: false,
+                                                                         imageUrl: imageUrl,
+                                                                       ),
+                                                                       const SizedBox(width: 8),
+                                                                       Expanded(
+                                                                         child: Row(
+                                                                           children: [
+                                                                             Flexible(
+                                                                               child: Text(
+                                                                                 prodName,
+                                                                                 style: GoogleFonts.outfit(
+                                                                                   fontSize: isMobile ? 12 : 13,
+                                                                                   fontWeight: FontWeight.w600,
+                                                                                   color: AppTheme.textPrimary,
+                                                                                 ),
+                                                                                 maxLines: 1,
+                                                                                 overflow: TextOverflow.ellipsis,
+                                                                               ),
+                                                                             ),
+                                                                             if (prodSku.isNotEmpty) ...[
+                                                                               const SizedBox(width: 6),
+                                                                               Container(
+                                                                                 padding: const EdgeInsets.symmetric(
+                                                                                   horizontal: 5,
+                                                                                   vertical: 1.5,
+                                                                                 ),
+                                                                                 decoration: BoxDecoration(
+                                                                                   color: const Color(0xFFF1F5F9),
+                                                                                   borderRadius: BorderRadius.circular(4),
+                                                                                 ),
+                                                                                 child: Text(
+                                                                                   prodSku,
+                                                                                   style: GoogleFonts.outfit(
+                                                                                     fontSize: 8.5,
+                                                                                     color: AppTheme.textSecondary,
+                                                                                     fontWeight: FontWeight.bold,
+                                                                                   ),
+                                                                                 ),
+                                                                               ),
+                                                                             ],
+                                                                           ],
+                                                                         ),
+                                                                       ),
+                                                                       const SizedBox(width: 6),
+                                                                       _StatusBadge(isActive: inStock),
+                                                                     ],
+                                                                   ),
+                                                                 ),
+                                                               ),
+                                                             ],
+                                                           );
+                                                         }).toList(),
+                                                       );
+                                                     })()
+                                                   : Column(
                                                       children: subs.asMap().entries.map((
                                                         entry,
                                                       ) {
@@ -866,7 +987,7 @@ class _CollectionsTabViewState extends State<CollectionsTabView> {
                                                                       icon: Icons.unfold_more_rounded,
                                                                       tooltip: 'Reorder Products',
                                                                       onTap: () => _openReorderDialog(
-                                                                        sub['name'] as String,
+                                                                        subId,
                                                                         sub['name'] as String,
                                                                         'collection',
                                                                       ),

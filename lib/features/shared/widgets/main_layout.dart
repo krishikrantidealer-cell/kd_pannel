@@ -14,6 +14,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/call_logs_page.dart';
 import 'sidebar_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -51,6 +53,8 @@ class _MainLayoutState extends State<MainLayout> {
     const TrashPage(),
     const AlertsPage(),
     const EstimateGeneratorPage(),
+    const WhatsAppCrmPage(),
+    const CallLogsPage(),
   ];
 
   // Persistent static stack of Sales Pages (Preserves states!)
@@ -62,6 +66,8 @@ class _MainLayoutState extends State<MainLayout> {
     const SalesCouponPage(),
     const AlertsPage(),
     const EstimateGeneratorPage(),
+    const WhatsAppCrmPage(),
+    const CallLogsPage(),
   ];
 
   @override
@@ -114,6 +120,10 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 10;
         } else if (routeName == '/sales/estimates') {
           _currentIdx = 11;
+        } else if (routeName == '/support') {
+          _currentIdx = 12;
+        } else if (routeName == '/calls') {
+          _currentIdx = 13;
         } else {
           _currentIdx = 0;
         }
@@ -132,6 +142,10 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 5;
         } else if (routeName == '/sales/estimates') {
           _currentIdx = 6;
+        } else if (routeName == '/support') {
+          _currentIdx = 7;
+        } else if (routeName == '/calls') {
+          _currentIdx = 8;
         } else {
           _currentIdx = 0;
         }
@@ -160,6 +174,8 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 9) route = '/trash';
       if (index == 10) route = '/alerts';
       if (index == 11) route = '/sales/estimates';
+      if (index == 12) route = '/support';
+      if (index == 13) route = '/calls';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/orders';
@@ -168,6 +184,8 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 4) route = '/sales/coupons';
       if (index == 5) route = '/alerts';
       if (index == 6) route = '/sales/estimates';
+      if (index == 7) route = '/support';
+      if (index == 8) route = '/calls';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

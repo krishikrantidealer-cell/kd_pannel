@@ -1192,12 +1192,19 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                       color: isSel ? AppTheme.primaryColor : AppTheme.textPrimary,
                     ),
                   ),
-                  subtitle: Text(
-                    'Original Price: ₹${v['price']}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      color: AppTheme.textSecondary,
-                    ),
+                  subtitle: Builder(
+                    builder: (_) {
+                      final fp = v['farmerPrice'] ?? v['farmer_price'];
+                      final fpNum = fp != null ? double.tryParse(fp.toString()) : null;
+                      final fpText = (fpNum != null && fpNum > 0) ? '  •  Farmer Price: ₹${fpNum % 1 == 0 ? fpNum.toInt() : fpNum.toStringAsFixed(0)}' : '';
+                      return Text(
+                        'Original Price: ₹${v['price']}$fpText',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      );
+                    },
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

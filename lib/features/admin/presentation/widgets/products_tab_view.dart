@@ -635,12 +635,53 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                 ),
                 Expanded(
                   flex: 4,
-                  child: Text(
-                    '$variantCount Variant${variantCount > 1 ? 's' : ''}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12.5,
-                      color: AppTheme.textBody,
-                      fontWeight: FontWeight.w500,
+                  child: InkWell(
+                    onTap: () => _showVariantDetailsDialog(context, prod),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '$variantCount Variant${variantCount > 1 ? 's' : ''}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.info_outline_rounded, size: 14, color: AppTheme.primaryColor),
+                            ],
+                          ),
+                          if (variantsList != null && variantsList.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Builder(
+                              builder: (_) {
+                                final firstVar = variantsList.first as Map?;
+                                final fp = firstVar?['farmerPrice'] ?? firstVar?['farmer_price'];
+                                final fpDouble = fp != null ? double.tryParse(fp.toString()) : null;
+                                if (fpDouble != null && fpDouble > 0) {
+                                  return Text(
+                                    'Farmer: ₹${fpDouble % 1 == 0 ? fpDouble.toInt() : fpDouble.toStringAsFixed(0)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10.5,
+                                      color: const Color(0xFF059669),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1189,6 +1230,157 @@ class _ProductsTabViewState extends State<ProductsTabView> {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showVariantDetailsDialog(BuildContext context, Map<String, dynamic> prod) {
+    final variantsList = (prod['variants'] as List?) ?? [];
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 550, maxHeight: 600),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            prod['name']?.toString() ?? 'Product Variants',
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Variant Price & Margin Breakdown',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: AppTheme.lightBorderColor),
+                const SizedBox(height: 16),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: variantsList.asMap().entries.map((entry) {
+                        final v = entry.value as Map;
+                        final String sizeStr = (v['size'] ?? v['packSize'] ?? 'Default').toString();
+                        final double dealerPrice = double.tryParse(v['price']?.toString() ?? '0') ?? 0.0;
+                        final double mrp = double.tryParse(v['compareAtPrice']?.toString() ?? '0') ?? 0.0;
+                        final dynamic fpRaw = v['farmerPrice'] ?? v['farmer_price'];
+                        final double farmerPrice = fpRaw != null ? (double.tryParse(fpRaw.toString()) ?? 0.0) : 0.0;
+                        final double marginAmt = (farmerPrice > 0 && dealerPrice > 0) ? (farmerPrice - dealerPrice) : 0.0;
+                        final double marginPct = (farmerPrice > 0 && marginAmt > 0) ? (marginAmt / farmerPrice) * 100 : 0.0;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Variant ${entry.key + 1}: $sizeStr',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  if (marginAmt > 0)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFECFDF5),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                                      ),
+                                      child: Text(
+                                        'Margin: ₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF059669),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('MRP', style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary)),
+                                      const SizedBox(height: 2),
+                                      Text('₹${mrp > 0 ? (mrp % 1 == 0 ? mrp.toInt() : mrp.toStringAsFixed(2)) : '—'}', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textBody)),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Dealer Price', style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary)),
+                                      const SizedBox(height: 2),
+                                      Text('₹${dealerPrice % 1 == 0 ? dealerPrice.toInt() : dealerPrice.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Farmer Price', style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary)),
+                                      const SizedBox(height: 2),
+                                      Text('₹${farmerPrice > 0 ? (farmerPrice % 1 == 0 ? farmerPrice.toInt() : farmerPrice.toStringAsFixed(2)) : '—'}', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF059669))),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
               ],
             ),

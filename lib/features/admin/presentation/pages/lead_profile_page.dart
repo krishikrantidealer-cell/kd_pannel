@@ -14,6 +14,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
@@ -537,13 +538,17 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       'activity': u['updatedAt'] != null ? _formatTimeAgo(u['updatedAt']) : '-',
       'agent': u['assignedAgent'] != null
           ? (u['assignedAgent'] is Map
-              ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'.trim()
-              : u['assignedAgent'].toString())
+                ? '${u['assignedAgent']['firstName'] ?? ''} ${u['assignedAgent']['lastName'] ?? ''}'
+                      .trim()
+                : u['assignedAgent'].toString())
           : '-',
       'agentId': u['assignedAgent'] != null
           ? (u['assignedAgent'] is Map
-              ? (u['assignedAgent']['_id'] ?? u['assignedAgent']['\$oid'] ?? u['assignedAgent']).toString()
-              : u['assignedAgent'].toString())
+                ? (u['assignedAgent']['_id'] ??
+                          u['assignedAgent']['\$oid'] ??
+                          u['assignedAgent'])
+                      .toString()
+                : u['assignedAgent'].toString())
           : null,
       'source': u['source'] ?? 'App',
       'deepLinkUrl': u['deepLinkUrl'],
@@ -910,10 +915,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                           // Robust ID extraction: handle string, Map ($oid), or null
                           final dynamic rawId = _lead!['id'] ?? _lead!['_id'];
                           String? userId;
-                          
+
                           if (rawId is String) {
                             userId = rawId;
-                          } else if (rawId is Map && rawId.containsKey('\$oid')) {
+                          } else if (rawId is Map &&
+                              rawId.containsKey('\$oid')) {
                             userId = rawId['\$oid'].toString();
                           } else if (rawId != null) {
                             userId = rawId.toString();
@@ -1531,9 +1537,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     final gstController = TextEditingController(
       text: _lead!['gstNumber'] ?? '',
     );
-    
+
     final validUserTypes = ['retailer', 'distributor', 'wholesaler', 'farmer'];
-    String initialType = _lead!['userType']?.toString().toLowerCase() ?? 'retailer';
+    String initialType =
+        _lead!['userType']?.toString().toLowerCase() ?? 'retailer';
     if (!validUserTypes.contains(initialType)) {
       initialType = 'retailer';
     }
@@ -1630,10 +1637,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                 final isFarmer = selectedUserType == 'farmer';
                 final existingLicence = _lead!['licenceImage']?.toString();
                 final existingShopImage = _lead!['shopImage']?.toString();
-                final hasExistingLicence = existingLicence != null &&
+                final hasExistingLicence =
+                    existingLicence != null &&
                     existingLicence.trim().isNotEmpty &&
                     existingLicence != 'null';
-                final hasExistingShop = existingShopImage != null &&
+                final hasExistingShop =
+                    existingShopImage != null &&
                     existingShopImage.trim().isNotEmpty &&
                     existingShopImage != 'null';
 
@@ -1655,8 +1664,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       gstNumber: gstController.text.trim(),
                       licenceImageBytes: licenceFile?.bytes?.toList(),
                       licenceFileName: licenceFile?.name,
-                      shopImageBytes:
-                          isFarmer ? null : shopFile?.bytes?.toList(),
+                      shopImageBytes: isFarmer
+                          ? null
+                          : shopFile?.bytes?.toList(),
                       shopFileName: isFarmer ? null : shopFile?.name,
                     ),
                   );
@@ -1970,15 +1980,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         final isTablet = Responsive.isTablet(context);
         final isLoading = state.status == LeadsStatus.submitting;
 
-        return Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryColor,
-                  ),
-                )
-              : SingleChildScrollView(
+        return SelectionArea(
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FAFC),
+            body: isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryColor,
+                    ),
+                  )
+                : SingleChildScrollView(
                     padding: EdgeInsets.symmetric(
                       horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
                       vertical: isMobile ? 20 : 32,
@@ -2092,7 +2103,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                             child: _activeTab == 0
                                 ? Column(
                                     key: const ValueKey(0),
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       if (!isMobile) ...[
                                         IntrinsicHeight(
@@ -2104,7 +2116,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                 flex: 1,
                                                 child: _LeadInformationCard(
                                                   lead: currentLead,
-                                                  salesAgents: state.salesAgents,
+                                                  salesAgents:
+                                                      state.salesAgents,
                                                   onAssignAgent: _assignAgent,
                                                 ),
                                               ),
@@ -2114,7 +2127,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                 child: _DealerKycDocumentsCard(
                                                   lead: currentLead,
                                                   onViewDocument: _launchUrl,
-                                                  onUpload: _showUploadKycDialog,
+                                                  onUpload:
+                                                      _showUploadKycDialog,
                                                   isVertical: true,
                                                 ),
                                               ),
@@ -2144,13 +2158,27 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         _UserEventsCard(
                                           userIdentifiers: [
                                             leadId!,
-                                            if (currentLead?['email'] != null) currentLead!['email'].toString(),
-                                            if (currentLead?['phone'] != null) currentLead!['phone'].toString(),
-                                            if (currentLead?['phoneNumber'] != null) currentLead!['phoneNumber'].toString(),
+                                            if (currentLead?['email'] != null)
+                                              currentLead!['email'].toString(),
+                                            if (currentLead?['phone'] != null)
+                                              currentLead!['phone'].toString(),
+                                            if (currentLead?['phoneNumber'] !=
+                                                null)
+                                              currentLead!['phoneNumber']
+                                                  .toString(),
                                           ],
                                           events: events,
                                           isLoading: isLoadingEvents,
-                                          onRefresh: () => context.read<LeadsBloc>().add(FetchLeadEventsEvent(currentLead?['email'] ?? currentLead?['phone'] ?? currentLead?['phoneNumber'] ?? leadId ?? '')),
+                                          onRefresh: () =>
+                                              context.read<LeadsBloc>().add(
+                                                FetchLeadEventsEvent(
+                                                  currentLead?['email'] ??
+                                                      currentLead?['phone'] ??
+                                                      currentLead?['phoneNumber'] ??
+                                                      leadId ??
+                                                      '',
+                                                ),
+                                              ),
                                         ),
                                     ],
                                   )
@@ -2162,29 +2190,40 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                           child: UserStatusNotesWidget(
                                             userId: leadId,
                                             initialStatus:
-                                                currentLead?['status'] ?? 'prospect',
+                                                currentLead?['status'] ??
+                                                'prospect',
                                             initialNotes:
                                                 currentLead?['notes'] ?? '',
                                             notesHistory:
-                                                currentLead?['notesHistory'] != null
-                                                ? List<Map<String, dynamic>>.from(
+                                                currentLead?['notesHistory'] !=
+                                                    null
+                                                ? List<
+                                                    Map<String, dynamic>
+                                                  >.from(
                                                     currentLead!['notesHistory'],
                                                   )
                                                 : null,
                                             isSubmitting: isLoading,
-                                            onSave: (status, notes, noteType, notePriority) {
-                                              context.read<LeadsBloc>().add(
-                                                UpdateLeadDetailsEvent(
-                                                  userId: leadId,
-                                                  updateData: {
-                                                    'leadStatus': status,
-                                                    'leadNotes': notes,
-                                                    'noteType': noteType,
-                                                    'notePriority': notePriority,
-                                                  },
-                                                ),
-                                              );
-                                            },
+                                            onSave:
+                                                (
+                                                  status,
+                                                  notes,
+                                                  noteType,
+                                                  notePriority,
+                                                ) {
+                                                  context.read<LeadsBloc>().add(
+                                                    UpdateLeadDetailsEvent(
+                                                      userId: leadId,
+                                                      updateData: {
+                                                        'leadStatus': status,
+                                                        'leadNotes': notes,
+                                                        'noteType': noteType,
+                                                        'notePriority':
+                                                            notePriority,
+                                                      },
+                                                    ),
+                                                  );
+                                                },
                                           ),
                                         ),
                                     ],
@@ -2194,6 +2233,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       ],
                     ),
                   ),
+          ),
         );
       },
     );
@@ -2587,27 +2627,22 @@ class _FlatHeaderSection extends StatelessWidget {
           isSolid: true,
           onTap: onEdit,
         ),
-        _ActionButton(
-          icon: FontAwesomeIcons.whatsapp,
-          label: 'WhatsApp',
-          color: const Color(0xFF25D366),
-          isSolid: true,
-          onTap: () async {
-            final whatsappUrl = "https://wa.me/${lead['phone']}";
-            final Uri url = Uri.parse(whatsappUrl);
-            if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-              if (!context.mounted) return;
-              NavigationService.messengerKey.currentState?.showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Could not open WhatsApp for number: ${lead['phone']}',
-                  ),
-                  backgroundColor: AppTheme.error,
-                ),
-              );
-            }
-          },
-        ),
+        // _ActionButton(
+        //   icon: FontAwesomeIcons.whatsapp,
+        //   label: 'WhatsApp',
+        //   color: const Color(0xFF25D366),
+        //   isSolid: true,
+        //   onTap: () {
+        //     final cleanPhone = lead['phone']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+        //     showDialog(
+        //       context: context,
+        //       builder: (context) => WhatsAppChatDialog(
+        //         phone: cleanPhone,
+        //         name: lead['name'] ?? 'Lead',
+        //       ),
+        //     );
+        //   },
+        // ),
         _ActionButton(
           icon: Icons.person_add_outlined,
           label: 'Convert Dealer',
@@ -2804,12 +2839,15 @@ class _LeadInformationCard extends StatelessWidget {
 
   Future<void> _makeCall(String phone, BuildContext context) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
-    
-    AnalyticsService().logEvent('agent_call_lead', properties: {
-      'leadId': lead['id'] ?? lead['_id'],
-      'leadName': lead['name'],
-      'details': 'Initiated phone call to lead: ${lead['name']}',
-    });
+
+    AnalyticsService().logEvent(
+      'agent_call_lead',
+      properties: {
+        'leadId': lead['id'] ?? lead['_id'],
+        'leadName': lead['name'],
+        'details': 'Initiated phone call to lead: ${lead['name']}',
+      },
+    );
 
     final url = Uri.parse('tel:$cleanPhone');
     if (await canLaunchUrl(url)) {
@@ -2832,11 +2870,14 @@ class _LeadInformationCard extends StatelessWidget {
       cleanPhone = '91$cleanPhone';
     }
 
-    AnalyticsService().logEvent('agent_whatsapp_lead', properties: {
-      'leadId': lead['id'] ?? lead['_id'],
-      'leadName': lead['name'],
-      'details': 'Opened WhatsApp chat with lead: ${lead['name']}',
-    });
+    AnalyticsService().logEvent(
+      'agent_whatsapp_lead',
+      properties: {
+        'leadId': lead['id'] ?? lead['_id'],
+        'leadName': lead['name'],
+        'details': 'Opened WhatsApp chat with lead: ${lead['name']}',
+      },
+    );
 
     final url = Uri.parse('https://wa.me/$cleanPhone');
     if (await canLaunchUrl(url)) {
@@ -3686,8 +3727,9 @@ class _DealerKycDocumentsCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: onUpload,
                 icon: Icon(
-                    hasBoth ? Icons.edit_document : Icons.upload_rounded,
-                    size: 16),
+                  hasBoth ? Icons.edit_document : Icons.upload_rounded,
+                  size: 16,
+                ),
                 label: Text(hasBoth ? 'Edit Documents' : 'Upload Documents'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppTheme.primaryColor,

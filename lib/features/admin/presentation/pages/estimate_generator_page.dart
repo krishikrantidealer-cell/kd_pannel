@@ -60,7 +60,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   bool _isSaving = false;
 
   // Cache text controllers per item map instance to prevent cursor jumping
-  final Map<Map<String, dynamic>, Map<String, TextEditingController>> _controllersCache = {};
+  final Map<Map<String, dynamic>, Map<String, TextEditingController>>
+  _controllersCache = {};
 
   @override
   void initState() {
@@ -109,7 +110,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 .toList();
           });
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('saved_estimates_history', jsonEncode(_savedEstimates));
+          await prefs.setString(
+            'saved_estimates_history',
+            jsonEncode(_savedEstimates),
+          );
           loadedFromBackend = true;
         }
       }
@@ -241,15 +245,13 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       _clientPhoneCtrl.text = est['clientPhone'] ?? '';
 
       final List rawItems = est['items'] ?? [];
-      _editingItems = rawItems
-          .map((i) {
-            final map = Map<String, dynamic>.from(i as Map);
-            if (!map.containsKey('gst')) {
-              map['gst'] = 18.0;
-            }
-            return map;
-          })
-          .toList();
+      _editingItems = rawItems.map((i) {
+        final map = Map<String, dynamic>.from(i as Map);
+        if (!map.containsKey('gst')) {
+          map['gst'] = 18.0;
+        }
+        return map;
+      }).toList();
 
       _tabController.index = 0;
     });
@@ -334,7 +336,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   Map<String, dynamic> _collectEstimateData() {
     final total = _calculateGrandTotal;
     return {
-      'id': _activeEstimate?['id'] ?? _activeEstimate?['_id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      'id':
+          _activeEstimate?['id'] ??
+          _activeEstimate?['_id'] ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       if (_activeEstimate?['_id'] != null) '_id': _activeEstimate?['_id'],
       'companyName': _companyNameCtrl.text.trim(),
       'companyGst': _companyGstCtrl.text.trim(),
@@ -384,7 +389,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
 
     final estData = _collectEstimateData();
     final String? dbId = estData['_id'] ?? _activeEstimate?['_id'];
-    
+
     bool backendSuccess = false;
     Map<String, dynamic>? savedBackendData;
 
@@ -394,7 +399,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         if (res.statusCode == 200) {
           final decoded = jsonDecode(res.body);
           if (decoded['success'] == true) {
-            savedBackendData = Map<String, dynamic>.from(decoded['estimate'] as Map);
+            savedBackendData = Map<String, dynamic>.from(
+              decoded['estimate'] as Map,
+            );
             backendSuccess = true;
           }
         }
@@ -403,7 +410,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         if (res.statusCode == 201 || res.statusCode == 200) {
           final decoded = jsonDecode(res.body);
           if (decoded['success'] == true) {
-            savedBackendData = Map<String, dynamic>.from(decoded['estimate'] as Map);
+            savedBackendData = Map<String, dynamic>.from(
+              decoded['estimate'] as Map,
+            );
             backendSuccess = true;
           }
         }
@@ -415,17 +424,17 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     setState(() {
       final localData = savedBackendData ?? estData;
       final String idToMatch = localData['_id'] ?? localData['id'] ?? '';
-      
+
       final int idx = _savedEstimates.indexWhere(
         (e) => (e['_id'] == idToMatch || e['id'] == idToMatch),
       );
-      
+
       if (idx >= 0) {
         _savedEstimates[idx] = localData;
       } else {
         _savedEstimates.insert(0, localData);
       }
-      
+
       if (_activeEstimate != null) {
         _activeEstimate = localData;
       }
@@ -443,8 +452,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          backendSuccess 
-              ? 'Estimate saved to database successfully!' 
+          backendSuccess
+              ? 'Estimate saved to database successfully!'
               : 'Estimate saved locally (backend offline)!',
           style: GoogleFonts.outfit(),
         ),
@@ -473,6 +482,12 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       final logoBytes = await rootBundle.load('assets/images/logo_copy.png');
       final base64Logo = base64Encode(logoBytes.buffer.asUint8List());
       estData['logoBase64'] = base64Logo;
+    } catch (_) {}
+
+    try {
+      final sealBytes = await rootBundle.load('assets/images/sign.png');
+      final base64Seal = base64Encode(sealBytes.buffer.asUint8List());
+      estData['sealBase64'] = base64Seal;
     } catch (_) {}
 
     printQuotation(estData);
@@ -687,6 +702,16 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                       color: AppTheme.primaryColor,
                                     ),
                                     children: variants.map((v) {
+                                      final fp =
+                                          v['farmerPrice'] ?? v['farmer_price'];
+                                      final fpNum = fp != null
+                                          ? double.tryParse(fp.toString())
+                                          : null;
+                                      final fpText =
+                                          (fpNum != null && fpNum > 0)
+                                          ? 'Farmer Price: ₹${fpNum % 1 == 0 ? fpNum.toInt() : fpNum.toStringAsFixed(0)}'
+                                          : null;
+
                                       return ListTile(
                                         contentPadding:
                                             const EdgeInsets.symmetric(
@@ -696,32 +721,55 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                           'Size/Var: ${v['size']}',
                                           style: GoogleFonts.outfit(
                                             fontSize: 12,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
+                                        subtitle: fpText != null
+                                            ? Text(
+                                                fpText,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 11,
+                                                  color: const Color(
+                                                    0xFF059669,
+                                                  ),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              )
+                                            : null,
                                         trailing: Text(
-                                          '₹${v['price']}',
+                                          'Dealer: ₹${v['price']}',
                                           style: GoogleFonts.outfit(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
+                                            color: AppTheme.primaryColor,
                                           ),
                                         ),
                                         onTap: () {
                                           setState(() {
                                             final item = _editingItems[itemIdx];
-                                            final name = '${p['title']} - ${v['size']}';
-                                            final price = ((v['price'] ?? 0.0) as num).toDouble();
-                                            
+                                            final name =
+                                                '${p['title']} - ${v['size']}';
+                                            final price =
+                                                ((v['price'] ?? 0.0) as num)
+                                                    .toDouble();
+
                                             item['name'] = name;
                                             item['price'] = price;
-                                            item['unit'] =
-                                                _parseUnitFromSize(v['size']?.toString() ?? '');
+                                            item['unit'] = _parseUnitFromSize(
+                                              v['size']?.toString() ?? '',
+                                            );
                                             item['amount'] =
-                                                price * (item['quantity'] ?? 0.0);
-                                                
-                                            final ctrls = _controllersCache[item];
+                                                price *
+                                                (item['quantity'] ?? 0.0);
+
+                                            final ctrls =
+                                                _controllersCache[item];
                                             if (ctrls != null) {
                                               ctrls['name']?.text = name;
-                                              ctrls['price']?.text = price == 0.0 ? '' : price.toString();
+                                              ctrls['price']?.text =
+                                                  price == 0.0
+                                                  ? ''
+                                                  : price.toString();
                                             }
                                           });
                                           Navigator.of(ctx).pop();
@@ -1116,7 +1164,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                               onSurface: AppTheme.textPrimary,
                             ),
                           ),
-                           child: child!,
+                          child: child!,
                         );
                       },
                     );
@@ -1355,7 +1403,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                       color: AppTheme.primaryColor.withOpacity(0.7),
                     )
                   : null,
-              suffixIcon: suffixIcon ??
+              suffixIcon:
+                  suffixIcon ??
                   (ctrl.text.isNotEmpty && !readOnly
                       ? IconButton(
                           icon: const Icon(
@@ -1401,13 +1450,19 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
           offset: (item['name'] ?? '').toString().length,
         );
       final price = TextEditingController(
-        text: (item['price'] == null || item['price'] == 0.0) ? '' : item['price'].toString(),
+        text: (item['price'] == null || item['price'] == 0.0)
+            ? ''
+            : item['price'].toString(),
       );
       final qty = TextEditingController(
-        text: (item['quantity'] == null || item['quantity'] == 0.0) ? '' : item['quantity'].toString(),
+        text: (item['quantity'] == null || item['quantity'] == 0.0)
+            ? ''
+            : item['quantity'].toString(),
       );
       final gst = TextEditingController(
-        text: (item['gst'] == null || item['gst'] == 0.0) ? '18' : item['gst'].toString(),
+        text: (item['gst'] == null || item['gst'] == 0.0)
+            ? '18'
+            : item['gst'].toString(),
       );
       return {'name': name, 'price': price, 'quantity': qty, 'gst': gst};
     });
@@ -1554,7 +1609,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 flex: 3,
                 child: DropdownButtonFormField<String>(
                   value: (() {
-                    final current = (item['unit'] ?? 'liter').toString().toLowerCase();
+                    final current = (item['unit'] ?? 'liter')
+                        .toString()
+                        .toLowerCase();
                     if (current == 'ltr') return 'liter';
                     if (current == 'gm') return 'g';
                     if (['kg', 'g', 'liter', 'ml', 'pcs'].contains(current)) {
@@ -1617,7 +1674,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   ),
                   onChanged: (val) {
                     final double p = double.tryParse(val) ?? 0.0;
-                    final double q = ((item['quantity'] ?? 0.0) as num).toDouble();
+                    final double q = ((item['quantity'] ?? 0.0) as num)
+                        .toDouble();
                     final double g = ((item['gst'] ?? 18.0) as num).toDouble();
                     item['price'] = p;
                     item['amount'] = q * p * (1 + g / 100);
@@ -1652,7 +1710,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   onChanged: (val) {
                     final double g = double.tryParse(val) ?? 0.0;
                     final double p = ((item['price'] ?? 0.0) as num).toDouble();
-                    final double q = ((item['quantity'] ?? 0.0) as num).toDouble();
+                    final double q = ((item['quantity'] ?? 0.0) as num)
+                        .toDouble();
                     item['gst'] = g;
                     item['amount'] = q * p * (1 + g / 100);
                     setState(() {});
@@ -2384,27 +2443,22 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // Seal Stamp visual graphic
-                        CustomPaint(
-                          painter: DashedCirclePainter(
-                            color: Colors.indigo.withOpacity(0.3),
-                            strokeWidth: 1.5,
-                            dashCount: 24,
-                          ),
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            alignment: Alignment.center,
-                            child: Text(
-                              'SEAL\nEBS',
-                              style: GoogleFonts.outfit(
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.indigo.withOpacity(0.4),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
+                        // Seal Stamp visual graphic (263x106px landscape)
+                        Image.asset(
+                          'assets/images/sign.png',
+                          width: 200,
+                          fit: BoxFit.fitWidth,
+                          filterQuality: FilterQuality.high,
+                          isAntiAlias: true,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Image.asset(
+                              'assets/images/logo.png',
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.contain,
+                              filterQuality: FilterQuality.high,
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -2565,20 +2619,20 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   final item = _editingItems[itemIdx];
                   final name = sugg['displayName'];
                   final price = sugg['price'];
-                  
+
                   item['name'] = name;
                   item['price'] = price;
-                  item['unit'] =
-                      _parseUnitFromSize(sugg['variant']?['size']?.toString() ?? '');
-                  item['amount'] =
-                      price * (item['quantity'] ?? 0.0);
-                      
+                  item['unit'] = _parseUnitFromSize(
+                    sugg['variant']?['size']?.toString() ?? '',
+                  );
+                  item['amount'] = price * (item['quantity'] ?? 0.0);
+
                   final ctrls = _controllersCache[item];
                   if (ctrls != null) {
                     ctrls['name']?.text = name;
                     ctrls['price']?.text = price == 0.0 ? '' : price.toString();
                   }
-                  
+
                   _focusedItemIdx = null;
                 });
               },
@@ -2593,13 +2647,17 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     final sizeStr = size.toLowerCase().trim();
     if (sizeStr.contains('kg')) {
       return 'kg';
-    } else if (sizeStr.contains('gm') || sizeStr.endsWith(' g') || sizeStr.contains(' g ')) {
+    } else if (sizeStr.contains('gm') ||
+        sizeStr.endsWith(' g') ||
+        sizeStr.contains(' g ')) {
       return 'g';
     } else if (sizeStr.contains('ml')) {
       return 'ml';
     } else if (sizeStr.contains('pcs') || sizeStr.contains('pc')) {
       return 'pcs';
-    } else if (sizeStr.contains('ltr') || sizeStr.contains('lit') || sizeStr.contains('liter')) {
+    } else if (sizeStr.contains('ltr') ||
+        sizeStr.contains('lit') ||
+        sizeStr.contains('liter')) {
       return 'liter';
     }
     return 'liter'; // Default fallback
