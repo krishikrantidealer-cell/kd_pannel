@@ -15,6 +15,8 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import '../../../../core/auth/auth_service.dart';
+import '../bloc/dealers_state.dart';
+import '../bloc/leads_state.dart';
 
 class UserEventsPage extends StatefulWidget {
   const UserEventsPage({super.key});

@@ -32,6 +32,7 @@ class _TrashPageState extends State<TrashPage> {
   String _selectedTab = 'Leads'; // 'Leads' or 'Dealers'
   String _searchQuery = '';
   int _currentRequestId = 0;
+  DateTimeRange? _selectedDateRange;
 
   @override
   void initState() {
@@ -95,7 +96,14 @@ class _TrashPageState extends State<TrashPage> {
       final kycFilter = _selectedTab == 'Dealers' ? 'verified' : 'not_verified';
       final searchFilter = _searchQuery.isNotEmpty ? '&search=${Uri.encodeComponent(_searchQuery)}' : '';
       
-      final url = '/users?trash=true&role=user&kycStatus=$kycFilter&page=$_page&limit=$_limit$searchFilter';
+      String dateFilter = '';
+      if (_selectedDateRange != null) {
+        final start = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
+        final end = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
+        dateFilter = '&startDate=$start&endDate=$end';
+      }
+      
+      final url = '/users?trash=true&role=user&kycStatus=$kycFilter&page=$_page&limit=$_limit$searchFilter$dateFilter';
       final res = await ApiClient().get(url);
       
       if (requestId != _currentRequestId || !mounted) return;
@@ -304,9 +312,12 @@ class _TrashPageState extends State<TrashPage> {
                     ),
               const SizedBox(height: 24),
 
-              // Tabs and count
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Tabs, Date Filter and count
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -315,12 +326,14 @@ class _TrashPageState extends State<TrashPage> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildSegmentButton('Leads', _selectedTab == 'Leads'),
                         _buildSegmentButton('Dealers', _selectedTab == 'Dealers'),
                       ],
                     ),
                   ),
+                  _buildDateFilter(),
                   Text(
                     '$_totalCount item(s) in Trash',
                     style: GoogleFonts.outfit(
@@ -357,6 +370,94 @@ class _TrashPageState extends State<TrashPage> {
                         ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.textPrimary,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.primaryColor,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _selectedDateRange) {
+      setState(() {
+        _selectedDateRange = picked;
+      });
+      _fetchTrashData(isFirstLoad: true);
+    }
+  }
+
+  Widget _buildDateFilter() {
+    return InkWell(
+      onTap: _selectDateRange,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _selectedDateRange != null ? AppTheme.primaryColor : Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.calendar_today_rounded,
+              size: 16,
+              color: _selectedDateRange != null ? AppTheme.primaryColor : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _selectedDateRange == null
+                  ? 'Filter by Date'
+                  : '${DateFormat('dd MMM').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM').format(_selectedDateRange!.end)}',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: _selectedDateRange != null ? FontWeight.bold : FontWeight.w500,
+                color: _selectedDateRange != null ? AppTheme.primaryColor : AppTheme.textSecondary,
+              ),
+            ),
+            if (_selectedDateRange != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedDateRange = null;
+                  });
+                  _fetchTrashData(isFirstLoad: true);
+                },
+                child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.primaryColor),
+              ),
+            ],
+          ],
         ),
       ),
     );

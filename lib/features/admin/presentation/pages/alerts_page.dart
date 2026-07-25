@@ -233,125 +233,138 @@ class _AlertsPageState extends State<AlertsPage> {
         child: RefreshIndicator(
           onRefresh: () => _fetchNotifications(isInitial: false),
           color: AppTheme.primaryColor,
-          child: SingleChildScrollView(
+          child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: AppTheme.getResponsivePadding(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header Row
-                isMobile
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildTitle(),
-                          const SizedBox(height: 16),
-                          Row(
+            slivers: [
+              SliverPadding(
+                padding: AppTheme.getResponsivePadding(context),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    // Header Row
+                    isMobile
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
-                              if (_unreadCount > 0) const SizedBox(width: 8),
-                              if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
+                              _buildTitle(),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
+                                  if (_unreadCount > 0) const SizedBox(width: 8),
+                                  if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
+                                ],
+                              ),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildTitle(),
+                              Row(
+                                children: [
+                                  if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
+                                  if (_unreadCount > 0 && _notifications.isNotEmpty) const SizedBox(width: 8),
+                                  if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildTitle(),
-                          Row(
+                    const SizedBox(height: 24),
+
+                    // Filters Bar
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
                             children: [
-                              if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
-                              if (_unreadCount > 0 && _notifications.isNotEmpty) const SizedBox(width: 8),
-                              if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
+                              _buildFilterButton('All', _selectedFilter == 'All'),
+                              _buildFilterButton('Unread', _selectedFilter == 'Unread'),
                             ],
                           ),
-                        ],
-                      ),
-                const SizedBox(height: 24),
-
-                // Filters Bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildFilterButton('All', _selectedFilter == 'All'),
-                          _buildFilterButton('Unread', _selectedFilter == 'Unread'),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${items.length} alert(s)',
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Content
-                _isLoading
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 60.0),
-                          child: CircularProgressIndicator(color: AppTheme.primaryColor),
                         ),
-                      )
-                    : items.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: items.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final item = items[index];
-                              final String? id = item['_id'] ?? item['id'];
-                              if (id == null) return _buildNotificationCard(item);
-                              return Dismissible(
-                                key: Key(id),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.error,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Delete',
-                                        style: GoogleFonts.outfit(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                confirmDismiss: (_) async => true,
-                                onDismissed: (_) => _deleteNotification(id),
-                                child: _buildNotificationCard(item),
-                              );
-                            },
+                        Text(
+                          '${items.length} alert(s)',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textSecondary,
                           ),
-              ],
-            ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ]),
+                ),
+              ),
+              if (_isLoading)
+                const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 60.0),
+                      child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                    ),
+                  ),
+                )
+              else if (items.isEmpty)
+                SliverPadding(
+                  padding: AppTheme.getResponsivePadding(context).copyWith(top: 0),
+                  sliver: SliverToBoxAdapter(child: _buildEmptyState()),
+                )
+              else
+                SliverPadding(
+                  padding: AppTheme.getResponsivePadding(context).copyWith(top: 0),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final item = items[index];
+                        final String? id = item['_id'] ?? item['id'];
+                        if (id == null) return _buildNotificationCard(item);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Dismissible(
+                            key: Key(id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Delete',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            confirmDismiss: (_) async => true,
+                            onDismissed: (_) => _deleteNotification(id),
+                            child: _buildNotificationCard(item),
+                          ),
+                        );
+                      },
+                      childCount: items.length,
+                    ),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+            ],
           ),
         ),
       ),
