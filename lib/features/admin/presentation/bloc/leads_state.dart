@@ -26,6 +26,13 @@ class LeadsState extends Equatable {
   final bool isLoadingProfile;
   final bool isLoadingEvents;
 
+  // Daily performance analytics states
+  final Map<String, dynamic>? dailyLeadStats;
+  final DateTime? selectedDailyDate;
+  final String? selectedDailyAgentId;
+  final bool isLoadingDailyStats;
+  final String analyticsViewMode; // 'allTime' or 'daily'
+
   const LeadsState({
     this.status = LeadsStatus.initial,
     this.allRawUsers = const [],
@@ -42,6 +49,11 @@ class LeadsState extends Equatable {
     this.currentLeadEvents = const [],
     this.isLoadingProfile = false,
     this.isLoadingEvents = false,
+    this.dailyLeadStats,
+    this.selectedDailyDate,
+    this.selectedDailyAgentId,
+    this.isLoadingDailyStats = false,
+    this.analyticsViewMode = 'allTime',
   });
 
   LeadsState copyWith({
@@ -60,6 +72,11 @@ class LeadsState extends Equatable {
     List<Map<String, dynamic>>? currentLeadEvents,
     bool? isLoadingProfile,
     bool? isLoadingEvents,
+    Map<String, dynamic>? dailyLeadStats,
+    DateTime? selectedDailyDate,
+    String? selectedDailyAgentId,
+    bool? isLoadingDailyStats,
+    String? analyticsViewMode,
   }) {
     return LeadsState(
       status: status ?? this.status,
@@ -77,6 +94,11 @@ class LeadsState extends Equatable {
       currentLeadEvents: currentLeadEvents ?? this.currentLeadEvents,
       isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
       isLoadingEvents: isLoadingEvents ?? this.isLoadingEvents,
+      dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
+      selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
+      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
+      analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );
   }
 
@@ -92,6 +114,11 @@ class LeadsState extends Equatable {
     int? pageSize,
     String? errorMessage,
     String? actionSuccessMessage,
+    Map<String, dynamic>? dailyLeadStats,
+    DateTime? selectedDailyDate,
+    String? selectedDailyAgentId,
+    bool? isLoadingDailyStats,
+    String? analyticsViewMode,
   }) {
     return LeadsState(
       status: status ?? this.status,
@@ -105,6 +132,11 @@ class LeadsState extends Equatable {
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage ?? this.errorMessage,
       actionSuccessMessage: actionSuccessMessage ?? this.actionSuccessMessage,
+      dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
+      selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
+      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
+      analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );
   }
 
@@ -119,6 +151,11 @@ class LeadsState extends Equatable {
     int? pageSize,
     String? errorMessage,
     String? actionSuccessMessage,
+    Map<String, dynamic>? dailyLeadStats,
+    DateTime? selectedDailyDate,
+    String? selectedDailyAgentId,
+    bool? isLoadingDailyStats,
+    String? analyticsViewMode,
   }) {
     return LeadsState(
       status: status ?? this.status,
@@ -132,6 +169,11 @@ class LeadsState extends Equatable {
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage,
       actionSuccessMessage: actionSuccessMessage,
+      dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
+      selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
+      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
+      analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );
   }
 
@@ -152,5 +194,10 @@ class LeadsState extends Equatable {
         currentLeadEvents,
         isLoadingProfile,
         isLoadingEvents,
+        dailyLeadStats,
+        selectedDailyDate,
+        selectedDailyAgentId,
+        isLoadingDailyStats,
+        analyticsViewMode,
       ];
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
@@ -18,22 +19,24 @@ class AnalyticsService extends WidgetsBindingObserver {
   final ApiClient _apiClient = ApiClient();
   static const String _storageKey = 'krishi_analytics_v1_queue';
   static const String _schemaVersion = '1.1.0';
-  
+
   // Enterprise Settings
-  static const int _batchThreshold = 20; 
-  static const Duration _batchInterval = Duration(seconds: 45); // Historical logs
-  
+  static const int _batchThreshold = 20;
+  static const Duration _batchInterval = Duration(
+    seconds: 45,
+  ); // Historical logs
+
   // Adaptive Heartbeat Settings
   static const Duration _activeHeartbeat = Duration(seconds: 15);
   static const Duration _idleHeartbeat = Duration(seconds: 60);
   static const Duration _idleThreshold = Duration(minutes: 5);
-  
+
   List<Map<String, dynamic>> _localQueue = [];
   Timer? _flushTimer;
   Timer? _heartbeatTimer;
   bool _isProcessing = false;
   DateTime _lastActivity = DateTime.now();
-  
+
   // Observability Metrics
   int _successCount = 0;
   int _failureCount = 0;
@@ -64,10 +67,13 @@ class AnalyticsService extends WidgetsBindingObserver {
   }
 
   /// The Main Entry Point for behavioral tracking (Historical Track)
-  Future<void> logEvent(String eventName, {Map<String, dynamic>? properties}) async {
+  Future<void> logEvent(
+    String eventName, {
+    Map<String, dynamic>? properties,
+  }) async {
     final userEmail = AuthService().currentUserEmail ?? 'Guest';
     final timestamp = DateTime.now().toUtc().toIso8601String();
-    
+
     _lastAction = eventName; // Update presence context
     _lastActivity = DateTime.now();
 
@@ -96,7 +102,7 @@ class AnalyticsService extends WidgetsBindingObserver {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    
+
     final isIdle = DateTime.now().difference(_lastActivity) > _idleThreshold;
     final interval = isIdle ? _idleHeartbeat : _activeHeartbeat;
 
@@ -136,10 +142,11 @@ class AnalyticsService extends WidgetsBindingObserver {
   }
 
   // --- Historical Flush Logic ---
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       flush();
       _heartbeatTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
@@ -158,7 +165,7 @@ class AnalyticsService extends WidgetsBindingObserver {
 
     final batchToSend = List<Map<String, dynamic>>.from(_localQueue);
     final startTime = DateTime.now();
-    
+
     try {
       final response = await _apiClient.post('/events/batch', {
         'events': batchToSend,
@@ -168,7 +175,7 @@ class AnalyticsService extends WidgetsBindingObserver {
           'successCount': _successCount,
           'failureCount': _failureCount,
           'droppedCount': _totalDropped,
-        }
+        },
       });
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -201,7 +208,9 @@ class AnalyticsService extends WidgetsBindingObserver {
     bool actorOnly = false,
   }) async {
     try {
-      String path = userEmail != null ? '/events?user=${Uri.encodeComponent(userEmail)}' : '/events';
+      String path = userEmail != null
+          ? '/events?user=${Uri.encodeComponent(userEmail)}'
+          : '/events';
       if (actorOnly) {
         path += userEmail != null ? '&actorOnly=true' : '?actorOnly=true';
       }
@@ -341,9 +350,64 @@ class AnalyticsService extends WidgetsBindingObserver {
         };
       }
       throw Exception(data['message'] ?? 'Unknown error fetching logs');
-    } else {
-      throw Exception('Server error (${response.statusCode})');
     }
+    return {'logs': [], 'totalCount': 0, 'nextCursor': null};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchFunnelData({
+    String days = '30',
+    DateTimeRange? customRange,
+  }) async {
+    try {
+      String path = '/events/funnel';
+      if (customRange != null) {
+        final startStr = customRange.start.toIso8601String();
+        final endStr = customRange.end.toIso8601String();
+        path +=
+            '?startDate=${Uri.encodeComponent(startStr)}&endDate=${Uri.encodeComponent(endStr)}';
+      } else {
+        final daysQuery = (days == 'Today')
+            ? '1'
+            : (days == 'Last 7 Days')
+            ? '7'
+            : (days == 'Last 30 Days')
+            ? '30'
+            : 'all';
+        path += '?days=$daysQuery';
+      }
+      final response = await _apiClient.get(path);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AnalyticsService] Error fetching funnel data: $e');
+    }
+    return [];
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDistrictAnalytics({
+    String days = '30',
+    DateTimeRange? customRange,
+  }) async {
+    try {
+      String endpoint = '/events/district-analytics?days=$days';
+      if (days == 'Custom Range' && customRange != null) {
+        endpoint += '&startDate=${customRange.start.toIso8601String()}&endDate=${customRange.end.toIso8601String()}';
+      }
+      final response = await _apiClient.get(endpoint);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AnalyticsService] Error fetching district analytics: $e');
+    }
+    return [];
   }
 
   // --- Persistence ---
@@ -357,7 +421,9 @@ class AnalyticsService extends WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString(_storageKey);
     if (data != null) {
-      try { _localQueue = List<Map<String, dynamic>>.from(jsonDecode(data)); } catch (_) {}
+      try {
+        _localQueue = List<Map<String, dynamic>>.from(jsonDecode(data));
+      } catch (_) {}
     }
   }
 

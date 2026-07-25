@@ -497,7 +497,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
   List<Map<String, dynamic>> get allLeads {
     final state = context.read<LeadsBloc>().state;
-    return _getAllLeads(state.allRawUsers);
+    return _getAllLeads(state.allRawUsers, state.salesAgents);
   }
 
   String _normalizeId(dynamic id) {
@@ -510,10 +510,9 @@ class _LeadsPageState extends State<LeadsPage> {
     return id.toString();
   }
 
-  List<Map<String, dynamic>> _getAllLeads(List<Map<String, dynamic>> rawUsers) {
-    final isSales = AuthService().isSales;
-    final agentId = AuthService().currentUserId;
-
+  List<Map<String, dynamic>> _getAllLeads(
+      List<Map<String, dynamic>> rawUsers,
+      [List<Map<String, dynamic>>? salesAgents]) {
     return rawUsers
         .where((u) {
           final role = u['role'] ?? 'user';
@@ -523,7 +522,6 @@ class _LeadsPageState extends State<LeadsPage> {
           final kycStatus = u['kycStatus'] ?? 'pending';
           if (kycStatus == 'verified') return false;
 
-          // Note: Sales Agent filtering is now handled by the Backend API
           return true;
         })
         .map((u) {
@@ -534,29 +532,58 @@ class _LeadsPageState extends State<LeadsPage> {
           final dynamic assignedAgent = u['assignedAgent'];
           String? resolvedAgentId;
           String agentName = '-';
-          
+
           if (assignedAgent != null) {
             if (assignedAgent is Map) {
-              resolvedAgentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
-              agentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
-              if (agentName.isEmpty) agentName = (assignedAgent['phoneNumber'] ?? '').toString();
+              resolvedAgentId = _normalizeId(
+                  assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent['id']);
+              agentName =
+                  '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'
+                      .trim();
+              if (agentName.isEmpty) {
+                agentName = (assignedAgent['phoneNumber'] ?? '').toString();
+              }
             } else {
-              resolvedAgentId = assignedAgent.toString();
+              resolvedAgentId = _normalizeId(assignedAgent);
             }
-            if (resolvedAgentId == null || resolvedAgentId.trim().isEmpty || resolvedAgentId == '-') {
+
+            if (resolvedAgentId == null ||
+                resolvedAgentId.trim().isEmpty ||
+                resolvedAgentId == '-') {
               resolvedAgentId = null;
               agentName = '-';
-            } else if (agentName.isEmpty || agentName == '-') {
-              // Try to resolve name from rawUsers
-              final agentUser = rawUsers.firstWhere(
-                (rawU) => _normalizeId(rawU['_id']) == resolvedAgentId,
+            } else if (agentName.isEmpty || agentName == '-' || agentName == 'Assigned') {
+              // 1. Try to resolve from salesAgents list
+              final matchedAgent = (salesAgents ?? []).firstWhere(
+                (sa) => _normalizeId(sa['_id'] ?? sa['id']) == resolvedAgentId,
                 orElse: () => {},
               );
-              if (agentUser.isNotEmpty) {
-                agentName = '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'.trim();
-                if (agentName.isEmpty) agentName = (agentUser['phoneNumber'] ?? '-').toString();
+
+              if (matchedAgent.isNotEmpty) {
+                agentName =
+                    '${matchedAgent['firstName'] ?? ''} ${matchedAgent['lastName'] ?? ''}'
+                        .trim();
+                if (agentName.isEmpty) {
+                  agentName = (matchedAgent['phoneNumber'] ?? '').toString();
+                }
               } else {
-                agentName = 'Assigned';
+                // 2. Try to resolve from rawUsers list
+                final agentUser = rawUsers.firstWhere(
+                  (rawU) => _normalizeId(rawU['_id']) == resolvedAgentId,
+                  orElse: () => {},
+                );
+                if (agentUser.isNotEmpty) {
+                  agentName =
+                      '${agentUser['firstName'] ?? ''} ${agentUser['lastName'] ?? ''}'
+                          .trim();
+                  if (agentName.isEmpty) {
+                    agentName = (agentUser['phoneNumber'] ?? '').toString();
+                  }
+                }
+              }
+
+              if (agentName.isEmpty || agentName == '-') {
+                agentName = 'Sales Agent';
               }
             }
           }
@@ -831,7 +858,7 @@ class _LeadsPageState extends State<LeadsPage> {
           }
         },
         builder: (context, state) {
-          final allLeadsData = _getAllLeads(state.allRawUsers);
+          final allLeadsData = _getAllLeads(state.allRawUsers, state.salesAgents);
 
           // Date Filtering (Global for page)
           DateTime? startDate;
@@ -1119,11 +1146,13 @@ class _LeadsPageState extends State<LeadsPage> {
                                       ),
                                     const SizedBox(height: 16),
                                     SelectionContainer.disabled(
-                                      child: _LeadsStatsGrid(
+                                      child: _MasterLeadsAnalyticsHeader(
+                                        state: state,
                                         leads: dateFilteredLeads,
                                         verifiedDealersCount: (state.selectedTimeframe == 'All Time' || (state.selectedTimeframe.isEmpty && state.selectedRange == null))
                                             ? verifiedDealersCount
                                             : dateFilteredLeads.where((l) => l['kycStatus'] == 'verified').length,
+                                        isMobile: isMobile,
                                       ),
                                     ),
                                     const SizedBox(height: 24),
@@ -2732,6 +2761,18 @@ class _LeadRowState extends State<_LeadRow> {
     if (widget.isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
     if (isHovered) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.03);
 
+    final String targetAgentId = (widget.lead['agentId'] ?? '').toString();
+    final matchingAgent = widget.salesAgents.firstWhere(
+      (agent) {
+        final aId = (agent['_id'] ?? agent['id'])?.toString();
+        return aId != null && aId.isNotEmpty && aId == targetAgentId;
+      },
+      orElse: () => {},
+    );
+    final String? selectedAgentValue = matchingAgent.isNotEmpty
+        ? (matchingAgent['_id'] ?? matchingAgent['id'])?.toString()
+        : null;
+
     return RepaintBoundary(
       child: MouseRegion(
         onEnter: (_) => setState(() => isHovered = true),
@@ -2843,13 +2884,7 @@ class _LeadRowState extends State<_LeadRow> {
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
-                                value:
-                                    widget.salesAgents.any(
-                                      (agent) =>
-                                          agent['_id'] == widget.lead['agentId'],
-                                    )
-                                    ? widget.lead['agentId']
-                                    : null,
+                                value: selectedAgentValue,
                                 isExpanded: true,
                                 isDense: true,
                                 icon: const Icon(
@@ -2872,15 +2907,16 @@ class _LeadRowState extends State<_LeadRow> {
                                     child: Text('-', style: _subStyle),
                                   ),
                                   ...widget.salesAgents.map((agent) {
+                                    final agentId = (agent['_id'] ?? agent['id'])?.toString() ?? '';
                                     final agentName =
                                         '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                             .trim();
                                     return DropdownMenuItem<String>(
-                                      value: agent['_id'],
+                                      value: agentId,
                                       child: Text(
                                         agentName.isNotEmpty
                                             ? agentName
-                                            : (agent['phoneNumber'] ?? ''),
+                                            : (agent['phoneNumber'] ?? 'Agent'),
                                         style: _cellStyleText.copyWith(
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w700,
@@ -3272,182 +3308,659 @@ class _HeaderText extends StatelessWidget {
   }
 }
 
-class _LeadsStatsGrid extends StatelessWidget {
+class _MasterLeadsAnalyticsHeader extends StatefulWidget {
+  final LeadsState state;
   final List<Map<String, dynamic>> leads;
   final int verifiedDealersCount;
+  final bool isMobile;
 
-  const _LeadsStatsGrid({
+  const _MasterLeadsAnalyticsHeader({
+    required this.state,
     required this.leads,
     required this.verifiedDealersCount,
+    required this.isMobile,
   });
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  @override
+  State<_MasterLeadsAnalyticsHeader> createState() =>
+      _MasterLeadsAnalyticsHeaderState();
+}
+
+class _MasterLeadsAnalyticsHeaderState
+    extends State<_MasterLeadsAnalyticsHeader> {
+  bool _isScoreboardExpanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final unassignedCount = leads
-        .where((l) => l['agentId'] == null)
-        .length;
-    final assignedCount = leads
-        .where((l) => l['agentId'] != null)
-        .length;
-    final kycPendingCount = leads
-        .where((l) {
-          final status = l['kycStatus'].toString().toLowerCase();
-          return status == 'pending' || status == 'submitted';
-        })
-        .length;
+    final currentUserId = AuthService().currentUserId;
+    final isSales = AuthService().isSales;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double spacing = AppTheme.spacingSmall;
-        final int columns;
-        if (constraints.maxWidth >= 1200) {
-          columns = 4;
-        } else if (constraints.maxWidth >= 768) {
-          columns = 2;
-        } else {
-          columns = 2; // Mobile
-        }
+    bool isAgentAssigned(dynamic assignedAgent) {
+      if (assignedAgent == null) return false;
+      if (assignedAgent is Map) {
+        final id = (assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent['id'])?.toString();
+        return id != null && id.trim().isNotEmpty && id != '-';
+      }
+      final str = assignedAgent.toString().trim();
+      return str.isNotEmpty && str != '-' && str != 'null';
+    }
 
-        final double width =
-            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+    String? getAgentId(dynamic assignedAgent) {
+      if (assignedAgent == null) return null;
+      if (assignedAgent is Map) {
+        final id = (assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent['id'])?.toString();
+        if (id != null && id.trim().isNotEmpty && id != '-') return id.trim();
+        return null;
+      }
+      final str = assignedAgent.toString().trim();
+      if (str.isNotEmpty && str != '-' && str != 'null') return str;
+      return null;
+    }
 
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            StatCardWidget(
-              width: width,
-              title: 'Unassigned Lead',
-              value: '$unassignedCount',
-              icon: Icons.person_off_outlined,
-              color: AppTheme.warning,
-              isCompact: true,
-              onTap: () {
-                context.read<LeadsBloc>().add(
-                  const UpdateLeadsFilterEvent(
-                    selectedFilterChip: 'Unassigned',
-                    currentPage: 1,
-                    searchQuery: '',
+    // Filter raw users according to user role
+    final userList = widget.state.allRawUsers.where((u) {
+      final role = u['role'] ?? 'user';
+      if (role != 'user') return false;
+      if (u['isDeleted'] == true) return false;
+
+      if (isSales) {
+        final agentId = getAgentId(u['assignedAgent']);
+        return agentId == currentUserId;
+      }
+      return true;
+    }).toList();
+
+    // Daily statistics payload & complete database totals
+    final dailyStats = widget.state.dailyLeadStats ?? {};
+
+    final unassignedCount = dailyStats['totalAllTimeUnassignedLeads'] ??
+        userList.where((u) {
+          final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+          return kycStatus != 'verified' && !isAgentAssigned(u['assignedAgent']);
+        }).length;
+
+    final assignedCount = dailyStats['totalAllTimeAssignedLeads'] ??
+        userList.where((u) {
+          final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+          return kycStatus != 'verified' && isAgentAssigned(u['assignedAgent']);
+        }).length;
+
+    final kycPendingCount = dailyStats['totalAllTimeKycPendingLeads'] ??
+        userList.where((u) {
+          final status = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+          return status == 'pending' || status == 'submitted' || status == 'processing';
+        }).length;
+
+    final verifiedDealersCount = dailyStats['totalAllTimeVerifiedDealers'] ??
+        userList.where((u) {
+          final status = (u['kycStatus'] ?? '').toString().toLowerCase();
+          return status == 'verified';
+        }).length;
+
+    final deletedCount = widget.state.allRawUsers.where((u) {
+      final role = u['role'] ?? 'user';
+      if (role != 'user') return false;
+      if (isSales) {
+        final agentId = getAgentId(u['assignedAgent']);
+        if (agentId != currentUserId) return false;
+      }
+      return u['isDeleted'] == true;
+    }).length;
+
+    final totalAllTimeDeletedLeads = dailyStats['totalDeletedLeads'] ?? deletedCount;
+    final teamStats = dailyStats['teamStats'] as Map<String, dynamic>? ?? {};
+    final agentStats = dailyStats['agentStats'] as Map<String, dynamic>? ?? {};
+
+    final totalTeamAssigned = teamStats['totalAssignedInDay'] ?? 0;
+    final totalTeamKycApproved = teamStats['totalKycApprovedInDay'] ?? 0;
+    final totalTeamDeleted = teamStats['totalDeletedInDay'] ?? 0;
+    final totalTeamInProgress = (totalTeamAssigned - totalTeamKycApproved - totalTeamDeleted) > 0
+        ? (totalTeamAssigned - totalTeamKycApproved - totalTeamDeleted)
+        : 0;
+
+    final agentAssigned = agentStats['assignedInDay'] ?? 0;
+    final agentKycApproved = agentStats['kycApprovedInDay'] ?? 0;
+    final selectedAgentName = agentStats['agentName'] ?? 'All Sales Team';
+
+    final agentBreakdown = (dailyStats['agentBreakdown'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        [];
+
+    final selectedDate = widget.state.selectedDailyDate ?? DateTime.now();
+    final dateStr =
+        "${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}";
+
+    final double spacing = AppTheme.spacingSmall;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.dashboard_customize_outlined,
+                  color: AppTheme.primaryColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Leads Performance Hub',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Real-time lead status overview & daily sales performance',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2024),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    context.read<LeadsBloc>().add(
+                          FetchDailyLeadStatsEvent(
+                            selectedDate: picked,
+                            selectedAgentId: widget.state.selectedDailyAgentId,
+                          ),
+                        );
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
                   ),
-                );
-              },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.calendar_month,
+                        size: 16,
+                        color: AppTheme.primaryColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Day: $dateStr',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: widget.state.selectedDailyAgentId,
+                    hint: Text(
+                      'All Sales Team',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    icon: const Icon(Icons.arrow_drop_down, size: 18),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(
+                          '👥 All Sales Team',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      ...widget.state.salesAgents.map((agent) {
+                        final id = (agent['_id'] ?? agent['id'])?.toString();
+                        final name =
+                            '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                .trim();
+                        return DropdownMenuItem<String?>(
+                          value: id,
+                          child: Text(
+                            name.isNotEmpty
+                                ? name
+                                : (agent['phoneNumber'] ?? 'Agent'),
+                            style: GoogleFonts.outfit(fontSize: 13),
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (val) {
+                      context.read<LeadsBloc>().add(
+                            FetchDailyLeadStatsEvent(
+                              selectedDate: selectedDate,
+                              selectedAgentId: val,
+                            ),
+                          );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Daily Sales Activity Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15)),
             ),
-            StatCardWidget(
-              width: width,
-              title: 'Assigned Lead',
-              value: '$assignedCount',
-              icon: Icons.person_pin_outlined,
-              color: AppTheme.info,
-              isCompact: true,
-              onTap: () {
-                context.read<LeadsBloc>().add(
-                  const UpdateLeadsFilterEvent(
-                    selectedFilterChip: 'Assigned',
-                    currentPage: 1,
-                    searchQuery: '',
+            child: Row(
+              children: [
+                const Icon(Icons.bolt, color: AppTheme.primaryColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Daily Activity ($dateStr): ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(
+                          text: '$totalTeamAssigned Assigned',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.info,
+                          ),
+                        ),
+                        const TextSpan(text: ' ('),
+                        TextSpan(
+                          text: '$totalTeamKycApproved Verified',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.success,
+                          ),
+                        ),
+                        const TextSpan(text: ' • '),
+                        TextSpan(
+                          text: '$totalTeamInProgress In Progress',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                        const TextSpan(text: ' • '),
+                        TextSpan(
+                          text: '$totalTeamDeleted Deleted',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                        const TextSpan(text: ')'),
+                        if (widget.state.selectedDailyAgentId != null) ...[
+                          TextSpan(
+                            text: '  |  $selectedAgentName: ',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: '$agentAssigned Assigned',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
-            StatCardWidget(
-              width: width,
-              title: 'KYC Pending',
-              value: '$kycPendingCount',
-              icon: Icons.pending_actions_outlined,
-              color: AppTheme.error,
-              isCompact: true,
-              onTap: () {
-                context.read<LeadsBloc>().add(
-                  const UpdateLeadsFilterEvent(
-                    selectedFilterChip: 'KYC Pending',
-                    currentPage: 1,
-                    searchQuery: '',
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final int columns = constraints.maxWidth >= 1200
+                  ? 5
+                  : (constraints.maxWidth >= 850 ? 3 : 2);
+              final double cardWidth =
+                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  StatCardWidget(
+                    width: cardWidth,
+                    title: 'Unassigned Leads',
+                    value: '$unassignedCount',
+                    icon: Icons.person_off_outlined,
+                    color: AppTheme.warning,
+                    isCompact: true,
+                    onTap: () {
+                      context.read<LeadsBloc>().add(
+                            const UpdateLeadsFilterEvent(
+                              selectedFilterChip: 'Unassigned',
+                              currentPage: 1,
+                              searchQuery: '',
+                            ),
+                          );
+                    },
                   ),
-                );
-              },
+                  StatCardWidget(
+                    width: cardWidth,
+                    title: 'Assigned Leads',
+                    value: '$assignedCount',
+                    subtext: '+$totalTeamAssigned assigned today',
+                    icon: Icons.person_pin_outlined,
+                    color: AppTheme.info,
+                    isCompact: true,
+                    onTap: () {
+                      context.read<LeadsBloc>().add(
+                            const UpdateLeadsFilterEvent(
+                              selectedFilterChip: 'Assigned',
+                              currentPage: 1,
+                              searchQuery: '',
+                            ),
+                          );
+                    },
+                  ),
+                  StatCardWidget(
+                    width: cardWidth,
+                    title: 'KYC Pending',
+                    value: '$kycPendingCount',
+                    icon: Icons.pending_actions_outlined,
+                    color: AppTheme.error,
+                    isCompact: true,
+                    onTap: () {
+                      context.read<LeadsBloc>().add(
+                            const UpdateLeadsFilterEvent(
+                              selectedFilterChip: 'KYC Pending',
+                              currentPage: 1,
+                              searchQuery: '',
+                            ),
+                          );
+                    },
+                  ),
+                  StatCardWidget(
+                    width: cardWidth,
+                    title: 'Verified Dealers',
+                    value: '$verifiedDealersCount',
+                    subtext: '+$totalTeamKycApproved verified today',
+                    icon: Icons.verified_user_outlined,
+                    color: AppTheme.success,
+                    isCompact: true,
+                    onTap: () {
+                      context.read<LeadsBloc>().add(
+                            const UpdateLeadsFilterEvent(
+                              selectedFilterChip: 'KYC Confirm',
+                              currentPage: 1,
+                              searchQuery: '',
+                            ),
+                          );
+                    },
+                  ),
+                  StatCardWidget(
+                    width: cardWidth,
+                    title: 'Deleted Leads',
+                    value: '$totalAllTimeDeletedLeads',
+                    subtext: '+$totalTeamDeleted deleted today',
+                    icon: Icons.delete_outline,
+                    color: Colors.red.shade400,
+                    isCompact: true,
+                    onTap: () {
+                      context.read<LeadsBloc>().add(
+                            const UpdateLeadsFilterEvent(
+                              selectedFilterChip: 'Deleted',
+                              currentPage: 1,
+                              searchQuery: '',
+                            ),
+                          );
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isScoreboardExpanded = !_isScoreboardExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              child: Row(
+                children: [
+                  Text(
+                    _isScoreboardExpanded
+                        ? 'Hide Sales Agent Scoreboard'
+                        : 'View Agent Daily Scoreboard (${agentBreakdown.length} Agents)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            StatCardWidget(
-              width: width,
-              title: 'Verified Dealer',
-              value: '$verifiedDealersCount',
-              icon: Icons.verified_user_outlined,
-              color: AppTheme.success,
-              isCompact: true,
-              onTap: () {
-                context.read<LeadsBloc>().add(
-                  const UpdateLeadsFilterEvent(
-                    selectedFilterChip: 'KYC Confirm',
-                    currentPage: 1,
-                    searchQuery: '',
+          ),
+          if (_isScoreboardExpanded) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: DataTable(
+                  columnSpacing: widget.isMobile ? 12 : 24,
+                  headingRowHeight: 38,
+                  headingRowColor: WidgetStateProperty.all(
+                    AppTheme.backgroundColor,
                   ),
-                );
-              },
+                  columns: [
+                    DataColumn(
+                      label: Text(
+                        'Sales Agent',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      numeric: true,
+                      label: Text(
+                        'Assigned (Day)',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      numeric: true,
+                      label: Text(
+                        'KYC Approved (Day)',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      numeric: true,
+                      label: Text(
+                        'Deleted (Day)',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      numeric: true,
+                      label: Text(
+                        'Conv. Rate',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                  rows: agentBreakdown.map((agent) {
+                    final isSelected =
+                        agent['agentId'] == widget.state.selectedDailyAgentId;
+                    final agentName = (agent['agentName'] != null && agent['agentName'].toString().isNotEmpty)
+                        ? agent['agentName'].toString()
+                        : 'Sales Agent';
+                    return DataRow(
+                      color: isSelected
+                          ? WidgetStateProperty.all(
+                              AppTheme.primaryColor.withValues(alpha: 0.05))
+                          : null,
+                      cells: [
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundColor:
+                                    AppTheme.primaryColor.withValues(alpha: 0.1),
+                                child: Text(
+                                  agentName[0].toUpperCase(),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                agentName,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        DataCell(Text('${agent['assignedInDay'] ?? 0}')),
+                        DataCell(Text('${agent['kycApprovedInDay'] ?? 0}')),
+                        DataCell(Text('${agent['deletedInDay'] ?? 0}')),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              agent['conversionRate'] ?? '0.0%',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.success,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ],
-        );
-      },
+        ],
+      ),
     );
   }
 }

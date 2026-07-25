@@ -14,6 +14,8 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/funnel_chart_widget.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/agri_heatmap_widget.dart';
 import '../../../../core/auth/auth_service.dart';
 import '../bloc/dealers_state.dart';
 import '../bloc/leads_state.dart';
@@ -26,6 +28,8 @@ class UserEventsPage extends StatefulWidget {
 }
 
 class _UserEventsPageState extends State<UserEventsPage> {
+  int _activeAnalyticsTab = 0; // 0: Funnel & Overview, 1: Retention Cohorts, 2: District Heatmap, 3: Activity Stream
+  String _selectedAnalyticsTimeRange = 'Last 30 Days'; // 'Today', 'Last 7 Days', 'Last 30 Days', 'All Time'
   String? _selectedUser;
   String? _selectedEventType;
   String _searchQuery = '';
@@ -74,6 +78,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
   final Set<String> _loadingUserEvents = {};
 
   final Map<String, List<Map<String, dynamic>>> _perUserEventsCache = {};
+  Future<List<Map<String, dynamic>>>? _funnelDataFuture;
+  Future<List<Map<String, dynamic>>>? _districtDataFuture;
+  DateTimeRange? _customAnalyticsDateRange;
+
+  String _formatAnalyticsDateLabel() {
+    if (_selectedAnalyticsTimeRange == 'Custom Range' && _customAnalyticsDateRange != null) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final start = _customAnalyticsDateRange!.start;
+      final end = _customAnalyticsDateRange!.end;
+      return '${start.day} ${months[start.month - 1]} - ${end.day} ${months[end.month - 1]}';
+    }
+    return _selectedAnalyticsTimeRange;
+  }
 
   @override
   void initState() {
@@ -168,14 +185,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return true;
     }
 
-    void indexUser(Map<String, dynamic> u) {
+    void indexUser(Map<String, dynamic> u, {String? defaultType}) {
       final uId = _normalizeId(u['_id']).toLowerCase();
       final uEmail = (u['email'] ?? '').toString().toLowerCase();
       final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
       final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
       final uShop = (u['shopName'] ?? '').toString().toLowerCase();
       final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-      final type = (kycStatus == 'verified') ? 'Dealer' : 'Lead';
+      final type = defaultType ?? ((kycStatus == 'verified') ? 'Dealer' : 'Lead');
 
       if (uId.isNotEmpty) typeLookup[uId] ??= type;
       if (uEmail.isNotEmpty) typeLookup[uEmail] ??= type;
@@ -195,14 +212,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
     try {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
-        indexUser(u);
+        indexUser(u, defaultType: 'Dealer');
       }
     } catch (_) {}
 
     try {
       final leadsState = context.read<LeadsBloc>().state;
       for (final u in leadsState.allRawUsers) {
-        indexUser(u);
+        indexUser(u, defaultType: 'Lead');
       }
     } catch (_) {}
 
@@ -631,7 +648,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         bool isHigh = false;
         String reason = '';
-        final bool hasSuccess = userGroups.containsKey('payment_success');
+        final bool hasSuccess = userGroups.containsKey('payment_success') ||
+            userGroups.containsKey('order_placed') ||
+            userGroups.containsKey('order_completed');
 
         if (userGroups.containsKey('payment_failed') && !hasSuccess) {
           isHigh = true;
@@ -639,7 +658,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         } else if (userGroups.containsKey('checkout_started') && !hasSuccess) {
           isHigh = true;
           reason = 'Abandoned Checkout';
-        } else if (userGroups.containsKey('add_to_cart') && !userGroups.containsKey('checkout_started') && !hasSuccess) {
+        } else if (userGroups.containsKey('add_to_cart') && !hasSuccess) {
           isHigh = true;
           reason = 'Abandoned Cart';
         }
@@ -988,15 +1007,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
     Map<String, dynamic> metrics = {};
     List<Map<String, dynamic>> flatEvents = [];
     try {
-      AnalyticsService().fetchSummaryMetrics().then((m) {
-        if (mounted && m.isNotEmpty) {
-          setState(() {
-            _globalHighPriorityCount = m['highPriority'] as int? ?? 0;
-            _globalFailedPaymentsCount = m['failedPayments'] as int? ?? 0;
-            _globalAbandonedCartsCount = m['abandonedCarts'] as int? ?? 0;
-          });
-        }
-      });
+      metrics = await AnalyticsService().fetchSummaryMetrics();
+      if (mounted && metrics.isNotEmpty) {
+        setState(() {
+          _globalHighPriorityCount = metrics['highPriority'] as int? ?? 0;
+          _globalFailedPaymentsCount = metrics['failedPayments'] as int? ?? 0;
+          _globalAbandonedCartsCount = metrics['abandonedCarts'] as int? ?? 0;
+        });
+      }
 
       final res = await AnalyticsService().fetchEventsPaged(
         limit: 300,
@@ -1142,6 +1160,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   void dispose() {
     _realTimeTimer?.cancel();
     _eventsRefreshDebounce?.cancel();
+    _rebuildDebounce?.cancel();
     _searchDebounce?.cancel();
     _presenceSubscription?.cancel();
     _searchController.dispose();
@@ -1389,8 +1408,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     // Filter by Event Category
     if (_selectedEventCategory != 'All') {
+      final catLower = _selectedEventCategory.toLowerCase();
       users = users.where((u) {
         final grouped = _getUserEventsGrouped(u);
+        if (catLower == 'add_to_cart' || catLower == 'cart_add') {
+          return grouped.containsKey('add_to_cart') || grouped.containsKey('cart_add') || grouped.containsKey('cart_view');
+        } else if (catLower == 'checkout_started') {
+          return grouped.containsKey('checkout_started') || grouped.containsKey('checkout_init') || grouped.containsKey('apply_coupon') || grouped.containsKey('payment_initiated');
+        } else if (catLower == 'payment_success' || catLower == 'order_completed' || catLower == 'order_placed') {
+          return grouped.containsKey('payment_success') || grouped.containsKey('order_placed') || grouped.containsKey('order_completed');
+        } else if (catLower == 'product_search' || catLower == 'product_view') {
+          return grouped.containsKey('product_search') || grouped.containsKey('product_view') || grouped.containsKey('category_view') || grouped.containsKey('login_success');
+        }
         return grouped.containsKey(_selectedEventCategory) &&
             (grouped[_selectedEventCategory]?.isNotEmpty ?? false);
       }).toList();
@@ -1417,15 +1446,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
     return _cachedUserEventsGrouped[userName] ?? {};
   }
 
-  List<Map<String, dynamic>> get _eventTypes {
-    if (AuthService().isSales) {
-      return _allEventTypes.where((e) {
-        final id = e['id'] as String;
-        return id != 'app_error' && id != 'coupon_created' && id != 'coupon_deleted';
-      }).toList();
-    }
-    return _allEventTypes;
-  }
+  List<Map<String, dynamic>> get _eventTypes => _allEventTypes;
 
   static final List<Map<String, dynamic>> _allEventTypes = [
     {
@@ -1464,20 +1485,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       'description': 'Checkout process initiated',
     },
     {
-      'id': 'apply_coupon',
-      'label': 'Apply Coupon',
-      'icon': Icons.local_offer_rounded,
-      'color': Colors.indigo,
-      'description': 'Discount codes attempted',
-    },
-    {
-      'id': 'payment_initiated',
-      'label': 'Payment Initiated',
-      'icon': Icons.payment_rounded,
-      'color': Colors.cyan,
-      'description': 'Payment gateway request sent',
-    },
-    {
       'id': 'payment_failed',
       'label': 'Payment Failed',
       'icon': Icons.error_outline_rounded,
@@ -1490,27 +1497,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       'icon': Icons.check_circle_outline_rounded,
       'color': const Color(0xFF10B981), // Emerald green
       'description': 'Completed payments received',
-    },
-    {
-      'id': 'coupon_created',
-      'label': 'Coupon Created',
-      'icon': Icons.add_circle_outline_rounded,
-      'color': Colors.indigo,
-      'description': 'Price coupons generated by agents',
-    },
-    {
-      'id': 'coupon_deleted',
-      'label': 'Coupon Deleted',
-      'icon': Icons.delete_outline_rounded,
-      'color': Colors.redAccent,
-      'description': 'Price coupons deleted by agents',
-    },
-    {
-      'id': 'app_error',
-      'label': 'Application Error',
-      'icon': Icons.warning_amber_rounded,
-      'color': Colors.deepOrange,
-      'description': 'System exceptions and failed operations',
     },
   ];
 
@@ -2013,6 +1999,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
                         if (_isFallbackMode) _buildFallbackBanner(),
                         _buildSummaryCards(isDesktop),
                         const SizedBox(height: 20),
+                        _buildAnalyticsTabsBar(),
+                        const SizedBox(height: 16),
+                        _buildActiveAnalyticsView(),
+                        const SizedBox(height: 20),
                         _buildRealTimeStats(),
                         const SizedBox(height: 20),
                         _buildUsersListHeader(isDesktop, filtered.length),
@@ -2074,7 +2064,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                           _selectedEventType = null;
                                         } else {
                                           _selectedUser = userName;
-                                          if (grouped.isNotEmpty) {
+                                          if (_selectedEventCategory != 'All' && grouped.containsKey(_selectedEventCategory)) {
+                                            _selectedEventType = _selectedEventCategory;
+                                          } else if (grouped.isNotEmpty) {
                                             _selectedEventType = grouped.keys.first;
                                           } else {
                                             _selectedEventType = null;
@@ -2134,6 +2126,625 @@ class _UserEventsPageState extends State<UserEventsPage> {
               ),
             ),
     );
+  }
+
+  Widget _buildAnalyticsTabsBar() {
+    final bool isSales = AuthService().isSales;
+    final tabs = isSales
+        ? [
+            {'icon': Icons.stream_rounded, 'title': 'Live Customer Telemetry Feed'},
+          ]
+        : [
+            {'icon': Icons.stream_rounded, 'title': 'Live Telemetry Feed'},
+            {'icon': Icons.filter_alt_rounded, 'title': 'Conversion Funnel'},
+            {'icon': Icons.map_rounded, 'title': 'Agri District Heatmap'},
+          ];
+
+    if (isSales && _activeAnalyticsTab != 0) {
+      _activeAnalyticsTab = 0;
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(tabs.length, (idx) {
+                final isSelected = _activeAnalyticsTab == idx;
+                final tab = tabs[idx];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: InkWell(
+                    onTap: () => setState(() => _activeAnalyticsTab = idx),
+                    borderRadius: BorderRadius.circular(20),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppTheme.primaryColor : AppTheme.cardColor,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor,
+                        ),
+                        boxShadow: isSelected ? AppTheme.cardShadow : null,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            tab['icon'] as IconData,
+                            size: 16,
+                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            tab['title'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              color: isSelected ? Colors.white : AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+        if (_activeAnalyticsTab == 1 || _activeAnalyticsTab == 2) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedAnalyticsTimeRange,
+                icon: const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.textPrimary),
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+                onChanged: (val) async {
+                  if (val == null) return;
+                  if (val == 'Custom Range') {
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2024, 1, 1),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                      initialDateRange: _customAnalyticsDateRange ?? DateTimeRange(
+                        start: DateTime.now().subtract(const Duration(days: 7)),
+                        end: DateTime.now(),
+                      ),
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.light().copyWith(
+                            colorScheme: const ColorScheme.light(
+                              primary: AppTheme.primaryColor,
+                              onPrimary: Colors.white,
+                              surface: AppTheme.cardColor,
+                              onSurface: AppTheme.textPrimary,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _selectedAnalyticsTimeRange = 'Custom Range';
+                        _customAnalyticsDateRange = picked;
+                        _funnelDataFuture = AnalyticsService().fetchFunnelData(
+                          days: 'Custom Range',
+                          customRange: picked,
+                        );
+                        _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(
+                          days: 'Custom Range',
+                          customRange: picked,
+                        );
+                      });
+                    }
+                  } else {
+                    setState(() {
+                      _selectedAnalyticsTimeRange = val;
+                      _customAnalyticsDateRange = null;
+                      _funnelDataFuture = AnalyticsService().fetchFunnelData(days: val);
+                      _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(days: val);
+                    });
+                  }
+                },
+                items: [
+                  const DropdownMenuItem(value: 'Today', child: Text('Today')),
+                  const DropdownMenuItem(value: 'Last 7 Days', child: Text('Last 7 Days')),
+                  const DropdownMenuItem(value: 'Last 30 Days', child: Text('Last 30 Days')),
+                  const DropdownMenuItem(value: 'All Time', child: Text('All Time')),
+                  DropdownMenuItem(
+                    value: 'Custom Range',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.date_range_rounded, size: 14, color: AppTheme.primaryColor),
+                        const SizedBox(width: 6),
+                        Text(_selectedAnalyticsTimeRange == 'Custom Range' ? _formatAnalyticsDateLabel() : 'Custom Range...'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  List<FunnelStepData> _calculateDynamicFunnelSteps() {
+    final Set<String> viewUsers = {};
+    int viewEvents = 0;
+
+    final Set<String> cartUsers = {};
+    int cartEvents = 0;
+
+    final Set<String> checkoutUsers = {};
+    int checkoutEvents = 0;
+
+    final Set<String> orderUsers = {};
+    int orderEvents = 0;
+
+    final DateTime now = DateTime.now();
+    DateTime? cutoff;
+    DateTime? endCutoff;
+    if (_selectedAnalyticsTimeRange == 'Today') {
+      cutoff = DateTime(now.year, now.month, now.day);
+    } else if (_selectedAnalyticsTimeRange == 'Last 7 Days') {
+      cutoff = now.subtract(const Duration(days: 7));
+    } else if (_selectedAnalyticsTimeRange == 'Last 30 Days') {
+      cutoff = now.subtract(const Duration(days: 30));
+    } else if (_selectedAnalyticsTimeRange == 'Custom Range' && _customAnalyticsDateRange != null) {
+      cutoff = _customAnalyticsDateRange!.start;
+      endCutoff = _customAnalyticsDateRange!.end.add(const Duration(days: 1));
+    }
+
+    _eventsLogs.forEach((catKey, logs) {
+      final key = catKey.toLowerCase();
+      for (final log in logs) {
+        if (cutoff != null) {
+          final tsRaw = log['timestamp'] ?? log['createdAt'] ?? log['time'];
+          if (tsRaw != null) {
+            DateTime? dt;
+            if (tsRaw is DateTime) {
+              dt = tsRaw;
+            } else if (tsRaw is String) {
+              dt = DateTime.tryParse(tsRaw);
+            }
+            if (dt != null && (dt.isBefore(cutoff) || (endCutoff != null && dt.isAfter(endCutoff)))) {
+              continue;
+            }
+          }
+        }
+
+        final userName = (log['user'] ?? log['userName'] ?? log['userEmail'] ?? log['userPhone'] ?? '').toString();
+        final rawType = (log['eventType'] ?? log['event'] ?? '').toString().toLowerCase();
+
+        if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+          rawUser: userName,
+          displayName: userName,
+          displayPhone: log['userPhone']?.toString(),
+          userDetails: log['payload'] is Map<String, dynamic> ? log['payload'] as Map<String, dynamic> : null,
+        )) {
+          continue;
+        }
+
+        // Step 1 represents all active user touchpoints / sessions
+        if (userName.isNotEmpty) viewUsers.add(userName);
+        viewEvents++;
+
+        if (key.contains('cart') || key == 'add_to_cart' || rawType.contains('cart')) {
+          if (userName.isNotEmpty) cartUsers.add(userName);
+          cartEvents++;
+        }
+        if (key.contains('checkout') || key.contains('coupon') || key == 'checkout_started' || rawType.contains('checkout')) {
+          if (userName.isNotEmpty) checkoutUsers.add(userName);
+          checkoutEvents++;
+        }
+        if (key.contains('payment') || key.contains('order') || key == 'payment_success' || key == 'order_placed' || key == 'order_created' || rawType.contains('order') || rawType.contains('payment')) {
+          if (userName.isNotEmpty) orderUsers.add(userName);
+          orderEvents++;
+        }
+      }
+    });
+
+    int step1Users = viewUsers.length;
+    int step1Events = viewEvents;
+
+    final int step2Users = cartUsers.length;
+    final int step2Events = cartEvents;
+
+    final int step3Users = checkoutUsers.length;
+    final int step3Events = checkoutEvents;
+
+    final int step4Users = orderUsers.length;
+    final int step4Events = orderEvents;
+
+    final int maxDownstreamUsers = [step2Users, step3Users, step4Users].fold(0, (max, v) => v > max ? v : max);
+    if (step1Users < maxDownstreamUsers) {
+      step1Users = maxDownstreamUsers;
+      if (step1Events < maxDownstreamUsers) step1Events = maxDownstreamUsers;
+    }
+
+    final double rate1 = step1Users > 0 ? 100.0 : 0.0;
+    final double rate2 = step1Users > 0 ? ((step2Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
+    final double rate3 = step1Users > 0 ? ((step3Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
+    final double rate4 = step1Users > 0 ? ((step4Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
+
+    return [
+      FunnelStepData(
+        stepName: '1. App Browse & Search',
+        userCount: step1Users,
+        eventCount: step1Events,
+        conversionRate: rate1,
+        stepColor: const Color(0xFF1E88E5),
+      ),
+      FunnelStepData(
+        stepName: '2. Add To Cart',
+        userCount: step2Users,
+        eventCount: step2Events,
+        conversionRate: rate2,
+        stepColor: const Color(0xFF43A047),
+      ),
+      FunnelStepData(
+        stepName: '3. Checkout Started',
+        userCount: step3Users,
+        eventCount: step3Events,
+        conversionRate: rate3,
+        stepColor: const Color(0xFFFB8C00),
+      ),
+      FunnelStepData(
+        stepName: '4. Order Completed',
+        userCount: step4Users,
+        eventCount: step4Events,
+        conversionRate: rate4,
+        stepColor: const Color(0xFFE53935),
+      ),
+    ];
+  }
+
+  void _onFunnelStepSelected(String stepName) {
+    String targetCategory = 'All';
+    if (stepName.contains('Browse') || stepName.contains('1')) {
+      targetCategory = 'product_search';
+    } else if (stepName.contains('Cart') || stepName.contains('2')) {
+      targetCategory = 'add_to_cart';
+    } else if (stepName.contains('Checkout') || stepName.contains('3')) {
+      targetCategory = 'checkout_started';
+    } else if (stepName.contains('Order') || stepName.contains('4')) {
+      targetCategory = 'payment_success';
+    }
+
+    // Toggle filter if clicking the already selected category
+    if (_selectedEventCategory == targetCategory) {
+      targetCategory = 'All';
+    }
+
+    setState(() {
+      _selectedMetricFilter = 'All';
+      _selectedPriority = 'All';
+      _selectedEventCategory = targetCategory;
+    });
+    _rebuildCache();
+  }
+
+  List<DistrictDemandData> _calculateDynamicDistrictData() {
+    final Map<String, _DistrictTempData> districtMap = {};
+
+    _DistrictTempData getOrCreate(String district, String state) {
+      final key = '${district.toLowerCase()}_${state.toLowerCase()}';
+      return districtMap.putIfAbsent(
+        key,
+        () => _DistrictTempData(districtName: district, stateName: state),
+      );
+    }
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      for (final u in dealersState.allRawUsers) {
+        final address = (u['address'] is Map) ? u['address'] as Map : {};
+        final district = (address['cityTehsil'] ?? address['district'] ?? u['city'] ?? u['district'] ?? '').toString().trim();
+        final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+
+        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+          final String rawUser = _normalizeId(u['_id']);
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+
+          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+            rawUser: rawUser,
+            displayName: displayName,
+            displayPhone: displayPhone,
+            userDetails: u,
+          )) {
+            continue;
+          }
+
+          final entry = getOrCreate(district, state);
+          entry.activeFarmers++;
+
+          final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
+          entry.revenue += orderVal.toDouble();
+          if (orderVal > 0) {
+            entry.buyersCount++;
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final leadsState = context.read<LeadsBloc>().state;
+      for (final u in leadsState.allRawUsers) {
+        final address = (u['address'] is Map) ? u['address'] as Map : {};
+        final district = (address['cityTehsil'] ?? address['district'] ?? u['city'] ?? u['district'] ?? '').toString().trim();
+        final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+
+        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+          final String rawUser = _normalizeId(u['_id']);
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+
+          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+            rawUser: rawUser,
+            displayName: displayName,
+            displayPhone: displayPhone,
+            userDetails: u,
+          )) {
+            continue;
+          }
+
+          final entry = getOrCreate(district, state);
+          entry.activeFarmers++;
+        }
+      }
+    } catch (_) {}
+
+    _eventsLogs.forEach((catKey, logs) {
+      for (final log in logs) {
+        final userName = (log['user'] ?? log['userName'] ?? log['userEmail'] ?? log['userPhone'] ?? '').toString();
+        if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+          rawUser: userName,
+          displayName: userName,
+          displayPhone: log['userPhone']?.toString(),
+          userDetails: log['payload'] is Map<String, dynamic> ? log['payload'] as Map<String, dynamic> : null,
+        )) {
+          continue;
+        }
+
+        final payload = (log['payload'] is Map) ? log['payload'] as Map : {};
+        final shipping = (payload['shippingAddress'] is Map) ? payload['shippingAddress'] as Map : {};
+        final district = (shipping['cityTehsil'] ?? log['city'] ?? log['district'] ?? '').toString().trim();
+        final state = (shipping['state'] ?? log['state'] ?? 'Maharashtra').toString().trim();
+        final amount = (payload['totalAmount'] ?? log['amount'] ?? log['price'] ?? 0) as num;
+
+        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+          final entry = getOrCreate(district, state);
+          if (amount > 0) {
+            entry.revenue += amount.toDouble();
+            entry.buyersCount++;
+          }
+        }
+      }
+    });
+
+    if (districtMap.isEmpty) {
+      return [];
+    }
+
+    final list = districtMap.values.where((e) => e.revenue > 0).toList();
+    if (list.isEmpty) return [];
+
+    list.sort((a, b) => b.revenue.compareTo(a.revenue));
+
+    return list.map((e) {
+      final double conversion = e.activeFarmers > 0
+          ? ((e.buyersCount / e.activeFarmers) * 100).clamp(0.0, 100.0)
+          : 0.0;
+      final double index = ((e.activeFarmers * 5) + (e.buyersCount * 15))
+          .clamp(10, 99)
+          .toDouble();
+      return DistrictDemandData(
+        districtName: e.districtName,
+        stateName: e.stateName,
+        primaryCrop: 'Agri Inputs & Products',
+        activeFarmers: e.activeFarmers,
+        searchVolumeIndex: index,
+        conversionRate: conversion,
+        grossRevenueRupees: e.revenue,
+      );
+    }).toList();
+  }
+
+  Widget _buildActiveAnalyticsView() {
+    if (AuthService().isSales) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+          boxShadow: AppTheme.cardShadow,
+        ),
+        child: Row(
+          children: [
+            const _LivePulsingBadge(color: Color(0xFF10B981)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Live Customer Telemetry Feed',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Monitoring real-time presence heartbeats, active sessions, and incoming telemetry events for your assigned customers below.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    switch (_activeAnalyticsTab) {
+      case 0:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
+            border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Row(
+            children: [
+              const _LivePulsingBadge(color: Color(0xFF10B981)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Live Telemetry & Activity Feed',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Monitoring real-time presence heartbeats, active sessions, and incoming telemetry events below.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      case 1:
+        _funnelDataFuture ??= AnalyticsService().fetchFunnelData(
+          days: _selectedAnalyticsTimeRange,
+          customRange: _customAnalyticsDateRange,
+        );
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _funnelDataFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+              return const FunnelChartWidget(steps: [], isLoading: true);
+            }
+            final data = snapshot.data ?? [];
+            if (data.isNotEmpty) {
+              final colors = [
+                const Color(0xFF1E88E5),
+                const Color(0xFF43A047),
+                const Color(0xFFFB8C00),
+                const Color(0xFFE53935),
+              ];
+              final steps = List.generate(data.length, (i) {
+                final item = data[i];
+                final uCount = item['userCount'];
+                final eCount = item['eventCount'];
+                final cRate = item['conversionRate'];
+
+                return FunnelStepData(
+                  stepName: (item['stepName'] ?? item['step'] ?? 'Step ${i + 1}').toString(),
+                  userCount: (uCount is num) ? uCount.toInt() : 0,
+                  eventCount: (eCount is num) ? eCount.toInt() : 0,
+                  conversionRate: (cRate is num) ? cRate.toDouble() : 0.0,
+                  stepColor: colors[i % colors.length],
+                );
+              });
+              return FunnelChartWidget(
+                steps: steps,
+                onStepSelected: _onFunnelStepSelected,
+              );
+            }
+            return FunnelChartWidget(
+              steps: _calculateDynamicFunnelSteps(),
+              onStepSelected: _onFunnelStepSelected,
+            );
+          },
+        );
+      case 2:
+        if (AuthService().isSales) {
+          final districts = _calculateDynamicDistrictData();
+          return AgriHeatmapWidget(districts: districts);
+        }
+        _districtDataFuture ??= AnalyticsService().fetchDistrictAnalytics(
+          days: _selectedAnalyticsTimeRange,
+          customRange: _customAnalyticsDateRange,
+        );
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _districtDataFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+              return const AgriHeatmapWidget(districts: [], isLoading: true);
+            }
+            final rawData = snapshot.data ?? [];
+            final data = rawData.where((item) {
+              final rev = item['grossRevenueRupees'];
+              return (rev is num) && rev > 0;
+            }).toList();
+            List<DistrictDemandData> districts = [];
+            if (data.isNotEmpty) {
+              districts = data.map((item) {
+                final farmers = item['activeFarmers'];
+                final sIndex = item['searchVolumeIndex'];
+                final cRate = item['conversionRate'];
+                final rev = item['grossRevenueRupees'];
+
+                return DistrictDemandData(
+                  districtName: (item['districtName'] ?? 'Unknown').toString(),
+                  stateName: (item['stateName'] ?? 'Maharashtra').toString(),
+                  primaryCrop: (item['primaryCrop'] ?? 'Agri Inputs & Crops').toString(),
+                  activeFarmers: (farmers is num) ? farmers.toInt() : 0,
+                  searchVolumeIndex: (sIndex is num) ? sIndex.toDouble() : 50.0,
+                  conversionRate: (cRate is num) ? cRate.toDouble() : 0.0,
+                  grossRevenueRupees: (rev is num) ? rev.toDouble() : 0.0,
+                );
+              }).toList();
+            } else {
+              districts = _calculateDynamicDistrictData();
+            }
+            return AgriHeatmapWidget(districts: districts);
+          },
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildUsersListHeader(bool isDesktop, int filteredCount) {
@@ -2250,7 +2861,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 ),
               ),
               _buildFilterDropdown(
-                label: 'User Type',
+                label: AuthService().isSales ? 'Customer Type' : 'User Type',
                 value: _selectedUserType,
                 options: AuthService().isSales
                     ? ['All', 'Dealer', 'Lead']
@@ -3959,7 +4570,157 @@ class _EventLogCardState extends State<_EventLogCard> {
   bool _hovered = false;
   bool _showRawJson = false;
 
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleanPhone.isEmpty) return;
+    final uri = Uri.parse('tel:$cleanPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  void _openWhatsApp(BuildContext context, String phoneNumber, String name) {
+    showDialog(
+      context: context,
+      builder: (context) => WhatsAppChatDialog(
+        phone: phoneNumber,
+        name: name,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _getEventTheme() {
+    final payload = widget.payload;
+    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+
+    if (action.contains('payment_failed') || action == 'payment_fail') {
+      return {
+        'color': const Color(0xFFEF4444),
+        'bgColor': const Color(0xFFFEF2F2),
+        'borderColor': const Color(0xFFFCA5A5),
+        'tag': 'FAILED PAYMENT',
+        'icon': Icons.error_rounded,
+      };
+    } else if (action.contains('payment_success') || action.contains('order')) {
+      return {
+        'color': const Color(0xFF10B981),
+        'bgColor': const Color(0xFFECFDF5),
+        'borderColor': const Color(0xFF6EE7B7),
+        'tag': 'SUCCESS',
+        'icon': Icons.check_circle_rounded,
+      };
+    } else if (action == 'cart_add' || action == 'add_to_cart' || action.contains('checkout')) {
+      return {
+        'color': const Color(0xFFF59E0B),
+        'bgColor': const Color(0xFFFFFBEB),
+        'borderColor': const Color(0xFFFDE68A),
+        'tag': 'HIGH INTENT',
+        'icon': Icons.shopping_cart_rounded,
+      };
+    } else if (action.contains('search') || action.contains('view')) {
+      return {
+        'color': const Color(0xFF0284C7),
+        'bgColor': const Color(0xFFF0F9FF),
+        'borderColor': const Color(0xFFBAE6FD),
+        'tag': 'BROWSING',
+        'icon': Icons.visibility_rounded,
+      };
+    }
+    return {
+      'color': AppTheme.primaryColor,
+      'bgColor': AppTheme.primaryColor.withOpacity(0.06),
+      'borderColor': AppTheme.primaryColor.withOpacity(0.2),
+      'tag': 'ACTIVITY',
+      'icon': Icons.bolt_rounded,
+    };
+  }
+
+  String _getHumanHeadline() {
+    final payload = widget.payload;
+    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+    final details = widget.details;
+
+    if (action == 'cart_add' || action == 'add_to_cart') {
+      final qty = payload['quantity'] ?? 1;
+      final prodName = payload['product_name'] ?? 'Product';
+      final price = payload['unit_price'] ?? payload['price'];
+      final priceStr = price is num ? ' (₹${(price * qty).toStringAsFixed(0)})' : '';
+      return '🛒 Added $qty' + 'x $prodName to Cart$priceStr';
+    } else if (action.contains('payment_failed') || action == 'payment_fail') {
+      final amt = payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
+      final amtStr = amt is num ? ' ₹${amt.toStringAsFixed(0)}' : '';
+      final gw = payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
+      final reason = payload['error_message'] ?? payload['reason'];
+      final reasonStr = reason != null && reason.toString().isNotEmpty ? ' — Cause: $reason' : '';
+      return '❌ Payment of$amtStr Failed via $gw$reasonStr';
+    } else if (action.contains('payment_success') || action.contains('payment_completed')) {
+      final amt = payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
+      final amtStr = amt is num ? ' ₹${amt.toStringAsFixed(0)}' : '';
+      final gw = payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
+      return '🟢 Payment of$amtStr Received via $gw';
+    } else if (action.contains('order') || action.contains('checkout_completed')) {
+      final orderId = payload['order_id'] ?? payload['orderId'] ?? '';
+      final amt = payload['amount'] ?? payload['total_price'] ?? payload['total'];
+      final amtStr = amt is num ? ' • Total: ₹${amt.toStringAsFixed(0)}' : '';
+      return '📦 Order ${orderId.isNotEmpty ? "#$orderId" : ""} Placed Successfully$amtStr';
+    } else if (action.contains('checkout')) {
+      final items = payload['item_count'] ?? payload['items_count'];
+      final itemsStr = items != null ? ' ($items items in cart)' : '';
+      return '🛍️ Started Checkout Process$itemsStr';
+    } else if (action.contains('search')) {
+      final query = payload['query'] ?? payload['search_term'] ?? '';
+      final results = payload['results_count'];
+      final resultsStr = results != null ? ' ($results items found)' : '';
+      return '🔍 Searched for "${query.isNotEmpty ? query : details}"$resultsStr';
+    } else if (action.contains('login') || action.contains('auth')) {
+      final method = payload['method'] ?? payload['auth_method'] ?? 'App OTP';
+      return '🔑 Logged in via $method';
+    } else if (action.contains('view') || action.contains('screen')) {
+      final page = payload['screen_name'] ?? payload['product_name'] ?? details;
+      return '👀 Viewed: ${page.isNotEmpty ? page : "App Screen"}';
+    } else if (details.isNotEmpty) {
+      return details;
+    }
+    return '⚡ Customer activity logged (${action.isNotEmpty ? action : "User Action"})';
+  }
+
+  String? _getSalesActionRecommendation() {
+    final payload = widget.payload;
+    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+
+    if (action == 'cart_add' || action == 'add_to_cart') {
+      return '💡 Sales Tip: High purchase intent! Call the customer to assist with ordering or offer special pricing.';
+    } else if (action.contains('payment_failed') || action == 'payment_fail') {
+      return '🚨 Sales Tip: Payment failed! Contact user now to help them finish order via manual UPI or Bank Deposit.';
+    } else if (action.contains('checkout')) {
+      return '⚡ Sales Tip: Customer is in checkout! Follow up on WhatsApp if they drop off without ordering.';
+    } else if (action.contains('search') || action.contains('view')) {
+      return '🔍 Sales Tip: Active browsing. Reach out to guide them on product choice.';
+    }
+    return null;
+  }
+
   String _formatKey(String key) {
+    final mappedKeys = {
+      'unit_price': 'Unit Price (₹)',
+      'product_name': 'Product Name',
+      'variant_name': 'Variant',
+      'quantity': 'Quantity',
+      'total_price': 'Total Price (₹)',
+      'grand_total': 'Grand Total (₹)',
+      'amount': 'Amount (₹)',
+      'payment_method': 'Payment Mode',
+      'gateway': 'Payment Gateway',
+      'screen_name': 'Page Viewed',
+      'error_message': 'Failure Reason',
+      'reason': 'Failure Reason',
+      'user_phone': 'Customer Phone',
+      'query': 'Search Query',
+      'results_count': 'Results Found',
+      'item_count': 'Total Items',
+    };
+    if (mappedKeys.containsKey(key)) return mappedKeys[key]!;
+
     final words = key.split('_');
     return words
         .map((w) {
@@ -4078,17 +4839,28 @@ class _EventLogCardState extends State<_EventLogCard> {
   }
 
   Widget _buildStructuredPayload(Map<String, dynamic> payload) {
-    final keys = payload.keys
-        .where((k) => k != 'action' && k != 'status' && k != 'items')
-        .toList();
+    final keys = payload.keys.where((k) {
+      final lower = k.toLowerCase();
+      return lower != 'action' &&
+          lower != 'status' &&
+          lower != 'items' &&
+          lower != '_id' &&
+          lower != '\$oid' &&
+          lower != '__v' &&
+          lower != 'schemaversion' &&
+          lower != 'sessionid' &&
+          lower != 'user_agent_raw' &&
+          lower != 'sdk_version';
+    }).toList();
+
     if (keys.isEmpty) return const SizedBox.shrink();
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 450;
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: 10,
+          runSpacing: 10,
           children: keys.map((key) {
             final val = payload[key];
             final displayKey = _formatKey(key);
@@ -4096,7 +4868,7 @@ class _EventLogCardState extends State<_EventLogCard> {
 
             final double itemWidth = isMobile
                 ? constraints.maxWidth
-                : (constraints.maxWidth - 12) / 2;
+                : (constraints.maxWidth - 10) / 2;
 
             return Container(
               width: itemWidth,
@@ -4116,7 +4888,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                     child: Text(
                       displayKey,
                       style: GoogleFonts.outfit(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textSecondary,
                       ),
@@ -4130,7 +4902,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                         : Text(
                             displayVal.toString(),
                             style: GoogleFonts.outfit(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textPrimary,
                             ),
@@ -4201,15 +4973,15 @@ class _EventLogCardState extends State<_EventLogCard> {
               const Icon(
                 Icons.shopping_cart_outlined,
                 size: 15,
-                color: AppTheme.textSecondary,
+                color: AppTheme.primaryColor,
               ),
               const SizedBox(width: 6),
               Text(
-                'Added Items',
+                'Shopping Cart Items',
                 style: GoogleFonts.outfit(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
+                  color: AppTheme.primaryColor,
                 ),
               ),
             ],
@@ -4222,7 +4994,7 @@ class _EventLogCardState extends State<_EventLogCard> {
 
           return Container(
             margin: const EdgeInsets.only(bottom: 8.0),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: AppTheme.cardColor,
               borderRadius: BorderRadius.circular(8),
@@ -4236,7 +5008,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
                         color: AppTheme.primaryColor.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(6),
@@ -4252,7 +5024,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                       child: Text(
                         prodName,
                         style: GoogleFonts.outfit(
-                          fontSize: 13,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimary,
                         ),
@@ -4292,7 +5064,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                             Text(
                               variantName,
                               style: GoogleFonts.outfit(
-                                fontSize: 11,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.textBody,
                               ),
@@ -4308,7 +5080,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                           Text(
                             '${qty}x',
                             style: GoogleFonts.outfit(
-                              fontSize: 11,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.bold,
                               color: AppTheme.primaryColor,
                             ),
@@ -4317,7 +5089,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                           Text(
                             '($formattedPrice)',
                             style: GoogleFonts.outfit(
-                              fontSize: 10.5,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textSecondary,
                             ),
@@ -4375,6 +5147,17 @@ class _EventLogCardState extends State<_EventLogCard> {
         ? fullInitials
         : fullInitials.substring(0, 2);
 
+    final theme = _getEventTheme();
+    final Color severityColor = theme['color'] as Color;
+    final Color severityBg = theme['bgColor'] as Color;
+    final Color severityBorder = theme['borderColor'] as Color;
+    final String tagLabel = theme['tag'] as String;
+    final IconData severityIcon = theme['icon'] as IconData;
+
+    final String headline = _getHumanHeadline();
+    final String? salesTip = _getSalesActionRecommendation();
+    final String? phone = widget.userPhone;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -4382,53 +5165,55 @@ class _EventLogCardState extends State<_EventLogCard> {
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
           color: _hovered
-              ? AppTheme.backgroundColor.withOpacity(0.6)
+              ? AppTheme.backgroundColor.withOpacity(0.7)
               : AppTheme.backgroundColor.withOpacity(0.4),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _hovered
-                ? AppTheme.primaryColor.withOpacity(0.2)
+                ? severityColor.withOpacity(0.35)
                 : AppTheme.borderColor,
+            width: _hovered ? 1.5 : 1.0,
           ),
           boxShadow: _hovered
               ? [
                   BoxShadow(
-                    color: AppTheme.primaryColor.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: severityColor.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ]
               : null,
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // User Header Row with Avatar, Name, Phone & Quick Actions
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.primaryColor.withOpacity(0.12),
-                        AppTheme.primaryColor.withOpacity(0.03),
+                        severityColor.withOpacity(0.15),
+                        severityColor.withOpacity(0.04),
                       ],
                     ),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: AppTheme.primaryColor.withOpacity(0.15),
+                      color: severityColor.withOpacity(0.25),
                     ),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     initials.isNotEmpty ? initials : 'U',
                     style: GoogleFonts.outfit(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.primaryColor,
+                      color: severityColor,
                     ),
                   ),
                 ),
@@ -4448,96 +5233,223 @@ class _EventLogCardState extends State<_EventLogCard> {
                                   context,
                                   widget.rawUser ?? widget.user,
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            widget.user,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 15.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppTheme.textPrimary,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.open_in_new_rounded,
-                                          size: 11,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ],
-                                    ),
-                                    if (widget.userPhone != null)
-                                      Text(
-                                        widget.userPhone!,
+                                    Flexible(
+                                      child: Text(
+                                        widget.user,
                                         style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          color: AppTheme.textSecondary,
-                                          fontWeight: FontWeight.w500,
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppTheme.textPrimary,
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.open_in_new_rounded,
+                                      size: 12,
+                                      color: AppTheme.textSecondary,
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            widget.time,
-                            style: GoogleFonts.outfit(
-                              fontSize: 12.5,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w600,
+                          // Event Severity Tag Pill
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: severityBg,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: severityBorder),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  severityIcon,
+                                  size: 11,
+                                  color: severityColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  tagLabel,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: severityColor,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        widget.device,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12.5,
-                          color: AppTheme.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (phone != null && phone.isNotEmpty) ...[
+                            Text(
+                              phone,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Direct Sales Action Buttons: Call & WhatsApp
+                            InkWell(
+                              onTap: () => _makePhoneCall(phone),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.phone,
+                                      size: 11,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Call',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () => _openWhatsApp(
+                                context,
+                                phone,
+                                widget.user,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                      size: 11,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'WhatsApp',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF10B981),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            '•  ${widget.time}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ],
             ),
+
+            const SizedBox(height: 12),
+
+            // Plain English Human-Readable Headline Container
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: severityBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: severityBorder.withOpacity(0.7)),
+              ),
+              child: Text(
+                headline,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+
+            // Sales Action Recommendation Tip Box
+            if (salesTip != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFCD34D)),
+                ),
+                child: Text(
+                  salesTip,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF92400E),
+                  ),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 10),
+
+            // Payload or Cart Details Section
             widget.payload['action'] == 'cart_add'
                 ? _buildCartAddDetails(widget.payload)
-                : Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardColor,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.borderColor.withOpacity(0.6),
-                      ),
-                    ),
-                    child: Text(
-                      widget.details,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13.5,
-                        color: AppTheme.textBody,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-            const SizedBox(height: 8),
+                : const SizedBox.shrink(),
+
+            const SizedBox(height: 6),
+
+            // View Details Toggle / Raw JSON Toggle
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -4560,12 +5472,12 @@ class _EventLogCardState extends State<_EventLogCard> {
                           _expanded
                               ? Icons.keyboard_arrow_up
                               : Icons.keyboard_arrow_down,
-                          size: 14,
+                          size: 15,
                           color: AppTheme.primaryColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _expanded ? 'Hide Details' : 'View Payload Details',
+                          _expanded ? 'Hide Technical Details' : 'View Key Data Fields',
                           style: GoogleFonts.outfit(
                             fontSize: 12.5,
                             fontWeight: FontWeight.bold,
@@ -4601,7 +5513,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            _showRawJson ? 'Structured View' : 'Raw JSON',
+                            _showRawJson ? 'Structured View' : 'Raw Developer JSON',
                             style: GoogleFonts.outfit(
                               fontSize: 12.5,
                               fontWeight: FontWeight.bold,
@@ -4642,4 +5554,14 @@ class _EventLogCardState extends State<_EventLogCard> {
       ),
     );
   }
+}
+
+class _DistrictTempData {
+  final String districtName;
+  final String stateName;
+  int activeFarmers = 0;
+  int buyersCount = 0;
+  double revenue = 0.0;
+
+  _DistrictTempData({required this.districtName, required this.stateName});
 }

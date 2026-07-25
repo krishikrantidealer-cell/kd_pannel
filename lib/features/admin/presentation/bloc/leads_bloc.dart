@@ -25,6 +25,15 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<FetchLeadDetailsEvent>(_onFetchLeadDetails);
     on<FetchLeadEventsEvent>(_onFetchLeadEvents);
     on<ImportLeadsEvent>(_onImportLeads);
+    on<FetchDailyLeadStatsEvent>(_onFetchDailyLeadStats);
+    on<ToggleAnalyticsViewModeEvent>(_onToggleAnalyticsViewMode);
+  }
+
+  void _onToggleAnalyticsViewMode(
+    ToggleAnalyticsViewModeEvent event,
+    Emitter<LeadsState> emit,
+  ) {
+    emit(state.copyWith(analyticsViewMode: event.mode));
   }
 
   Future<void> _onImportLeads(
@@ -167,10 +176,55 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         allRawUsers: users,
         salesAgents: salesAgents,
       ));
+      add(FetchDailyLeadStatsEvent(
+        selectedDate: state.selectedDailyDate,
+        selectedAgentId: state.selectedDailyAgentId,
+      ));
     } catch (e) {
       emit(state.copyWith(
         status: LeadsStatus.failure,
         errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onFetchDailyLeadStats(
+    FetchDailyLeadStatsEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    final targetDate = event.selectedDate ?? state.selectedDailyDate ?? DateTime.now();
+    final targetAgentId = event.selectedAgentId ?? state.selectedDailyAgentId;
+
+    emit(state.copyWith(
+      isLoadingDailyStats: true,
+      selectedDailyDate: targetDate,
+      selectedDailyAgentId: targetAgentId,
+    ));
+
+    try {
+      final dateStr = "${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}";
+      String url = '/users/daily-lead-stats?date=$dateStr';
+      if (targetAgentId != null && targetAgentId.isNotEmpty) {
+        url += '&agentId=$targetAgentId';
+      }
+
+      final res = await ApiClient().get(url);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          emit(state.copyWith(
+            isLoadingDailyStats: false,
+            dailyLeadStats: Map<String, dynamic>.from(data),
+          ));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch daily lead stats');
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        isLoadingDailyStats: false,
       ));
     }
   }
@@ -226,9 +280,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
 
           emit(state.copyWith(
             status: LeadsStatus.success,
-            actionSuccessMessage: 'Agent assigned successfully',
+            actionSuccessMessage: event.agentId != null
+                ? 'Agent assigned successfully'
+                : 'Agent unassigned',
           ));
           add(FetchLeadDetailsEvent(event.userId));
+          // Refresh daily stats so banner count updates immediately
+          add(FetchDailyLeadStatsEvent(
+            selectedDate: state.selectedDailyDate,
+            selectedAgentId: state.selectedDailyAgentId,
+          ));
         } else {
           throw Exception(data['message'] ?? 'Failed to assign agent');
         }
@@ -306,6 +367,12 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         actionSuccessMessage: 'Agent assigned to $successCount leads successfully',
       ));
       add(const FetchLeadsDataEvent(forceRefresh: true));
+      // Refresh daily stats so banner count updates immediately
+      add(FetchDailyLeadStatsEvent(
+        selectedDate: state.selectedDailyDate,
+        selectedAgentId: state.selectedDailyAgentId,
+      ));
+
     } catch (e) {
       emit(state.copyWithKeepMessages(
         status: LeadsStatus.success,

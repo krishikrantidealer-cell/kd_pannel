@@ -194,3 +194,25 @@ class ImportLeadsEvent extends LeadsEvent {
   @override
   List<Object?> get props => [leads];
 }
+
+class FetchDailyLeadStatsEvent extends LeadsEvent {
+  final DateTime? selectedDate;
+  final String? selectedAgentId;
+
+  const FetchDailyLeadStatsEvent({
+    this.selectedDate,
+    this.selectedAgentId,
+  });
+
+  @override
+  List<Object?> get props => [selectedDate, selectedAgentId];
+}
+
+class ToggleAnalyticsViewModeEvent extends LeadsEvent {
+  final String mode; // 'allTime' or 'daily'
+  const ToggleAnalyticsViewModeEvent(this.mode);
+
+  @override
+  List<Object?> get props => [mode];
+}
+
