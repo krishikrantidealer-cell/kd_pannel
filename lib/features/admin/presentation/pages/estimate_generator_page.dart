@@ -59,6 +59,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   // Submitting state
   bool _isSaving = false;
 
+  // GST Toggle
+  bool _isGstEnabled = true;
+
   // Cache text controllers per item map instance to prevent cursor jumping
   final Map<Map<String, dynamic>, Map<String, TextEditingController>>
   _controllersCache = {};
@@ -185,6 +188,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
 
   void _startNewEstimate() {
     setState(() {
+      _isGstEnabled = true;
       for (final ctrls in _controllersCache.values) {
         ctrls['name']?.dispose();
         ctrls['price']?.dispose();
@@ -243,6 +247,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       _clientNameCtrl.text = est['clientName'] ?? '';
       _clientAddressCtrl.text = est['clientAddress'] ?? '';
       _clientPhoneCtrl.text = est['clientPhone'] ?? '';
+      _isGstEnabled = est['isGstEnabled'] ?? true;
 
       final List rawItems = est['items'] ?? [];
       _editingItems = rawItems.map((i) {
@@ -310,6 +315,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   }
 
   double get _calculateGstTotal {
+    if (!_isGstEnabled) return 0.0;
     double total = 0.0;
     for (final item in _editingItems) {
       final double price = ((item['price'] ?? 0.0) as num).toDouble();
@@ -354,11 +360,12 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       'clientName': _clientNameCtrl.text.trim(),
       'clientAddress': _clientAddressCtrl.text.trim(),
       'clientPhone': _clientPhoneCtrl.text.trim(),
+      'isGstEnabled': _isGstEnabled,
 
       'items': _editingItems.map((it) {
         final price = ((it['price'] ?? 0.0) as num).toDouble();
         final qty = ((it['quantity'] ?? 0.0) as num).toDouble();
-        final gst = ((it['gst'] ?? 18.0) as num).toDouble();
+        final gst = _isGstEnabled ? (((it['gst'] ?? 18.0) as num).toDouble()) : 0.0;
         return {
           'name': it['name'] ?? '',
           'quantity': qty,
@@ -758,9 +765,15 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                             item['unit'] = _parseUnitFromSize(
                                               v['size']?.toString() ?? '',
                                             );
+                                            final double g = _isGstEnabled
+                                                ? (((item['gst'] ?? 18.0)
+                                                        as num)
+                                                    .toDouble())
+                                                : 0.0;
                                             item['amount'] =
                                                 price *
-                                                (item['quantity'] ?? 0.0);
+                                                (item['quantity'] ?? 0.0) *
+                                                (1 + g / 100);
 
                                             final ctrls =
                                                 _controllersCache[item];
@@ -1288,6 +1301,69 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         ),
         const SizedBox(height: 24),
 
+        // GST Toggle Section
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: _isGstEnabled
+                ? AppTheme.primaryColor.withOpacity(0.05)
+                : Colors.grey.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isGstEnabled
+                  ? AppTheme.primaryColor.withOpacity(0.2)
+                  : Colors.grey.withOpacity(0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _isGstEnabled
+                    ? Icons.receipt_long_rounded
+                    : Icons.money_off_rounded,
+                color: _isGstEnabled
+                    ? AppTheme.primaryColor
+                    : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'GST Application',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      _isGstEnabled
+                          ? 'GST (18%) will be added to the estimate'
+                          : 'GST will NOT be added to this estimate',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isGstEnabled,
+                activeColor: AppTheme.primaryColor,
+                onChanged: (val) {
+                  setState(() {
+                    _isGstEnabled = val;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
         // Section: Items Table
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1595,7 +1671,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   onChanged: (val) {
                     final double q = double.tryParse(val) ?? 0.0;
                     final double p = ((item['price'] ?? 0.0) as num).toDouble();
-                    final double g = ((item['gst'] ?? 18.0) as num).toDouble();
+                    final double g = _isGstEnabled ? (((item['gst'] ?? 18.0) as num).toDouble()) : 0.0;
                     item['quantity'] = q;
                     item['amount'] = q * p * (1 + g / 100);
                     setState(() {});
@@ -1676,7 +1752,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     final double p = double.tryParse(val) ?? 0.0;
                     final double q = ((item['quantity'] ?? 0.0) as num)
                         .toDouble();
-                    final double g = ((item['gst'] ?? 18.0) as num).toDouble();
+                    final double g = _isGstEnabled ? (((item['gst'] ?? 18.0) as num).toDouble()) : 0.0;
                     item['price'] = p;
                     item['amount'] = q * p * (1 + g / 100);
                     setState(() {});
@@ -1686,39 +1762,42 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
               const SizedBox(width: 8),
 
               // GST %
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: gstCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  style: GoogleFonts.outfit(fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'GST %',
-                    labelStyle: GoogleFonts.outfit(fontSize: 10),
-                    suffixText: '%',
-                    suffixStyle: GoogleFonts.outfit(fontSize: 11),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
+              if (_isGstEnabled) ...[
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: gstCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
+                    style: GoogleFonts.outfit(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'GST %',
+                      labelStyle: GoogleFonts.outfit(fontSize: 10),
+                      suffixText: '%',
+                      suffixStyle: GoogleFonts.outfit(fontSize: 11),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
+                    onChanged: (val) {
+                      final double g = double.tryParse(val) ?? 0.0;
+                      final double p =
+                          ((item['price'] ?? 0.0) as num).toDouble();
+                      final double q =
+                          ((item['quantity'] ?? 0.0) as num).toDouble();
+                      item['gst'] = g;
+                      item['amount'] = q * p * (1 + g / 100);
+                      setState(() {});
+                    },
                   ),
-                  onChanged: (val) {
-                    final double g = double.tryParse(val) ?? 0.0;
-                    final double p = ((item['price'] ?? 0.0) as num).toDouble();
-                    final double q = ((item['quantity'] ?? 0.0) as num)
-                        .toDouble();
-                    item['gst'] = g;
-                    item['amount'] = q * p * (1 + g / 100);
-                    setState(() {});
-                  },
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
+              ],
 
               // Computed Row Total
               Column(
@@ -1732,13 +1811,25 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '₹${(((item['price'] ?? 0.0) * (item['quantity'] ?? 0.0)) * (1 + (item['gst'] ?? 18.0) / 100)).toStringAsFixed(2)}',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: AppTheme.textPrimary,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final double p =
+                          ((item['price'] ?? 0.0) as num).toDouble();
+                      final double q =
+                          ((item['quantity'] ?? 0.0) as num).toDouble();
+                      final double g = _isGstEnabled
+                          ? (((item['gst'] ?? 18.0) as num).toDouble())
+                          : 0.0;
+                      final double amt = p * q * (1 + g / 100);
+                      return Text(
+                        '₹${amt.toStringAsFixed(2)}',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppTheme.textPrimary,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1808,13 +1899,14 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          'GSTIN: ${_companyGstCtrl.text}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            color: Colors.grey.shade300,
+                        if (_isGstEnabled)
+                          Text(
+                            'GSTIN: ${_companyGstCtrl.text}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              color: Colors.grey.shade300,
+                            ),
                           ),
-                        ),
                         Text(
                           'State: ${_companyStateCtrl.text}',
                           style: GoogleFonts.outfit(
@@ -2104,18 +2196,19 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                           ),
                         ),
                       ),
-                      SizedBox(
-                        width: 60,
-                        child: Text(
-                          'GST',
-                          textAlign: TextAlign.right,
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+                      if (_isGstEnabled)
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            'GST',
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
                       SizedBox(
                         width: 90,
                         child: Text(
@@ -2214,17 +2307,18 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                               ),
                             ),
                           ),
-                          SizedBox(
-                            width: 60,
-                            child: Text(
-                              '${gst.toStringAsFixed(0)}%',
-                              textAlign: TextAlign.right,
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: AppTheme.textPrimary,
+                          if (_isGstEnabled)
+                            SizedBox(
+                              width: 60,
+                              child: Text(
+                                '${gst.toStringAsFixed(0)}%',
+                                textAlign: TextAlign.right,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textPrimary,
+                                ),
                               ),
                             ),
-                          ),
                           SizedBox(
                             width: 90,
                             child: Text(
@@ -2276,7 +2370,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                       ),
                       const SizedBox(width: 50),
                       const SizedBox(width: 80),
-                      const SizedBox(width: 60),
+                      if (_isGstEnabled) const SizedBox(width: 60),
                       SizedBox(
                         width: 90,
                         child: Text(
@@ -2342,7 +2436,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                               Padding(
                                 padding: const EdgeInsets.all(8.0),
                                 child: Text(
-                                  'Sub Total (Excl. GST)',
+                                  _isGstEnabled
+                                      ? 'Sub Total (Excl. GST)'
+                                      : 'Total Amount',
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -2363,32 +2459,33 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                               ),
                             ],
                           ),
-                          TableRow(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  'GST Total',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                          if (_isGstEnabled)
+                            TableRow(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    'GST Total',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  '₹${_calculateGstTotal.toStringAsFixed(2)}',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textPrimary,
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    '₹${_calculateGstTotal.toStringAsFixed(2)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    textAlign: TextAlign.right,
                                   ),
-                                  textAlign: TextAlign.right,
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           TableRow(
                             decoration: const BoxDecoration(
                               color: Color(0xFFC21820),

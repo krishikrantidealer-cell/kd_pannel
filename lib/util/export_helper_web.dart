@@ -193,6 +193,8 @@ String generateQuotationHtml(Map<String, dynamic> data) {
   final logoBase64 = data['logoBase64'] as String?;
   final sealBase64 = data['sealBase64'] as String?;
 
+  final bool isGstEnabled = data['isGstEnabled'] ?? true;
+
   final List items = data['items'] ?? [];
   double baseSubtotal = 0.0;
   double gstTotal = 0.0;
@@ -203,7 +205,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
     final item = items[i];
     final double price = ((item['price'] ?? 0.0) as num).toDouble();
     final int qty = ((item['quantity'] ?? 0) as num).toInt();
-    final double gst = ((item['gst'] ?? 18.0) as num).toDouble();
+    final double gst = isGstEnabled ? (((item['gst'] ?? 18.0) as num).toDouble()) : 0.0;
     final double subtotal = price * qty;
     final double gstAmt = subtotal * (gst / 100);
     final double amt = subtotal + gstAmt;
@@ -222,7 +224,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
         <td class="center">${qty}</td>
         <td class="center">${item['unit'] ?? 'liter'}</td>
         <td class="num">${formatCurrency(price)}</td>
-        <td class="center">${gst.toStringAsFixed(0)}%</td>
+        ${isGstEnabled ? '<td class="center">${gst.toStringAsFixed(0)}%</td>' : ''}
         <td class="num">${formatCurrency(amt)}</td>
       </tr>
     ''');
@@ -765,7 +767,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
           ${logoBase64 != null ? '<img src="data:image/png;base64,$logoBase64" class="logo-img" alt="Logo" />' : '<span class="logo-text">EBS</span>'}
         </div>
         <h1>$companyName</h1>
-        <p>GSTIN: $companyGst</p>
+        ${isGstEnabled ? '<p>GSTIN: $companyGst</p>' : ''}
         <p>State: $companyState</p>
       </div>
     </div>
@@ -799,11 +801,11 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       <thead>
         <tr>
           <th class="center" style="width: 5%">#</th>
-          <th style="width: 40%">Item name</th>
+          <th style="width: ${isGstEnabled ? '40%' : '51%'}">Item name</th>
           <th class="center" style="width: 10%">Quantity</th>
           <th class="center" style="width: 10%">Unit</th>
           <th class="num" style="width: 11%">Price/Unit</th>
-          <th class="center" style="width: 11%">GST</th>
+          ${isGstEnabled ? '<th class="center" style="width: 11%">GST</th>' : ''}
           <th class="num" style="width: 13%">Amount</th>
         </tr>
       </thead>
@@ -815,7 +817,7 @@ String generateQuotationHtml(Map<String, dynamic> data) {
           <td class="center">$totalQuantity</td>
           <td class="center"></td>
           <td class="num"></td>
-          <td class="center"></td>
+          ${isGstEnabled ? '<td class="center"></td>' : ''}
           <td class="num">${formatCurrency(grandTotal)}</td>
         </tr>
       </tbody>
@@ -831,13 +833,15 @@ String generateQuotationHtml(Map<String, dynamic> data) {
       <div class="totals-box">
         <table class="totals-table">
           <tr>
-            <td class="label">Sub Total (Excl. GST)</td>
+            <td class="label">${isGstEnabled ? 'Sub Total (Excl. GST)' : 'Total Amount'}</td>
             <td class="val">${formatCurrency(baseSubtotal)}</td>
           </tr>
+          ${isGstEnabled ? '''
           <tr>
             <td class="label">GST Total</td>
             <td class="val">${formatCurrency(gstTotal)}</td>
           </tr>
+          ''' : ''}
           <tr class="grand-total">
             <td class="label">Grand Total</td>
             <td class="val">${formatCurrency(grandTotal)}</td>
