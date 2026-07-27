@@ -21,6 +21,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
@@ -961,7 +962,9 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context, ordersState) {
         return BlocBuilder<DealersBloc, DealersState>(
           builder: (context, dealersState) {
-            return LayoutBuilder(
+            return BlocBuilder<LeadsBloc, LeadsState>(
+              builder: (context, leadsState) {
+                return LayoutBuilder(
               builder: (context, constraints) {
                 final double spacing = isDesktop ? 16.0 : 12.0;
                 int columns = 6;
@@ -1109,7 +1112,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   }
                 }
 
-                final int periodNewLeads = dealersState.allRawUsers.where((u) {
+                final int fallbackNewLeads = dealersState.allRawUsers.where((u) {
                   final isLead =
                       u['role'] == 'user' && u['kycStatus'] != 'verified';
                   if (!isLead) return false;
@@ -1117,6 +1120,11 @@ class _DashboardPageState extends State<DashboardPage> {
                   final uDate = parsedUserDate(u);
                   return uDate != null && isWithinPeriod(uDate);
                 }).length;
+
+                final totalRegisteredToday = leadsState.dailyLeadStats?['totalRegisteredToday'];
+                final int periodNewLeads = (selectedDropdown == 'Today' && totalRegisteredToday != null)
+                    ? (totalRegisteredToday as int)
+                    : fallbackNewLeads;
 
                 return Wrap(
                   spacing: spacing,
@@ -1292,7 +1300,9 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
-  }
+  },
+);
+}
 
   Widget _buildAvatarCluster() {
     return SizedBox(
@@ -2523,13 +2533,13 @@ class _DashboardPageState extends State<DashboardPage> {
             );
 
             // Dynamic View All Button
+            final String targetLabel = activeTableTab == 0
+                ? 'orders'
+                : activeTableTab == 1
+                    ? 'leads'
+                    : 'dealers';
             final Widget viewAllButton = Tooltip(
-              message:
-                  'View all ${activeTableTab == 0
-                      ? "orders"
-                      : activeTableTab == 1
-                      ? "leads"
-                      : "dealers"}',
+              message: 'View all $targetLabel',
               child: InkWell(
                 onTap: () {
                   final route = activeTableTab == 0

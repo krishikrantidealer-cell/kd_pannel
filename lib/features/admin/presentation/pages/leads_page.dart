@@ -3370,8 +3370,28 @@ class _MasterLeadsAnalyticsHeaderState
       return true;
     }).toList();
 
+
     // Daily statistics payload & complete database totals
     final dailyStats = widget.state.dailyLeadStats ?? {};
+
+    // Today's new leads — sourced from the backend which counts ALL role:'user'
+    // created today (active + soft-deleted). This matches a raw MongoDB createdAt
+    // query and avoids undercounting leads who registered but were later deleted.
+    final totalRegisteredToday = dailyStats['totalRegisteredToday'];
+    final registeredTodayNowDeleted = (dailyStats['registeredTodayNowDeleted'] ?? 0) as int;
+
+    // Fallback: count from in-memory active userList if stats haven't loaded yet
+    final now = DateTime.now();
+    final fallbackTodayCount = userList.where((u) {
+      final raw = u['createdAt'];
+      if (raw == null) return false;
+      final dt = DateTime.tryParse(raw.toString())?.toLocal();
+      if (dt == null) return false;
+      return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    }).length;
+
+    final todayLeadsCount = totalRegisteredToday ?? fallbackTodayCount;
+
 
     final unassignedCount = dailyStats['totalAllTimeUnassignedLeads'] ??
         userList.where((u) {
@@ -3697,7 +3717,19 @@ class _MasterLeadsAnalyticsHeaderState
                 children: [
                   StatCardWidget(
                     width: cardWidth,
+                    title: 'New Today',
+                    value: '$todayLeadsCount',
+                    subtext: registeredTodayNowDeleted > 0
+                        ? '$registeredTodayNowDeleted deleted after registration'
+                        : 'leads registered today',
+                    icon: Icons.today_outlined,
+                    color: const Color(0xFF00C896),
+                    isCompact: true,
+                  ),
+                  StatCardWidget(
+                    width: cardWidth,
                     title: 'Unassigned Leads',
+
                     value: '$unassignedCount',
                     icon: Icons.person_off_outlined,
                     color: AppTheme.warning,

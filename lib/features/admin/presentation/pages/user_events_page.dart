@@ -2452,35 +2452,64 @@ class _UserEventsPageState extends State<UserEventsPage> {
       );
     }
 
+    List<String> extractAllLocationNames(Map<String, dynamic> u) {
+      final address = (u['address'] is Map) ? u['address'] as Map : {};
+      final fields = [
+        address['district'],
+        u['district'],
+        address['cityTehsil'],
+        address['villageArea'],
+        address['addressLine2'],
+        address['address2'],
+        u['cityTehsil'],
+        u['city'],
+      ];
+      final Set<String> names = {};
+      for (final f in fields) {
+        if (f != null && f.toString().trim().isNotEmpty) {
+          final String val = f.toString().trim();
+          names.add(val);
+          for (final part in val.split(RegExp(r'[,/\s]+'))) {
+            if (part.trim().length >= 3) {
+              names.add(part.trim());
+            }
+          }
+        }
+      }
+      return names.toList();
+    }
+
     try {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
-        final district = (address['cityTehsil'] ?? address['district'] ?? u['city'] ?? u['district'] ?? '').toString().trim();
         final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+        final locs = extractAllLocationNames(u);
 
-        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
-          final String rawUser = _normalizeId(u['_id']);
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+        for (final district in locs) {
+          if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+            final String rawUser = _normalizeId(u['_id']);
+            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+            if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
 
-          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
-            continue;
-          }
+            if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+              rawUser: rawUser,
+              displayName: displayName,
+              displayPhone: displayPhone,
+              userDetails: u,
+            )) {
+              continue;
+            }
 
-          final entry = getOrCreate(district, state);
-          entry.activeFarmers++;
+            final entry = getOrCreate(district, state);
+            entry.activeFarmers++;
 
-          final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
-          entry.revenue += orderVal.toDouble();
-          if (orderVal > 0) {
-            entry.buyersCount++;
+            final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
+            entry.revenue += orderVal.toDouble();
+            if (orderVal > 0) {
+              entry.buyerUserIds.add(rawUser);
+            }
           }
         }
       }
@@ -2490,26 +2519,28 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final leadsState = context.read<LeadsBloc>().state;
       for (final u in leadsState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
-        final district = (address['cityTehsil'] ?? address['district'] ?? u['city'] ?? u['district'] ?? '').toString().trim();
         final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+        final locs = extractAllLocationNames(u);
 
-        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
-          final String rawUser = _normalizeId(u['_id']);
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+        for (final district in locs) {
+          if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+            final String rawUser = _normalizeId(u['_id']);
+            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+            if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
 
-          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
-            continue;
+            if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+              rawUser: rawUser,
+              displayName: displayName,
+              displayPhone: displayPhone,
+              userDetails: u,
+            )) {
+              continue;
+            }
+
+            final entry = getOrCreate(district, state);
+            entry.activeFarmers++;
           }
-
-          final entry = getOrCreate(district, state);
-          entry.activeFarmers++;
         }
       }
     } catch (_) {}
@@ -2536,7 +2567,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
           final entry = getOrCreate(district, state);
           if (amount > 0) {
             entry.revenue += amount.toDouble();
-            entry.buyersCount++;
+            if (userName.isNotEmpty) {
+              entry.buyerUserIds.add(userName);
+            }
           }
         }
       }
@@ -2551,6 +2584,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     list.sort((a, b) => b.revenue.compareTo(a.revenue));
 
+    final categories = [
+      'Seeds & Planting',
+      'Fertilizers & Soil Care',
+      'Irrigation & Drip Kits',
+      'Crop Protection',
+      'Tools & Machinery',
+    ];
+    int catIdx = 0;
+
     return list.map((e) {
       final double conversion = e.activeFarmers > 0
           ? ((e.buyersCount / e.activeFarmers) * 100).clamp(0.0, 100.0)
@@ -2558,11 +2600,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final double index = ((e.activeFarmers * 5) + (e.buyersCount * 15))
           .clamp(10, 99)
           .toDouble();
+      final assignedCategory = categories[(catIdx++) % categories.length];
       return DistrictDemandData(
         districtName: e.districtName,
         stateName: e.stateName,
-        primaryCrop: 'Agri Inputs & Products',
-        activeFarmers: e.activeFarmers,
+        primaryCrop: 'General Products',
+        category: 'General Products',
+        activeDealers: e.activeFarmers,
         searchVolumeIndex: index,
         conversionRate: conversion,
         grossRevenueRupees: e.revenue,
@@ -2721,19 +2765,50 @@ class _UserEventsPageState extends State<UserEventsPage> {
             List<DistrictDemandData> districts = [];
             if (data.isNotEmpty) {
               districts = data.map((item) {
-                final farmers = item['activeFarmers'];
+                final dealers = item['activeDealers'] ?? item['activeFarmers'];
                 final sIndex = item['searchVolumeIndex'];
                 final cRate = item['conversionRate'];
                 final rev = item['grossRevenueRupees'];
+                final category = (item['category'] ?? 'General Products').toString();
+                final subCategory = (item['subCategory'] ?? '').toString();
+
+                Map<String, double>? catBreakdown;
+                if (item['categoryBreakdown'] is Map) {
+                  catBreakdown = Map<String, double>.from(
+                    (item['categoryBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                  );
+                }
+
+                Map<String, double>? subCatBreakdown;
+                if (item['subCategoryBreakdown'] is Map) {
+                  subCatBreakdown = Map<String, double>.from(
+                    (item['subCategoryBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                  );
+                }
+
+                Map<String, double>? prodBreakdown;
+                if (item['productBreakdown'] is Map) {
+                  prodBreakdown = Map<String, double>.from(
+                    (item['productBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                  );
+                }
 
                 return DistrictDemandData(
                   districtName: (item['districtName'] ?? 'Unknown').toString(),
-                  stateName: (item['stateName'] ?? 'Maharashtra').toString(),
-                  primaryCrop: (item['primaryCrop'] ?? 'Agri Inputs & Crops').toString(),
-                  activeFarmers: (farmers is num) ? farmers.toInt() : 0,
+                  stateName: (item['stateName'] ?? 'Madhya Pradesh').toString(),
+                  primaryCrop: (item['primaryCrop'] ?? category).toString(),
+                  category: category,
+                  subCategory: subCategory,
+                  registeredDealers: (item['registeredDealers'] is num) ? (item['registeredDealers'] as num).toInt() : (dealers is num ? dealers.toInt() : 0),
+                  activeBuyers: (item['activeBuyers'] is num) ? (item['activeBuyers'] as num).toInt() : 0,
+                  activeDealers: (item['registeredDealers'] is num) ? (item['registeredDealers'] as num).toInt() : (dealers is num ? dealers.toInt() : 0),
                   searchVolumeIndex: (sIndex is num) ? sIndex.toDouble() : 50.0,
                   conversionRate: (cRate is num) ? cRate.toDouble() : 0.0,
                   grossRevenueRupees: (rev is num) ? rev.toDouble() : 0.0,
+                  orderCount: (item['orderCount'] is num) ? (item['orderCount'] as num).toInt() : 0,
+                  categoryBreakdown: catBreakdown,
+                  subCategoryBreakdown: subCatBreakdown,
+                  productBreakdown: prodBreakdown,
                 );
               }).toList();
             } else {
@@ -5560,8 +5635,10 @@ class _DistrictTempData {
   final String districtName;
   final String stateName;
   int activeFarmers = 0;
-  int buyersCount = 0;
+  final Set<String> buyerUserIds = {};
   double revenue = 0.0;
+
+  int get buyersCount => buyerUserIds.length;
 
   _DistrictTempData({required this.districtName, required this.stateName});
 }
