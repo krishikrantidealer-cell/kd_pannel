@@ -187,19 +187,22 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     }
 
     // 1. Available States — fully normalized dedup
-    // Key = strip ALL spaces + lowercase, so "madhya pradesh"/"MADHYA PRADESH"/"Madhyapradesh" all collapse to one
-    final Map<String, String> stateDedup = {}; // strippedKey → display name
+    final Map<String, String> stateDedup = {}; 
     for (final d in widget.districts) {
-      final raw = d.stateName;
+      String raw = d.stateName.trim();
       if (raw.isEmpty || raw.toLowerCase() == 'unknown') continue;
-      final key = raw.toLowerCase().replaceAll(RegExp(r'\s+'), ''); // space-stripped key
-      if (!stateDedup.containsKey(key)) {
-        // Title-case display: "MADHYA PRADESH" → "Madhya Pradesh"
-        stateDedup[key] = raw
-            .split(' ')
-            .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '')
-            .where((w) => w.isNotEmpty)
-            .join(' ');
+      
+      // A. Standardize Casing immediately (Fixes "Madhya pradesh" vs "Madhya Pradesh")
+      raw = raw.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
+
+      // B. Create a "Fuzzy Key" (Strips everything but letters, merges Andra/Andhra)
+      String fuzzyKey = raw.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+      if (fuzzyKey.contains('andra')) fuzzyKey = 'andhrapradesh'; // Fixes "Andra" typo
+      if (fuzzyKey.contains('madhya')) fuzzyKey = 'madhyapradesh'; // Fixes "Madhyaperdesh" typo
+
+      // C. Preservation: Only store the first version found (which will be Title Cased)
+      if (!stateDedup.containsKey(fuzzyKey)) {
+        stateDedup[fuzzyKey] = raw;
       }
     }
     final List<String> availableStates = ['All', ...stateDedup.values.toList()..sort()];

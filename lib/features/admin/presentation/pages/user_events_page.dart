@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/marketing/presentation/widgets/funnel_chart_widget.dart';
 import 'package:kd_pannel/features/marketing/presentation/widgets/agri_heatmap_widget.dart';
+import 'package:kd_pannel/core/services/pincode_service.dart';
 import '../../../../core/auth/auth_service.dart';
 import '../bloc/dealers_state.dart';
 import '../bloc/leads_state.dart';
@@ -95,6 +96,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   @override
   void initState() {
     super.initState();
+    PincodeService().init();
     _scrollController.addListener(_onScroll);
     _loadEvents();
     _startRealTimePoll();
@@ -2441,6 +2443,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
     _rebuildCache();
   }
 
+  final Set<String> _resolvingPincodes = {};
+
+  void _asyncResolvePincode(String pincode) {
+    if (pincode.length != 6 || _resolvingPincodes.contains(pincode)) return;
+    _resolvingPincodes.add(pincode);
+    PincodeService().resolve(pincode).then((success) {
+      _resolvingPincodes.remove(pincode);
+      if (success && mounted) {
+        setState(() {}); // Rebuild map with new location intelligence
+      }
+    });
+  }
+
   List<DistrictDemandData> _calculateDynamicDistrictData() {
     final Map<String, _DistrictTempData> districtMap = {};
 
@@ -2456,8 +2471,27 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
-        final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
-        final district = (address['district'] ?? u['district'] ?? address['cityTehsil'] ?? u['cityTehsil'] ?? u['city'] ?? '').toString().trim();
+        
+        // --- Smart Location Extraction Logic via PIN Code ---
+        String district = '';
+        String state = '';
+
+        final rawPincode = (address['pincode'] ?? u['pincode'] ?? '').toString().trim();
+        if (rawPincode.length == 6) {
+          final loc = PincodeService().lookup(rawPincode);
+          if (loc != null) {
+            district = loc['district']!;
+            state = loc['state']!;
+          } else {
+            _asyncResolvePincode(rawPincode);
+          }
+        }
+
+        // Fallback to raw fields if PIN code didn't match our cache yet
+        if (district.isEmpty) {
+          district = (address['district'] ?? u['district'] ?? address['cityTehsil'] ?? u['city'] ?? '').toString().trim();
+          state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+        }
 
         if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
           final String rawUser = _normalizeId(u['_id']);
@@ -2502,8 +2536,25 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final payload = (log['payload'] is Map) ? log['payload'] as Map : {};
         final shipping = (payload['shippingAddress'] is Map) ? payload['shippingAddress'] as Map : {};
         
-        final district = (shipping['district'] ?? shipping['cityTehsil'] ?? log['district'] ?? log['city'] ?? '').toString().trim();
-        final state = (shipping['state'] ?? log['state'] ?? 'Maharashtra').toString().trim();
+        // Smart PIN check for event logs too
+        String district = '';
+        String state = '';
+        final eventPincode = (shipping['pincode'] ?? payload['pincode'] ?? log['pincode'] ?? '').toString().trim();
+        if (eventPincode.length == 6) {
+          final loc = PincodeService().lookup(eventPincode);
+          if (loc != null) {
+            district = loc['district']!;
+            state = loc['state']!;
+          } else {
+            _asyncResolvePincode(eventPincode);
+          }
+        }
+
+        if (district.isEmpty) {
+          district = (shipping['district'] ?? shipping['cityTehsil'] ?? log['district'] ?? log['city'] ?? '').toString().trim();
+          state = (shipping['state'] ?? log['state'] ?? 'Maharashtra').toString().trim();
+        }
+
         final amount = (payload['totalAmount'] ?? log['amount'] ?? log['price'] ?? 0) as num;
 
         if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
