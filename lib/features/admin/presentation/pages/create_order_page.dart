@@ -200,7 +200,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
 
-  String _paymentMethod = 'FullPayment';
+  String? _paymentMethod;
   double _advanceAmount = 0;
   late TextEditingController _paymentIdController;
 
@@ -2536,7 +2536,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               child: SizedBox(
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitOrder,
+                  onPressed: (_isSubmitting || _paymentMethod == null) ? null : _submitOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                     shape: RoundedRectangleBorder(

@@ -255,6 +255,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
               'categoryId': p['categoryId'],
               'subCategoryId': p['subCategoryId'],
               'description': p['description'] ?? '',
+              'dosage': p['dosage'] ?? {},
               'specifications': p['specifications'] ?? {},
               'tags': p['tags'] ?? [],
               'mediumImages': p['mediumImages'] ?? [],

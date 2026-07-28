@@ -38,6 +38,17 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _vendorController = TextEditingController();
+  final _dosagePerLiterController = TextEditingController();
+  final _dosagePerAcreController = TextEditingController();
+  final _dosageMethodController = TextEditingController();
+  String _dosagePerLiterUnit = 'gm';
+  String _dosagePerAcreUnit = 'gm';
+  final List<String> _dosageUnits = [
+    'gm',
+    'kg',
+    'lit',
+    'ml',
+  ];
   final _orderController = TextEditingController(text: '0');
   final Map<String, TextEditingController> _customOrdersControllers = {};
   late final quill.QuillController _descriptionController;
@@ -88,6 +99,121 @@ class _CreateProductPageState extends State<CreateProductPage> {
   bool _isLoadingDetails = false;
   bool _isTransitionComplete = false;
   late final Stopwatch _perfStopwatch;
+
+  static const Map<String, List<String>> _categoryToMethods = {
+    'Fertilizer': [
+      'Broadcasting',
+      'Basal Application',
+      'Top Dressing',
+      'Row Placement',
+      'Band Placement',
+      'Hill Placement',
+      'Side Dressing',
+      'Deep Placement',
+      'Plough Sole Placement',
+      'Localized Placement',
+      'Spot Application',
+      'Ring Application',
+      'Fertigation',
+      'Foliar Spray',
+      'Starter Solution',
+      'Soil Application',
+    ],
+    'Water Soluble Fertilizer (WSF)': [
+      'Fertigation',
+      'Foliar Spray',
+      'Soil Drenching',
+    ],
+    'WSF': ['Fertigation', 'Foliar Spray', 'Soil Drenching'],
+    'Bio Fertilizer': [
+      'Fertigation',
+      'Foliar Spray',
+      'Seed Treatment',
+      'Seedling Root Dip',
+      'Root Dip',
+      'Soil Application',
+    ],
+    'Micronutrient': [
+      'Fertigation',
+      'Foliar Spray',
+      'Seed Treatment',
+      'Soil Application',
+    ],
+    'PGR': [
+      'Fertigation',
+      'Foliar Spray',
+      'Soil Drenching',
+      'Root Drenching',
+      'Trunk Injection',
+    ],
+    'Insecticide': [
+      'Seed Treatment',
+      'Soil Application',
+      'Soil Drenching',
+      'Root Drenching',
+      'Granule Application',
+      'Bait Application',
+      'Spraying',
+      'Dusting',
+      'Fumigation',
+      'Trunk Injection',
+    ],
+    'Fungicide': [
+      'Seed Treatment',
+      'Soil Application',
+      'Soil Drenching',
+      'Root Drenching',
+      'Spraying',
+      'Nursery Treatment',
+      'Trunk Injection',
+      'Wound Dressing',
+    ],
+    'Herbicide': [
+      'Spot Application',
+      'Spraying',
+      'Pre-Plant Application',
+      'Pre-Plant Incorporated (PPI)',
+      'Pre-Emergence Spray',
+      'Early Post-Emergence Spray',
+      'Post-Emergence Spray',
+      'Directed Spray',
+      'Shielded Spray',
+      'Spot Spray',
+      'Wiper Application',
+    ],
+    'Biopesticide': [
+      'Seed Treatment',
+      'Soil Application',
+      'Soil Drenching',
+      'Root Drenching',
+      'Spraying',
+    ],
+    'Organic Fertilizer': ['Soil Application'],
+  };
+
+  void _updateDosageMethod() {
+    final methods = <String>{};
+    for (final cat in _formCategories) {
+      final key = _categoryToMethods.keys.firstWhere(
+        (k) => k.toLowerCase() == cat.toLowerCase(),
+        orElse: () => '',
+      );
+      if (key.isNotEmpty) {
+        methods.addAll(_categoryToMethods[key]!);
+      }
+    }
+
+    final options = methods.toList()..sort();
+    final currentMethod = _dosageMethodController.text;
+
+    if (currentMethod.isNotEmpty &&
+        currentMethod != 'Select Method' &&
+        options.isNotEmpty &&
+        !options.contains(currentMethod)) {
+      // If categories changed and the previous method is no longer valid, reset it
+      _dosageMethodController.text = 'Select Method';
+    }
+  }
 
   @override
   void initState() {
@@ -160,8 +286,47 @@ class _CreateProductPageState extends State<CreateProductPage> {
       debugPrint(
         '[PERF] CreateProductPage.initState - data is NOT null (Edit Mode). Elapsed: ${_perfStopwatch.elapsedMilliseconds}ms',
       );
-      _nameController.text = data['name'] ?? '';
+      _nameController.text = data['name'] ?? data['title'] ?? '';
       _vendorController.text = data['vendor'] ?? '';
+      if (data['dosage'] != null) {
+        final dosage = data['dosage'] as Map;
+        final perLiter = dosage['perLiterWater']?.toString() ?? '';
+        final perAcre = dosage['perAcre']?.toString() ?? '';
+
+        if (perLiter.isNotEmpty) {
+          final parts = perLiter.split(' ');
+          if (parts.length >= 2) {
+            final unit = parts.last.toLowerCase();
+            if (_dosageUnits.contains(unit)) {
+              _dosagePerLiterUnit = unit;
+              _dosagePerLiterController.text =
+                  parts.sublist(0, parts.length - 1).join(' ');
+            } else {
+              _dosagePerLiterController.text = perLiter;
+            }
+          } else {
+            _dosagePerLiterController.text = perLiter;
+          }
+        }
+
+        if (perAcre.isNotEmpty) {
+          final parts = perAcre.split(' ');
+          if (parts.length >= 2) {
+            final unit = parts.last.toLowerCase();
+            if (_dosageUnits.contains(unit)) {
+              _dosagePerAcreUnit = unit;
+              _dosagePerAcreController.text =
+                  parts.sublist(0, parts.length - 1).join(' ');
+            } else {
+              _dosagePerAcreController.text = perAcre;
+            }
+          } else {
+            _dosagePerAcreController.text = perAcre;
+          }
+        }
+
+        _dosageMethodController.text = dosage['method'] ?? '';
+      }
       _orderController.text = (data['order'] ?? 0).toString();
       final customOrdersMap = data['customOrders'] as Map? ?? {};
       customOrdersMap.forEach((key, val) {
@@ -445,11 +610,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
       setState(() {
         _formCategories = resolvedCategories;
         _formSubCategories = resolvedSubCategories;
+        _updateDosageMethod();
       });
     } else {
       setState(() {
         _formCategories = [];
         _formSubCategories = [];
+        _updateDosageMethod();
       });
     }
   }
@@ -486,6 +653,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
   void dispose() {
     _nameController.dispose();
     _vendorController.dispose();
+    _dosagePerLiterController.dispose();
+    _dosagePerAcreController.dispose();
+    _dosageMethodController.dispose();
     _orderController.dispose();
     _customOrdersControllers.values.forEach((ctrl) => ctrl.dispose());
     _htmlDescriptionController.dispose();
@@ -1566,6 +1736,17 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'categoryIds': categoryIds,
         'subCategoryIds': subCategoryIds,
         'description': description,
+        'dosage': {
+          'perLiterWater': _dosagePerLiterController.text.trim().isNotEmpty
+              ? '${_dosagePerLiterController.text.trim()} $_dosagePerLiterUnit'
+              : '',
+          'perAcre': _dosagePerAcreController.text.trim().isNotEmpty
+              ? '${_dosagePerAcreController.text.trim()} $_dosagePerAcreUnit'
+              : '',
+          'method': _dosageMethodController.text == 'Select Method'
+              ? ''
+              : _dosageMethodController.text.trim(),
+        },
         'variants': mappedVariants,
         'tags': _tags,
         'assignedCollections': _assignedCollections,
@@ -1957,6 +2138,104 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 ),
                               ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionCard(
+                    title: 'Dosage & Application Method',
+                    icon: Icons.medication_liquid_rounded,
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildFormTextField(
+                                label: 'Per Liter Water',
+                                hint: '0.3 – 0.5',
+                                controller: _dosagePerLiterController,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: _buildFormDropdown(
+                                label: 'Unit',
+                                value: _dosagePerLiterUnit,
+                                options: _dosageUnits,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _dosagePerLiterUnit = val);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildFormTextField(
+                                label: 'Per Acre',
+                                hint: '100 – 120',
+                                controller: _dosagePerAcreController,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: _buildFormDropdown(
+                                label: 'Unit',
+                                value: _dosagePerAcreUnit,
+                                options: _dosageUnits,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _dosagePerAcreUnit = val);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Builder(
+                          builder: (context) {
+                            final methods = <String>{};
+                            for (final cat in _formCategories) {
+                              final key = _categoryToMethods.keys.firstWhere(
+                                (k) => k.toLowerCase() == cat.toLowerCase(),
+                                orElse: () => '',
+                              );
+                              if (key.isNotEmpty) {
+                                methods.addAll(_categoryToMethods[key]!);
+                              }
+                            }
+
+                            final options = ['Select Method', ...methods.toList()..sort()];
+                            final currentMethod = _dosageMethodController.text;
+
+                            final selectedValue = (currentMethod.isNotEmpty &&
+                                    options.contains(currentMethod))
+                                ? currentMethod
+                                : 'Select Method';
+
+                            return _buildFormDropdown(
+                              label: 'Method',
+                              value: selectedValue,
+                              options: options,
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _dosageMethodController.text = val;
+                                  });
+                                }
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -2815,6 +3094,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                               (s) => s.toLowerCase() == sub.toLowerCase(),
                             ),
                           );
+                          _updateDosageMethod();
                         });
                       },
                       borderRadius: BorderRadius.circular(12),
@@ -2892,6 +3172,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                         setState(() {
                           if (!_formCategories.contains(val)) {
                             _formCategories.add(val);
+                            _updateDosageMethod();
                           }
                         });
                       },
@@ -3167,6 +3448,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                                 setState(() {
                                   if (!_formCategories.contains(name)) {
                                     _formCategories.add(name);
+                                    _updateDosageMethod();
                                   }
                                 });
                                 if (context.mounted) Navigator.pop(context);

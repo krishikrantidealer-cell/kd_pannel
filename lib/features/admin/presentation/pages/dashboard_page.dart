@@ -1113,8 +1113,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 }
 
                 final int fallbackNewLeads = dealersState.allRawUsers.where((u) {
-                  final isLead =
-                      u['role'] == 'user' && u['kycStatus'] != 'verified';
+                  final isLead = u['role'] == 'user';
                   if (!isLead) return false;
                   if (isTotal) return true;
                   final uDate = parsedUserDate(u);
@@ -1378,9 +1377,7 @@ class _DashboardPageState extends State<DashboardPage> {
           builder: (context, dealersState) {
             final orders = ordersState.orders;
             final leads = dealersState.allRawUsers
-                .where(
-                  (u) => u['role'] == 'user' && u['kycStatus'] != 'verified',
-                )
+                .where((u) => u['role'] == 'user')
                 .toList();
 
             final now = DateTime.now();
@@ -1406,7 +1403,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 final dayOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
-                  return localPlaced.year == d.year &&
+                  return o.orderStatus != 'Cancelled' &&
+                      localPlaced.year == d.year &&
                       localPlaced.month == d.month &&
                       localPlaced.day == d.day;
                 });
@@ -1462,7 +1460,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 final rangeOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
-                  return localPlaced.isAfter(start) &&
+                  return o.orderStatus != 'Cancelled' &&
+                      localPlaced.isAfter(start) &&
                       localPlaced.isBefore(end);
                 });
                 final double revenue = rangeOrders.fold(
@@ -1523,7 +1522,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 final rangeOrders = orders.where((o) {
                   final localPlaced = o.placedAt.toLocal();
-                  return localPlaced.isAfter(start) &&
+                  return o.orderStatus != 'Cancelled' &&
+                      localPlaced.isAfter(start) &&
                       localPlaced.isBefore(end);
                 });
                 final double revenue = rangeOrders.fold(

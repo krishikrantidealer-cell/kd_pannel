@@ -2452,99 +2452,41 @@ class _UserEventsPageState extends State<UserEventsPage> {
       );
     }
 
-    List<String> extractAllLocationNames(Map<String, dynamic> u) {
-      final address = (u['address'] is Map) ? u['address'] as Map : {};
-      final fields = [
-        address['district'],
-        u['district'],
-        address['cityTehsil'],
-        address['villageArea'],
-        address['addressLine2'],
-        address['address2'],
-        u['cityTehsil'],
-        u['city'],
-      ];
-      final Set<String> names = {};
-      for (final f in fields) {
-        if (f != null && f.toString().trim().isNotEmpty) {
-          final String val = f.toString().trim();
-          names.add(val);
-          for (final part in val.split(RegExp(r'[,/\s]+'))) {
-            if (part.trim().length >= 3) {
-              names.add(part.trim());
-            }
-          }
-        }
-      }
-      return names.toList();
-    }
-
     try {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
         final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
-        final locs = extractAllLocationNames(u);
+        final district = (address['district'] ?? u['district'] ?? address['cityTehsil'] ?? u['cityTehsil'] ?? u['city'] ?? '').toString().trim();
 
-        for (final district in locs) {
-          if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
-            final String rawUser = _normalizeId(u['_id']);
-            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-            if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+        if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
+          final String rawUser = _normalizeId(u['_id']);
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
 
-            if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-              rawUser: rawUser,
-              displayName: displayName,
-              displayPhone: displayPhone,
-              userDetails: u,
-            )) {
-              continue;
-            }
+          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
+            rawUser: rawUser,
+            displayName: displayName,
+            displayPhone: displayPhone,
+            userDetails: u,
+          )) {
+            continue;
+          }
 
-            final entry = getOrCreate(district, state);
-            entry.activeFarmers++;
+          final entry = getOrCreate(district, state);
+          entry.activeDealers++;
 
-            final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
-            entry.revenue += orderVal.toDouble();
-            if (orderVal > 0) {
-              entry.buyerUserIds.add(rawUser);
-            }
+          final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
+          entry.revenue += orderVal.toDouble();
+          if (orderVal > 0) {
+            entry.buyerUserIds.add(rawUser);
           }
         }
       }
     } catch (_) {}
 
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
-      for (final u in leadsState.allRawUsers) {
-        final address = (u['address'] is Map) ? u['address'] as Map : {};
-        final state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
-        final locs = extractAllLocationNames(u);
-
-        for (final district in locs) {
-          if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
-            final String rawUser = _normalizeId(u['_id']);
-            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-            if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
-
-            if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-              rawUser: rawUser,
-              displayName: displayName,
-              displayPhone: displayPhone,
-              userDetails: u,
-            )) {
-              continue;
-            }
-
-            final entry = getOrCreate(district, state);
-            entry.activeFarmers++;
-          }
-        }
-      }
-    } catch (_) {}
-
+    // 2. Process events logs to identify buying behavior and revenue
     _eventsLogs.forEach((catKey, logs) {
       for (final log in logs) {
         final userName = (log['user'] ?? log['userName'] ?? log['userEmail'] ?? log['userPhone'] ?? '').toString();
@@ -2559,7 +2501,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         final payload = (log['payload'] is Map) ? log['payload'] as Map : {};
         final shipping = (payload['shippingAddress'] is Map) ? payload['shippingAddress'] as Map : {};
-        final district = (shipping['cityTehsil'] ?? log['city'] ?? log['district'] ?? '').toString().trim();
+        
+        final district = (shipping['district'] ?? shipping['cityTehsil'] ?? log['district'] ?? log['city'] ?? '').toString().trim();
         final state = (shipping['state'] ?? log['state'] ?? 'Maharashtra').toString().trim();
         final amount = (payload['totalAmount'] ?? log['amount'] ?? log['price'] ?? 0) as num;
 
@@ -2594,10 +2537,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
     int catIdx = 0;
 
     return list.map((e) {
-      final double conversion = e.activeFarmers > 0
-          ? ((e.buyersCount / e.activeFarmers) * 100).clamp(0.0, 100.0)
+      final double conversion = e.activeDealers > 0
+          ? ((e.buyersCount / e.activeDealers) * 100).clamp(0.0, 100.0)
           : 0.0;
-      final double index = ((e.activeFarmers * 5) + (e.buyersCount * 15))
+      final double index = ((e.activeDealers * 5) + (e.buyersCount * 15))
           .clamp(10, 99)
           .toDouble();
       final assignedCategory = categories[(catIdx++) % categories.length];
@@ -2606,7 +2549,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         stateName: e.stateName,
         primaryCrop: 'General Products',
         category: 'General Products',
-        activeDealers: e.activeFarmers,
+        activeDealers: e.activeDealers,
         searchVolumeIndex: index,
         conversionRate: conversion,
         grossRevenueRupees: e.revenue,
@@ -5634,7 +5577,7 @@ class _EventLogCardState extends State<_EventLogCard> {
 class _DistrictTempData {
   final String districtName;
   final String stateName;
-  int activeFarmers = 0;
+  int activeDealers = 0;
   final Set<String> buyerUserIds = {};
   double revenue = 0.0;
 
