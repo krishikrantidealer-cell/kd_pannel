@@ -186,24 +186,53 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       );
     }
 
-    // 1. Available States — fully normalized dedup
+    // 1. Available States — Strict Canonical Normalization
     final Map<String, String> stateDedup = {}; 
+    
+    String getCanonicalState(String input) {
+      final s = input.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+      if (s.contains('andra') || s.contains('andhra')) return 'Andhra Pradesh';
+      if (s.contains('arunachal')) return 'Arunachal Pradesh';
+      if (s.contains('assam')) return 'Assam';
+      if (s.contains('bihar')) return 'Bihar';
+      if (s.contains('chhattisgarh') || s.contains('chattis')) return 'Chhattisgarh';
+      if (s.contains('goa')) return 'Goa';
+      if (s.contains('gujarat') || s.contains('gujrat')) return 'Gujarat';
+      if (s.contains('haryana')) return 'Haryana';
+      if (s.contains('himachal')) return 'Himachal Pradesh';
+      if (s.contains('jharkhand')) return 'Jharkhand';
+      if (s.contains('karnataka')) return 'Karnataka';
+      if (s.contains('kerala')) return 'Kerala';
+      if (s.contains('madhya') || s.contains('madhy')) return 'Madhya Pradesh';
+      if (s.contains('maharashtra') || s.contains('maha')) return 'Maharashtra';
+      if (s.contains('manipur')) return 'Manipur';
+      if (s.contains('meghalaya')) return 'Meghalaya';
+      if (s.contains('mizoram')) return 'Mizoram';
+      if (s.contains('nagaland')) return 'Nagaland';
+      if (s.contains('odisha') || s.contains('orissa')) return 'Odisha';
+      if (s.contains('punjab')) return 'Punjab';
+      if (s.contains('rajasthan') || s.contains('rajs')) return 'Rajasthan';
+      if (s.contains('sikkim')) return 'Sikkim';
+      if (s.contains('tamil')) return 'Tamil Nadu';
+      if (s.contains('telangana')) return 'Telangana';
+      if (s.contains('tripura')) return 'Tripura';
+      if (s.contains('uttarpradesh') || s == 'up') return 'Uttar Pradesh';
+      if (s.contains('uttarakhand') || s.contains('uttaranchal')) return 'Uttarakhand';
+      if (s.contains('bengal')) return 'West Bengal';
+      if (s.contains('jammu')) return 'Jammu and Kashmir';
+      if (s.contains('ladakh')) return 'Ladakh';
+      if (s.contains('delhi')) return 'Delhi';
+      // Default: Clean Casing
+      return input.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
+    }
+
     for (final d in widget.districts) {
-      String raw = d.stateName.trim();
+      final raw = d.stateName.trim();
       if (raw.isEmpty || raw.toLowerCase() == 'unknown') continue;
       
-      // A. Standardize Casing immediately (Fixes "Madhya pradesh" vs "Madhya Pradesh")
-      raw = raw.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
-
-      // B. Create a "Fuzzy Key" (Strips everything but letters, merges Andra/Andhra)
-      String fuzzyKey = raw.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-      if (fuzzyKey.contains('andra')) fuzzyKey = 'andhrapradesh'; // Fixes "Andra" typo
-      if (fuzzyKey.contains('madhya')) fuzzyKey = 'madhyapradesh'; // Fixes "Madhyaperdesh" typo
-
-      // C. Preservation: Only store the first version found (which will be Title Cased)
-      if (!stateDedup.containsKey(fuzzyKey)) {
-        stateDedup[fuzzyKey] = raw;
-      }
+      final cleanName = getCanonicalState(raw);
+      final key = cleanName.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+      stateDedup[key] = cleanName;
     }
     final List<String> availableStates = ['All', ...stateDedup.values.toList()..sort()];
     if (!availableStates.contains(_selectedState)) {
