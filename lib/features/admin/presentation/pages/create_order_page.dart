@@ -210,6 +210,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   double _discountAmount = 0;
   String? _freeProductName;
 
+  // Manual Discount
+  String _manualDiscountType = 'None'; // 'None', 'Fixed', 'Percentage'
+  final TextEditingController _manualDiscountCtrl = TextEditingController();
+
   // Step control (1 = product selection, 2 = shipping & review)
   int _step = 1;
 
@@ -243,6 +247,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     _phoneController.dispose();
     _paymentIdController.dispose();
     _searchCtrl.dispose();
+    _manualDiscountCtrl.dispose();
     super.dispose();
   }
 
@@ -301,7 +306,29 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final double total = _cart.fold(0, (sum, c) => sum + c.lineTotal);
-    final double finalTotal = (total - _discountAmount).clamp(0, double.infinity);
+    
+    // Calculate Sales Cart Discount for final payload
+    double salesCartDiscount = 0;
+    if (_appliedSalesCoupon != null) {
+      final type = _appliedSalesCoupon!['cartDiscountType'] ?? 'None';
+      final val = (_appliedSalesCoupon!['cartDiscountValue'] ?? 0) as num;
+      if (type == 'Fixed') {
+        salesCartDiscount = val.toDouble();
+      } else if (type == 'Percentage') {
+        salesCartDiscount = (total * val.toDouble()) / 100;
+      }
+    }
+
+    // Calculate Manual Discount
+    double manualDiscountValue = 0;
+    final manualVal = double.tryParse(_manualDiscountCtrl.text.trim()) ?? 0;
+    if (_manualDiscountType == 'Fixed') {
+      manualDiscountValue = manualVal;
+    } else if (_manualDiscountType == 'Percentage') {
+      manualDiscountValue = (total * manualVal) / 100;
+    }
+
+    final double finalTotal = (total - _discountAmount - salesCartDiscount - manualDiscountValue).clamp(0, double.infinity);
 
     // Track checkout started
     AnalyticsService().logEvent('checkout_started', properties: {
@@ -309,6 +336,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       'dealerName': widget.dealer.name,
       'itemCount': _cart.length,
       'totalAmount': finalTotal,
+      'manualDiscount': manualDiscountValue,
       'details': 'Checkout started for dealer ${widget.dealer.name}',
     });
 
@@ -345,9 +373,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         'paymentId': _paymentIdController.text.trim(),
         'advanceAmount': _paymentMethod == 'Partial' ? _advanceAmount : finalTotal,
         'totalAmount': finalTotal,
+        'discountAmount': (_discountAmount + salesCartDiscount + manualDiscountValue),
         if (_appliedCoupon != null) 'couponCode': _appliedCoupon!['code'],
         if (_appliedSalesCoupon != null) 'salesCouponCode': _appliedSalesCoupon!['code'],
-        if (_discountAmount > 0) 'discountAmount': _discountAmount,
         'orderStatus': 'Processing',
         'paymentStatus': _paymentMethod == 'FullPayment'
             ? 'Paid'
@@ -1243,6 +1271,14 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   const SizedBox(height: 12),
                   _buildCouponRow(),
                   const SizedBox(height: 24),
+                  _buildSectionHeader(
+                    Icons.shopping_cart_checkout_rounded,
+                    'Manual Order Discount',
+                    'One-time adjustment for this order',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildManualDiscountSection(),
+                  const SizedBox(height: 24),
                   _buildPriceBreakdown(),
                 ],
               ),
@@ -1653,10 +1689,166 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     );
   }
 
+  Widget _buildManualDiscountSection() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _buildManualTypeTab('None', 'None'),
+              const SizedBox(width: 8),
+              _buildManualTypeTab('Fixed', 'Fixed ₹'),
+              const SizedBox(width: 8),
+              _buildManualTypeTab('Percentage', 'Percentage %'),
+            ],
+          ),
+          if (_manualDiscountType != 'None') ...[
+            const SizedBox(height: 12),
+            Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _manualDiscountType == 'Percentage'
+                        ? Icons.percent_rounded
+                        : Icons.currency_rupee_rounded,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _manualDiscountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _manualDiscountType == 'Percentage'
+                            ? 'Enter discount % (max 100)'
+                            : 'Enter discount amount',
+                        hintStyle: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) {
+                        final val = double.tryParse(v);
+                        if (_manualDiscountType == 'Percentage') {
+                          if (val != null && val > 100) {
+                            _manualDiscountCtrl.text = '100';
+                            _manualDiscountCtrl.selection =
+                                TextSelection.fromPosition(
+                                  TextPosition(offset: 3),
+                                );
+                          }
+                        } else if (_manualDiscountType == 'Fixed') {
+                          final subtotal = _cartTotal;
+                          if (val != null && val > subtotal) {
+                            _manualDiscountCtrl.text = subtotal.toStringAsFixed(0);
+                            _manualDiscountCtrl.selection =
+                                TextSelection.fromPosition(
+                                  TextPosition(offset: _manualDiscountCtrl.text.length),
+                                );
+                          }
+                        }
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualTypeTab(String type, String label) {
+    final isSel = _manualDiscountType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _manualDiscountType = type;
+          if (type == 'None') _manualDiscountCtrl.clear();
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSel ? AppTheme.primaryColor.withValues(alpha: 0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSel ? AppTheme.primaryColor : AppTheme.borderColor, width: 1.5),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTheme.labelSM.copyWith(
+                color: isSel ? AppTheme.primaryColor : AppTheme.textSecondary,
+                fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPriceBreakdown() {
     final subtotal = _cartTotal;
-    final finalTotal = (subtotal - _discountAmount).clamp(0.0, double.infinity);
+    
+    // Calculate Sales Cart Discount
+    double salesCartDiscount = 0;
+    if (_appliedSalesCoupon != null) {
+      final type = _appliedSalesCoupon!['cartDiscountType'] ?? 'None';
+      final val = (_appliedSalesCoupon!['cartDiscountValue'] ?? 0) as num;
+      if (type == 'Fixed') {
+        salesCartDiscount = val.toDouble();
+      } else if (type == 'Percentage') {
+        salesCartDiscount = (subtotal * val.toDouble()) / 100;
+      }
+    }
+
+    // Calculate Manual Discount
+    double manualDiscountValue = 0;
+    final manualVal = double.tryParse(_manualDiscountCtrl.text.trim()) ?? 0;
+    if (_manualDiscountType == 'Fixed') {
+      manualDiscountValue = manualVal;
+    } else if (_manualDiscountType == 'Percentage') {
+      manualDiscountValue = (subtotal * manualVal) / 100;
+    }
+
+    final finalTotal = (subtotal - _discountAmount - salesCartDiscount - manualDiscountValue).clamp(0.0, double.infinity);
     final remaining = finalTotal - _advanceAmount;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1674,6 +1866,22 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               'Coupon (${_appliedCoupon!['code']})',
               '- ₹${_formatAmt(_discountAmount)}',
               color: AppTheme.success,
+            ),
+          ],
+          if (salesCartDiscount > 0) ...[
+            const SizedBox(height: 6),
+            _PriceRow(
+              'Sales Cart Discount',
+              '- ₹${_formatAmt(salesCartDiscount)}',
+              color: Colors.blue,
+            ),
+          ],
+          if (manualDiscountValue > 0) ...[
+            const SizedBox(height: 6),
+            _PriceRow(
+              'Manual Discount',
+              '- ₹${_formatAmt(manualDiscountValue)}',
+              color: Colors.orange,
             ),
           ],
           if (_freeProductName != null) ...[
@@ -2451,6 +2659,28 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                         color: AppTheme.textSecondary, fontSize: 13),
                   ),
                   const Divider(height: 20),
+                  if (validatedCoupon['cartDiscountType'] != 'None') ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.shopping_cart_checkout_rounded, size: 16, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Cart Discount: ${validatedCoupon['cartDiscountType'] == 'Percentage' ? '${validatedCoupon['cartDiscountValue']}% off' : '₹${validatedCoupon['cartDiscountValue']} off'}',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue.shade800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   ... (validatedCoupon['overrides'] as List).map((ov) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),

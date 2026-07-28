@@ -300,10 +300,6 @@ class _SalesCouponPageState extends State<SalesCouponPage> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Coupon Card
-// ---------------------------------------------------------------------------
-
 class _CouponCard extends StatelessWidget {
   final Map<String, dynamic> coupon;
   final VoidCallback onDelete;
@@ -336,6 +332,8 @@ class _CouponCard extends StatelessWidget {
     final List overrides = coupon['overrides'] ?? [];
     final code = coupon['code'] ?? '';
     final expiresAt = coupon['expiresAt'];
+    final cartDiscountType = coupon['cartDiscountType'] ?? 'None';
+    final cartDiscountValue = (coupon['cartDiscountValue'] ?? 0) as num;
 
     return Container(
       decoration: BoxDecoration(
@@ -430,6 +428,44 @@ class _CouponCard extends StatelessWidget {
                     ),
                   );
                 }),
+                if (cartDiscountType != 'None' && cartDiscountValue > 0) ...[
+                  if (overrides.isNotEmpty) const Divider(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.shopping_cart_checkout_rounded, size: 18, color: Colors.blue),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Extra Cart-Level Discount',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue.shade800),
+                              ),
+                              Text(
+                                cartDiscountType == 'Percentage'
+                                    ? 'Apply $cartDiscountValue% off on final total'
+                                    : 'Apply ₹${_fmt(cartDiscountValue)} off on final total',
+                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.blue.shade700),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          cartDiscountType == 'Percentage' ? '$cartDiscountValue%' : '₹${_fmt(cartDiscountValue)}',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.blue.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Divider(height: 24),
                 // Coupon code row + actions
                 Row(
@@ -595,6 +631,10 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
   Map<String, dynamic>? _selectedVariant;
   final TextEditingController _priceCtrl = TextEditingController();
   
+  // Cart Discount
+  String _cartDiscountType = 'None'; // 'None', 'Fixed', 'Percentage'
+  final TextEditingController _cartDiscountCtrl = TextEditingController();
+  
   // Final Collection
   final List<Map<String, dynamic>> _draftOverrides = [];
   DateTime? _expiresAt;
@@ -627,6 +667,7 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
   void dispose() {
     _searchCtrl.dispose();
     _priceCtrl.dispose();
+    _cartDiscountCtrl.dispose();
     super.dispose();
   }
 
@@ -680,8 +721,12 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
   }
 
   Future<void> _submit() async {
-    if (_draftOverrides.isEmpty) {
-      setState(() => _errorMsg = 'Add at least one product to the coupon');
+    final hasOverrides = _draftOverrides.isNotEmpty;
+    final cartVal = double.tryParse(_cartDiscountCtrl.text.trim()) ?? 0;
+    final hasCartDiscount = _cartDiscountType != 'None' && cartVal > 0;
+
+    if (!hasOverrides && !hasCartDiscount) {
+      setState(() => _errorMsg = 'Add at least one product override or a cart discount');
       return;
     }
 
@@ -693,6 +738,8 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
     try {
       final body = {
         'overrides': _draftOverrides,
+        'cartDiscountType': _cartDiscountType,
+        'cartDiscountValue': cartVal,
         if (_expiresAt != null) 'expiresAt': _expiresAt!.toIso8601String(),
       };
 
@@ -1056,28 +1103,49 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                       itemBuilder: (_, i) => _buildProductCard(_filtered[i]),
                     ),
         ),
-        if (_draftOverrides.isNotEmpty)
+        if (_products.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Colors.grey.shade200)),
             ),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => setState(() => _step = 2),
-                icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-                label: Text(
-                  'View Draft List (${_draftOverrides.length})',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
+            child: Row(
+              children: [
+                if (_draftOverrides.isEmpty && _cartDiscountType == 'None')
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => setState(() => _step = 2),
+                      icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 16),
+                      label: Text(
+                        'Set Cart-Level Discount',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => setState(() => _step = 2),
+                      icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                      label: Text(
+                        _draftOverrides.isEmpty 
+                            ? 'Cart Discount: $_cartDiscountType'
+                            : 'View Review List (${_draftOverrides.length})',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
       ],
@@ -1297,7 +1365,7 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
     return Column(
       children: [
         Expanded(
-          child: _draftOverrides.isEmpty
+          child: (_draftOverrides.isEmpty && _cartDiscountType == 'None')
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1427,6 +1495,8 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                 ),
         ),
         const Divider(height: 1),
+        _buildCartDiscountSection(),
+        const Divider(height: 1),
         Container(
           padding: const EdgeInsets.all(16),
           color: const Color(0xFFF9FAFB),
@@ -1507,7 +1577,7 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: (_isSubmitting || _draftOverrides.isEmpty) ? null : _submit,
+                      onPressed: (_isSubmitting || (_draftOverrides.isEmpty && _cartDiscountType == 'None')) ? null : _submit,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1524,6 +1594,147 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCartDiscountSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.shopping_cart_checkout_rounded, size: 18, color: AppTheme.textPrimary),
+              const SizedBox(width: 8),
+              Text(
+                'Add Final Cart Discount',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary),
+              ),
+              const Spacer(),
+              if (_cartDiscountType != 'None')
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _cartDiscountType = 'None';
+                    _cartDiscountCtrl.clear();
+                  }),
+                  child: Text(
+                    'Clear',
+                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildDiscountTypeTab('None', 'None'),
+              const SizedBox(width: 8),
+              _buildDiscountTypeTab('Fixed', 'Fixed ₹'),
+              const SizedBox(width: 8),
+              _buildDiscountTypeTab('Percentage', 'Percentage %'),
+            ],
+          ),
+          if (_cartDiscountType != 'None') ...[
+            const SizedBox(height: 12),
+            Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _cartDiscountType == 'Percentage'
+                        ? Icons.percent_rounded
+                        : Icons.currency_rupee_rounded,
+                    size: 16,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _cartDiscountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _cartDiscountType == 'Percentage'
+                            ? 'Enter discount % (max 100)'
+                            : 'Enter discount amount',
+                        hintStyle: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) {
+                        if (_cartDiscountType == 'Percentage') {
+                          final val = double.tryParse(v);
+                          if (val != null && val > 100) {
+                            _cartDiscountCtrl.text = '100';
+                            _cartDiscountCtrl.selection =
+                                TextSelection.fromPosition(
+                                  const TextPosition(offset: 3),
+                                );
+                          }
+                        }
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscountTypeTab(String type, String label) {
+    final isSel = _cartDiscountType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _cartDiscountType = type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSel ? AppTheme.primaryColor.withValues(alpha: 0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSel ? AppTheme.primaryColor : const Color(0xFFE5E7EB), width: 1.5),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                color: isSel ? AppTheme.primaryColor : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
