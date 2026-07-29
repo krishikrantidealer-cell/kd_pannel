@@ -452,8 +452,18 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       }
     }
 
-    final int totalDealers = filteredDistricts.fold(0, (sum, d) => sum + (d.activeBuyers > 0 ? d.activeBuyers : d.activeDealers));
-    final int totalRegisteredDealers = filteredDistricts.fold(0, (sum, d) => sum + (d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers));
+    final int totalDealers = filteredDistricts.fold(0, (sum, d) {
+      final reg = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
+      if (_selectedActivityFilter.startsWith('Untapped Only')) {
+        return sum + (reg - d.activeBuyers).clamp(0, 999999);
+      } else if (_selectedActivityFilter.startsWith('Active Only')) {
+        return sum + d.activeBuyers;
+      }
+      return sum + (d.activeBuyers > 0 ? d.activeBuyers : d.activeDealers);
+    });
+
+    final int totalRegisteredDealers = filteredDistricts.fold(
+        0, (sum, d) => sum + (d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers));
     final int totalOrders = filteredDistricts.fold(0, (sum, d) => sum + d.orderCount);
     final double avgConversionRate = filteredDistricts.isNotEmpty
         ? filteredDistricts.fold(0.0, (sum, d) => sum + d.conversionRate) / filteredDistricts.length
@@ -972,7 +982,11 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                     ),
                     const SizedBox(width: 18),
                     Text(
-                      'ACTIVE DEALERS: ',
+                      _selectedActivityFilter.startsWith('Untapped Only')
+                          ? 'UNTAPPED DEALERS: '
+                          : (_selectedActivityFilter.startsWith('Active Only')
+                              ? 'ACTIVE BUYERS: '
+                              : 'ACTIVE DEALERS: '),
                       style: GoogleFonts.outfit(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -1449,7 +1463,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                                                 crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    'DEALERS (ACTIVE / REG)',
+                                                    _selectedActivityFilter.startsWith('Untapped Only')
+                                                        ? 'UNTAPPED / REG'
+                                                        : 'DEALERS (ACTIVE / REG)',
                                                     style: GoogleFonts.outfit(
                                                       fontSize: 9,
                                                       fontWeight: FontWeight.w800,
@@ -1464,7 +1480,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                                                       const Icon(Icons.storefront_rounded, size: 13, color: Colors.blue),
                                                       const SizedBox(width: 3),
                                                       Text(
-                                                        '${district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers} / ${district.registeredDealers > 0 ? district.registeredDealers : (district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers)}',
+                                                        _selectedActivityFilter.startsWith('Untapped Only')
+                                                            ? '${(district.registeredDealers - district.activeBuyers).clamp(0, 9999)} / ${district.registeredDealers}'
+                                                            : '${district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers} / ${district.registeredDealers > 0 ? district.registeredDealers : (district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers)}',
                                                         style: GoogleFonts.outfit(
                                                           fontSize: 14,
                                                           fontWeight: FontWeight.w800,
