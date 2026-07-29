@@ -1667,7 +1667,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          itemVal == 'All' ? 'All ${label.toLowerCase()}s' : itemVal,
+                          itemVal == 'All'
+                              ? 'All ${label.toLowerCase().endsWith('y') ? label.toLowerCase().substring(0, label.length - 1) + 'ies' : label.toLowerCase() + 's'}'
+                              : itemVal,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
                             fontWeight: itemVal == 'All' ? FontWeight.w600 : FontWeight.w800,
