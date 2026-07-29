@@ -29,8 +29,10 @@ class UserEventsPage extends StatefulWidget {
 }
 
 class _UserEventsPageState extends State<UserEventsPage> {
-  int _activeAnalyticsTab = 0; // 0: Funnel & Overview, 1: Retention Cohorts, 2: District Heatmap, 3: Activity Stream
-  String _selectedAnalyticsTimeRange = 'Last 30 Days'; // 'Today', 'Last 7 Days', 'Last 30 Days', 'All Time'
+  int _activeAnalyticsTab =
+      0; // 0: Funnel & Overview, 1: Retention Cohorts, 2: District Heatmap, 3: Activity Stream
+  String _selectedAnalyticsTimeRange =
+      'All Time'; // 'Today', 'Last 7 Days', 'Last 30 Days', 'All Time'
   String? _selectedUser;
   String? _selectedEventType;
   String _searchQuery = '';
@@ -39,7 +41,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   String _selectedPriority = 'All'; // 'All', 'High Priority'
   String _selectedMetricFilter =
       'All'; // 'All', 'High Priority', 'Abandoned Carts', 'Failed Payments', 'Live Users'
-  String _selectedEventCategory = 'All'; // 'All' or specific category ID (e.g., 'add_to_cart')
+  String _selectedEventCategory =
+      'All'; // 'All' or specific category ID (e.g., 'add_to_cart')
 
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _userSearchController = TextEditingController();
@@ -73,7 +76,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   Map<String, bool> _cachedHighPriority = {};
   Map<String, String> _cachedPriorityReason = {};
   Map<String, DateTime> _cachedMostRecentEventTimes = {};
-  Map<String, Map<String, List<Map<String, dynamic>>>> _cachedUserEventsGrouped = {};
+  Map<String, Map<String, List<Map<String, dynamic>>>>
+  _cachedUserEventsGrouped = {};
   Map<String, String> _cachedUserTypes = {};
   final Set<String> _onlineUserKeys = {};
   final Set<String> _loadingUserEvents = {};
@@ -84,8 +88,22 @@ class _UserEventsPageState extends State<UserEventsPage> {
   DateTimeRange? _customAnalyticsDateRange;
 
   String _formatAnalyticsDateLabel() {
-    if (_selectedAnalyticsTimeRange == 'Custom Range' && _customAnalyticsDateRange != null) {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (_selectedAnalyticsTimeRange == 'Custom Range' &&
+        _customAnalyticsDateRange != null) {
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       final start = _customAnalyticsDateRange!.start;
       final end = _customAnalyticsDateRange!.end;
       return '${start.day} ${months[start.month - 1]} - ${end.day} ${months[end.month - 1]}';
@@ -126,10 +144,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   void _openWhatsAppChat(String phoneNumber, String recipientName) {
     showDialog(
       context: context,
-      builder: (context) => WhatsAppChatDialog(
-        phone: phoneNumber,
-        name: recipientName,
-      ),
+      builder: (context) =>
+          WhatsAppChatDialog(phone: phoneNumber, name: recipientName),
     );
   }
 
@@ -154,10 +170,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final dealersState = context.read<DealersBloc>().state;
     final leadsState = context.read<LeadsBloc>().state;
 
-    if (_lastDealersState == dealersState && _lastLeadsState == leadsState && _cachedAssignedUserKeys != null) {
+    if (_lastDealersState == dealersState &&
+        _lastLeadsState == leadsState &&
+        _cachedAssignedUserKeys != null) {
       return;
     }
-    
+
     _lastDealersState = dealersState;
     _lastLeadsState = leadsState;
 
@@ -173,15 +191,20 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final assignedAgent = u['assignedAgent'];
       final assignedAgentId = u['assignedAgentId']?.toString();
       if (assignedAgentId != null && assignedAgentId.isNotEmpty) {
-        return assignedAgentId == currentUserId || assignedAgentId == currentUserEmail;
+        return assignedAgentId == currentUserId ||
+            assignedAgentId == currentUserEmail;
       }
       if (assignedAgent != null) {
         if (assignedAgent is Map) {
-          final agentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
+          final agentId = _normalizeId(
+            assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent,
+          );
           final agentEmail = assignedAgent['email']?.toString();
-          return agentId == currentUserId || (agentEmail != null && agentEmail == currentUserEmail);
+          return agentId == currentUserId ||
+              (agentEmail != null && agentEmail == currentUserEmail);
         } else if (assignedAgent is String) {
-          return assignedAgent == currentUserId || assignedAgent == currentUserEmail;
+          return assignedAgent == currentUserId ||
+              assignedAgent == currentUserEmail;
         }
       }
       return true;
@@ -190,11 +213,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
     void indexUser(Map<String, dynamic> u, {String? defaultType}) {
       final uId = _normalizeId(u['_id']).toLowerCase();
       final uEmail = (u['email'] ?? '').toString().toLowerCase();
-      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
-      final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+          .toString()
+          .toLowerCase();
+      final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+          .trim()
+          .toLowerCase();
       final uShop = (u['shopName'] ?? '').toString().toLowerCase();
       final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-      final type = defaultType ?? ((kycStatus == 'verified') ? 'Dealer' : 'Lead');
+      final type =
+          defaultType ?? ((kycStatus == 'verified') ? 'Dealer' : 'Lead');
 
       if (uId.isNotEmpty) typeLookup[uId] ??= type;
       if (uEmail.isNotEmpty) typeLookup[uEmail] ??= type;
@@ -246,19 +274,24 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final assignedAgent = userDetails['assignedAgent'];
       final assignedAgentId = userDetails['assignedAgentId']?.toString();
       if (assignedAgentId != null && assignedAgentId.isNotEmpty) {
-        if (assignedAgentId == currentUserId || assignedAgentId == currentUserEmail) {
+        if (assignedAgentId == currentUserId ||
+            assignedAgentId == currentUserEmail) {
           return true;
         }
       }
       if (assignedAgent != null) {
         if (assignedAgent is Map) {
-          final agentId = _normalizeId(assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent);
+          final agentId = _normalizeId(
+            assignedAgent['_id'] ?? assignedAgent['\$oid'] ?? assignedAgent,
+          );
           final agentEmail = assignedAgent['email']?.toString();
-          if (agentId == currentUserId || (agentEmail != null && agentEmail == currentUserEmail)) {
+          if (agentId == currentUserId ||
+              (agentEmail != null && agentEmail == currentUserEmail)) {
             return true;
           }
         } else if (assignedAgent is String) {
-          if (assignedAgent == currentUserId || assignedAgent == currentUserEmail) {
+          if (assignedAgent == currentUserId ||
+              assignedAgent == currentUserEmail) {
             return true;
           }
         }
@@ -297,7 +330,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           _eventsLogs.isNotEmpty) {
         // We still might need to merge if _eventsLogs was cleared, but usually it's fine
       }
-      
+
       _lastOrdersCount = dealersState.allRawOrders.length;
       _lastDealersCount = dealersState.allRawUsers.length;
       _lastLeadsCount = leadsState.allRawUsers.length;
@@ -310,12 +343,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         final orderId = (order['orderId'] ?? order['_id'] ?? '').toString();
         if (orderId.isNotEmpty && _mergedOrderIds.contains(orderId)) continue;
-        
+
         final rawUser = _normalizeId(user['_id']);
-        String displayName = '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
-        if (displayName.isEmpty) displayName = (user['shopName'] ?? '').toString();
+        String displayName =
+            '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
+        if (displayName.isEmpty)
+          displayName = (user['shopName'] ?? '').toString();
         if (displayName.isEmpty) displayName = 'Dealer';
-        final displayPhone = (user['phoneNumber'] ?? user['phone'] ?? '').toString();
+        final displayPhone = (user['phoneNumber'] ?? user['phone'] ?? '')
+            .toString();
 
         if (!AuthService().isSales ||
             _isUserAssignedToCurrentSalesAgent(
@@ -327,7 +363,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           final eventType = order['orderStatus'] == 'Delivered'
               ? 'payment_success'
               : 'order_created';
-          
+
           final categoryList = _eventsLogs.putIfAbsent(eventType, () => []);
           if (orderId.isNotEmpty) _mergedOrderIds.add(orderId);
 
@@ -339,9 +375,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
             'userPhone': displayPhone,
             'rawUser': rawUser,
             'time': _formatTimestamp(order['createdAt']?.toString()),
-            'rawTimestamp': order['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+            'rawTimestamp':
+                order['createdAt']?.toString() ??
+                DateTime.now().toIso8601String(),
             'device': (order['paymentMethod'] ?? 'Web Application').toString(),
-            'details': 'Placed Order #$orderId - ₹$total (${order['orderStatus'] ?? 'Processing'})',
+            'details':
+                'Placed Order #$orderId - ₹$total (${order['orderStatus'] ?? 'Processing'})',
             'payload': Map<String, dynamic>.from(order),
           });
         }
@@ -350,7 +389,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       // 2. Process Assigned Dealers
       for (final u in dealersState.allRawUsers) {
         final rawUser = _normalizeId(u['_id']);
-        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim();
         if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
         if (displayName.isEmpty) displayName = 'Dealer';
         final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
@@ -375,9 +415,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
             'userPhone': displayPhone,
             'rawUser': rawUser,
             'time': _formatTimestamp(u['createdAt']?.toString()),
-            'rawTimestamp': u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+            'rawTimestamp':
+                u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
             'device': 'Mobile App',
-            'details': 'Verified Dealer - ${u['city'] ?? u['state'] ?? 'Active'} (${u['shopName'] ?? 'Agro Shop'})',
+            'details':
+                'Verified Dealer - ${u['city'] ?? u['state'] ?? 'Active'} (${u['shopName'] ?? 'Agro Shop'})',
             'payload': Map<String, dynamic>.from(u),
           });
         }
@@ -386,7 +428,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       // 3. Process Assigned Leads
       for (final u in leadsState.allRawUsers) {
         final rawUser = _normalizeId(u['_id']);
-        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
+        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim();
         if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
         if (displayName.isEmpty) displayName = 'Lead';
         final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
@@ -411,9 +454,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
             'userPhone': displayPhone,
             'rawUser': rawUser,
             'time': _formatTimestamp(u['createdAt']?.toString()),
-            'rawTimestamp': u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+            'rawTimestamp':
+                u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
             'device': (u['source'] ?? 'Direct Lead').toString(),
-            'details': 'Assigned Lead - Source: ${u['source'] ?? 'CTWA'} (${u['city'] ?? 'Active'})',
+            'details':
+                'Assigned Lead - Source: ${u['source'] ?? 'CTWA'} (${u['city'] ?? 'Active'})',
             'payload': Map<String, dynamic>.from(u),
           });
         }
@@ -424,7 +469,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   String? _getUserRole(String userIdentifier, String? currentRole) {
-    if (currentRole?.toLowerCase() == 'admin' || currentRole?.toLowerCase() == 'sales') return currentRole;
+    if (currentRole?.toLowerCase() == 'admin' ||
+        currentRole?.toLowerCase() == 'sales')
+      return currentRole;
 
     final idLower = userIdentifier.toLowerCase();
 
@@ -484,10 +531,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
     try {
       final dealersState = context.read<DealersBloc>().state;
       final matchingUser = dealersState.allRawUsers.firstWhere((u) {
-        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
         final shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final email = (u['email'] ?? '').toString().toLowerCase();
-        final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
+        final phone = (u['phoneNumber'] ?? u['phone'] ?? '')
+            .toString()
+            .toLowerCase();
         final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
@@ -495,17 +546,24 @@ class _UserEventsPageState extends State<UserEventsPage> {
             phone.contains(queryLower) ||
             uid.contains(queryLower);
       });
-      return matchingUser['email'] ?? matchingUser['phoneNumber'] ?? matchingUser['phone'] ?? searchQuery;
+      return matchingUser['email'] ??
+          matchingUser['phoneNumber'] ??
+          matchingUser['phone'] ??
+          searchQuery;
     } catch (_) {}
 
     // 2. Try to find in Leads
     try {
       final leadsState = context.read<LeadsBloc>().state;
       final matchingUser = leadsState.allRawUsers.firstWhere((u) {
-        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+        final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
         final shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final email = (u['email'] ?? '').toString().toLowerCase();
-        final phone = (u['phoneNumber'] ?? u['phone'] ?? '').toString().toLowerCase();
+        final phone = (u['phoneNumber'] ?? u['phone'] ?? '')
+            .toString()
+            .toLowerCase();
         final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
@@ -513,7 +571,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
             phone.contains(queryLower) ||
             uid.contains(queryLower);
       });
-      return matchingUser['email'] ?? matchingUser['phoneNumber'] ?? matchingUser['phone'] ?? searchQuery;
+      return matchingUser['email'] ??
+          matchingUser['phoneNumber'] ??
+          matchingUser['phone'] ??
+          searchQuery;
     } catch (_) {}
 
     return searchQuery;
@@ -539,16 +600,17 @@ class _UserEventsPageState extends State<UserEventsPage> {
       _buildUserLookupIndexes();
       _mergeSalesCustomerEventsIntoLogs();
 
-      final Map<String, Map<String, List<Map<String, dynamic>>>> userEventsGrouped = {};
+      final Map<String, Map<String, List<Map<String, dynamic>>>>
+      userEventsGrouped = {};
       final Set<String> usersSet = {};
-      
+
       // 1. Group events by user and category
       _eventsLogs.forEach((category, logs) {
         for (final log in logs) {
           final String? userName = log['user'] as String?;
           if (userName != null && userName.isNotEmpty) {
             usersSet.add(userName);
-            
+
             final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
             final categoryList = userMap.putIfAbsent(category, () => []);
             categoryList.add(log);
@@ -561,10 +623,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
           final String rawUser = _normalizeId(u['_id']);
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+              .trim();
+          if (displayName.isEmpty)
+            displayName = (u['shopName'] ?? '').toString();
           if (displayName.isEmpty) displayName = 'Dealer';
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+              .toString();
 
           if (!AuthService().isSales ||
               _isUserAssignedToCurrentSalesAgent(
@@ -583,10 +648,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final leadsState = context.read<LeadsBloc>().state;
         for (final u in leadsState.allRawUsers) {
           final String rawUser = _normalizeId(u['_id']);
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+              .trim();
+          if (displayName.isEmpty)
+            displayName = (u['shopName'] ?? '').toString();
           if (displayName.isEmpty) displayName = 'Lead';
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+              .toString();
 
           if (!AuthService().isSales ||
               _isUserAssignedToCurrentSalesAgent(
@@ -650,7 +718,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         bool isHigh = false;
         String reason = '';
-        final bool hasSuccess = userGroups.containsKey('payment_success') ||
+        final bool hasSuccess =
+            userGroups.containsKey('payment_success') ||
             userGroups.containsKey('order_placed') ||
             userGroups.containsKey('order_completed');
 
@@ -698,12 +767,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
         if (aOnline && !bOnline) return -1;
         if (!aOnline && bOnline) return 1;
 
-        final aTime = _cachedMostRecentEventTimes[a] ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bTime = _cachedMostRecentEventTimes[b] ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final aTime =
+            _cachedMostRecentEventTimes[a] ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime =
+            _cachedMostRecentEventTimes[b] ??
+            DateTime.fromMillisecondsSinceEpoch(0);
         if (aTime != bTime) {
           return bTime.compareTo(aTime);
         }
-        
+
         return a.compareTo(b);
       });
 
@@ -713,7 +786,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       if (mounted) setState(() {});
     }
   }
-
 
   String _calculateUserType(String userName) {
     final nameLower = userName.toLowerCase();
@@ -725,7 +797,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     // Check in fallback static dealers list
     final isStaticDealer = allDealers.any((d) {
-      return d.name.toLowerCase().contains(nameLower) || nameLower.contains(d.name.toLowerCase().split(' ').first);
+      return d.name.toLowerCase().contains(nameLower) ||
+          nameLower.contains(d.name.toLowerCase().split(' ').first);
     });
     if (isStaticDealer) return 'Dealer';
 
@@ -752,8 +825,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         );
 
         // Skip if it's the current admin or has admin/sales role
-        final isNameOrEmailAdmin = userIdStr.toLowerCase().contains('admin') ||
-            (enrichedUpdate['userName']?.toString().toLowerCase().contains('admin') ?? false);
+        final isNameOrEmailAdmin =
+            userIdStr.toLowerCase().contains('admin') ||
+            (enrichedUpdate['userName']?.toString().toLowerCase().contains(
+                  'admin',
+                ) ??
+                false);
         if (userIdStr == AuthService().currentUserEmail ||
             role?.toLowerCase() == 'admin' ||
             role?.toLowerCase() == 'sales' ||
@@ -764,7 +841,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
             !_isUserAssignedToCurrentSalesAgent(
               rawUser: userIdStr,
               displayName: enrichedUpdate['userName']?.toString(),
-              displayPhone: enrichedUpdate['phone']?.toString() ?? enrichedUpdate['phoneNumber']?.toString(),
+              displayPhone:
+                  enrichedUpdate['phone']?.toString() ??
+                  enrichedUpdate['phoneNumber']?.toString(),
               userDetails: enrichedUpdate,
             )) {
           return;
@@ -776,14 +855,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
         // Check if user already in list
         final index = _realTimeUsers.indexWhere((u) => u['user'] == userId);
         if (index != -1) {
-          _realTimeUsers[index] = {
-            ..._realTimeUsers[index],
-            ...enrichedUpdate,
-          };
+          _realTimeUsers[index] = {..._realTimeUsers[index], ...enrichedUpdate};
         } else {
           _realTimeUsers.insert(0, enrichedUpdate);
         }
-        
+
         _requestRebuildCache();
 
         // Trigger a background refresh of historical events
@@ -835,8 +911,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
             final role = _getUserRole(userIdStr, u['role']?.toString());
 
             // Skip if it's the current admin or has admin/sales role
-            final isNameOrEmailAdmin = userIdStr.toLowerCase().contains('admin') ||
-                (u['userName']?.toString().toLowerCase().contains('admin') ?? false);
+            final isNameOrEmailAdmin =
+                userIdStr.toLowerCase().contains('admin') ||
+                (u['userName']?.toString().toLowerCase().contains('admin') ??
+                    false);
             if (userIdStr == currentUserEmail ||
                 role?.toLowerCase() == 'admin' ||
                 role?.toLowerCase() == 'sales' ||
@@ -847,7 +925,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 !_isUserAssignedToCurrentSalesAgent(
                   rawUser: userIdStr,
                   displayName: u['userName']?.toString(),
-                  displayPhone: u['phone']?.toString() ?? u['phoneNumber']?.toString(),
+                  displayPhone:
+                      u['phone']?.toString() ?? u['phoneNumber']?.toString(),
                   userDetails: u,
                 )) {
               continue;
@@ -887,7 +966,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final Map<String, int> batchUserCounts = {};
 
     for (var event in flatEvents) {
-      final String? eventId = event['_id']?.toString() ?? event['eventId']?.toString();
+      final String? eventId =
+          event['_id']?.toString() ?? event['eventId']?.toString();
       if (eventId != null) {
         if (_processedEventIds.contains(eventId)) continue;
         _processedEventIds.add(eventId);
@@ -907,7 +987,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       String? displayPhone;
 
       final userDetails = event['userDetails'] as Map<String, dynamic>?;
-      if (userDetails != null && (targetUserName == null || targetUserName.isEmpty)) {
+      if (userDetails != null &&
+          (targetUserName == null || targetUserName.isEmpty)) {
         final firstName = userDetails['firstName'] ?? '';
         final lastName = userDetails['lastName'] ?? '';
         final shopName = userDetails['shopName'] ?? '';
@@ -928,7 +1009,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final currentRole =
           userDetails?['role']?.toString() ?? event['role']?.toString();
       final role = _getUserRole(rawUser, currentRole);
-      final isNameOrEmailAdmin = rawUser.toLowerCase().contains('admin') ||
+      final isNameOrEmailAdmin =
+          rawUser.toLowerCase().contains('admin') ||
           displayName.toLowerCase().contains('admin');
 
       if (rawUser == AuthService().currentUserEmail ||
@@ -988,7 +1070,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (!mounted || _isLoadingEvents) return;
     _isLoadingEvents = true;
     _isBackgroundLoading = isBackground;
-    
+
     final bool isSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
     final String activeMetricFilter = metricFilter ?? _selectedMetricFilter;
     final String activeFilter = activeMetricFilter != 'All'
@@ -1020,7 +1102,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
       final res = await AnalyticsService().fetchEventsPaged(
         limit: 300,
-        userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+        userEmail: backendQuery != null && backendQuery.isNotEmpty
+            ? backendQuery
+            : null,
         filter: activeFilter,
       );
 
@@ -1029,7 +1113,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
       if (flatEvents.isNotEmpty) {
         // If background refresh and not a search, merge with existing logs
         final bool shouldMerge = isBackground && !isSearch;
-        
+
         if (!shouldMerge) {
           _eventsLogs = {};
           _processedEventIds.clear();
@@ -1037,7 +1121,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
           _nextCursor = res['nextCursor'] as String?;
         }
 
-        final Map<String, List<Map<String, dynamic>>> currentGrouped = Map.from(_eventsLogs);
+        final Map<String, List<Map<String, dynamic>>> currentGrouped = Map.from(
+          _eventsLogs,
+        );
         final Map<String, String> currentNameToId = Map.from(_nameToId);
 
         _processEventsList(flatEvents, currentGrouped, currentNameToId);
@@ -1068,10 +1154,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     _rebuildCache();
 
-    if (metrics.isEmpty && (searchQuery == null || searchQuery.trim().isEmpty)) {
+    if (metrics.isEmpty &&
+        (searchQuery == null || searchQuery.trim().isEmpty)) {
       final users = _usersWithEvents;
       _globalHighPriorityCount = users.where((u) => _isHighPriority(u)).length;
-      _globalFailedPaymentsCount = users.where((u) => _getPriorityReason(u) == 'Payment Failed').length;
+      _globalFailedPaymentsCount = users
+          .where((u) => _getPriorityReason(u) == 'Payment Failed')
+          .length;
       _globalAbandonedCartsCount = users.where((u) {
         final reason = _getPriorityReason(u);
         return reason == 'Abandoned Cart' || reason == 'Abandoned Checkout';
@@ -1103,7 +1192,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   Future<void> _loadMoreEvents() async {
-    if (!mounted || _isLoadingEvents || _nextCursor == null || _isLoadingMore) return;
+    if (!mounted || _isLoadingEvents || _nextCursor == null || _isLoadingMore)
+      return;
     setState(() {
       _isLoadingMore = true;
     });
@@ -1114,14 +1204,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final res = await AnalyticsService().fetchEventsPaged(
         limit: 300,
         before: _nextCursor,
-        userEmail: backendQuery != null && backendQuery.isNotEmpty ? backendQuery : null,
+        userEmail: backendQuery != null && backendQuery.isNotEmpty
+            ? backendQuery
+            : null,
         filter: _selectedMetricFilter,
       );
       final flatEvents = res['events'] as List<Map<String, dynamic>>;
       _nextCursor = res['nextCursor'] as String?;
 
       if (flatEvents.isNotEmpty) {
-        final Map<String, List<Map<String, dynamic>>> grouped = Map.from(_eventsLogs);
+        final Map<String, List<Map<String, dynamic>>> grouped = Map.from(
+          _eventsLogs,
+        );
         final Map<String, String> nameToId = Map.from(_nameToId);
 
         _processEventsList(flatEvents, grouped, nameToId);
@@ -1171,9 +1265,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
     super.dispose();
   }
 
-  Future<void> _fetchEventsForUser(String userName, {bool silent = false}) async {
+  Future<void> _fetchEventsForUser(
+    String userName, {
+    bool silent = false,
+  }) async {
     if (_loadingUserEvents.contains(userName)) return;
-    
+
     if (!silent) {
       setState(() {
         _loadingUserEvents.add(userName);
@@ -1183,7 +1280,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
     }
 
     try {
-      final resolvedQuery = _resolveSearchQueryToEmailOrPhone(userName) ?? _nameToId[userName] ?? userName;
+      final resolvedQuery =
+          _resolveSearchQueryToEmailOrPhone(userName) ??
+          _nameToId[userName] ??
+          userName;
       if (resolvedQuery.isEmpty) return;
 
       Map<String, dynamic> res = await AnalyticsService().fetchEventsPaged(
@@ -1191,9 +1291,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         limit: 150,
         actorOnly: false,
       );
-      List<Map<String, dynamic>> flatEvents = res['events'] as List<Map<String, dynamic>>? ?? [];
+      List<Map<String, dynamic>> flatEvents =
+          res['events'] as List<Map<String, dynamic>>? ?? [];
 
-      if (flatEvents.isEmpty && _nameToId[userName] != null && _nameToId[userName] != resolvedQuery) {
+      if (flatEvents.isEmpty &&
+          _nameToId[userName] != null &&
+          _nameToId[userName] != resolvedQuery) {
         final fallbackRes = await AnalyticsService().fetchEventsPaged(
           userEmail: _nameToId[userName],
           limit: 150,
@@ -1204,10 +1307,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
       if (flatEvents.isNotEmpty) {
         _perUserEventsCache[userName] = flatEvents;
-        final Map<String, List<Map<String, dynamic>>> grouped = Map.from(_eventsLogs);
+        final Map<String, List<Map<String, dynamic>>> grouped = Map.from(
+          _eventsLogs,
+        );
         final Map<String, String> nameToId = Map.from(_nameToId);
 
-        _processEventsList(flatEvents, grouped, nameToId, isSingleUserSearch: true, targetUserName: userName);
+        _processEventsList(
+          flatEvents,
+          grouped,
+          nameToId,
+          isSingleUserSearch: true,
+          targetUserName: userName,
+        );
 
         _eventsLogs = grouped;
         _nameToId = nameToId;
@@ -1221,7 +1332,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
       }
     } catch (e) {
-      debugPrint('[UserEventsPage] Failed to fetch events for user $userName: $e');
+      debugPrint(
+        '[UserEventsPage] Failed to fetch events for user $userName: $e',
+      );
     } finally {
       _loadingUserEvents.remove(userName);
       if (mounted) {
@@ -1233,10 +1346,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
   Future<void> _prefetchAssignedUsersEvents() async {
     if (!mounted) return;
     final int prefetchLimit = AuthService().isSales ? 3 : 10;
-    final usersToPrefetch = _cachedUsersWithEvents.where((u) {
-      final events = _getUserEventsGrouped(u);
-      return events.isEmpty;
-    }).take(prefetchLimit).toList();
+    final usersToPrefetch = _cachedUsersWithEvents
+        .where((u) {
+          final events = _getUserEventsGrouped(u);
+          return events.isEmpty;
+        })
+        .take(prefetchLimit)
+        .toList();
 
     for (final userName in usersToPrefetch) {
       if (!mounted) break;
@@ -1362,7 +1478,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   DateTime _getMostRecentEventTime(String userName) {
-    return _cachedMostRecentEventTimes[userName] ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return _cachedMostRecentEventTimes[userName] ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   List<String> get _usersWithEvents => _cachedUsersWithEvents;
@@ -1414,13 +1531,25 @@ class _UserEventsPageState extends State<UserEventsPage> {
       users = users.where((u) {
         final grouped = _getUserEventsGrouped(u);
         if (catLower == 'add_to_cart' || catLower == 'cart_add') {
-          return grouped.containsKey('add_to_cart') || grouped.containsKey('cart_add') || grouped.containsKey('cart_view');
+          return grouped.containsKey('add_to_cart') ||
+              grouped.containsKey('cart_add') ||
+              grouped.containsKey('cart_view');
         } else if (catLower == 'checkout_started') {
-          return grouped.containsKey('checkout_started') || grouped.containsKey('checkout_init') || grouped.containsKey('apply_coupon') || grouped.containsKey('payment_initiated');
-        } else if (catLower == 'payment_success' || catLower == 'order_completed' || catLower == 'order_placed') {
-          return grouped.containsKey('payment_success') || grouped.containsKey('order_placed') || grouped.containsKey('order_completed');
+          return grouped.containsKey('checkout_started') ||
+              grouped.containsKey('checkout_init') ||
+              grouped.containsKey('apply_coupon') ||
+              grouped.containsKey('payment_initiated');
+        } else if (catLower == 'payment_success' ||
+            catLower == 'order_completed' ||
+            catLower == 'order_placed') {
+          return grouped.containsKey('payment_success') ||
+              grouped.containsKey('order_placed') ||
+              grouped.containsKey('order_completed');
         } else if (catLower == 'product_search' || catLower == 'product_view') {
-          return grouped.containsKey('product_search') || grouped.containsKey('product_view') || grouped.containsKey('category_view') || grouped.containsKey('login_success');
+          return grouped.containsKey('product_search') ||
+              grouped.containsKey('product_view') ||
+              grouped.containsKey('category_view') ||
+              grouped.containsKey('login_success');
         }
         return grouped.containsKey(_selectedEventCategory) &&
             (grouped[_selectedEventCategory]?.isNotEmpty ?? false);
@@ -1435,7 +1564,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final searchIdx = _cachedUserSearchIndex[u];
       if (searchIdx != null) {
         if (searchIdx.contains(query)) return true;
-        if (cleanQuery.isNotEmpty && searchIdx.contains(cleanQuery)) return true;
+        if (cleanQuery.isNotEmpty && searchIdx.contains(cleanQuery))
+          return true;
         return false;
       }
       return u.toLowerCase().contains(query);
@@ -1950,7 +2080,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
-          AuthService().isSales ? 'Customer Activity & Telemetry' : 'Live Telemetry & Events',
+          AuthService().isSales
+              ? 'Customer Activity & Telemetry'
+              : 'Live Telemetry & Events',
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
@@ -1999,27 +2131,34 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
                         if (_isFallbackMode) _buildFallbackBanner(),
-                        _buildSummaryCards(isDesktop),
-                        const SizedBox(height: 20),
+                        if (_activeAnalyticsTab == 0) ...[
+                          _buildSummaryCards(isDesktop),
+                          const SizedBox(height: 20),
+                        ],
                         _buildAnalyticsTabsBar(),
                         const SizedBox(height: 16),
                         _buildActiveAnalyticsView(),
-                        const SizedBox(height: 20),
-                        _buildRealTimeStats(),
-                        const SizedBox(height: 20),
-                        _buildUsersListHeader(isDesktop, filtered.length),
+                        if (_activeAnalyticsTab == 0) ...[
+                          const SizedBox(height: 20),
+                          _buildRealTimeStats(),
+                          const SizedBox(height: 20),
+                          _buildUsersListHeader(isDesktop, filtered.length),
+                        ],
                       ]),
                     ),
                   ),
-                  SliverPadding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isDesktop ? 28 : 16,
-                    ),
-                    sliver: filtered.isEmpty
-                        ? SliverToBoxAdapter(child: _buildEmptyUsersList())
-                        : SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
+                  if (_activeAnalyticsTab == 0)
+                    SliverPadding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isDesktop ? 28 : 16,
+                      ),
+                      sliver: filtered.isEmpty
+                          ? SliverToBoxAdapter(child: _buildEmptyUsersList())
+                          : SliverList(
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
                                 final userName = filtered[index];
                                 final isSelected = _selectedUser == userName;
                                 final grouped = _getUserEventsGrouped(userName);
@@ -2030,7 +2169,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                       (userId != null && u['user'] == userId);
                                 });
 
-                                final bool isHighPriority = _isHighPriority(userName);
+                                final bool isHighPriority = _isHighPriority(
+                                  userName,
+                                );
                                 final String priorityReason = isHighPriority
                                     ? _getPriorityReason(userName)
                                     : '';
@@ -2052,7 +2193,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                     isSelected: isSelected,
                                     selectedEventType: _selectedEventType,
                                     eventTypes: _eventTypes,
-                                    isLoadingEvents: _loadingUserEvents.contains(userName),
+                                    isLoadingEvents: _loadingUserEvents.contains(
+                                      userName,
+                                    ),
                                     onCategorySelected: (catId) {
                                       setState(() {
                                         _selectedUser = userName;
@@ -2066,10 +2209,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                           _selectedEventType = null;
                                         } else {
                                           _selectedUser = userName;
-                                          if (_selectedEventCategory != 'All' && grouped.containsKey(_selectedEventCategory)) {
-                                            _selectedEventType = _selectedEventCategory;
+                                          if (_selectedEventCategory != 'All' &&
+                                              grouped.containsKey(
+                                                _selectedEventCategory,
+                                              )) {
+                                            _selectedEventType =
+                                                _selectedEventCategory;
                                           } else if (grouped.isNotEmpty) {
-                                            _selectedEventType = grouped.keys.first;
+                                            _selectedEventType =
+                                                grouped.keys.first;
                                           } else {
                                             _selectedEventType = null;
                                           }
@@ -2077,15 +2225,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                         }
                                       });
                                     },
-                                    onViewProfile: (name) => _navigateToProfile(context, name),
+                                    onViewProfile: (name) =>
+                                        _navigateToProfile(context, name),
                                   ),
                                 );
-                              },
-                              childCount: filtered.length,
+                              }, childCount: filtered.length),
                             ),
-                          ),
-                  ),
-                  if (!AuthService().isSales && _nextCursor != null)
+                    ),
+                  if (_activeAnalyticsTab == 0 && !AuthService().isSales && _nextCursor != null)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 24),
@@ -2103,7 +2250,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                 )
                               : OutlinedButton.icon(
                                   onPressed: _loadMoreEvents,
-                                  icon: const Icon(Icons.arrow_downward_rounded, size: 14),
+                                  icon: const Icon(
+                                    Icons.arrow_downward_rounded,
+                                    size: 14,
+                                  ),
                                   label: Text(
                                     'Load More Events',
                                     style: GoogleFonts.outfit(
@@ -2113,7 +2263,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppTheme.primaryColor,
-                                    side: const BorderSide(color: AppTheme.primaryColor),
+                                    side: const BorderSide(
+                                      color: AppTheme.primaryColor,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                       vertical: 8,
@@ -2134,7 +2286,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final bool isSales = AuthService().isSales;
     final tabs = isSales
         ? [
-            {'icon': Icons.stream_rounded, 'title': 'Live Customer Telemetry Feed'},
+            {
+              'icon': Icons.stream_rounded,
+              'title': 'Live Customer Telemetry Feed',
+            },
           ]
         : [
             {'icon': Icons.stream_rounded, 'title': 'Live Telemetry Feed'},
@@ -2162,12 +2317,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     borderRadius: BorderRadius.circular(20),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppTheme.primaryColor : AppTheme.cardColor,
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : AppTheme.cardColor,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor,
+                          color: isSelected
+                              ? AppTheme.primaryColor
+                              : AppTheme.borderColor,
                         ),
                         boxShadow: isSelected ? AppTheme.cardShadow : null,
                       ),
@@ -2176,15 +2338,21 @@ class _UserEventsPageState extends State<UserEventsPage> {
                           Icon(
                             tab['icon'] as IconData,
                             size: 16,
-                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                            color: isSelected
+                                ? Colors.white
+                                : AppTheme.textSecondary,
                           ),
                           const SizedBox(width: 8),
                           Text(
                             tab['title'] as String,
                             style: GoogleFonts.outfit(
                               fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              color: isSelected ? Colors.white : AppTheme.textPrimary,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppTheme.textPrimary,
                             ),
                           ),
                         ],
@@ -2208,7 +2376,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedAnalyticsTimeRange,
-                icon: const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.textPrimary),
+                icon: const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  color: AppTheme.textPrimary,
+                ),
                 style: GoogleFonts.outfit(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -2221,10 +2392,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
                       context: context,
                       firstDate: DateTime(2024, 1, 1),
                       lastDate: DateTime.now().add(const Duration(days: 1)),
-                      initialDateRange: _customAnalyticsDateRange ?? DateTimeRange(
-                        start: DateTime.now().subtract(const Duration(days: 7)),
-                        end: DateTime.now(),
-                      ),
+                      initialDateRange:
+                          _customAnalyticsDateRange ??
+                          DateTimeRange(
+                            start: DateTime.now().subtract(
+                              const Duration(days: 7),
+                            ),
+                            end: DateTime.now(),
+                          ),
                       builder: (context, child) {
                         return Theme(
                           data: ThemeData.light().copyWith(
@@ -2247,34 +2422,55 @@ class _UserEventsPageState extends State<UserEventsPage> {
                           days: 'Custom Range',
                           customRange: picked,
                         );
-                        _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(
-                          days: 'Custom Range',
-                          customRange: picked,
-                        );
+                        _districtDataFuture = AnalyticsService()
+                            .fetchDistrictAnalytics(
+                              days: 'Custom Range',
+                              customRange: picked,
+                            );
                       });
                     }
                   } else {
                     setState(() {
                       _selectedAnalyticsTimeRange = val;
                       _customAnalyticsDateRange = null;
-                      _funnelDataFuture = AnalyticsService().fetchFunnelData(days: val);
-                      _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(days: val);
+                      _funnelDataFuture = AnalyticsService().fetchFunnelData(
+                        days: val,
+                      );
+                      _districtDataFuture = AnalyticsService()
+                          .fetchDistrictAnalytics(days: val);
                     });
                   }
                 },
                 items: [
                   const DropdownMenuItem(value: 'Today', child: Text('Today')),
-                  const DropdownMenuItem(value: 'Last 7 Days', child: Text('Last 7 Days')),
-                  const DropdownMenuItem(value: 'Last 30 Days', child: Text('Last 30 Days')),
-                  const DropdownMenuItem(value: 'All Time', child: Text('All Time')),
+                  const DropdownMenuItem(
+                    value: 'Last 7 Days',
+                    child: Text('Last 7 Days'),
+                  ),
+                  const DropdownMenuItem(
+                    value: 'Last 30 Days',
+                    child: Text('Last 30 Days'),
+                  ),
+                  const DropdownMenuItem(
+                    value: 'All Time',
+                    child: Text('All Time'),
+                  ),
                   DropdownMenuItem(
                     value: 'Custom Range',
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.date_range_rounded, size: 14, color: AppTheme.primaryColor),
+                        const Icon(
+                          Icons.date_range_rounded,
+                          size: 14,
+                          color: AppTheme.primaryColor,
+                        ),
                         const SizedBox(width: 6),
-                        Text(_selectedAnalyticsTimeRange == 'Custom Range' ? _formatAnalyticsDateLabel() : 'Custom Range...'),
+                        Text(
+                          _selectedAnalyticsTimeRange == 'Custom Range'
+                              ? _formatAnalyticsDateLabel()
+                              : 'Custom Range...',
+                        ),
                       ],
                     ),
                   ),
@@ -2309,7 +2505,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       cutoff = now.subtract(const Duration(days: 7));
     } else if (_selectedAnalyticsTimeRange == 'Last 30 Days') {
       cutoff = now.subtract(const Duration(days: 30));
-    } else if (_selectedAnalyticsTimeRange == 'Custom Range' && _customAnalyticsDateRange != null) {
+    } else if (_selectedAnalyticsTimeRange == 'Custom Range' &&
+        _customAnalyticsDateRange != null) {
       cutoff = _customAnalyticsDateRange!.start;
       endCutoff = _customAnalyticsDateRange!.end.add(const Duration(days: 1));
     }
@@ -2326,21 +2523,34 @@ class _UserEventsPageState extends State<UserEventsPage> {
             } else if (tsRaw is String) {
               dt = DateTime.tryParse(tsRaw);
             }
-            if (dt != null && (dt.isBefore(cutoff) || (endCutoff != null && dt.isAfter(endCutoff)))) {
+            if (dt != null &&
+                (dt.isBefore(cutoff) ||
+                    (endCutoff != null && dt.isAfter(endCutoff)))) {
               continue;
             }
           }
         }
 
-        final userName = (log['user'] ?? log['userName'] ?? log['userEmail'] ?? log['userPhone'] ?? '').toString();
-        final rawType = (log['eventType'] ?? log['event'] ?? '').toString().toLowerCase();
+        final userName =
+            (log['user'] ??
+                    log['userName'] ??
+                    log['userEmail'] ??
+                    log['userPhone'] ??
+                    '')
+                .toString();
+        final rawType = (log['eventType'] ?? log['event'] ?? '')
+            .toString()
+            .toLowerCase();
 
-        if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-          rawUser: userName,
-          displayName: userName,
-          displayPhone: log['userPhone']?.toString(),
-          userDetails: log['payload'] is Map<String, dynamic> ? log['payload'] as Map<String, dynamic> : null,
-        )) {
+        if (AuthService().isSales &&
+            !_isUserAssignedToCurrentSalesAgent(
+              rawUser: userName,
+              displayName: userName,
+              displayPhone: log['userPhone']?.toString(),
+              userDetails: log['payload'] is Map<String, dynamic>
+                  ? log['payload'] as Map<String, dynamic>
+                  : null,
+            )) {
           continue;
         }
 
@@ -2348,15 +2558,26 @@ class _UserEventsPageState extends State<UserEventsPage> {
         if (userName.isNotEmpty) viewUsers.add(userName);
         viewEvents++;
 
-        if (key.contains('cart') || key == 'add_to_cart' || rawType.contains('cart')) {
+        if (key.contains('cart') ||
+            key == 'add_to_cart' ||
+            rawType.contains('cart')) {
           if (userName.isNotEmpty) cartUsers.add(userName);
           cartEvents++;
         }
-        if (key.contains('checkout') || key.contains('coupon') || key == 'checkout_started' || rawType.contains('checkout')) {
+        if (key.contains('checkout') ||
+            key.contains('coupon') ||
+            key == 'checkout_started' ||
+            rawType.contains('checkout')) {
           if (userName.isNotEmpty) checkoutUsers.add(userName);
           checkoutEvents++;
         }
-        if (key.contains('payment') || key.contains('order') || key == 'payment_success' || key == 'order_placed' || key == 'order_created' || rawType.contains('order') || rawType.contains('payment')) {
+        if (key.contains('payment') ||
+            key.contains('order') ||
+            key == 'payment_success' ||
+            key == 'order_placed' ||
+            key == 'order_created' ||
+            rawType.contains('order') ||
+            rawType.contains('payment')) {
           if (userName.isNotEmpty) orderUsers.add(userName);
           orderEvents++;
         }
@@ -2375,16 +2596,26 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final int step4Users = orderUsers.length;
     final int step4Events = orderEvents;
 
-    final int maxDownstreamUsers = [step2Users, step3Users, step4Users].fold(0, (max, v) => v > max ? v : max);
+    final int maxDownstreamUsers = [
+      step2Users,
+      step3Users,
+      step4Users,
+    ].fold(0, (max, v) => v > max ? v : max);
     if (step1Users < maxDownstreamUsers) {
       step1Users = maxDownstreamUsers;
       if (step1Events < maxDownstreamUsers) step1Events = maxDownstreamUsers;
     }
 
     final double rate1 = step1Users > 0 ? 100.0 : 0.0;
-    final double rate2 = step1Users > 0 ? ((step2Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
-    final double rate3 = step1Users > 0 ? ((step3Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
-    final double rate4 = step1Users > 0 ? ((step4Users / step1Users) * 100).clamp(0.0, 100.0) : 0.0;
+    final double rate2 = step1Users > 0
+        ? ((step2Users / step1Users) * 100).clamp(0.0, 100.0)
+        : 0.0;
+    final double rate3 = step1Users > 0
+        ? ((step3Users / step1Users) * 100).clamp(0.0, 100.0)
+        : 0.0;
+    final double rate4 = step1Users > 0
+        ? ((step4Users / step1Users) * 100).clamp(0.0, 100.0)
+        : 0.0;
 
     return [
       FunnelStepData(
@@ -2471,12 +2702,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
-        
+
         // --- Smart Location Extraction Logic via PIN Code ---
         String district = '';
         String state = '';
 
-        final rawPincode = (address['pincode'] ?? u['pincode'] ?? '').toString().trim();
+        final rawPincode = (address['pincode'] ?? u['pincode'] ?? '')
+            .toString()
+            .trim();
         if (rawPincode.length == 6) {
           final loc = PincodeService().lookup(rawPincode);
           if (loc != null) {
@@ -2489,29 +2722,44 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         // Fallback to raw fields if PIN code didn't match our cache yet
         if (district.isEmpty) {
-          district = (address['district'] ?? u['district'] ?? address['cityTehsil'] ?? u['city'] ?? '').toString().trim();
-          state = (address['state'] ?? u['state'] ?? 'Maharashtra').toString().trim();
+          district =
+              (address['district'] ??
+                      u['district'] ??
+                      address['cityTehsil'] ??
+                      u['city'] ??
+                      '')
+                  .toString()
+                  .trim();
+          state = (address['state'] ?? u['state'] ?? 'Maharashtra')
+              .toString()
+              .trim();
         }
 
         if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
           final String rawUser = _normalizeId(u['_id']);
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
-          if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+              .trim();
+          if (displayName.isEmpty)
+            displayName = (u['shopName'] ?? '').toString();
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+              .toString();
 
-          if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
+          if (AuthService().isSales &&
+              !_isUserAssignedToCurrentSalesAgent(
+                rawUser: rawUser,
+                displayName: displayName,
+                displayPhone: displayPhone,
+                userDetails: u,
+              )) {
             continue;
           }
 
           final entry = getOrCreate(district, state);
           entry.activeDealers++;
 
-          final orderVal = (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0) as num;
+          final orderVal =
+              (u['totalOrderValue'] ?? u['revenue'] ?? u['grossRevenue'] ?? 0)
+                  as num;
           entry.revenue += orderVal.toDouble();
           if (orderVal > 0) {
             entry.buyerUserIds.add(rawUser);
@@ -2523,23 +2771,37 @@ class _UserEventsPageState extends State<UserEventsPage> {
     // 2. Process events logs to identify buying behavior and revenue
     _eventsLogs.forEach((catKey, logs) {
       for (final log in logs) {
-        final userName = (log['user'] ?? log['userName'] ?? log['userEmail'] ?? log['userPhone'] ?? '').toString();
-        if (AuthService().isSales && !_isUserAssignedToCurrentSalesAgent(
-          rawUser: userName,
-          displayName: userName,
-          displayPhone: log['userPhone']?.toString(),
-          userDetails: log['payload'] is Map<String, dynamic> ? log['payload'] as Map<String, dynamic> : null,
-        )) {
+        final userName =
+            (log['user'] ??
+                    log['userName'] ??
+                    log['userEmail'] ??
+                    log['userPhone'] ??
+                    '')
+                .toString();
+        if (AuthService().isSales &&
+            !_isUserAssignedToCurrentSalesAgent(
+              rawUser: userName,
+              displayName: userName,
+              displayPhone: log['userPhone']?.toString(),
+              userDetails: log['payload'] is Map<String, dynamic>
+                  ? log['payload'] as Map<String, dynamic>
+                  : null,
+            )) {
           continue;
         }
 
         final payload = (log['payload'] is Map) ? log['payload'] as Map : {};
-        final shipping = (payload['shippingAddress'] is Map) ? payload['shippingAddress'] as Map : {};
-        
+        final shipping = (payload['shippingAddress'] is Map)
+            ? payload['shippingAddress'] as Map
+            : {};
+
         // Smart PIN check for event logs too
         String district = '';
         String state = '';
-        final eventPincode = (shipping['pincode'] ?? payload['pincode'] ?? log['pincode'] ?? '').toString().trim();
+        final eventPincode =
+            (shipping['pincode'] ?? payload['pincode'] ?? log['pincode'] ?? '')
+                .toString()
+                .trim();
         if (eventPincode.length == 6) {
           final loc = PincodeService().lookup(eventPincode);
           if (loc != null) {
@@ -2551,11 +2813,22 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
 
         if (district.isEmpty) {
-          district = (shipping['district'] ?? shipping['cityTehsil'] ?? log['district'] ?? log['city'] ?? '').toString().trim();
-          state = (shipping['state'] ?? log['state'] ?? 'Maharashtra').toString().trim();
+          district =
+              (shipping['district'] ??
+                      shipping['cityTehsil'] ??
+                      log['district'] ??
+                      log['city'] ??
+                      '')
+                  .toString()
+                  .trim();
+          state = (shipping['state'] ?? log['state'] ?? 'Maharashtra')
+              .toString()
+              .trim();
         }
 
-        final amount = (payload['totalAmount'] ?? log['amount'] ?? log['price'] ?? 0) as num;
+        final amount =
+            (payload['totalAmount'] ?? log['amount'] ?? log['price'] ?? 0)
+                as num;
 
         if (district.isNotEmpty && district.toLowerCase() != 'unknown') {
           final entry = getOrCreate(district, state);
@@ -2600,7 +2873,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
         stateName: e.stateName,
         primaryCrop: 'General Products',
         category: 'General Products',
-        activeDealers: e.activeDealers,
+        registeredDealers: e.activeDealers,
+        activeBuyers: e.buyersCount,
+        activeDealers: e.buyersCount > 0 ? e.buyersCount : e.activeDealers,
         searchVolumeIndex: index,
         conversionRate: conversion,
         grossRevenueRupees: e.revenue,
@@ -2700,7 +2975,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
         return FutureBuilder<List<Map<String, dynamic>>>(
           future: _funnelDataFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
               return const FunnelChartWidget(steps: [], isLoading: true);
             }
             final data = snapshot.data ?? [];
@@ -2718,7 +2994,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 final cRate = item['conversionRate'];
 
                 return FunnelStepData(
-                  stepName: (item['stepName'] ?? item['step'] ?? 'Step ${i + 1}').toString(),
+                  stepName:
+                      (item['stepName'] ?? item['step'] ?? 'Step ${i + 1}')
+                          .toString(),
                   userCount: (uCount is num) ? uCount.toInt() : 0,
                   eventCount: (eCount is num) ? eCount.toInt() : 0,
                   conversionRate: (cRate is num) ? cRate.toDouble() : 0.0,
@@ -2748,14 +3026,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         return FutureBuilder<List<Map<String, dynamic>>>(
           future: _districtDataFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
               return const AgriHeatmapWidget(districts: [], isLoading: true);
             }
             final rawData = snapshot.data ?? [];
-            final data = rawData.where((item) {
-              final rev = item['grossRevenueRupees'];
-              return (rev is num) && rev > 0;
-            }).toList();
+            final data = rawData;
             List<DistrictDemandData> districts = [];
             if (data.isNotEmpty) {
               districts = data.map((item) {
@@ -2763,27 +3039,34 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 final sIndex = item['searchVolumeIndex'];
                 final cRate = item['conversionRate'];
                 final rev = item['grossRevenueRupees'];
-                final category = (item['category'] ?? 'General Products').toString();
+                final category = (item['category'] ?? 'General Products')
+                    .toString();
                 final subCategory = (item['subCategory'] ?? '').toString();
 
                 Map<String, double>? catBreakdown;
                 if (item['categoryBreakdown'] is Map) {
                   catBreakdown = Map<String, double>.from(
-                    (item['categoryBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                    (item['categoryBreakdown'] as Map).map(
+                      (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+                    ),
                   );
                 }
 
                 Map<String, double>? subCatBreakdown;
                 if (item['subCategoryBreakdown'] is Map) {
                   subCatBreakdown = Map<String, double>.from(
-                    (item['subCategoryBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                    (item['subCategoryBreakdown'] as Map).map(
+                      (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+                    ),
                   );
                 }
 
                 Map<String, double>? prodBreakdown;
                 if (item['productBreakdown'] is Map) {
                   prodBreakdown = Map<String, double>.from(
-                    (item['productBreakdown'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+                    (item['productBreakdown'] as Map).map(
+                      (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+                    ),
                   );
                 }
 
@@ -2793,15 +3076,28 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   primaryCrop: (item['primaryCrop'] ?? category).toString(),
                   category: category,
                   subCategory: subCategory,
-                  registeredDealers: (item['registeredDealers'] is num) ? (item['registeredDealers'] as num).toInt() : (dealers is num ? dealers.toInt() : 0),
-                  activeBuyers: (item['activeBuyers'] is num) ? (item['activeBuyers'] as num).toInt() : 0,
-                  activeDealers: (item['registeredDealers'] is num) ? (item['registeredDealers'] as num).toInt() : (dealers is num ? dealers.toInt() : 0),
+                  registeredDealers: (item['registeredDealers'] is num)
+                      ? (item['registeredDealers'] as num).toInt()
+                      : (dealers is num ? dealers.toInt() : 0),
+                  activeBuyers: (item['activeBuyers'] is num)
+                      ? (item['activeBuyers'] as num).toInt()
+                      : 0,
+                  activeDealers:
+                      (item['activeBuyers'] is num &&
+                          (item['activeBuyers'] as num) > 0)
+                      ? (item['activeBuyers'] as num).toInt()
+                      : ((item['activeDealers'] is num)
+                            ? (item['activeDealers'] as num).toInt()
+                            : 0),
                   searchVolumeIndex: (sIndex is num) ? sIndex.toDouble() : 50.0,
                   conversionRate: (cRate is num) ? cRate.toDouble() : 0.0,
                   grossRevenueRupees: (rev is num) ? rev.toDouble() : 0.0,
-                  orderCount: (item['orderCount'] is num) ? (item['orderCount'] as num).toInt() : 0,
+                  orderCount: (item['orderCount'] is num)
+                      ? (item['orderCount'] as num).toInt()
+                      : 0,
                   categoryBreakdown: catBreakdown,
                   subCategoryBreakdown: subCatBreakdown,
+
                   productBreakdown: prodBreakdown,
                 );
               }).toList();
@@ -2820,7 +3116,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.borderRadiusXLarge)),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppTheme.borderRadiusXLarge),
+        ),
         boxShadow: AppTheme.cardShadow,
         border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
       ),
@@ -2893,9 +3191,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
                       _userSearchQuery = val.trim();
                     });
                     _searchDebounce?.cancel();
-                    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-                      _loadEvents(silent: true, searchQuery: val.trim());
-                    });
+                    _searchDebounce = Timer(
+                      const Duration(milliseconds: 300),
+                      () {
+                        _loadEvents(silent: true, searchQuery: val.trim());
+                      },
+                    );
                   },
                   style: GoogleFonts.outfit(
                     fontSize: 14,
@@ -2952,14 +3253,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
               _buildFilterDropdown(
                 label: 'Event Category',
                 value: _selectedEventCategory,
-                options: [
-                  'All',
-                  ..._eventTypes.map((e) => e['id'] as String),
-                ],
+                options: ['All', ..._eventTypes.map((e) => e['id'] as String)],
                 displayLabels: {
                   'All': 'All Categories',
                   ...Map.fromEntries(
-                    _eventTypes.map((e) => MapEntry(e['id'] as String, e['label'] as String)),
+                    _eventTypes.map(
+                      (e) => MapEntry(e['id'] as String, e['label'] as String),
+                    ),
                   ),
                 },
                 onChanged: (val) {
@@ -3008,7 +3308,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppTheme.borderRadiusXLarge)),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(AppTheme.borderRadiusXLarge),
+        ),
         boxShadow: AppTheme.cardShadow,
         border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
       ),
@@ -3034,7 +3336,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       ),
     );
   }
-
 
   Widget _buildRealTimeStats() {
     return Container(
@@ -3680,8 +3981,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
     );
   }
 
-
-
   String _getUserType(String userName) {
     return _cachedUserTypes[userName] ?? 'Guest';
   }
@@ -3816,10 +4115,7 @@ class _UserCardState extends State<_UserCard>
   void _openWhatsApp(BuildContext context, String phoneNumber, String name) {
     showDialog(
       context: context,
-      builder: (context) => WhatsAppChatDialog(
-        phone: phoneNumber,
-        name: name,
-      ),
+      builder: (context) => WhatsAppChatDialog(phone: phoneNumber, name: name),
     );
   }
 
@@ -3954,9 +4250,17 @@ class _UserCardState extends State<_UserCard>
                               const SizedBox(width: 8),
                               Builder(
                                 builder: (context) {
-                                  final bool isCartIssue = widget.priorityReason == 'Abandoned Cart' || widget.priorityReason == 'Abandoned Checkout';
-                                  final Color badgeColor = isCartIssue ? Colors.orange : AppTheme.error;
-                                  final IconData badgeIcon = isCartIssue ? Icons.shopping_cart_outlined : Icons.priority_high_rounded;
+                                  final bool isCartIssue =
+                                      widget.priorityReason ==
+                                          'Abandoned Cart' ||
+                                      widget.priorityReason ==
+                                          'Abandoned Checkout';
+                                  final Color badgeColor = isCartIssue
+                                      ? Colors.orange
+                                      : AppTheme.error;
+                                  final IconData badgeIcon = isCartIssue
+                                      ? Icons.shopping_cart_outlined
+                                      : Icons.priority_high_rounded;
 
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
@@ -3992,7 +4296,7 @@ class _UserCardState extends State<_UserCard>
                                       ],
                                     ),
                                   );
-                                }
+                                },
                               ),
                             ],
                           ],
@@ -4007,7 +4311,9 @@ class _UserCardState extends State<_UserCard>
                                 style: GoogleFonts.outfit(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                                  color: AppTheme.textSecondary.withValues(
+                                    alpha: 0.8,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -4025,7 +4331,11 @@ class _UserCardState extends State<_UserCard>
                               ),
                               const SizedBox(width: 6),
                               InkWell(
-                                onTap: () => _openWhatsApp(context, userPhone!, widget.name),
+                                onTap: () => _openWhatsApp(
+                                  context,
+                                  userPhone!,
+                                  widget.name,
+                                ),
                                 borderRadius: BorderRadius.circular(4),
                                 child: const Padding(
                                   padding: EdgeInsets.all(2.0),
@@ -4115,9 +4425,14 @@ class _UserCardState extends State<_UserCard>
                           if (widget.isLoadingEvents) ...[
                             const SizedBox(height: 12),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                                color: AppTheme.primaryColor.withValues(
+                                  alpha: 0.05,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -4145,15 +4460,26 @@ class _UserCardState extends State<_UserCard>
                           ] else if (widget.groupedEvents.isEmpty) ...[
                             const SizedBox(height: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppTheme.backgroundColor,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+                                border: Border.all(
+                                  color: AppTheme.borderColor.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.textSecondary),
+                                  const Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 16,
+                                    color: AppTheme.textSecondary,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -4651,16 +4977,15 @@ class _EventLogCardState extends State<_EventLogCard> {
   void _openWhatsApp(BuildContext context, String phoneNumber, String name) {
     showDialog(
       context: context,
-      builder: (context) => WhatsAppChatDialog(
-        phone: phoneNumber,
-        name: name,
-      ),
+      builder: (context) => WhatsAppChatDialog(phone: phoneNumber, name: name),
     );
   }
 
   Map<String, dynamic> _getEventTheme() {
     final payload = widget.payload;
-    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+    final action = (payload['action'] ?? payload['eventType'] ?? '')
+        .toString()
+        .toLowerCase();
 
     if (action.contains('payment_failed') || action == 'payment_fail') {
       return {
@@ -4678,7 +5003,9 @@ class _EventLogCardState extends State<_EventLogCard> {
         'tag': 'SUCCESS',
         'icon': Icons.check_circle_rounded,
       };
-    } else if (action == 'cart_add' || action == 'add_to_cart' || action.contains('checkout')) {
+    } else if (action == 'cart_add' ||
+        action == 'add_to_cart' ||
+        action.contains('checkout')) {
       return {
         'color': const Color(0xFFF59E0B),
         'bgColor': const Color(0xFFFFFBEB),
@@ -4706,30 +5033,43 @@ class _EventLogCardState extends State<_EventLogCard> {
 
   String _getHumanHeadline() {
     final payload = widget.payload;
-    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+    final action = (payload['action'] ?? payload['eventType'] ?? '')
+        .toString()
+        .toLowerCase();
     final details = widget.details;
 
     if (action == 'cart_add' || action == 'add_to_cart') {
       final qty = payload['quantity'] ?? 1;
       final prodName = payload['product_name'] ?? 'Product';
       final price = payload['unit_price'] ?? payload['price'];
-      final priceStr = price is num ? ' (₹${(price * qty).toStringAsFixed(0)})' : '';
+      final priceStr = price is num
+          ? ' (₹${(price * qty).toStringAsFixed(0)})'
+          : '';
       return '🛒 Added $qty' + 'x $prodName to Cart$priceStr';
     } else if (action.contains('payment_failed') || action == 'payment_fail') {
-      final amt = payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
+      final amt =
+          payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
       final amtStr = amt is num ? ' ₹${amt.toStringAsFixed(0)}' : '';
-      final gw = payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
+      final gw =
+          payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
       final reason = payload['error_message'] ?? payload['reason'];
-      final reasonStr = reason != null && reason.toString().isNotEmpty ? ' — Cause: $reason' : '';
+      final reasonStr = reason != null && reason.toString().isNotEmpty
+          ? ' — Cause: $reason'
+          : '';
       return '❌ Payment of$amtStr Failed via $gw$reasonStr';
-    } else if (action.contains('payment_success') || action.contains('payment_completed')) {
-      final amt = payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
+    } else if (action.contains('payment_success') ||
+        action.contains('payment_completed')) {
+      final amt =
+          payload['amount'] ?? payload['total_price'] ?? payload['grand_total'];
       final amtStr = amt is num ? ' ₹${amt.toStringAsFixed(0)}' : '';
-      final gw = payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
+      final gw =
+          payload['payment_method'] ?? payload['gateway'] ?? 'Online Payment';
       return '🟢 Payment of$amtStr Received via $gw';
-    } else if (action.contains('order') || action.contains('checkout_completed')) {
+    } else if (action.contains('order') ||
+        action.contains('checkout_completed')) {
       final orderId = payload['order_id'] ?? payload['orderId'] ?? '';
-      final amt = payload['amount'] ?? payload['total_price'] ?? payload['total'];
+      final amt =
+          payload['amount'] ?? payload['total_price'] ?? payload['total'];
       final amtStr = amt is num ? ' • Total: ₹${amt.toStringAsFixed(0)}' : '';
       return '📦 Order ${orderId.isNotEmpty ? "#$orderId" : ""} Placed Successfully$amtStr';
     } else if (action.contains('checkout')) {
@@ -4755,7 +5095,9 @@ class _EventLogCardState extends State<_EventLogCard> {
 
   String? _getSalesActionRecommendation() {
     final payload = widget.payload;
-    final action = (payload['action'] ?? payload['eventType'] ?? '').toString().toLowerCase();
+    final action = (payload['action'] ?? payload['eventType'] ?? '')
+        .toString()
+        .toLowerCase();
 
     if (action == 'cart_add' || action == 'add_to_cart') {
       return '💡 Sales Tip: High purchase intent! Call the customer to assist with ordering or offer special pricing.';
@@ -5272,9 +5614,7 @@ class _EventLogCardState extends State<_EventLogCard> {
                       ],
                     ),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: severityColor.withOpacity(0.25),
-                    ),
+                    border: Border.all(color: severityColor.withOpacity(0.25)),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -5386,7 +5726,9 @@ class _EventLogCardState extends State<_EventLogCard> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primaryColor.withOpacity(0.08),
+                                  color: AppTheme.primaryColor.withOpacity(
+                                    0.08,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Row(
@@ -5412,11 +5754,8 @@ class _EventLogCardState extends State<_EventLogCard> {
                             ),
                             const SizedBox(width: 6),
                             InkWell(
-                              onTap: () => _openWhatsApp(
-                                context,
-                                phone,
-                                widget.user,
-                              ),
+                              onTap: () =>
+                                  _openWhatsApp(context, phone, widget.user),
                               borderRadius: BorderRadius.circular(4),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -5424,7 +5763,9 @@ class _EventLogCardState extends State<_EventLogCard> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withOpacity(0.1),
+                                  color: const Color(
+                                    0xFF10B981,
+                                  ).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Row(
@@ -5546,7 +5887,9 @@ class _EventLogCardState extends State<_EventLogCard> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _expanded ? 'Hide Technical Details' : 'View Key Data Fields',
+                          _expanded
+                              ? 'Hide Technical Details'
+                              : 'View Key Data Fields',
                           style: GoogleFonts.outfit(
                             fontSize: 12.5,
                             fontWeight: FontWeight.bold,
@@ -5582,7 +5925,9 @@ class _EventLogCardState extends State<_EventLogCard> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            _showRawJson ? 'Structured View' : 'Raw Developer JSON',
+                            _showRawJson
+                                ? 'Structured View'
+                                : 'Raw Developer JSON',
                             style: GoogleFonts.outfit(
                               fontSize: 12.5,
                               fontWeight: FontWeight.bold,

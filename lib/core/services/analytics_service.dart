@@ -389,7 +389,7 @@ class AnalyticsService extends WidgetsBindingObserver {
   }
 
   Future<List<Map<String, dynamic>>> fetchDistrictAnalytics({
-    String days = '30',
+    String days = 'All Time',
     DateTimeRange? customRange,
   }) async {
     try {

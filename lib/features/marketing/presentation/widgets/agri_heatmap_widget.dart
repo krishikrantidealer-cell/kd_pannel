@@ -55,11 +55,49 @@ String _formatCurrency(double rupees) {
   }
 }
 
-
-
 class AgriHeatmapWidget extends StatefulWidget {
   final List<DistrictDemandData> districts;
   final bool isLoading;
+
+  static const Map<String, List<String>> _stateDistricts = {
+    "Andaman and Nicobar Islands": ["Nicobars", "North and Middle Andaman", "South Andaman"],
+    "Andhra Pradesh": ["Anantapur", "Chittoor", "East Godavari", "Guntur", "Krishna", "Kurnool", "Mahabubnagar", "Nellore", "Prakasam", "Srikakulam", "Visakhapatnam", "Vizianagaram", "West Godavari", "YSR Kadapa"],
+    "Arunachal Pradesh": ["Tawang", "West Kameng", "East Kameng", "Papum Pare", "Kurung Kumey", "Kra Daadi", "Lower Subansiri", "Upper Subansiri", "West Siang", "East Siang", "Siang", "Upper Siang", "Lower Siang", "Lower Dibang Valley", "Dibang Valley", "Anjaw", "Lohit", "Namsai", "Changlang", "Tirap", "Longding"],
+    "Assam": ["Baksa", "Barpeta", "Biswanath", "Bongaigaon", "Cachar", "Charaideo", "Chirang", "Darrang", "Dhemaji", "Dhubri", "Dibrugarh", "Goalpara", "Golaghat", "Hailakandi", "Hojai", "Jorhat", "Kamrup Metropolitan", "Kamrup", "Karbi Anglong", "Karimganj", "Kokrajhar", "Lakhimpur", "Majuli", "Morigaon", "Nagaon", "Nalbari", "Dima Hasao", "Sivasagar", "Sonitpur", "South Salmara-Mankachar", "Tinsukia", "Udalguri", "West Karbi Anglong"],
+    "Bihar": ["Araria", "Arwal", "Aurangabad", "Banka", "Begusarai", "Bhagalpur", "Bhojpur", "Buxar", "Darbhanga", "East Champaran (Motihari)", "Gaya", "Gopalganj", "Jamui", "Jehanabad", "Kaimur (Bhabua)", "Katihar", "Khagaria", "Kishanganj", "Lakhisarai", "Madhepura", "Madhubani", "Munger (Monghyr)", "Muzaffarpur", "Nalanda", "Nawada", "Patna", "Purnia (Purnea)", "Rohtas", "Saharsa", "Samastipur", "Saran", "Sheikhpura", "Sheohar", "Sitamarhi", "Siwan", "Supaul", "Vaishali", "West Champaran"],
+    "Chandigarh (UT)": ["Chandigarh"],
+    "Chhattisgarh": ["Balod", "Baloda Bazar", "Balrampur", "Bastar", "Bemetara", "Bijapur", "Bilaspur", "Dantewada (South Bastar)", "Dhamtari", "Durg", "Gariyaband", "Janjgir-Champa", "Jashpur", "Kabirdham (Kawardha)", "Kanker (North Bastar)", "Kondagaon", "Korba", "Korea (Koriya)", "Mahasamund", "Mungeli", "Narayanpur", "Raigarh", "Raipur", "Rajnandgaon", "Sukma", "Surajpur", "Surguja"],
+    "Dadra and Nagar Haveli (UT)": ["Dadra & Nagar Haveli"],
+    "Daman and Diu (UT)": ["Daman", "Diu"],
+    "Delhi (NCT)": ["Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi", "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"],
+    "Goa": ["North Goa", "South Goa"],
+    "Gujarat": ["Ahmedabad", "Amreli", "Anand", "Aravalli", "Banaskantha (Palanpur)", "Bharuch", "Bhavnagar", "Botad", "Chhota Udepur", "Dahod", "Dangs (Ahwa)", "Devbhoomi Dwarka", "Gandhinagar", "Gir Somnath", "Jamnagar", "Junagadh", "Kachchh", "Kheda (Nadiad)", "Mahisagar", "Mehsana", "Morbi", "Narmada (Rajpipla)", "Navsari", "Panchmahal (Godhra)", "Patan", "Porbandar", "Rajkot", "Sabarkantha (Himmatnagar)", "Surat", "Surendranagar", "Tapi (Vyara)", "Vadodara", "Valsad"],
+    "Haryana": ["Ambala", "Bhiwani", "Charkhi Dadri", "Faridabad", "Fatehabad", "Gurgaon", "Hisar", "Jhajjar", "Jind", "Kaithal", "Karnal", "Kurukshetra", "Mahendragarh", "Mewat", "Palwal", "Panchkula", "Panipat", "Rewari", "Rohtak", "Sirsa", "Sonipat", "Yamunanagar"],
+    "Himachal Pradesh": ["Bilaspur", "Chamba", "Hamirpur", "Kangra", "Kinnaur", "Kullu", "Lahaul & Spiti", "Mandi", "Shimla", "Sirmaur (Sirmour)", "Solan", "Una"],
+    "Jammu and Kashmir": ["Anantnag", "Bandipore", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu", "Kargil", "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Leh", "Poonch", "Pulwama", "Rajouri", "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"],
+    "Jharkhand": ["Bokaro", "Chatra", "Deoghar", "Dhanbad", "Dumka", "East Singhbhum", "Garhwa", "Giridih", "Godda", "Gumla", "Hazaribag", "Jamtara", "Khunti", "Koderma", "Latehar", "Lohardaga", "Pakur", "Palamu", "Ramgarh", "Ranchi", "Sahibganj", "Seraikela-Kharsawan", "Simdega", "West Singhbhum"],
+    "Karnataka": ["Bagalkot", "Ballari (Bellary)", "Belagavi (Belgaum)", "Bengaluru (Bangalore) Rural", "Bengaluru (Bangalore) Urban", "Bidar", "Chamarajanagar", "Chikballapur", "Chikkamagaluru (Chikmagalur)", "Chitradurga", "Dakshina Kannada", "Davangere", "Dharwad", "Gadag", "Hassan", "Haveri", "Kalaburagi (Gulbarga)", "Kodagu", "Kolar", "Koppal", "Mandya", "Mysuru (Mysore)", "Raichur", "Ramanagara", "Shivamogga (Shimoga)", "Tumakuru (Tumkur)", "Udupi", "Uttara Kannada (Karwar)", "Vijayapura (Bijapur)", "Yadgir"],
+    "Kerala": ["Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod", "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad", "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad"],
+    "Ladakh": ["Kargil", "Leh"],
+    "Lakshadweep (UT)": ["Agatti", "Amini", "Androth", "Bithra", "Chethlath", "Kavaratti", "Kadmath", "Kalpeni", "Kilthan", "Minicoy"],
+    "Madhya Pradesh": ["Agar Malwa", "Alirajpur", "Anuppur", "Ashoknagar", "Balaghat", "Barwani", "Betul", "Bhind", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia", "Dewas", "Dhar", "Dindori", "Guna", "Gwalior", "Harda", "Hoshangabad", "Indore", "Jabalpur", "Jhabua", "Katni", "Khandwa", "Khargone", "Mandla", "Mandsaur", "Morena", "Narsinghpur", "Neemuch", "Panna", "Raisen", "Rajgarh", "Ratlam", "Rewa", "Sagar", "Satna", "Sehore", "Seoni", "Shahdol", "Shajapur", "Sheopur", "Shivpuri", "Sidhi", "Singrauli", "Tikamgarh", "Ujjain", "Umaria", "Vidisha"],
+    "Maharashtra": ["Ahmednagar", "Akola", "Amravati", "Aurangabad", "Beed", "Bhandara", "Buldhana", "Chandrapur", "Dhule", "Gadchiroli", "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur", "Latur", "Mumbai City", "Mumbai Suburban", "Nagpur", "Nanded", "Nandurbar", "Nashik", "Osmanabad", "Palghar", "Parbhani", "Pune", "Raigad", "Ratnagiri", "Sangli", "Satara", "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"],
+    "Manipur": ["Bishnupur", "Chandel", "Churachandpur", "Imphal East", "Imphal West", "Jiribam", "Kakching", "Kamjong", "Kangpokpi", "Noney", "Pherzawl", "Senapati", "Tamenglong", "Tengnoupal", "Thoubal", "Ukhrul"],
+    "Meghalaya": ["East Garo Hills", "East Jaintia Hills", "East Khasi Hills", "North Garo Hills", "Ri Bhoi", "South Garo Hills", "South West Garo Hills", "South West Khasi Hills", "West Garo Hills", "West Jaintia Hills", "West Khasi Hills"],
+    "Mizoram": ["Aizawl", "Champhai", "Kolasib", "Lawngtlai", "Lunglei", "Mamit", "Saiha", "Serchhip"],
+    "Nagaland": ["Dimapur", "Kiphire", "Kohima", "Longleng", "Mokokchung", "Mon", "Peren", "Phek", "Tuensang", "Wokha", "Zunheboto"],
+    "Odisha": ["Angul", "Balangir", "Balasore", "Bargarh", "Bhadrak", "Boudh", "Cuttack", "Deogarh", "Dhenkanal", "Gajapati", "Ganjam", "Jagatsinghapur", "Jajpur", "Jharsuguda", "Kalahandi", "Kandhamal", "Kendrapara", "Kendujhar (Keonjhar)", "Khordha", "Koraput", "Malkangiri", "Mayurbhanj", "Nabarangpur", "Nayagarh", "Nuapada", "Puri", "Rayagada", "Sambalpur", "Sonepur", "Sundargarh"],
+    "Puducherry (UT)": ["Karaikal", "Mahe", "Pondicherry", "Yanam"],
+    "Punjab": ["Amritsar", "Barnala", "Bathinda", "Faridkot", "Fatehgarh Sahib", "Fazilka", "Ferozepur", "Gurdaspur", "Hoshiarpur", "Jalandhar", "Kapurthala", "Ludhiana", "Mansa", "Moga", "Muktsar", "Nawanshahr (Shahid Bhagat Singh Nagar)", "Pathankot", "Patiala", "Rupnagar", "Sahibzada Ajit Singh Nagar (Mohali)", "Sangrur", "Tarn Taran"],
+    "Rajasthan": ["Ajmer", "Alwar", "Banswara", "Baran", "Barmer", "Bharatpur", "Bhilwara", "Bikaner", "Bundi", "Chittorgarh", "Churu", "Dausa", "Dholpur", "Dungarpur", "Hanumangarh", "Jaipur", "Jaisalmer", "Jalore", "Jhalawar", "Jhunjhunu", "Jodhpur", "Karauli", "Kota", "Nagaur", "Pali", "Pratapgarh", "Rajsamand", "Sawai Madhopur", "Sikar", "Sirohi", "Sri Ganganagar", "Tonk", "Udaipur"],
+    "Sikkim": ["East Sikkim", "North Sikkim", "South Sikkim", "West Sikkim"],
+    "Tamil Nadu": ["Ariyalur", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul", "Erode", "Kanchipuram", "Kanyakumari", "Karur", "Krishnagiri", "Madurai", "Nagapattinam", "Namakkal", "Nilgiris", "Perambalur", "Pudukkottai", "Ramanathapuram", "Salem", "Sivaganga", "Thanjavur", "Theni", "Thoothukudi (Tuticorin)", "Tiruchirappalli", "Tirunelveli", "Tiruppur", "Tiruvallur", "Tiruvannamalai", "Tiruvarur", "Vellore", "Viluppuram", "Virudhunagar"],
+    "Telangana": ["Adilabad", "Bhadradri Kothagudem", "Hyderabad", "Jagtial", "Jangaon", "Jayashankar Bhoopalpally", "Jogulamba Gadwal", "Kamareddy", "Karimnagar", "Khammam", "Komaram Bheem Asifabad", "Mahabubabad", "Mahabubnagar", "Mancherial", "Medak", "Medchal", "Nagarkurnool", "Nalgonda", "Nirmal", "Nizamabad", "Peddapalli", "Rajanna Sircilla", "Rangareddy", "Sangareddy", "Siddipet", "Suryapet", "Vikarabad", "Wanaparthy", "Warangal (Rural)", "Warangal (Urban)", "Yadadri Bhuvanagiri"],
+    "Tripura": ["Dhalai", "Gomati", "Khowai", "North Tripura", "Sepahijala", "South Tripura", "Unakoti", "West Tripura"],
+    "Uttarakhand": ["Almora", "Bageshwar", "Champoli", "Champawat", "Dehradun", "Haridwar", "Nainital", "Pauri Garhwal", "Pithoragarh", "Rudraprayag", "Tehri Garhwal", "Udham Singh Nagar", "Uttarkashi"],
+    "Uttar Pradesh": ["Agra", "Aligarh", "Allahabad", "Ambedkar Nagar", "Amethi (Chatrapati Sahuji Mahraj Nagar)", "Amroha (J.P. Nagar)", "Auraiya", "Azamgarh", "Baghpat", "Bahraich", "Ballia", "Balrampur", "Banda", "Barabanki", "Bareilly", "Basti", "Bhadohi", "Bijnor", "Budaun", "Bulandshahr", "Chandauli", "Chitrakoot", "Deoria", "Etah", "Etawah", "Faizabad", "Farrukhabad", "Fatehpur", "Firozabad", "Gautam Buddha Nagar", "Ghaziabad", "Ghazipur", "Gonda", "Gorakhpur", "Hamirpur", "Hapur (Panchsheel Nagar)", "Hardoi", "Hathras", "Jalaun", "Jaunpur", "Jhansi", "Kannauj", "Kanpur Dehat", "Kanpur Nagar", "Kanshiram Nagar (Kasganj)", "Kaushambi", "Kushinagar (Padrauna)", "Lakhimpur - Kheri", "Lalitpur", "Lucknow", "Maharajganj", "Mahoba", "Mainpuri", "Mathura", "Mau", "Meerut", "Mirzapur", "Moradabad", "Muzaffarnagar", "Pilibhit", "Pratapgarh", "RaeBareli", "Rampur", "Saharanpur", "Sambhal (Bhim Nagar)", "Sant Kabir Nagar", "Shahjahanpur", "Shamali (Prabuddh Nagar)", "Shravasti", "Siddharth Nagar", "Sitapur", "Sonbhadra", "Sultanpur", "Unnao", "Varanasi"],
+    "West Bengal": ["Alipurduar", "Bankura", "Birbhum", "Burdwan (Bardhaman)", "Cooch Behar", "Dakshin Dinajpur (South Dinajpur)", "Darjeeling", "Hooghly", "Howrah", "Jalpaiguri", "Kalimpong", "Kolkata", "Malda", "Murshidabad", "Nadia", "North 24 Parganas", "Paschim Medinipur (West Medinipur)", "Purba Medinipur (East Medinipur)", "Purulia", "South 24 Parganas", "Uttar Dinajpur (North Dinajpur)"],
+  };
 
   const AgriHeatmapWidget({
     super.key,
@@ -77,6 +115,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
   String _selectedCategory = 'All';
   String _selectedSubCategory = 'All';
   String _selectedProduct = 'All';
+  String _selectedActivityFilter = 'All'; // 'All', 'Active Only', 'Untapped Only'
   String _searchQuery = '';
 
   // Breakdown View Mode: 'None', 'Product', 'Category', 'SubCategory'
@@ -97,6 +136,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       _selectedCategory = 'All';
       _selectedSubCategory = 'All';
       _selectedProduct = 'All';
+      _selectedActivityFilter = 'All';
       _searchQuery = '';
       _breakdownMode = 'None';
       _searchController.clear();
@@ -126,6 +166,8 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     }
     return {district.category: district.grossRevenueRupees};
   }
+
+  String _normalize(String input) => input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   @override
   Widget build(BuildContext context) {
@@ -186,83 +228,156 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       );
     }
 
-    // 1. Available States — Strict Canonical Normalization
-    final Map<String, String> stateDedup = {}; 
-    
-    String getCanonicalState(String input) {
-      final s = input.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-      if (s.contains('andra') || s.contains('andhra')) return 'Andhra Pradesh';
-      if (s.contains('arunachal')) return 'Arunachal Pradesh';
-      if (s.contains('assam')) return 'Assam';
-      if (s.contains('bihar')) return 'Bihar';
-      if (s.contains('chhattisgarh') || s.contains('chattis')) return 'Chhattisgarh';
-      if (s.contains('goa')) return 'Goa';
-      if (s.contains('gujarat') || s.contains('gujrat')) return 'Gujarat';
-      if (s.contains('haryana')) return 'Haryana';
-      if (s.contains('himachal')) return 'Himachal Pradesh';
-      if (s.contains('jharkhand')) return 'Jharkhand';
-      if (s.contains('karnataka')) return 'Karnataka';
-      if (s.contains('kerala')) return 'Kerala';
-      if (s.contains('madhya') || s.contains('madhy')) return 'Madhya Pradesh';
-      if (s.contains('maharashtra') || s.contains('maha')) return 'Maharashtra';
-      if (s.contains('manipur')) return 'Manipur';
-      if (s.contains('meghalaya')) return 'Meghalaya';
-      if (s.contains('mizoram')) return 'Mizoram';
-      if (s.contains('nagaland')) return 'Nagaland';
-      if (s.contains('odisha') || s.contains('orissa')) return 'Odisha';
-      if (s.contains('punjab')) return 'Punjab';
-      if (s.contains('rajasthan') || s.contains('rajs')) return 'Rajasthan';
-      if (s.contains('sikkim')) return 'Sikkim';
-      if (s.contains('tamil')) return 'Tamil Nadu';
-      if (s.contains('telangana')) return 'Telangana';
-      if (s.contains('tripura')) return 'Tripura';
-      if (s.contains('uttarpradesh') || s == 'up') return 'Uttar Pradesh';
-      if (s.contains('uttarakhand') || s.contains('uttaranchal')) return 'Uttarakhand';
-      if (s.contains('bengal')) return 'West Bengal';
-      if (s.contains('jammu')) return 'Jammu and Kashmir';
-      if (s.contains('ladakh')) return 'Ladakh';
-      if (s.contains('delhi')) return 'Delhi';
-      // Default: Clean Casing
-      return input.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
-    }
-
-    for (final d in widget.districts) {
-      final raw = d.stateName.trim();
-      if (raw.isEmpty || raw.toLowerCase() == 'unknown') continue;
-      
-      final cleanName = getCanonicalState(raw);
-      final key = cleanName.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-      stateDedup[key] = cleanName;
-    }
-    final List<String> availableStates = ['All', ...stateDedup.values.toList()..sort()];
+    // 1. Available States & Counts
+    final List<String> availableStates = ['All', ...AgriHeatmapWidget._stateDistricts.keys.toList()..sort()];
     if (!availableStates.contains(_selectedState)) {
       _selectedState = 'All';
     }
 
-    // 2. Filter by State (space-stripped, case-insensitive match)
-    String _stateKey(String s) => s.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    final List<DistrictDemandData> stateFilteredDistricts = _selectedState == 'All'
-        ? widget.districts
-        : widget.districts
-            .where((d) => _stateKey(d.stateName) == _stateKey(_selectedState))
-            .toList();
+    final Map<String, int> stateOrderCounts = {};
+    final Map<String, int> stateDealerCounts = {};
+    int unmatchedOrders = 0;
+    final Set<String> unmatchedStateNames = {};
+    
+    for (final d in widget.districts) {
+      final dataStateKey = _normalize(d.stateName);
+      final dealerCount = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
+      
+      final matchedState = availableStates.firstWhere(
+        (s) {
+          if (s == 'All') return false;
+          final staticStateKey = _normalize(s);
+          
+          if (dataStateKey == staticStateKey) return true;
+          
+          final sKey = staticStateKey.replaceAll('and', '').replaceAll('islands', '').replaceAll('ut', '').replaceAll('nct', '');
+          final dKey = dataStateKey.replaceAll('and', '').replaceAll('islands', '').replaceAll('ut', '').replaceAll('nct', '');
+          
+          if (sKey == dKey && sKey.length > 3) return true;
+          if (sKey.contains(dKey) && dKey.length > 4) return true;
+          if (dKey.contains(sKey) && sKey.length > 4) return true;
+          
+          if (staticStateKey == 'andhrapradesh' && (dataStateKey == 'ap' || dataStateKey == 'andrapradesh')) return true;
+          if (staticStateKey == 'uttarpradesh' && (dataStateKey == 'up' || dataStateKey == 'uttarpradesh')) return true;
+          if (staticStateKey == 'madhyapradesh' && (dataStateKey == 'mp' || dataStateKey == 'madhyapradesh')) return true;
+          if (staticStateKey == 'maharashtra' && (dataStateKey == 'mh' || dataStateKey == 'maha')) return true;
+          if (staticStateKey == 'gujarat' && (dataStateKey == 'gj' || dataStateKey == 'gujrat')) return true;
+          if (staticStateKey == 'rajasthan' && (dataStateKey == 'rj' || dataStateKey == 'rajs')) return true;
+          if (staticStateKey == 'westbengal' && (dataStateKey == 'wb' || dataStateKey == 'bengal')) return true;
+          if (staticStateKey == 'tamilnadu' && (dataStateKey == 'tn' || dataStateKey == 'tamil')) return true;
+          if (staticStateKey == 'karnataka' && (dataStateKey == 'ka' || dataStateKey == 'karnatak')) return true;
+          if (staticStateKey == 'telangana' && (dataStateKey == 'tg' || dataStateKey == 'ts' || dataStateKey == 'telengana')) return true;
+          if (staticStateKey == 'jammukashmir' && (dataStateKey == 'jk' || dataStateKey == 'jammu' || dataStateKey == 'jammukashmir')) return true;
+          if (staticStateKey == 'uttarakhand' && (dataStateKey == 'uk' || dataStateKey == 'uttaranchal' || dataStateKey == 'uttarkhand')) return true;
+          if (staticStateKey == 'odisha' && (dataStateKey == 'orissa' || dataStateKey == 'odisa')) return true;
+          if (staticStateKey == 'puducherryut' && (dataStateKey == 'pondicherry' || dataStateKey == 'puduchery')) return true;
+          if (staticStateKey == 'lakshadweeput' && (dataStateKey == 'laccadive' || dataStateKey == 'lakshadweep')) return true;
 
-    // 3. Available Districts — case-insensitive dedup (backend returns canonical names)
-    final Map<String, String> districtDedup = {};
+          return false;
+        },
+        orElse: () => '',
+      );
+      
+      if (matchedState.isNotEmpty) {
+        stateOrderCounts[matchedState] = (stateOrderCounts[matchedState] ?? 0) + d.orderCount;
+        stateDealerCounts[matchedState] = (stateDealerCounts[matchedState] ?? 0) + dealerCount;
+      } else {
+        unmatchedOrders += d.orderCount;
+        if (d.stateName.isNotEmpty) unmatchedStateNames.add(d.stateName);
+      }
+    }
+
+    if (unmatchedOrders > 0) {
+      final label = 'Other (${unmatchedStateNames.take(2).join(", ")})';
+      stateOrderCounts[label] = unmatchedOrders;
+      if (!availableStates.contains(label)) {
+        availableStates.add(label);
+      }
+    }
+
+    // Keep states that have orders or registered dealers
+    availableStates.retainWhere((s) => s == 'All' || (stateOrderCounts[s] ?? 0) > 0 || (stateDealerCounts[s] ?? 0) > 0);
+    final String safeState = availableStates.contains(_selectedState) ? _selectedState : 'All';
+    
+    final int grandTotalOrders = widget.districts.fold(0, (sum, d) => sum + d.orderCount);
+
+    // 2. Filter by State (robust case-insensitive match against static list)
+    final List<DistrictDemandData> stateFilteredDistricts = safeState == 'All'
+        ? widget.districts
+        : widget.districts.where((d) {
+            final dataStateKey = _normalize(d.stateName);
+            final selectedStateKey = _normalize(safeState);
+            if (dataStateKey == selectedStateKey) return true;
+            if (selectedStateKey == 'uttarpradesh' && dataStateKey == 'up') return true;
+            if (selectedStateKey == 'madhyapradesh' && dataStateKey == 'mp') return true;
+            return false;
+          }).toList();
+
+    // 3. Available Districts & Counts
+    final List<String> availableDistricts = ['All'];
+    if (safeState != 'All') {
+      availableDistricts.addAll(AgriHeatmapWidget._stateDistricts[safeState] ?? []);
+    } else {
+      final Set<String> distSet = widget.districts
+          .where((d) => (d.orderCount > 0 || d.registeredDealers > 0) && d.districtName.isNotEmpty && d.districtName.toLowerCase() != 'unknown')
+          .map((d) => d.districtName)
+          .toSet();
+      availableDistricts.addAll(distSet.toList()..sort());
+    }
+
+    final Map<String, int> districtOrderCounts = {};
+    final Map<String, int> districtDealerCounts = {};
     for (final d in stateFilteredDistricts) {
-      final raw = d.districtName;
-      if (raw.isEmpty || raw.toLowerCase() == 'unknown') continue;
-      final key = raw.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-      districtDedup[key] ??= raw
-          .split(' ')
-          .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '')
-          .where((w) => w.isNotEmpty)
-          .join(' ');
+      final dataDistKey = _normalize(d.districtName);
+      final dealerCount = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
+      final matchedDist = availableDistricts.firstWhere(
+        (dist) {
+          if (dist == 'All') return false;
+          final staticDistKey = _normalize(dist);
+          return dataDistKey.contains(staticDistKey) || staticDistKey.contains(dataDistKey);
+        },
+        orElse: () => '',
+      );
+      if (matchedDist.isNotEmpty) {
+        districtOrderCounts[matchedDist] = (districtOrderCounts[matchedDist] ?? 0) + d.orderCount;
+        districtDealerCounts[matchedDist] = (districtDealerCounts[matchedDist] ?? 0) + dealerCount;
+      } else if ((d.orderCount > 0 || dealerCount > 0) && d.districtName.isNotEmpty) {
+        districtOrderCounts[d.districtName] = (districtOrderCounts[d.districtName] ?? 0) + d.orderCount;
+        districtDealerCounts[d.districtName] = (districtDealerCounts[d.districtName] ?? 0) + dealerCount;
+        if (!availableDistricts.contains(d.districtName)) {
+          availableDistricts.add(d.districtName);
+        }
+      }
     }
-    final List<String> availableDistricts = ['All', ...districtDedup.values.toList()..sort()];
-    if (!availableDistricts.contains(_selectedDistrict)) {
-      _selectedDistrict = 'All';
+
+    // Keep districts that have orders or registered dealers
+    availableDistricts.retainWhere((d) => d == 'All' || (districtOrderCounts[d] ?? 0) > 0 || (districtDealerCounts[d] ?? 0) > 0);
+    final String safeDistrict = availableDistricts.contains(_selectedDistrict) ? _selectedDistrict : 'All';
+
+    // Compute Activity Filter Dealer Counts
+    int activeDealersTotal = 0;
+    int untappedDealersTotal = 0;
+    for (final d in widget.districts) {
+      final reg = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
+      if (d.orderCount > 0) {
+        activeDealersTotal += reg;
+      } else {
+        untappedDealersTotal += reg;
+      }
     }
+    final int allDealersCountTotal = activeDealersTotal + untappedDealersTotal;
+
+    final String optAll = 'All ($allDealersCountTotal Dealers)';
+    final String optActive = 'Active Only ($activeDealersTotal Dealers)';
+    final String optUntapped = 'Untapped Only ($untappedDealersTotal Dealers)';
+    final List<String> activityOptions = [optAll, optActive, optUntapped];
+
+    final String activeFilterValue = activityOptions.firstWhere(
+      (opt) => opt.startsWith(_selectedActivityFilter),
+      orElse: () => optAll,
+    );
+
+    final int stateFilteredTotalOrders = districtOrderCounts.values.fold(0, (sum, val) => sum + val);
 
     // 4. Available Database Categories
     final Set<String> categorySet = widget.districts
@@ -275,26 +390,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       }
     }
     final List<String> availableCategories = ['All', ...categorySet.toList()..sort()];
-    if (!availableCategories.contains(_selectedCategory)) {
-      _selectedCategory = 'All';
-    }
+    final String safeCategory = availableCategories.contains(_selectedCategory) ? _selectedCategory : 'All';
 
-    // 5. Available Database SubCategories
-    final Set<String> subCategorySet = widget.districts
-        .map((d) => d.subCategory.trim())
-        .where((sc) => sc.isNotEmpty)
-        .toSet();
-    for (final d in widget.districts) {
-      if (d.subCategoryBreakdown != null) {
-        subCategorySet.addAll(d.subCategoryBreakdown!.keys);
-      }
-    }
-    final List<String> availableSubCategories = ['All', ...subCategorySet.toList()..sort()];
-    if (!availableSubCategories.contains(_selectedSubCategory)) {
-      _selectedSubCategory = 'All';
-    }
-
-    // 6. Available Database Products
+    // 5. Available Database Products
     final Set<String> productSet = {};
     for (final d in widget.districts) {
       if (d.productBreakdown != null) {
@@ -302,28 +400,20 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       }
     }
     final List<String> availableProducts = ['All', ...productSet.toList()..sort()];
-    if (!availableProducts.contains(_selectedProduct)) {
-      _selectedProduct = 'All';
-    }
+    final String safeProduct = availableProducts.contains(_selectedProduct) ? _selectedProduct : 'All';
 
-    // 7. Filter Districts by State, District, Category, SubCategory, Product & Search Query
+    // 7. Filter Districts by State, District, Category, Product & Search Query
     final List<DistrictDemandData> filteredDistricts = stateFilteredDistricts.where((d) {
-      final matchesDistrict = _selectedDistrict == 'All' ||
-          d.districtName.toLowerCase() == _selectedDistrict.toLowerCase();
+      final matchesDistrict = safeDistrict == 'All' || _normalize(d.districtName) == _normalize(safeDistrict);
 
       final catBreakdown = _getEffectiveCategoryBreakdown(d);
-      final matchesCategory = _selectedCategory == 'All' ||
-          d.category.toLowerCase() == _selectedCategory.toLowerCase() ||
-          catBreakdown.keys.any((k) => k.toLowerCase() == _selectedCategory.toLowerCase());
-
-      final matchesSubCategory = _selectedSubCategory == 'All' ||
-          d.subCategory.toLowerCase() == _selectedSubCategory.toLowerCase() ||
-          (d.subCategoryBreakdown != null &&
-              d.subCategoryBreakdown!.keys.any((k) => k.toLowerCase() == _selectedSubCategory.toLowerCase()));
+      final matchesCategory = safeCategory == 'All' ||
+          d.category.toLowerCase() == safeCategory.toLowerCase() ||
+          catBreakdown.keys.any((k) => k.toLowerCase() == safeCategory.toLowerCase());
 
       final prodBreakdown = _getEffectiveProductBreakdown(d);
-      final matchesProduct = _selectedProduct == 'All' ||
-          prodBreakdown.keys.any((p) => p.toLowerCase() == _selectedProduct.toLowerCase());
+      final matchesProduct = safeProduct == 'All' ||
+          prodBreakdown.keys.any((p) => p.toLowerCase() == safeProduct.toLowerCase());
 
       final matchesSearch = _searchQuery.isEmpty ||
           d.districtName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -332,7 +422,11 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
           d.category.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           prodBreakdown.keys.any((p) => p.toLowerCase().contains(_searchQuery.toLowerCase()));
 
-      return matchesDistrict && matchesCategory && matchesSubCategory && matchesProduct && matchesSearch;
+      final matchesActivity = _selectedActivityFilter.startsWith('All') ||
+          (_selectedActivityFilter.startsWith('Active Only') && d.orderCount > 0) ||
+          (_selectedActivityFilter.startsWith('Untapped Only') && d.orderCount == 0);
+
+      return matchesDistrict && matchesCategory && matchesProduct && matchesSearch && matchesActivity;
     }).toList();
 
     // Aggregated Metrics
@@ -357,7 +451,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       }
     }
 
-    final int totalDealers = filteredDistricts.fold(0, (sum, d) => sum + d.activeDealers);
+    final int totalDealers = filteredDistricts.fold(0, (sum, d) => sum + (d.activeBuyers > 0 ? d.activeBuyers : d.activeDealers));
+    final int totalRegisteredDealers = filteredDistricts.fold(0, (sum, d) => sum + (d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers));
+    final int totalOrders = filteredDistricts.fold(0, (sum, d) => sum + d.orderCount);
     final double avgConversionRate = filteredDistricts.isNotEmpty
         ? filteredDistricts.fold(0.0, (sum, d) => sum + d.conversionRate) / filteredDistricts.length
         : 0.0;
@@ -365,8 +461,8 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     final bool hasActiveFilters = _selectedState != 'All' ||
         _selectedDistrict != 'All' ||
         _selectedCategory != 'All' ||
-        _selectedSubCategory != 'All' ||
         _selectedProduct != 'All' ||
+        _selectedActivityFilter != 'All' ||
         _searchQuery.isNotEmpty ||
         _breakdownMode != 'None';
 
@@ -490,14 +586,42 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                       direction: isDesktop ? Axis.horizontal : Axis.vertical,
                       crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                       children: [
+                        // 0. Activity Filter Dropdown
+                        Expanded(
+                          flex: isDesktop ? 2 : 0,
+                          child: _buildFilterDropdownColumn(
+                            label: 'ACTIVITY',
+                            value: activeFilterValue,
+                            icon: Icons.filter_alt_rounded,
+                            items: activityOptions,
+                            activeColor: const Color(0xFF00897B),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  if (val.startsWith('Active Only')) {
+                                    _selectedActivityFilter = 'Active Only';
+                                  } else if (val.startsWith('Untapped Only')) {
+                                    _selectedActivityFilter = 'Untapped Only';
+                                  } else {
+                                    _selectedActivityFilter = 'All';
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+
                         // 1. State Dropdown
                         Expanded(
                           flex: isDesktop ? 2 : 0,
                           child: _buildFilterDropdownColumn(
                             label: 'STATE',
-                            value: _selectedState,
+                            value: safeState,
                             icon: Icons.map_rounded,
                             items: availableStates,
+                            itemCounts: stateOrderCounts,
+                            totalCount: grandTotalOrders,
                             activeColor: AppTheme.primaryColor,
                             onChanged: (val) {
                               if (val != null) {
@@ -516,9 +640,11 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                           flex: isDesktop ? 2 : 0,
                           child: _buildFilterDropdownColumn(
                             label: 'DISTRICT',
-                            value: _selectedDistrict,
+                            value: safeDistrict,
                             icon: Icons.location_city_rounded,
                             items: availableDistricts,
+                            itemCounts: districtOrderCounts,
+                            totalCount: stateFilteredTotalOrders,
                             activeColor: const Color(0xFF0288D1),
                             onChanged: (val) {
                               if (val != null) {
@@ -536,7 +662,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                           flex: isDesktop ? 3 : 0,
                           child: _buildFilterDropdownColumn(
                             label: 'CATEGORY',
-                            value: _selectedCategory,
+                            value: safeCategory,
                             icon: Icons.category_rounded,
                             items: availableCategories,
                             activeColor: const Color(0xFF7B1FA2),
@@ -557,7 +683,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                             flex: isDesktop ? 3 : 0,
                             child: _buildFilterDropdownColumn(
                               label: 'PRODUCT',
-                              value: _selectedProduct,
+                              value: safeProduct,
                               icon: Icons.inventory_2_rounded,
                               items: availableProducts,
                               activeColor: const Color(0xFFE65100),
@@ -858,7 +984,55 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Container(
+                      width: 1,
+                      height: 20,
+                      color: AppTheme.borderColor,
+                    ),
+                    const SizedBox(width: 18),
+                    Text(
+                      'REGISTERED DEALERS: ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '$totalRegisteredDealers',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
                         color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Container(
+                      width: 1,
+                      height: 20,
+                      color: AppTheme.borderColor,
+                    ),
+                    const SizedBox(width: 18),
+                    Text(
+                      'TOTAL ORDERS: ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '$totalOrders',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFFE65100),
                       ),
                     ),
                     const SizedBox(width: 18),
@@ -1222,43 +1396,86 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                                             ),
                                           ],
                                         ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                'ACTIVE DEALERS',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Colors.blue.shade800,
-                                                  letterSpacing: 0.5,
-                                                ),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFE65100).withOpacity(0.08),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: const Color(0xFFE65100).withOpacity(0.2)),
                                               ),
-                                              const SizedBox(height: 1),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
-                                                  const Icon(Icons.storefront_rounded, size: 13, color: Colors.blue),
-                                                  const SizedBox(width: 3),
                                                   Text(
-                                                    '${district.activeDealers}',
+                                                    'ORDERS',
                                                     style: GoogleFonts.outfit(
-                                                      fontSize: 14,
+                                                      fontSize: 9,
                                                       fontWeight: FontWeight.w800,
-                                                      color: Colors.blue.shade900,
+                                                      color: const Color(0xFFE65100),
+                                                      letterSpacing: 0.5,
                                                     ),
+                                                  ),
+                                                  const SizedBox(height: 1),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.shopping_cart_rounded, size: 13, color: Color(0xFFE65100)),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        '${district.orderCount}',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: const Color(0xFFE65100),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ],
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.withOpacity(0.08),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                children: [
+                                                  Text(
+                                                    'DEALERS (ACTIVE / REG)',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: Colors.blue.shade800,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 1),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.storefront_rounded, size: 13, color: Colors.blue),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        '${district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers} / ${district.registeredDealers > 0 ? district.registeredDealers : (district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers)}',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: Colors.blue.shade900,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
@@ -1374,6 +1591,8 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     required String value,
     required IconData icon,
     required List<String> items,
+    Map<String, int>? itemCounts,
+    int? totalCount,
     required Color activeColor,
     required ValueChanged<String?> onChanged,
   }) {
@@ -1414,6 +1633,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
               ),
               onChanged: onChanged,
               items: items.map((itemVal) {
+                final count = itemVal == 'All' ? totalCount : (itemCounts?[itemVal] ?? 0);
                 return DropdownMenuItem<String>(
                   value: itemVal,
                   child: Row(
@@ -1433,6 +1653,18 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                           ),
                         ),
                       ),
+                      if (count != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            '($count)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: itemVal == 'All' ? AppTheme.textSecondary : activeColor.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 );
