@@ -359,10 +359,11 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     int untappedDealersTotal = 0;
     for (final d in widget.districts) {
       final reg = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
-      if (d.orderCount > 0) {
-        activeDealersTotal += reg;
-      } else {
-        untappedDealersTotal += reg;
+      final buyers = d.activeBuyers;
+      
+      activeDealersTotal += buyers;
+      if (reg > buyers) {
+        untappedDealersTotal += (reg - buyers);
       }
     }
     final int allDealersCountTotal = activeDealersTotal + untappedDealersTotal;
@@ -423,8 +424,8 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
           prodBreakdown.keys.any((p) => p.toLowerCase().contains(_searchQuery.toLowerCase()));
 
       final matchesActivity = _selectedActivityFilter.startsWith('All') ||
-          (_selectedActivityFilter.startsWith('Active Only') && d.orderCount > 0) ||
-          (_selectedActivityFilter.startsWith('Untapped Only') && d.orderCount == 0);
+          (_selectedActivityFilter.startsWith('Active Only') && (d.orderCount > 0 || d.activeBuyers > 0)) ||
+          (_selectedActivityFilter.startsWith('Untapped Only') && (d.orderCount == 0 || d.registeredDealers > d.activeBuyers));
 
       return matchesDistrict && matchesCategory && matchesProduct && matchesSearch && matchesActivity;
     }).toList();

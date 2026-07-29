@@ -116,6 +116,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
     super.initState();
     PincodeService().init();
     _scrollController.addListener(_onScroll);
+    _funnelDataFuture = AnalyticsService().fetchFunnelData(days: _selectedAnalyticsTimeRange);
+    _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(days: _selectedAnalyticsTimeRange);
     _loadEvents();
     _startRealTimePoll();
     _listenToLivePresence();
