@@ -1634,7 +1634,9 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
               ),
               onChanged: onChanged,
               items: items.map((itemVal) {
-                final count = itemVal == 'All' ? totalCount : (itemCounts?[itemVal] ?? 0);
+                final count = itemVal == 'All'
+                    ? totalCount
+                    : (itemCounts != null ? (itemCounts[itemVal] ?? 0) : null);
                 return DropdownMenuItem<String>(
                   value: itemVal,
                   child: Row(
