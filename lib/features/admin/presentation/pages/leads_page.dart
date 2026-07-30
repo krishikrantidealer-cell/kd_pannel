@@ -3360,8 +3360,6 @@ class _MasterLeadsAnalyticsHeader extends StatefulWidget {
 
 class _MasterLeadsAnalyticsHeaderState
     extends State<_MasterLeadsAnalyticsHeader> {
-  bool _isScoreboardExpanded = false;
-
   @override
   Widget build(BuildContext context) {
     final currentUserId = AuthService().currentUserId;
@@ -3490,11 +3488,6 @@ class _MasterLeadsAnalyticsHeaderState
     final agentAssigned = agentStats['assignedInDay'] ?? 0;
     final agentKycApproved = agentStats['kycApprovedInDay'] ?? 0;
     final selectedAgentName = agentStats['agentName'] ?? 'All Sales Team';
-
-    final agentBreakdown = (dailyStats['agentBreakdown'] as List<dynamic>?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList() ??
-        [];
 
     final selectedDate = widget.state.selectedDailyDate ?? DateTime.now();
     final dateStr =
@@ -3892,182 +3885,6 @@ class _MasterLeadsAnalyticsHeaderState
           ),
           if (!isSales) ...[
             const SizedBox(height: 12),
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _isScoreboardExpanded = !_isScoreboardExpanded;
-                });
-              },
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    Text(
-                      _isScoreboardExpanded
-                          ? 'Hide Sales Agent Scoreboard'
-                          : 'View Agent Daily Scoreboard (${agentBreakdown.length} Agents)',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_isScoreboardExpanded) ...[
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: DataTable(
-                    columnSpacing: widget.isMobile ? 12 : 24,
-                    headingRowHeight: 38,
-                    headingRowColor: WidgetStateProperty.all(
-                      AppTheme.backgroundColor,
-                    ),
-                    columns: [
-                      DataColumn(
-                        label: Text(
-                          'Sales Agent',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        numeric: true,
-                        label: Text(
-                          'Assigned (Day)',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        numeric: true,
-                        label: Text(
-                          'KYC Approved (Day)',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        numeric: true,
-                        label: Text(
-                          'Deleted (Day)',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        numeric: true,
-                        label: Text(
-                          'Conv. Rate',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                    rows: agentBreakdown.map((agent) {
-                      final agentId = agent['_id']?.toString() ?? '';
-                      final isSelected =
-                          agentId == widget.state.selectedDailyAgentId;
-                      final agentName = agent['agentName'] ?? 'Agent';
-
-                      return DataRow(
-                        selected: isSelected,
-                        onSelectChanged: (selected) {
-                          context.read<LeadsBloc>().add(
-                                FetchDailyLeadStatsEvent(
-                                  selectedDate: selectedDate,
-                                  selectedAgentId:
-                                      selected == true ? agentId : null,
-                                ),
-                              );
-                        },
-                        cells: [
-                          DataCell(
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 10,
-                                  backgroundColor: AppTheme.primaryColor
-                                      .withValues(alpha: 0.12),
-                                  child: Text(
-                                    agentName[0].toUpperCase(),
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  agentName,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          DataCell(Text('${agent['assignedInDay'] ?? 0}')),
-                          DataCell(Text('${agent['kycApprovedInDay'] ?? 0}')),
-                          DataCell(Text('${agent['deletedInDay'] ?? 0}')),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.success.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                agent['conversionRate'] ?? '0.0%',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.success,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
           ],
         ],
       ),

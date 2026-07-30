@@ -23,6 +23,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
 
   // History list
   List<Map<String, dynamic>> _savedEstimates = [];
+  String _searchQuery = '';
   bool _isLoadingHistory = true;
 
   // Active editing state (null if in list view)
@@ -47,6 +48,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   final _clientNameCtrl = TextEditingController();
   final _clientAddressCtrl = TextEditingController();
   final _clientPhoneCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
 
   // Product Search / Selection
   List<Map<String, dynamic>> _availableProducts = [];
@@ -88,6 +90,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     _clientNameCtrl.dispose();
     _clientAddressCtrl.dispose();
     _clientPhoneCtrl.dispose();
+    _searchCtrl.dispose();
     for (final ctrls in _controllersCache.values) {
       ctrls['name']?.dispose();
       ctrls['price']?.dispose();
@@ -262,7 +265,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     });
   }
 
-  void _deleteFromHistory(int idx) async {
+  void _deleteFromHistory(Map<String, dynamic> est) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -288,8 +291,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     );
 
     if (confirm == true) {
-      final item = _savedEstimates[idx];
-      final String? dbId = item['_id'] ?? item['id'];
+      final String? dbId = est['_id'] ?? est['id'];
       if (dbId != null && dbId.length == 24) {
         try {
           await ApiClient().delete('/admin/estimates/$dbId');
@@ -298,7 +300,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         }
       }
       setState(() {
-        _savedEstimates.removeAt(idx);
+        _savedEstimates.removeWhere((e) => (e['_id'] ?? e['id']) == dbId);
       });
       _saveHistory();
     }
@@ -381,7 +383,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     };
   }
 
-  void _saveEstimate({bool goBack = false}) async {
+  Future<bool> _saveEstimate({bool goBack = false}) async {
     if (_clientNameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -389,7 +391,21 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return false;
+    }
+
+    // Validate Items: Ensure all items have a name
+    for (int i = 0; i < _editingItems.length; i++) {
+      final name = (_editingItems[i]['name'] ?? '').toString().trim();
+      if (name.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please enter a name for item #${i + 1}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
     }
 
     setState(() => _isSaving = true);
@@ -467,9 +483,12 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
         backgroundColor: backendSuccess ? AppTheme.primaryColor : Colors.orange,
       ),
     );
+
+    return true;
   }
 
   void _downloadPdf() async {
+    if (_isSaving) return;
     if (_clientNameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -481,7 +500,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     }
 
     // Save state first so it persists in history
-    _saveEstimate();
+    final bool saved = await _saveEstimate();
+    if (!saved) return;
 
     final estData = _collectEstimateData();
 
@@ -869,7 +889,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
             )
           else ...[
             TextButton.icon(
-              onPressed: () => _saveEstimate(goBack: true),
+              onPressed: _isSaving ? null : () => _saveEstimate(goBack: true),
               icon: _isSaving
                   ? const SizedBox(
                       width: 14,
@@ -897,10 +917,19 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: FilledButton.icon(
-                onPressed: _downloadPdf,
-                icon: const Icon(Icons.download_rounded, size: 16),
+                onPressed: _isSaving ? null : _downloadPdf,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.download_rounded, size: 16),
                 label: Text(
-                  'Download / Print',
+                  _isSaving ? 'Processing...' : 'Download / Print',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
@@ -954,132 +983,215 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       );
     }
 
-    if (_savedEstimates.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.description_outlined,
-              size: 64,
-              color: Colors.grey.shade300,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No estimate history found',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create a new estimate by clicking the button above',
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: _startNewEstimate,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Estimate'),
-            ),
-          ],
-        ),
-      );
-    }
+    final filtered = _savedEstimates.where((est) {
+      final query = _searchQuery.toLowerCase();
+      final name = (est['clientName'] ?? '').toString().toLowerCase();
+      final no = (est['estimateNo'] ?? '').toString().toLowerCase();
+      final phone = (est['clientPhone'] ?? '').toString().toLowerCase();
+      return name.contains(query) || no.contains(query) || phone.contains(query);
+    }).toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _savedEstimates.length,
-      itemBuilder: (_, i) {
-        final est = _savedEstimates[i];
-        final clientName = est['clientName'] ?? 'Unnamed Customer';
-        final estNo = est['estimateNo'] ?? 'No Number';
-        final estDate = est['estimateDate'] ?? '';
-        final total = est['grandTotal'] ?? 0.0;
-        final itemsCount = (est['items'] as List?)?.length ?? 0;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Material(
-              color: Colors.transparent,
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+    return Column(
+      children: [
+        // Search Bar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                leading: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC21820).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.description_rounded,
-                      color: Color(0xFFC21820),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ),
-                title: Text(
-                  clientName,
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                subtitle: Text(
-                  'Est No: $estNo · $estDate · $itemsCount ${itemsCount == 1 ? 'item' : 'items'}',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '₹${total.toStringAsFixed(2)}',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
+                    decoration: InputDecoration(
+                      hintText: 'Search by Customer, Estimate No, or Phone...',
+                      hintStyle: GoogleFonts.outfit(
                         fontSize: 14,
-                        color: AppTheme.textPrimary,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                        fontWeight: FontWeight.w500,
                       ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        color: AppTheme.primaryColor,
-                      ),
-                      onPressed: () => _editEstimate(est),
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: AppTheme.error,
-                      ),
-                      onPressed: () => _deleteFromHistory(i),
-                    ),
-                  ],
+                  ),
                 ),
-                onTap: () => _editEstimate(est),
-              ),
+                if (_searchQuery.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _searchQuery.isEmpty
+                            ? Icons.description_outlined
+                            : Icons.search_off_rounded,
+                        size: 64,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isEmpty
+                            ? 'No estimate history found'
+                            : 'No matches found for "$_searchQuery"',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      if (_searchQuery.isEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create a new estimate by clicking the button above',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        OutlinedButton.icon(
+                          onPressed: _startNewEstimate,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create Estimate'),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final est = filtered[i];
+                    final clientName = est['clientName'] ?? 'Unnamed Customer';
+                    final estNo = est['estimateNo'] ?? 'No Number';
+                    final estDate = est['estimateDate'] ?? '';
+                    final total = est['grandTotal'] ?? 0.0;
+                    final itemsCount = (est['items'] as List?)?.length ?? 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color:
+                                    const Color(0xFFC21820).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.description_rounded,
+                                  color: Color(0xFFC21820),
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              clientName,
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Est No: $estNo · $estDate · $itemsCount ${itemsCount == 1 ? 'item' : 'items'}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '₹${total.toStringAsFixed(2)}',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  onPressed: () => _editEstimate(est),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: AppTheme.error,
+                                  ),
+                                  onPressed: () => _deleteFromHistory(est),
+                                ),
+                              ],
+                            ),
+                            onTap: () => _editEstimate(est),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
