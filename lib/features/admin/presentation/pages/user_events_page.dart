@@ -219,13 +219,27 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
       final cleanPhone = uPhone.replaceAll(RegExp(r'\D'), '');
       
-      final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-          .trim()
-          .toLowerCase();
-      final uShop = (u['shopName'] ?? '').toString().toLowerCase();
+      final rawFirstName = (u['firstName'] ?? '').toString().toLowerCase();
+      final rawLastName = (u['lastName'] ?? '').toString().toLowerCase();
+      final rawShopName = (u['shopName'] ?? '').toString().toLowerCase();
+      
+      final dbRole = u['role']?.toString().toLowerCase();
       final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-      final type =
-          defaultType ?? ((kycStatus == 'verified') ? 'Dealer' : 'Lead');
+      
+      // Determine Type: Staff always comes first
+      String type = 'Lead';
+      if (dbRole == 'admin') {
+        type = 'Admin';
+      } else if (dbRole == 'sales') {
+        type = 'Sales';
+      } else if (kycStatus == 'verified') {
+        type = 'Dealer';
+      }
+      
+      if (defaultType != null) type = defaultType;
+
+      final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+      final uShop = (u['shopName'] ?? '').toString().trim().toLowerCase();
 
       if (uId.isNotEmpty) typeLookup[uId] ??= type;
       if (uEmail.isNotEmpty) typeLookup[uEmail] ??= type;
@@ -1076,31 +1090,49 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final userDetails = event['userDetails'] as Map<String, dynamic>?;
       if (userDetails != null &&
           (targetUserName == null || targetUserName.isEmpty)) {
-        final firstName = userDetails['firstName'] ?? '';
-        final lastName = userDetails['lastName'] ?? '';
-        final shopName = userDetails['shopName'] ?? '';
-        final phone = userDetails['phoneNumber'] ?? '';
+      final firstName = (userDetails['firstName'] ?? '').toString().trim();
+      final lastName = (userDetails['lastName'] ?? '').toString().trim();
+      final shopName = (userDetails['shopName'] ?? '').toString().trim();
+      final phone = (userDetails['phoneNumber'] ?? '').toString().trim();
 
-        if (firstName.isNotEmpty || lastName.isNotEmpty) {
-          displayName = '$firstName $lastName'.trim();
-        } else if (shopName.isNotEmpty) {
-          displayName = shopName;
-        } else if (phone.isNotEmpty) {
-          displayName = phone;
-        }
+      bool isNameTrash(String? n) {
+        if (n == null || n.isEmpty) return true;
+        final low = n.toLowerCase();
+        return low == 'new customer' || 
+               low == 'admin' || 
+               low == 'sales' || 
+               low == 'admin user' || 
+               low == 'staff' ||
+               low.contains('test') ||
+               RegExp(r'^\d+$').hasMatch(n);
+      }
 
-        if (phone.isNotEmpty) {
-          displayPhone = phone;
-        }
+      String? validName;
+      if (!isNameTrash(firstName) || !isNameTrash(lastName)) {
+        validName = '$firstName $lastName'.trim();
+      } else if (!isNameTrash(shopName)) {
+        validName = shopName;
+      }
+
+      if (validName != null && validName.isNotEmpty) {
+        displayName = validName;
+      } else if (phone.isNotEmpty) {
+        displayName = phone;
+      } else {
+        displayName = 'New Customer';
+      }
+
+      if (phone.isNotEmpty) {
+        displayPhone = phone;
+      }
       }
 
       if (displayName.isEmpty ||
           displayName == 'Dealer' ||
           displayName == 'Lead' ||
-          displayName.toLowerCase() == 'unknown' ||
-          displayName.toLowerCase() == 'unknown user' ||
-          displayName.toLowerCase() == 'admin' ||
-          displayName.toLowerCase() == 'admin user') {
+          displayName.toLowerCase().contains('unknown') ||
+          displayName.toLowerCase().contains('admin') ||
+          displayName.toLowerCase().contains('sales')) {
         displayName = (displayPhone != null && displayPhone.isNotEmpty)
             ? displayPhone
             : 'New Customer';
@@ -1114,13 +1146,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
       final isNameOrEmailAdmin =
           rawUser.toLowerCase().contains('admin') ||
-          displayName.toLowerCase().contains('admin');
+          displayName.toLowerCase().contains('admin') ||
+          displayName.toLowerCase().contains('sales');
 
       if (rawUser == AuthService().currentUserEmail ||
           role?.toLowerCase() == 'admin' ||
           role?.toLowerCase() == 'sales' ||
           isNameOrEmailAdmin) {
-        continue;
+        // Double check: if it's a regular user role but with a name containing staff keywords, allow it as a customer
+        if (role?.toLowerCase() == 'user' && !rawUser.toLowerCase().contains('admin')) {
+          // Keep processing as a customer
+        } else {
+          continue;
+        }
       }
 
       if (AuthService().isSales &&
@@ -1537,15 +1575,27 @@ class _UserEventsPageState extends State<UserEventsPage> {
             uid == idLower;
       }, orElse: () => <String, dynamic>{});
       if (dealerData != null && dealerData.isNotEmpty) {
-        final String personName =
-            (dealerData['firstName'] != null || dealerData['lastName'] != null)
-            ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
-                  .trim()
-            : '';
-        final String shopName = dealerData['shopName'] ?? '';
-        final String displayName = personName.isNotEmpty
-            ? personName
-            : (shopName.isNotEmpty ? shopName : userIdentifier);
+        final String fName = (dealerData['firstName'] ?? '').toString().trim();
+        final String lName = (dealerData['lastName'] ?? '').toString().trim();
+        final String sName = (dealerData['shopName'] ?? '').toString().trim();
+        
+        bool isTrash(String n) {
+          final low = n.toLowerCase();
+          return low.isEmpty ||
+              low == 'admin' ||
+              low == 'sales' ||
+              low == 'new customer' ||
+              RegExp(r'^\d+$').hasMatch(n);
+        }
+
+        String dName = '';
+        if (!isTrash(fName) || !isTrash(lName)) {
+          dName = '$fName $lName'.trim();
+        } else if (!isTrash(sName)) {
+          dName = sName;
+        }
+
+        final String displayName = dName.isNotEmpty ? dName : (dealerData['phoneNumber'] ?? userIdentifier);
         final String displayPhone =
             dealerData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
@@ -1575,15 +1625,27 @@ class _UserEventsPageState extends State<UserEventsPage> {
             uid == idLower;
       }, orElse: () => <String, dynamic>{});
       if (leadData != null && leadData.isNotEmpty) {
-        final String personName =
-            (leadData['firstName'] != null || leadData['lastName'] != null)
-            ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
-                  .trim()
-            : '';
-        final String shopName = leadData['shopName'] ?? '';
-        final String displayName = personName.isNotEmpty
-            ? personName
-            : (shopName.isNotEmpty ? shopName : userIdentifier);
+        final String fName = (leadData['firstName'] ?? '').toString().trim();
+        final String lName = (leadData['lastName'] ?? '').toString().trim();
+        final String sName = (leadData['shopName'] ?? '').toString().trim();
+        
+        bool isTrash(String n) {
+          final low = n.toLowerCase();
+          return low.isEmpty ||
+              low == 'admin' ||
+              low == 'sales' ||
+              low == 'new customer' ||
+              RegExp(r'^\d+$').hasMatch(n);
+        }
+
+        String dName = '';
+        if (!isTrash(fName) || !isTrash(lName)) {
+          dName = '$fName $lName'.trim();
+        } else if (!isTrash(sName)) {
+          dName = sName;
+        }
+
+        final String displayName = dName.isNotEmpty ? dName : (leadData['phoneNumber'] ?? userIdentifier);
         final String displayPhone =
             leadData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
@@ -4997,7 +5059,7 @@ class _UserCardState extends State<_UserCard>
 
   Widget _buildUserTypeBadge(BuildContext context, String userName) {
     final type = widget.userType;
-    if (type == 'Guest') return const SizedBox.shrink();
+    if (type == 'Guest' || type == 'Admin' || type == 'Sales') return const SizedBox.shrink();
 
     final isDealer = type == 'Dealer';
     final bgColor = isDealer
