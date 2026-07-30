@@ -216,9 +216,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     void indexUser(Map<String, dynamic> u, {String? defaultType}) {
       final uId = _normalizeId(u['_id']).toLowerCase();
       final uEmail = (u['email'] ?? '').toString().toLowerCase();
-      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
-          .toString()
-          .toLowerCase();
+      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+      final cleanPhone = uPhone.replaceAll(RegExp(r'\D'), '');
+      
       final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
           .trim()
           .toLowerCase();
@@ -229,14 +229,30 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
       if (uId.isNotEmpty) typeLookup[uId] ??= type;
       if (uEmail.isNotEmpty) typeLookup[uEmail] ??= type;
-      if (uPhone.isNotEmpty) typeLookup[uPhone] ??= type;
+      
+      if (uPhone.isNotEmpty) {
+        typeLookup[uPhone.toLowerCase()] ??= type;
+        if (cleanPhone.length >= 10) {
+          final last10 = cleanPhone.substring(cleanPhone.length - 10);
+          typeLookup[last10] = type;
+        }
+      }
+      
       if (uName.isNotEmpty) typeLookup[uName] ??= type;
       if (uShop.isNotEmpty) typeLookup[uShop] ??= type;
 
       if (isRawUserAssigned(u)) {
         if (uId.isNotEmpty) assignedKeys.add(uId);
         if (uEmail.isNotEmpty) assignedKeys.add(uEmail);
-        if (uPhone.isNotEmpty) assignedKeys.add(uPhone);
+        
+        if (uPhone.isNotEmpty) {
+          assignedKeys.add(uPhone.toLowerCase());
+          if (cleanPhone.length >= 10) {
+            final last10 = cleanPhone.substring(cleanPhone.length - 10);
+            assignedKeys.add(last10);
+          }
+        }
+        
         if (uName.isNotEmpty) assignedKeys.add(uName);
         if (uShop.isNotEmpty) assignedKeys.add(uShop);
       }
@@ -313,6 +329,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (rawUserLower.isNotEmpty && keys.contains(rawUserLower)) return true;
     if (nameLower.isNotEmpty && keys.contains(nameLower)) return true;
     if (phoneLower.isNotEmpty && keys.contains(phoneLower)) return true;
+    
+    // Normalize phone check
+    final cleanPhone = phoneLower.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.length >= 10) {
+      final last10 = cleanPhone.substring(cleanPhone.length - 10);
+      if (keys.contains(last10)) return true;
+    }
+    
+    final cleanRaw = rawUserLower.replaceAll(RegExp(r'\D'), '');
+    if (cleanRaw.length >= 10) {
+      final last10 = cleanRaw.substring(cleanRaw.length - 10);
+      if (keys.contains(last10)) return true;
+    }
 
     return false;
   }
@@ -486,6 +515,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return currentRole;
 
     final idLower = userIdentifier.toLowerCase();
+    final cleanId = idLower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanId.length >= 10 ? cleanId.substring(cleanId.length - 10) : '';
 
     // 1. Try to find in Dealers
     try {
@@ -496,11 +527,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
             .trim()
             .toLowerCase();
         final String phone = (u['phoneNumber'] ?? '').toString();
+        final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
         final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final String email = (u['email'] ?? '').toString().toLowerCase();
         final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        
         return fullName == idLower ||
             phone == idLower ||
+            (last10.isNotEmpty && p10 == last10) ||
             shopName == idLower ||
             email == idLower ||
             uid == idLower;
@@ -520,10 +556,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
             .trim()
             .toLowerCase();
         final String phone = (u['phoneNumber'] ?? '').toString();
+        final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
         final String email = (u['email'] ?? '').toString().toLowerCase();
         final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        
         return fullName == idLower ||
             phone == idLower ||
+            (last10.isNotEmpty && p10 == last10) ||
             email == idLower ||
             uid == idLower;
       }, orElse: () => <String, dynamic>{});
@@ -538,6 +579,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   String? _resolveSearchQueryToEmailOrPhone(String? searchQuery) {
     if (searchQuery == null || searchQuery.trim().isEmpty) return null;
     final queryLower = searchQuery.trim().toLowerCase();
+    final cleanQuery = queryLower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanQuery.length >= 10 ? cleanQuery.substring(cleanQuery.length - 10) : '';
 
     // 1. Try to find in Dealers
     try {
@@ -551,11 +594,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final phone = (u['phoneNumber'] ?? u['phone'] ?? '')
             .toString()
             .toLowerCase();
+        final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+        
         final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
             email.contains(queryLower) ||
             phone.contains(queryLower) ||
+            (last10.isNotEmpty && p10 == last10) ||
             uid.contains(queryLower);
       });
       return matchingUser['email'] ??
@@ -576,11 +623,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final phone = (u['phoneNumber'] ?? u['phone'] ?? '')
             .toString()
             .toLowerCase();
+        final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+        
         final uid = (u['_id'] ?? '').toString().toLowerCase();
         return fullName.contains(queryLower) ||
             shopName.contains(queryLower) ||
             email.contains(queryLower) ||
             phone.contains(queryLower) ||
+            (last10.isNotEmpty && p10 == last10) ||
             uid.contains(queryLower);
       });
       return matchingUser['email'] ??
@@ -769,7 +820,20 @@ class _UserEventsPageState extends State<UserEventsPage> {
         if (rawUser != null) {
           buffer.write(rawUser.toLowerCase());
           buffer.write(' ');
+          
+          final cleanRaw = rawUser.replaceAll(RegExp(r'\D'), '');
+          if (cleanRaw.length >= 10) {
+            buffer.write(cleanRaw.substring(cleanRaw.length - 10));
+            buffer.write(' ');
+          }
         }
+        
+        final cleanName = userName.replaceAll(RegExp(r'\D'), '');
+        if (cleanName.length >= 10) {
+          buffer.write(cleanName.substring(cleanName.length - 10));
+          buffer.write(' ');
+        }
+
         userSearchIndex[userName] = buffer.toString();
       }
       _cachedUserSearchIndex = userSearchIndex;
@@ -806,8 +870,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (_cachedUserTypeLookup == null) {
       _buildUserLookupIndexes();
     }
-    final type = _cachedUserTypeLookup?[nameLower];
+    var type = _cachedUserTypeLookup?[nameLower];
     if (type != null) return type;
+
+    // Try normalized phone lookup as fallback
+    final clean = nameLower.replaceAll(RegExp(r'\D'), '');
+    if (clean.length >= 10) {
+      final last10 = clean.substring(clean.length - 10);
+      type = _cachedUserTypeLookup?[last10];
+      if (type != null) return type;
+    }
 
     // Check in fallback static dealers list
     final isStaticDealer = allDealers.any((d) {
@@ -1034,10 +1106,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
             : 'New Customer';
       }
 
-      // Skip if the user is current admin, has 'admin' / 'sales' role, or name/email contains 'admin'
       final currentRole =
           userDetails?['role']?.toString() ?? event['role']?.toString();
+      
+      // Use rawUser or displayPhone for role lookup if rawUser looks like a phone
       final role = _getUserRole(rawUser, currentRole);
+
       final isNameOrEmailAdmin =
           rawUser.toLowerCase().contains('admin') ||
           displayName.toLowerCase().contains('admin');
@@ -1436,6 +1510,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
     String? currentPhone,
   ) {
     final idLower = userIdentifier.toLowerCase();
+    final cleanId = idLower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanId.length >= 10 ? cleanId.substring(cleanId.length - 10) : '';
 
     // 1. Try to find in Dealers
     try {
@@ -1446,11 +1522,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
             .trim()
             .toLowerCase();
         final String phone = (u['phoneNumber'] ?? '').toString();
+        final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
         final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
         final String email = (u['email'] ?? '').toString().toLowerCase();
         final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        
         return fullName == idLower ||
             phone == idLower ||
+            (last10.isNotEmpty && p10 == last10) ||
             shopName == idLower ||
             email == idLower ||
             uid == idLower;
@@ -1481,10 +1562,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
             .trim()
             .toLowerCase();
         final String phone = (u['phoneNumber'] ?? '').toString();
+        final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
         final String email = (u['email'] ?? '').toString().toLowerCase();
         final String uid = (u['_id'] ?? '').toString().toLowerCase();
+        
         return fullName == idLower ||
             phone == idLower ||
+            (last10.isNotEmpty && p10 == last10) ||
             email == idLower ||
             uid == idLower;
       }, orElse: () => <String, dynamic>{});
