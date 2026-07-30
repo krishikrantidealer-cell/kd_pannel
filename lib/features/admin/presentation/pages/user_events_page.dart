@@ -2408,7 +2408,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                       });
                                     },
                                     onViewProfile: (name) =>
-                                        _navigateToProfile(context, name),
+                                        _navigateToProfile(context, userId ?? name),
                                   ),
                                 );
                               }, childCount: filtered.length),
@@ -5097,23 +5097,37 @@ class _UserCardState extends State<_UserCard>
 }
 
 void _navigateToProfile(BuildContext context, String user) {
-  final nameLower = user.toLowerCase();
+  if (user.isEmpty) return;
+  final nameLower = user.toLowerCase().trim();
+  final cleanUser = nameLower.replaceAll(RegExp(r'\D'), '');
+  final userLast10 = cleanUser.length >= 10 ? cleanUser.substring(cleanUser.length - 10) : '';
 
   // 1. Try to find in Dealers first (Real database records)
   final dealersState = context.read<DealersBloc>().state;
-  final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere((
-    u,
-  ) {
-    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-        .trim()
-        .toLowerCase();
+  final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere((u) {
+    final String uid = (u['_id'] ?? '').toString();
+    // Strict ID Match
+    if (uid == user) return true;
+
     final String phone = (u['phoneNumber'] ?? '').toString();
+    final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+    final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
+    // Phone Match (Strict or Last 10)
+    if (phone == user || (userLast10.isNotEmpty && p10 == userLast10)) return true;
+
+    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
     final String shopName = (u['shopName'] ?? '').toString().toLowerCase();
-    return fullName == nameLower ||
-        phone == user ||
-        shopName == nameLower ||
-        fullName.contains(nameLower) ||
-        nameLower.contains(fullName);
+
+    // Name Match (Only if not empty and not just digits)
+    if (fullName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(fullName)) {
+      if (fullName == nameLower || fullName.contains(nameLower) || nameLower.contains(fullName)) return true;
+    }
+    if (shopName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(shopName)) {
+      if (shopName == nameLower || shopName.contains(nameLower) || nameLower.contains(shopName)) return true;
+    }
+
+    return false;
   }, orElse: () => <String, dynamic>{});
 
   if (dealerData != null && dealerData.isNotEmpty) {
@@ -5211,13 +5225,20 @@ void _navigateToProfile(BuildContext context, String user) {
   // 3. Not a dealer, so it must be a Lead! Let's find in Leads first.
   final leadsState = context.read<LeadsBloc>().state;
   final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((u) {
-    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-        .trim()
-        .toLowerCase();
+    final String uid = (u['_id'] ?? '').toString();
+    if (uid == user) return true;
+
     final String phone = (u['phoneNumber'] ?? '').toString();
-    return fullName == nameLower ||
-        phone == user ||
-        fullName.contains(nameLower);
+    final String cleanP = phone.replaceAll(RegExp(r'\D'), '');
+    final String p10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+
+    if (phone == user || (userLast10.isNotEmpty && p10 == userLast10)) return true;
+
+    final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+    if (fullName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(fullName)) {
+      if (fullName == nameLower || fullName.contains(nameLower) || nameLower.contains(fullName)) return true;
+    }
+    return false;
   }, orElse: () => <String, dynamic>{});
 
   if (leadData != null && leadData.isNotEmpty) {

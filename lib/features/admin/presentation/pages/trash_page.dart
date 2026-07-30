@@ -647,7 +647,7 @@ class _TrashPageState extends State<TrashPage> {
       columnWidths: const {
         0: FlexColumnWidth(3), // Name
         1: FlexColumnWidth(2), // Phone
-        2: FlexColumnWidth(3), // Shop Name
+        2: FlexColumnWidth(3), // Deleted By
         3: FlexColumnWidth(2.5), // Deleted Date
         4: FlexColumnWidth(2), // Actions
       },
@@ -659,7 +659,7 @@ class _TrashPageState extends State<TrashPage> {
           children: [
             _buildTableHeaderCell('Name'),
             _buildTableHeaderCell('Phone'),
-            _buildTableHeaderCell('Shop Name'),
+            _buildTableHeaderCell('Deleted By'),
             _buildTableHeaderCell('Deleted Date'),
             _buildTableHeaderCell('Actions', alignRight: true),
           ],
@@ -669,7 +669,15 @@ class _TrashPageState extends State<TrashPage> {
           final String name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
           final String displayName = name.isEmpty ? 'Unknown User' : name;
           final String displayPhoneStr = _cleanDeletedField(u['phoneNumber']);
-          final String displayShopStr = u['shopName'] ?? '-';
+          
+          // Fallback logic for deletedBy: field -> assignedAgent -> '-'
+          String deletedBy = u['deletedByAdminName'] ?? '';
+          if (deletedBy.isEmpty && u['assignedAgent'] != null) {
+            final agent = u['assignedAgent'];
+            deletedBy = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+          }
+          if (deletedBy.isEmpty) deletedBy = '-';
+
           final String deletedDateStr = u['deletedAt'] != null
               ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(u['deletedAt']).toLocal())
               : '-';
@@ -699,7 +707,7 @@ class _TrashPageState extends State<TrashPage> {
               _buildTableCell(Text(displayPhoneStr, style: GoogleFonts.outfit(color: AppTheme.textPrimary))),
               _buildTableCell(
                 Text(
-                  displayShopStr,
+                  deletedBy,
                   style: GoogleFonts.outfit(color: AppTheme.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -724,6 +732,13 @@ class _TrashPageState extends State<TrashPage> {
         final String name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
         final String displayName = name.isEmpty ? 'Unknown User' : name;
         final String displayPhoneStr = _cleanDeletedField(u['phoneNumber']);
+        
+        String deletedByMobile = u['deletedByAdminName'] ?? '';
+        if (deletedByMobile.isEmpty && u['assignedAgent'] != null) {
+          final agent = u['assignedAgent'];
+          deletedByMobile = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+        }
+
         final String deletedDateStr = u['deletedAt'] != null
             ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(u['deletedAt']).toLocal())
             : '-';
@@ -771,10 +786,10 @@ class _TrashPageState extends State<TrashPage> {
                 'Phone: $displayPhoneStr',
                 style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
               ),
-              if (u['shopName'] != null && u['shopName'].toString().isNotEmpty) ...[
+              if (deletedByMobile.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
-                  'Shop Name: ${u['shopName']}',
+                  'Deleted By: $deletedByMobile',
                   style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
                 ),
               ],
@@ -990,7 +1005,14 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
     final String name = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim();
     final String displayName = name.isEmpty ? 'Unknown User' : name;
     final String phone = widget.cleanDeletedField(u['phoneNumber']);
-    final String shop = u['shopName'] ?? '-';
+    
+    String deletedBy = u['deletedByAdminName'] ?? '';
+    if (deletedBy.isEmpty && u['assignedAgent'] != null) {
+      final agent = u['assignedAgent'];
+      deletedBy = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+    }
+    if (deletedBy.isEmpty) deletedBy = 'System';
+
     final String kycStatus = u['kycStatus'] ?? 'pending';
     final String deletedDate = u['deletedAt'] != null
         ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(u['deletedAt']).toLocal())
@@ -1086,9 +1108,9 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
                           Text(phone,
                               style: GoogleFonts.outfit(
                                   fontSize: 13, color: AppTheme.textSecondary)),
-                          if (shop != '-') ...[
+                          if (u['shopName'] != null && u['shopName'].toString().isNotEmpty) ...[
                             const SizedBox(height: 2),
-                            Text(shop,
+                            Text(u['shopName'],
                                 style: GoogleFonts.outfit(
                                     fontSize: 13, color: AppTheme.textSecondary)),
                           ],
@@ -1130,7 +1152,7 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
                                   children: [
                                     Icon(Icons.delete_rounded, size: 12, color: AppTheme.error),
                                     const SizedBox(width: 4),
-                                    Text('Deleted $deletedDate',
+                                    Text('Deleted by $deletedBy on $deletedDate',
                                         style: GoogleFonts.outfit(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
