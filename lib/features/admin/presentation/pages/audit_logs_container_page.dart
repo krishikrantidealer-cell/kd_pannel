@@ -53,7 +53,7 @@ class _AuditLogsContainerPageState extends State<AuditLogsContainerPage> with Si
               Row(
                 children: [
                   Text(
-                    'Logs',
+                    'Sales Activity',
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,

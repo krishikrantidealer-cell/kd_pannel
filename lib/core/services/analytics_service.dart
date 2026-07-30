@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,18 +44,25 @@ class AnalyticsService extends WidgetsBindingObserver {
   // Presence State
   String _currentScreen = 'Home';
   String _lastAction = 'App Open';
+  final List<String> _breadcrumbs = [];
+  List<String> get breadcrumbs => List.unmodifiable(_breadcrumbs);
 
   /// Initialize the service and start the heartbeat
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
     await _loadFromDisk();
     _startHeartbeat();
-    // debugPrint('[Analytics] Pipeline online. Adaptive heartbeat active.');
   }
 
   /// Sets the current context for the real-time heartbeat
   void updateContext({String? screen, String? action}) {
-    if (screen != null) _currentScreen = screen;
+    if (screen != null) {
+      _currentScreen = screen;
+      if (_breadcrumbs.isEmpty || _breadcrumbs.last != screen) {
+        _breadcrumbs.add(screen);
+        if (_breadcrumbs.length > 8) _breadcrumbs.removeAt(0);
+      }
+    }
     if (action != null) _lastAction = action;
     _lastActivity = DateTime.now();
     _startHeartbeat(); // Recalculate interval if active
@@ -77,6 +83,11 @@ class AnalyticsService extends WidgetsBindingObserver {
     _lastAction = eventName; // Update presence context
     _lastActivity = DateTime.now();
 
+    final eventProps = Map<String, dynamic>.from(properties ?? {});
+    if (_breadcrumbs.isNotEmpty) {
+      eventProps['journeyPath'] = _breadcrumbs.join(' ➡️ ');
+    }
+
     final event = {
       'eventId': _generateEventId(),
       'sessionId': AuthService().sessionId,
@@ -85,13 +96,21 @@ class AnalyticsService extends WidgetsBindingObserver {
       'user': userEmail,
       'timestamp': timestamp,
       'platform': kIsWeb ? 'Web' : defaultTargetPlatform.name.toLowerCase(),
-      'properties': properties ?? {},
+      'properties': eventProps,
     };
 
     _localQueue.add(event);
     await _saveToDisk();
 
-    if (_localQueue.length >= _batchThreshold) {
+    final lowerEvent = eventName.toLowerCase();
+    final isHighPriority = lowerEvent.contains('order') ||
+        lowerEvent.contains('checkout') ||
+        lowerEvent.contains('cart') ||
+        lowerEvent.contains('payment') ||
+        lowerEvent.contains('assign') ||
+        lowerEvent.contains('kyc');
+
+    if (_localQueue.length >= _batchThreshold || isHighPriority) {
       flush();
     } else {
       _resetBatchTimer();
@@ -115,6 +134,8 @@ class AnalyticsService extends WidgetsBindingObserver {
     final userEmail = AuthService().currentUserEmail;
     if (userEmail == null) return;
 
+    final breadcrumbsStr = _breadcrumbs.isNotEmpty ? _breadcrumbs.join(' ➡️ ') : 'Home';
+
     // Use WebSocket if connected (highly efficient)
     if (WebSocketService().connectionStatusNow) {
       WebSocketService().updatePresence(
@@ -124,6 +145,7 @@ class AnalyticsService extends WidgetsBindingObserver {
           'userEmail': userEmail,
           'sessionId': AuthService().sessionId,
           'appVersion': _schemaVersion,
+          'journeyPath': breadcrumbsStr,
         },
       );
       return; // Skip HTTP if WS worked
@@ -137,6 +159,7 @@ class AnalyticsService extends WidgetsBindingObserver {
         'currentScreen': _currentScreen,
         'lastAction': _lastAction,
         'device': kIsWeb ? 'Web' : defaultTargetPlatform.name.toUpperCase(),
+        'journeyPath': breadcrumbsStr,
       });
     } catch (_) {}
   }
@@ -179,8 +202,6 @@ class AnalyticsService extends WidgetsBindingObserver {
       });
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final latency = DateTime.now().difference(startTime).inMilliseconds;
-        // debugPrint('[Analytics] Batch flushed. Size: ${batchToSend.length}, Latency: ${latency}ms');
         _successCount++;
         _localQueue.removeRange(0, batchToSend.length);
         await _saveToDisk();

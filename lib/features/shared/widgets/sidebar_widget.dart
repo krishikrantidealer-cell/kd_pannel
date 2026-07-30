@@ -83,7 +83,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 5},
     {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 6},
     {'icon': Icons.insights_rounded, 'title': 'Marketing', 'index': 7},
-    {'icon': Icons.history_rounded, 'title': 'Logs', 'index': 8},
+    {'icon': Icons.local_activity_rounded, 'title': 'Sales Activity', 'index': 8},
     {'icon': Icons.delete_sweep_rounded, 'title': 'Trash Bin', 'index': 9},
     {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 10},
     {'icon': Icons.description_rounded, 'title': 'Estimates', 'index': 11},

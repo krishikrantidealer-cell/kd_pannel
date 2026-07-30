@@ -1270,7 +1270,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         title: 'Events $periodSuffix',
                         value: _cachedEventsToday,
                         color: const Color(0xFF8B5CF6), // Vibrant violet
-                        trendLabel: 'Telemetry Active',
+                        trendLabel: 'Live Pulse Active',
                         trendIcon: Icons.bolt_rounded,
                         onTap: () {
                           Navigator.pushReplacementNamed(context, '/marketing');
@@ -3638,7 +3638,7 @@ class _DashboardPageState extends State<DashboardPage> {
               const LivePulsingBadge(color: Color(0xFF8B5CF6)),
               const SizedBox(width: 4),
               Text(
-                'LIVE TELEMETRY',
+                'LIVE PULSE ACTIVE',
                 style: GoogleFonts.outfit(
                   fontSize: 9,
                   fontWeight: FontWeight.w800,

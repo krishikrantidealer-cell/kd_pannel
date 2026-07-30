@@ -518,6 +518,17 @@ class _LeadsPageState extends State<LeadsPage> {
           final role = u['role'] ?? 'user';
           if (role != 'user') return false;
 
+          if (AuthService().isSales) {
+            final dynamic assignedAgent = u['assignedAgent'];
+            final String? assignedAgentId = _normalizeId(
+                assignedAgent?['_id'] ?? assignedAgent?['\$oid'] ?? assignedAgent);
+            if (assignedAgentId == null ||
+                assignedAgentId.trim().isEmpty ||
+                assignedAgentId != AuthService().currentUserId) {
+              return false;
+            }
+          }
+
           // Leads should ONLY show non-verified users
           final kycStatus = u['kycStatus'] ?? 'pending';
           if (kycStatus == 'verified') return false;
@@ -1371,7 +1382,28 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  List<String> get activeFilterChips {
+    if (AuthService().isSales) {
+      return [
+        'All',
+        'Assigned',
+        'KYC Pending',
+        'KYC Confirm',
+        'Deleted',
+      ];
+    }
+    return [
+      'All',
+      'Assigned',
+      'Unassigned',
+      'KYC Pending',
+      'KYC Confirm',
+      'Deleted',
+    ];
+  }
+
   Widget _buildFilterChips(bool isMobile, LeadsState state) {
+    final chipsToDisplay = activeFilterChips;
     if (!isMobile) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1384,7 +1416,7 @@ class _LeadsPageState extends State<LeadsPage> {
               physics:
                   const NeverScrollableScrollPhysics(), // Forced single-line rhythm
               child: Row(
-                children: filterChips
+                children: chipsToDisplay
                     .map(
                       (chip) => Padding(
                         padding: const EdgeInsets.only(
@@ -1424,7 +1456,7 @@ class _LeadsPageState extends State<LeadsPage> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             child: Row(
-              children: filterChips
+              children: chipsToDisplay
                   .map(
                     (chip) => Padding(
                       padding: const EdgeInsets.only(right: 12),
@@ -3393,29 +3425,46 @@ class _MasterLeadsAnalyticsHeaderState
     final todayLeadsCount = totalRegisteredToday ?? fallbackTodayCount;
 
 
-    final unassignedCount = dailyStats['totalAllTimeUnassignedLeads'] ??
-        userList.where((u) {
-          final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
-          return kycStatus != 'verified' && !isAgentAssigned(u['assignedAgent']);
-        }).length;
+    final unassignedCount = isSales
+        ? 0
+        : (dailyStats['totalAllTimeUnassignedLeads'] ??
+            userList.where((u) {
+              final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+              return kycStatus != 'verified' && !isAgentAssigned(u['assignedAgent']);
+            }).length);
 
-    final assignedCount = dailyStats['totalAllTimeAssignedLeads'] ??
-        userList.where((u) {
-          final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
-          return kycStatus != 'verified' && isAgentAssigned(u['assignedAgent']);
-        }).length;
+    final assignedCount = isSales
+        ? userList.where((u) {
+            final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+            return kycStatus != 'verified';
+          }).length
+        : (dailyStats['totalAllTimeAssignedLeads'] ??
+            userList.where((u) {
+              final kycStatus = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+              return kycStatus != 'verified' && isAgentAssigned(u['assignedAgent']);
+            }).length);
 
-    final kycPendingCount = dailyStats['totalAllTimeKycPendingLeads'] ??
-        userList.where((u) {
-          final status = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
-          return status == 'pending' || status == 'submitted' || status == 'processing';
-        }).length;
+    final kycPendingCount = isSales
+        ? userList.where((u) {
+            final status = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+            return status == 'pending' || status == 'submitted' || status == 'processing';
+          }).length
+        : (dailyStats['totalAllTimeKycPendingLeads'] ??
+            userList.where((u) {
+              final status = (u['kycStatus'] ?? 'pending').toString().toLowerCase();
+              return status == 'pending' || status == 'submitted' || status == 'processing';
+            }).length);
 
-    final verifiedDealersCount = dailyStats['totalAllTimeVerifiedDealers'] ??
-        userList.where((u) {
-          final status = (u['kycStatus'] ?? '').toString().toLowerCase();
-          return status == 'verified';
-        }).length;
+    final verifiedDealersCount = isSales
+        ? userList.where((u) {
+            final status = (u['kycStatus'] ?? '').toString().toLowerCase();
+            return status == 'verified';
+          }).length
+        : (dailyStats['totalAllTimeVerifiedDealers'] ??
+            userList.where((u) {
+              final status = (u['kycStatus'] ?? '').toString().toLowerCase();
+              return status == 'verified';
+            }).length);
 
     final deletedCount = widget.state.allRawUsers.where((u) {
       final role = u['role'] ?? 'user';
@@ -3424,16 +3473,16 @@ class _MasterLeadsAnalyticsHeaderState
         final agentId = getAgentId(u['assignedAgent']);
         if (agentId != currentUserId) return false;
       }
-      return u['isDeleted'] == true;
+      return u['isDeleted'] == true || u['status'] == 'deleted';
     }).length;
 
     final totalAllTimeDeletedLeads = dailyStats['totalDeletedLeads'] ?? deletedCount;
     final teamStats = dailyStats['teamStats'] as Map<String, dynamic>? ?? {};
     final agentStats = dailyStats['agentStats'] as Map<String, dynamic>? ?? {};
 
-    final totalTeamAssigned = teamStats['totalAssignedInDay'] ?? 0;
-    final totalTeamKycApproved = teamStats['totalKycApprovedInDay'] ?? 0;
-    final totalTeamDeleted = teamStats['totalDeletedInDay'] ?? 0;
+    final totalTeamAssigned = isSales ? (agentStats['assignedInDay'] ?? teamStats['totalAssignedInDay'] ?? 0) : (teamStats['totalAssignedInDay'] ?? 0);
+    final totalTeamKycApproved = isSales ? (agentStats['kycApprovedInDay'] ?? teamStats['totalKycApprovedInDay'] ?? 0) : (teamStats['totalKycApprovedInDay'] ?? 0);
+    final totalTeamDeleted = isSales ? (agentStats['deletedInDay'] ?? teamStats['totalDeletedInDay'] ?? 0) : (teamStats['totalDeletedInDay'] ?? 0);
     final totalTeamInProgress = (totalTeamAssigned - totalTeamKycApproved - totalTeamDeleted) > 0
         ? (totalTeamAssigned - totalTeamKycApproved - totalTeamDeleted)
         : 0;
@@ -3491,7 +3540,7 @@ class _MasterLeadsAnalyticsHeaderState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Leads Performance Hub',
+                      isSales ? 'My Lead Hub & Performance' : 'Leads Performance Hub',
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -3499,7 +3548,9 @@ class _MasterLeadsAnalyticsHeaderState
                       ),
                     ),
                     Text(
-                      'Real-time lead status overview & daily sales performance',
+                      isSales
+                          ? 'Manage your assigned leads, track KYC verification, and convert dealers'
+                          : 'Real-time lead status overview & daily sales performance',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -3563,64 +3614,65 @@ class _MasterLeadsAnalyticsHeaderState
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundColor,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: widget.state.selectedDailyAgentId,
-                    hint: Text(
-                      'All Sales Team',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    icon: const Icon(Icons.arrow_drop_down, size: 18),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          '👥 All Sales Team',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+              if (!isSales)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: widget.state.selectedDailyAgentId,
+                      hint: Text(
+                        'All Sales Team',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
-                      ...widget.state.salesAgents.map((agent) {
-                        final id = (agent['_id'] ?? agent['id'])?.toString();
-                        final name =
-                            '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                .trim();
-                        return DropdownMenuItem<String?>(
-                          value: id,
+                      icon: const Icon(Icons.arrow_drop_down, size: 18),
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
                           child: Text(
-                            name.isNotEmpty
-                                ? name
-                                : (agent['phoneNumber'] ?? 'Agent'),
-                            style: GoogleFonts.outfit(fontSize: 13),
+                            '👥 All Sales Team',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) {
-                      context.read<LeadsBloc>().add(
-                            FetchDailyLeadStatsEvent(
-                              selectedDate: selectedDate,
-                              selectedAgentId: val,
+                        ),
+                        ...widget.state.salesAgents.map((agent) {
+                          final id = (agent['_id'] ?? agent['id'])?.toString();
+                          final name =
+                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                  .trim();
+                          return DropdownMenuItem<String?>(
+                            value: id,
+                            child: Text(
+                              name.isNotEmpty
+                                  ? name
+                                  : (agent['phoneNumber'] ?? 'Agent'),
+                              style: GoogleFonts.outfit(fontSize: 13),
                             ),
                           );
-                    },
+                        }),
+                      ],
+                      onChanged: (agentId) {
+                        context.read<LeadsBloc>().add(
+                              FetchDailyLeadStatsEvent(
+                                selectedDate: selectedDate,
+                                selectedAgentId: agentId,
+                              ),
+                            );
+                      },
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -3711,10 +3763,10 @@ class _MasterLeadsAnalyticsHeaderState
               final double cardWidth =
                   (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
+              final List<Widget> cards = [];
+
+              if (!isSales) {
+                cards.add(
                   StatCardWidget(
                     width: cardWidth,
                     title: 'New Today',
@@ -3726,10 +3778,11 @@ class _MasterLeadsAnalyticsHeaderState
                     color: const Color(0xFF00C896),
                     isCompact: true,
                   ),
+                );
+                cards.add(
                   StatCardWidget(
                     width: cardWidth,
                     title: 'Unassigned Leads',
-
                     value: '$unassignedCount',
                     icon: Icons.person_off_outlined,
                     color: AppTheme.warning,
@@ -3744,252 +3797,277 @@ class _MasterLeadsAnalyticsHeaderState
                           );
                     },
                   ),
-                  StatCardWidget(
-                    width: cardWidth,
-                    title: 'Assigned Leads',
-                    value: '$assignedCount',
-                    subtext: '+$totalTeamAssigned assigned today',
-                    icon: Icons.person_pin_outlined,
-                    color: AppTheme.info,
-                    isCompact: true,
-                    onTap: () {
-                      context.read<LeadsBloc>().add(
-                            const UpdateLeadsFilterEvent(
-                              selectedFilterChip: 'Assigned',
-                              currentPage: 1,
-                              searchQuery: '',
-                            ),
-                          );
-                    },
-                  ),
-                  StatCardWidget(
-                    width: cardWidth,
-                    title: 'KYC Pending',
-                    value: '$kycPendingCount',
-                    icon: Icons.pending_actions_outlined,
-                    color: AppTheme.error,
-                    isCompact: true,
-                    onTap: () {
-                      context.read<LeadsBloc>().add(
-                            const UpdateLeadsFilterEvent(
-                              selectedFilterChip: 'KYC Pending',
-                              currentPage: 1,
-                              searchQuery: '',
-                            ),
-                          );
-                    },
-                  ),
-                  StatCardWidget(
-                    width: cardWidth,
-                    title: 'Verified Dealers',
-                    value: '$verifiedDealersCount',
-                    subtext: '+$totalTeamKycApproved verified today',
-                    icon: Icons.verified_user_outlined,
-                    color: AppTheme.success,
-                    isCompact: true,
-                    onTap: () {
-                      context.read<LeadsBloc>().add(
-                            const UpdateLeadsFilterEvent(
-                              selectedFilterChip: 'KYC Confirm',
-                              currentPage: 1,
-                              searchQuery: '',
-                            ),
-                          );
-                    },
-                  ),
-                  StatCardWidget(
-                    width: cardWidth,
-                    title: 'Deleted Leads',
-                    value: '$totalAllTimeDeletedLeads',
-                    subtext: '+$totalTeamDeleted deleted today',
-                    icon: Icons.delete_outline,
-                    color: Colors.red.shade400,
-                    isCompact: true,
-                    onTap: () {
-                      context.read<LeadsBloc>().add(
-                            const UpdateLeadsFilterEvent(
-                              selectedFilterChip: 'Deleted',
-                              currentPage: 1,
-                              searchQuery: '',
-                            ),
-                          );
-                    },
-                  ),
-                ],
+                );
+              }
+
+              cards.add(
+                StatCardWidget(
+                  width: cardWidth,
+                  title: isSales ? 'My Assigned Leads' : 'Assigned Leads',
+                  value: '$assignedCount',
+                  subtext: isSales ? 'Assigned active leads' : '+$totalTeamAssigned assigned today',
+                  icon: Icons.person_pin_outlined,
+                  color: AppTheme.info,
+                  isCompact: true,
+                  onTap: () {
+                    context.read<LeadsBloc>().add(
+                          const UpdateLeadsFilterEvent(
+                            selectedFilterChip: 'Assigned',
+                            currentPage: 1,
+                            searchQuery: '',
+                          ),
+                        );
+                  },
+                ),
+              );
+
+              cards.add(
+                StatCardWidget(
+                  width: cardWidth,
+                  title: 'KYC Pending',
+                  value: '$kycPendingCount',
+                  icon: Icons.pending_actions_outlined,
+                  color: AppTheme.error,
+                  isCompact: true,
+                  onTap: () {
+                    context.read<LeadsBloc>().add(
+                          const UpdateLeadsFilterEvent(
+                            selectedFilterChip: 'KYC Pending',
+                            currentPage: 1,
+                            searchQuery: '',
+                          ),
+                        );
+                  },
+                ),
+              );
+
+              cards.add(
+                StatCardWidget(
+                  width: cardWidth,
+                  title: isSales ? 'My Verified Dealers' : 'Verified Dealers',
+                  value: '$verifiedDealersCount',
+                  subtext: isSales ? 'Converted dealers' : '+$totalTeamKycApproved verified today',
+                  icon: Icons.verified_user_outlined,
+                  color: AppTheme.success,
+                  isCompact: true,
+                  onTap: () {
+                    context.read<LeadsBloc>().add(
+                          const UpdateLeadsFilterEvent(
+                            selectedFilterChip: 'KYC Confirm',
+                            currentPage: 1,
+                            searchQuery: '',
+                          ),
+                        );
+                  },
+                ),
+              );
+
+              cards.add(
+                StatCardWidget(
+                  width: cardWidth,
+                  title: isSales ? 'My Deleted Leads' : 'Deleted Leads',
+                  value: '$totalAllTimeDeletedLeads',
+                  subtext: isSales ? 'Deleted leads' : '+$totalTeamDeleted deleted today',
+                  icon: Icons.delete_outline,
+                  color: Colors.red.shade400,
+                  isCompact: true,
+                  onTap: () {
+                    context.read<LeadsBloc>().add(
+                          const UpdateLeadsFilterEvent(
+                            selectedFilterChip: 'Deleted',
+                            currentPage: 1,
+                            searchQuery: '',
+                          ),
+                        );
+                  },
+                ),
+              );
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: cards,
               );
             },
           ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: () {
-              setState(() {
-                _isScoreboardExpanded = !_isScoreboardExpanded;
-              });
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Row(
-                children: [
-                  Text(
-                    _isScoreboardExpanded
-                        ? 'Hide Sales Agent Scoreboard'
-                        : 'View Agent Daily Scoreboard (${agentBreakdown.length} Agents)',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_isScoreboardExpanded) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: DataTable(
-                  columnSpacing: widget.isMobile ? 12 : 24,
-                  headingRowHeight: 38,
-                  headingRowColor: WidgetStateProperty.all(
-                    AppTheme.backgroundColor,
-                  ),
-                  columns: [
-                    DataColumn(
-                      label: Text(
-                        'Sales Agent',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: Text(
-                        'Assigned (Day)',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: Text(
-                        'KYC Approved (Day)',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: Text(
-                        'Deleted (Day)',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: Text(
-                        'Conv. Rate',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
+          if (!isSales) ...[
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isScoreboardExpanded = !_isScoreboardExpanded;
+                });
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      _isScoreboardExpanded
+                          ? 'Hide Sales Agent Scoreboard'
+                          : 'View Agent Daily Scoreboard (${agentBreakdown.length} Agents)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryColor,
                       ),
                     ),
                   ],
-                  rows: agentBreakdown.map((agent) {
-                    final isSelected =
-                        agent['agentId'] == widget.state.selectedDailyAgentId;
-                    final agentName = (agent['agentName'] != null && agent['agentName'].toString().isNotEmpty)
-                        ? agent['agentName'].toString()
-                        : 'Sales Agent';
-                    return DataRow(
-                      color: isSelected
-                          ? WidgetStateProperty.all(
-                              AppTheme.primaryColor.withValues(alpha: 0.05))
-                          : null,
-                      cells: [
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                radius: 12,
-                                backgroundColor:
-                                    AppTheme.primaryColor.withValues(alpha: 0.1),
-                                child: Text(
-                                  agentName[0].toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                agentName,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        DataCell(Text('${agent['assignedInDay'] ?? 0}')),
-                        DataCell(Text('${agent['kycApprovedInDay'] ?? 0}')),
-                        DataCell(Text('${agent['deletedInDay'] ?? 0}')),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              agent['conversionRate'] ?? '0.0%',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.success,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
                 ),
               ),
             ),
+            if (_isScoreboardExpanded) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: DataTable(
+                    columnSpacing: widget.isMobile ? 12 : 24,
+                    headingRowHeight: 38,
+                    headingRowColor: WidgetStateProperty.all(
+                      AppTheme.backgroundColor,
+                    ),
+                    columns: [
+                      DataColumn(
+                        label: Text(
+                          'Sales Agent',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        numeric: true,
+                        label: Text(
+                          'Assigned (Day)',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        numeric: true,
+                        label: Text(
+                          'KYC Approved (Day)',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        numeric: true,
+                        label: Text(
+                          'Deleted (Day)',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        numeric: true,
+                        label: Text(
+                          'Conv. Rate',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                    rows: agentBreakdown.map((agent) {
+                      final agentId = agent['_id']?.toString() ?? '';
+                      final isSelected =
+                          agentId == widget.state.selectedDailyAgentId;
+                      final agentName = agent['agentName'] ?? 'Agent';
+
+                      return DataRow(
+                        selected: isSelected,
+                        onSelectChanged: (selected) {
+                          context.read<LeadsBloc>().add(
+                                FetchDailyLeadStatsEvent(
+                                  selectedDate: selectedDate,
+                                  selectedAgentId:
+                                      selected == true ? agentId : null,
+                                ),
+                              );
+                        },
+                        cells: [
+                          DataCell(
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: AppTheme.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  child: Text(
+                                    agentName[0].toUpperCase(),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  agentName,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          DataCell(Text('${agent['assignedInDay'] ?? 0}')),
+                          DataCell(Text('${agent['kycApprovedInDay'] ?? 0}')),
+                          DataCell(Text('${agent['deletedInDay'] ?? 0}')),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.success.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                agent['conversionRate'] ?? '0.0%',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.success,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),

@@ -107,7 +107,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       final result = await AnalyticsService().fetchEventsPaged(
         userEmail: event.identifier,
         limit: 50,
-        actorOnly: true,
+        actorOnly: false,
       );
       final List<Map<String, dynamic>> events =
           (result['events'] as List).cast<Map<String, dynamic>>();
@@ -139,7 +139,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         userEmail: event.identifier,
         limit: 50,
         before: state.eventsNextCursor,
-        actorOnly: true,
+        actorOnly: false,
       );
       final List<Map<String, dynamic>> moreEvents =
           (result['events'] as List).cast<Map<String, dynamic>>();

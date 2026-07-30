@@ -720,7 +720,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
         ),
         const SizedBox(width: 6),
         Text(
-          'LIVE TELEMETRY ACTIVE',
+          'LIVE CUSTOMER PULSE ACTIVE',
           style: GoogleFonts.outfit(
             fontSize: 9,
             fontWeight: FontWeight.w900,

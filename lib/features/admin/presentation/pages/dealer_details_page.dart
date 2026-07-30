@@ -1352,7 +1352,7 @@ class _DealerDetailsPageState extends State<DealerDetailsPage>
               ),
               const SizedBox(width: 10),
               Text(
-                'Session Events & Telemetry',
+                'Customer Activity History',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   fontWeight: FontWeight.w900,

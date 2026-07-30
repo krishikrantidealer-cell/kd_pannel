@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/marketing/presentation/widgets/funnel_chart_widget.dart';
 import 'package:kd_pannel/features/marketing/presentation/widgets/agri_heatmap_widget.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/live_customer_pulse_widget.dart';
 import 'package:kd_pannel/core/services/pincode_service.dart';
 import '../../../../core/auth/auth_service.dart';
 import '../bloc/dealers_state.dart';
@@ -244,14 +245,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
     try {
       final dealersState = context.read<DealersBloc>().state;
       for (final u in dealersState.allRawUsers) {
-        indexUser(u, defaultType: 'Dealer');
+        indexUser(u);
       }
     } catch (_) {}
 
     try {
       final leadsState = context.read<LeadsBloc>().state;
       for (final u in leadsState.allRawUsers) {
-        indexUser(u, defaultType: 'Lead');
+        indexUser(u);
       }
     } catch (_) {}
 
@@ -349,11 +350,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final rawUser = _normalizeId(user['_id']);
         String displayName =
             '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
-        if (displayName.isEmpty)
-          displayName = (user['shopName'] ?? '').toString();
-        if (displayName.isEmpty) displayName = 'Dealer';
         final displayPhone = (user['phoneNumber'] ?? user['phone'] ?? '')
             .toString();
+        if (displayName.isEmpty)
+          displayName = (user['shopName'] ?? '').toString();
+        if (displayName.isEmpty)
+          displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
         if (!AuthService().isSales ||
             _isUserAssignedToCurrentSalesAgent(
@@ -388,14 +390,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
       }
 
-      // 2. Process Assigned Dealers
+      // 2. Process Assigned Dealers (Verified KYC only)
       for (final u in dealersState.allRawUsers) {
+        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+        if (kycStatus != 'verified') continue;
+
         final rawUser = _normalizeId(u['_id']);
+        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
         String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim();
         if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-        if (displayName.isEmpty) displayName = 'Dealer';
-        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+        if (displayName.isEmpty)
+          displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
         final userKey = 'dealer_${rawUser}_$displayName';
         if (_mergedUserIds.contains(userKey)) continue;
@@ -427,14 +433,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
       }
 
-      // 3. Process Assigned Leads
+      // 3. Process Assigned Leads (Pending/Unverified KYC)
       for (final u in leadsState.allRawUsers) {
+        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+        if (kycStatus == 'verified') continue;
+
         final rawUser = _normalizeId(u['_id']);
+        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
         String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim();
         if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-        if (displayName.isEmpty) displayName = 'Lead';
-        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+        if (displayName.isEmpty)
+          displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
         final userKey = 'lead_${rawUser}_$displayName';
         if (_mergedUserIds.contains(userKey)) continue;
@@ -625,13 +635,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
           final String rawUser = _normalizeId(u['_id']);
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+              .toString();
           String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
               .trim();
           if (displayName.isEmpty)
             displayName = (u['shopName'] ?? '').toString();
-          if (displayName.isEmpty) displayName = 'Dealer';
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
-              .toString();
+          if (displayName.isEmpty)
+            displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
           if (!AuthService().isSales ||
               _isUserAssignedToCurrentSalesAgent(
@@ -650,13 +661,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
         final leadsState = context.read<LeadsBloc>().state;
         for (final u in leadsState.allRawUsers) {
           final String rawUser = _normalizeId(u['_id']);
+          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+              .toString();
           String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
               .trim();
           if (displayName.isEmpty)
             displayName = (u['shopName'] ?? '').toString();
-          if (displayName.isEmpty) displayName = 'Lead';
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
-              .toString();
+          if (displayName.isEmpty)
+            displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
           if (!AuthService().isSales ||
               _isUserAssignedToCurrentSalesAgent(
@@ -799,8 +811,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     // Check in fallback static dealers list
     final isStaticDealer = allDealers.any((d) {
-      return d.name.toLowerCase().contains(nameLower) ||
-          nameLower.contains(d.name.toLowerCase().split(' ').first);
+      final dName = d.name.toLowerCase();
+      final dPhone = d.phone.toLowerCase();
+      return dName == nameLower || dPhone == nameLower || (d.id != null && d.id!.toLowerCase() == nameLower);
     });
     if (isStaticDealer) return 'Dealer';
 
@@ -985,7 +998,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
       String displayName = (targetUserName != null && targetUserName.isNotEmpty)
           ? targetUserName
-          : (event['user']?.toString() ?? 'Unknown User');
+          : (event['user']?.toString() ?? 'New Customer');
       String? displayPhone;
 
       final userDetails = event['userDetails'] as Map<String, dynamic>?;
@@ -1000,11 +1013,25 @@ class _UserEventsPageState extends State<UserEventsPage> {
           displayName = '$firstName $lastName'.trim();
         } else if (shopName.isNotEmpty) {
           displayName = shopName;
+        } else if (phone.isNotEmpty) {
+          displayName = phone;
         }
 
         if (phone.isNotEmpty) {
           displayPhone = phone;
         }
+      }
+
+      if (displayName.isEmpty ||
+          displayName == 'Dealer' ||
+          displayName == 'Lead' ||
+          displayName.toLowerCase() == 'unknown' ||
+          displayName.toLowerCase() == 'unknown user' ||
+          displayName.toLowerCase() == 'admin' ||
+          displayName.toLowerCase() == 'admin user') {
+        displayName = (displayPhone != null && displayPhone.isNotEmpty)
+            ? displayPhone
+            : 'New Customer';
       }
 
       // Skip if the user is current admin, has 'admin' / 'sales' role, or name/email contains 'admin'
@@ -1915,7 +1942,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Offline Telemetry Mode',
+                  'Offline Activity Cache Mode',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1924,7 +1951,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Backend events DB returned no records or is unreachable. Displaying cached local telemetry.',
+                  'Server activity database unreachable. Displaying saved local customer actions.',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: const Color(0xFFB45309),
@@ -2083,8 +2110,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       appBar: AppBar(
         title: Text(
           AuthService().isSales
-              ? 'Customer Activity & Telemetry'
-              : 'Live Telemetry & Events',
+              ? 'Customer Activity & Live Pulse'
+              : 'Live Customer Activity Hub',
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
@@ -2133,16 +2160,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
                         if (_isFallbackMode) _buildFallbackBanner(),
-                        if (_activeAnalyticsTab == 0) ...[
-                          _buildSummaryCards(isDesktop),
-                          const SizedBox(height: 20),
-                        ],
                         _buildAnalyticsTabsBar(),
                         const SizedBox(height: 16),
                         _buildActiveAnalyticsView(),
                         if (_activeAnalyticsTab == 0) ...[
-                          const SizedBox(height: 20),
-                          _buildRealTimeStats(),
                           const SizedBox(height: 20),
                           _buildUsersListHeader(isDesktop, filtered.length),
                         ],
@@ -2290,12 +2311,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         ? [
             {
               'icon': Icons.stream_rounded,
-              'title': 'Live Customer Telemetry Feed',
+              'title': 'Live Customer Pulse Feed',
             },
           ]
         : [
-            {'icon': Icons.stream_rounded, 'title': 'Live Telemetry Feed'},
-            {'icon': Icons.filter_alt_rounded, 'title': 'Conversion Funnel'},
+            {'icon': Icons.stream_rounded, 'title': 'Live Customer Pulse Feed'},
+            {'icon': Icons.filter_alt_rounded, 'title': 'Sales Journey Step-by-Step'},
             {'icon': Icons.map_rounded, 'title': 'Agri District Heatmap'},
           ];
 
@@ -2887,87 +2908,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   Widget _buildActiveAnalyticsView() {
     if (AuthService().isSales) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.cardColor,
-          borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
-          boxShadow: AppTheme.cardShadow,
-        ),
-        child: Row(
-          children: [
-            const _LivePulsingBadge(color: Color(0xFF10B981)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Live Customer Telemetry Feed',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Monitoring real-time presence heartbeats, active sessions, and incoming telemetry events for your assigned customers below.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      return LiveCustomerPulseWidget(
+        realTimeUsers: _realTimeUsers,
+        onUserSelected: (userName) => _scrollToAndExpandUser(userName),
+        onRefresh: _loadEvents,
       );
     }
 
     switch (_activeAnalyticsTab) {
       case 0:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-            border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Row(
-            children: [
-              const _LivePulsingBadge(color: Color(0xFF10B981)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Live Telemetry & Activity Feed',
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Monitoring real-time presence heartbeats, active sessions, and incoming telemetry events below.',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        return LiveCustomerPulseWidget(
+          realTimeUsers: _realTimeUsers,
+          onUserSelected: (userName) => _scrollToAndExpandUser(userName),
+          onRefresh: _loadEvents,
         );
       case 1:
         _funnelDataFuture ??= AnalyticsService().fetchFunnelData(
@@ -3340,13 +3293,34 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   Widget _buildRealTimeStats() {
+    int hotCount = 0;
+    int warmCount = 0;
+    int browsingCount = 0;
+
+    for (final u in _realTimeUsers) {
+      final label = u['intentLabel']?.toString() ?? '';
+      if (label.contains('Hot')) {
+        hotCount++;
+      } else if (label.contains('Warm')) {
+        warmCount++;
+      } else {
+        browsingCount++;
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-        boxShadow: AppTheme.cardShadow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3359,29 +3333,118 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   const _LivePulsingBadge(color: Color(0xFF10B981)),
                   const SizedBox(width: 10),
                   Text(
-                    'Live Users Presence',
+                    'Live Customer Pulse Feed',
                     style: GoogleFonts.outfit(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      '${_realTimeUsers.length} Online Now',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF10B981),
+                      ),
                     ),
                   ),
                 ],
               ),
-              Text(
-                '${_realTimeUsers.length} Active Now',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF10B981),
+              if (_realTimeUsers.isNotEmpty)
+                Row(
+                  children: [
+                    if (hotCount > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.redAccent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '🔥 $hotCount Hot',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (warmCount > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '☀️ $warmCount Warm',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (browsingCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '🍃 $browsingCount Browsing',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
             ],
           ),
           if (_realTimeUsers.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             SizedBox(
-              height: 100,
+              height: 124,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _realTimeUsers.length,
@@ -3395,57 +3458,135 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   );
                   final displayName = enriched['name'] ?? 'Unknown';
                   final displayPhone = enriched['phone'] ?? '';
+                  final intentLabel = user['intentLabel']?.toString() ?? 'Browsing 🍃';
+                  final journeyPath = user['journeyPath']?.toString() ?? '';
+                  final currentScreen = user['currentScreen']?.toString() ?? 'Home';
+                  final action = user['action']?.toString() ?? 'Browsing';
+
+                  final isHot = intentLabel.contains('Hot');
+                  final isWarm = intentLabel.contains('Warm');
+                  final accentColor = isHot
+                      ? Colors.redAccent
+                      : isWarm
+                          ? Colors.orange
+                          : AppTheme.primaryColor;
 
                   return MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       onTap: () => _scrollToAndExpandUser(displayName),
-                      child: Container(
-                        width: 180,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 220,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppTheme.backgroundColor,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppTheme.borderColor),
+                          color: accentColor.withValues(alpha: 0.02),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.3),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              displayName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (displayPhone.isNotEmpty &&
-                                displayPhone != displayName)
-                              Text(
-                                displayPhone,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(
-                                  Icons.touch_app_outlined,
+                                Stack(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: accentColor.withValues(alpha: 0.15),
+                                      child: Text(
+                                        displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: accentColor,
+                                        ),
+                                      ),
+                                    ),
+                                    const Positioned(
+                                      right: -1,
+                                      bottom: -1,
+                                      child: _LivePulsingBadge(
+                                        color: Color(0xFF10B981),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        displayName,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (displayPhone.isNotEmpty && displayPhone != displayName)
+                                        Text(
+                                          displayPhone,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    intentLabel,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: accentColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  currentScreen.toLowerCase().contains('checkout') || currentScreen.toLowerCase().contains('cart')
+                                      ? Icons.shopping_cart_outlined
+                                      : Icons.screen_search_desktop_outlined,
                                   size: 12,
-                                  color: AppTheme.primaryColor,
+                                  color: accentColor,
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    user['action'] ?? 'Browsing',
+                                    '$currentScreen • $action',
                                     style: GoogleFonts.outfit(
-                                      fontSize: 11,
-                                      color: AppTheme.textSecondary,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.textPrimary,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -3457,25 +3598,28 @@ class _UserEventsPageState extends State<UserEventsPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  user['currentScreen'] ?? 'Home',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppTheme.primaryColor,
+                                Expanded(
+                                  child: Text(
+                                    journeyPath.isNotEmpty ? 'Trail: $journeyPath' : 'Active on App',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 9,
+                                      color: AppTheme.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
+                                const SizedBox(width: 4),
                                 if (user['_localLastSeen'] != null)
                                   Text(
                                     _getRelativeLastSeen(
                                       user['_localLastSeen'],
                                     ),
                                     style: GoogleFonts.outfit(
-                                      fontSize: 9,
-                                      color: AppTheme.textSecondary.withOpacity(
-                                        0.6,
-                                      ),
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 8.5,
+                                      color: const Color(0xFF10B981),
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                               ],
@@ -4132,16 +4276,25 @@ class _UserCardState extends State<_UserCard>
       totalEvents += logs.length;
     });
 
-    // Extract phone number from events if available
+    // Extract phone number, intent label, and journey path from events if available
     String? userPhone;
+    String? intentLabel;
+    String? journeyPath;
     for (final logs in widget.groupedEvents.values) {
       for (final log in logs) {
-        if (log['userPhone'] != null) {
+        if (userPhone == null && log['userPhone'] != null) {
           userPhone = log['userPhone'] as String?;
-          break;
+        }
+        if (intentLabel == null && log['intentLabel'] != null) {
+          intentLabel = log['intentLabel'] as String?;
+        }
+        if (journeyPath == null) {
+          final props = log['properties'] ?? log['payload'];
+          if (props is Map && props['journeyPath'] != null) {
+            journeyPath = props['journeyPath'] as String?;
+          }
         }
       }
-      if (userPhone != null) break;
     }
 
     final String initials = widget.name.isNotEmpty
@@ -4248,6 +4401,42 @@ class _UserCardState extends State<_UserCard>
                             ),
                             const SizedBox(width: 8),
                             _buildUserTypeBadge(context, widget.name),
+                            if (intentLabel != null) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: intentLabel.contains('Hot')
+                                      ? Colors.redAccent.withValues(alpha: 0.1)
+                                      : intentLabel.contains('Warm')
+                                          ? Colors.orange.withValues(alpha: 0.1)
+                                          : Colors.blue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: intentLabel.contains('Hot')
+                                        ? Colors.redAccent.withValues(alpha: 0.3)
+                                        : intentLabel.contains('Warm')
+                                            ? Colors.orange.withValues(alpha: 0.3)
+                                            : Colors.blue.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  intentLabel,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: intentLabel.contains('Hot')
+                                        ? Colors.redAccent
+                                        : intentLabel.contains('Warm')
+                                            ? Colors.orange
+                                            : Colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (widget.isHighPriority) ...[
                               const SizedBox(width: 8),
                               Builder(
@@ -4346,6 +4535,31 @@ class _UserCardState extends State<_UserCard>
                                     size: 14,
                                     color: Color(0xFF10B981),
                                   ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (journeyPath != null && journeyPath.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.alt_route_rounded,
+                                size: 12,
+                                color: AppTheme.primaryColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'Journey: $journeyPath',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -4819,8 +5033,9 @@ void _navigateToProfile(BuildContext context, String user) {
   // 2. Try to find in fallback static dealers list (allDealers)
   Dealer? matchedDealer;
   for (final d in allDealers) {
-    if (d.name.toLowerCase().contains(nameLower) ||
-        nameLower.contains(d.name.toLowerCase().split(' ').first)) {
+    final dName = d.name.toLowerCase();
+    final dPhone = d.phone.toLowerCase();
+    if (dName == nameLower || dPhone == nameLower || (d.id != null && d.id!.toLowerCase() == nameLower)) {
       matchedDealer = d;
       break;
     }
