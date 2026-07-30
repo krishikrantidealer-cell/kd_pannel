@@ -1564,7 +1564,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
             ),
         ],
       ),
-    );
+    ));
   }
 
   // Segment Tab Helper
