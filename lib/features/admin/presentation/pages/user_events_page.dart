@@ -2292,175 +2292,177 @@ class _UserEventsPageState extends State<UserEventsPage> {
           child: Divider(height: 1, color: AppTheme.lightBorderColor),
         ),
       ),
-      body: _isLoading
-          ? _buildShimmerLoading(isDesktop)
-          : RefreshIndicator(
-              onRefresh: _loadEvents,
-              color: AppTheme.primaryColor,
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-                slivers: [
-                  if (_isLoadingEvents && !_isLoading && !_isBackgroundLoading)
-                    const SliverToBoxAdapter(
-                      child: LinearProgressIndicator(
-                        minHeight: 2,
-                        color: AppTheme.primaryColor,
-                        backgroundColor: Colors.transparent,
-                      ),
-                    ),
-                  SliverPadding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isDesktop ? 28 : 16,
-                      vertical: isDesktop ? 20 : 12,
-                    ),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        if (_isFallbackMode) _buildFallbackBanner(),
-                        _buildAnalyticsTabsBar(),
-                        const SizedBox(height: 16),
-                        _buildActiveAnalyticsView(),
-                        if (_activeAnalyticsTab == 0) ...[
-                          const SizedBox(height: 20),
-                          _buildUsersListHeader(isDesktop, filtered.length),
-                        ],
-                      ]),
-                    ),
+      body: SelectionArea(
+        child: _isLoading
+            ? _buildShimmerLoading(isDesktop)
+            : RefreshIndicator(
+                onRefresh: _loadEvents,
+                color: AppTheme.primaryColor,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
                   ),
-                  if (_activeAnalyticsTab == 0)
+                  slivers: [
+                    if (_isLoadingEvents && !_isLoading && !_isBackgroundLoading)
+                      const SliverToBoxAdapter(
+                        child: LinearProgressIndicator(
+                          minHeight: 2,
+                          color: AppTheme.primaryColor,
+                          backgroundColor: Colors.transparent,
+                        ),
+                      ),
                     SliverPadding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isDesktop ? 28 : 16,
+                        vertical: isDesktop ? 20 : 12,
                       ),
-                      sliver: filtered.isEmpty
-                          ? SliverToBoxAdapter(child: _buildEmptyUsersList())
-                          : SliverList(
-                              delegate: SliverChildBuilderDelegate((
-                                context,
-                                index,
-                              ) {
-                                final userName = filtered[index];
-                                final isSelected = _selectedUser == userName;
-                                final grouped = _getUserEventsGrouped(userName);
-                                final userId = _nameToId[userName];
-                                final isOnline = _realTimeUsers.any((u) {
-                                  final uName = u['userName'] ?? u['user'] ?? '';
-                                  return uName == userName ||
-                                      (userId != null && u['user'] == userId);
-                                });
-
-                                final bool isHighPriority = _isHighPriority(
-                                  userName,
-                                );
-                                final String priorityReason = isHighPriority
-                                    ? _getPriorityReason(userName)
-                                    : '';
-
-                                final cardKey = _userCardKeys.putIfAbsent(
-                                  userName,
-                                  () => GlobalKey(),
-                                );
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: _UserCard(
-                                    key: cardKey,
-                                    name: userName,
-                                    userType: _getUserType(userName),
-                                    isOnline: isOnline,
-                                    isHighPriority: isHighPriority,
-                                    priorityReason: priorityReason,
-                                    groupedEvents: grouped,
-                                    isSelected: isSelected,
-                                    selectedEventType: _selectedEventType,
-                                    eventTypes: _eventTypes,
-                                    isLoadingEvents: _loadingUserEvents.contains(
-                                      userName,
-                                    ),
-                                    onCategorySelected: (catId) {
-                                      setState(() {
-                                        _selectedUser = userName;
-                                        _selectedEventType = catId;
-                                      });
-                                    },
-                                    onTap: () {
-                                      setState(() {
-                                        if (_selectedUser == userName) {
-                                          _selectedUser = null;
-                                          _selectedEventType = null;
-                                        } else {
-                                          _selectedUser = userName;
-                                          if (_selectedEventCategory != 'All' &&
-                                              grouped.containsKey(
-                                                _selectedEventCategory,
-                                              )) {
-                                            _selectedEventType =
-                                                _selectedEventCategory;
-                                          } else if (grouped.isNotEmpty) {
-                                            _selectedEventType =
-                                                grouped.keys.first;
-                                          } else {
-                                            _selectedEventType = null;
-                                          }
-                                          _fetchEventsForUser(userName);
-                                        }
-                                      });
-                                    },
-                                    onViewProfile: (name) =>
-                                        _navigateToProfile(context, userId ?? name),
-                                  ),
-                                );
-                              }, childCount: filtered.length),
-                            ),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          if (_isFallbackMode) _buildFallbackBanner(),
+                          _buildAnalyticsTabsBar(),
+                          const SizedBox(height: 16),
+                          _buildActiveAnalyticsView(),
+                          if (_activeAnalyticsTab == 0) ...[
+                            const SizedBox(height: 20),
+                            _buildUsersListHeader(isDesktop, filtered.length),
+                          ],
+                        ]),
+                      ),
                     ),
-                  if (_activeAnalyticsTab == 0 && !AuthService().isSales && _nextCursor != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: _isLoadingMore
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppTheme.primaryColor,
+                    if (_activeAnalyticsTab == 0)
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isDesktop ? 28 : 16,
+                        ),
+                        sliver: filtered.isEmpty
+                            ? SliverToBoxAdapter(child: _buildEmptyUsersList())
+                            : SliverList(
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final userName = filtered[index];
+                                  final isSelected = _selectedUser == userName;
+                                  final grouped = _getUserEventsGrouped(userName);
+                                  final userId = _nameToId[userName];
+                                  final isOnline = _realTimeUsers.any((u) {
+                                    final uName = u['userName'] ?? u['user'] ?? '';
+                                    return uName == userName ||
+                                        (userId != null && u['user'] == userId);
+                                  });
+
+                                  final bool isHighPriority = _isHighPriority(
+                                    userName,
+                                  );
+                                  final String priorityReason = isHighPriority
+                                      ? _getPriorityReason(userName)
+                                      : '';
+
+                                  final cardKey = _userCardKeys.putIfAbsent(
+                                    userName,
+                                    () => GlobalKey(),
+                                  );
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _UserCard(
+                                      key: cardKey,
+                                      name: userName,
+                                      userType: _getUserType(userName),
+                                      isOnline: isOnline,
+                                      isHighPriority: isHighPriority,
+                                      priorityReason: priorityReason,
+                                      groupedEvents: grouped,
+                                      isSelected: isSelected,
+                                      selectedEventType: _selectedEventType,
+                                      eventTypes: _eventTypes,
+                                      isLoadingEvents: _loadingUserEvents.contains(
+                                        userName,
+                                      ),
+                                      onCategorySelected: (catId) {
+                                        setState(() {
+                                          _selectedUser = userName;
+                                          _selectedEventType = catId;
+                                        });
+                                      },
+                                      onTap: () {
+                                        setState(() {
+                                          if (_selectedUser == userName) {
+                                            _selectedUser = null;
+                                            _selectedEventType = null;
+                                          } else {
+                                            _selectedUser = userName;
+                                            if (_selectedEventCategory != 'All' &&
+                                                grouped.containsKey(
+                                                  _selectedEventCategory,
+                                                )) {
+                                              _selectedEventType =
+                                                  _selectedEventCategory;
+                                            } else if (grouped.isNotEmpty) {
+                                              _selectedEventType =
+                                                  grouped.keys.first;
+                                            } else {
+                                              _selectedEventType = null;
+                                            }
+                                            _fetchEventsForUser(userName);
+                                          }
+                                        });
+                                      },
+                                      onViewProfile: (name) =>
+                                          _navigateToProfile(context, userId ?? name),
+                                    ),
+                                  );
+                                }, childCount: filtered.length),
+                              ),
+                      ),
+                    if (_activeAnalyticsTab == 0 && !AuthService().isSales && _nextCursor != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: _isLoadingMore
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  )
+                                : OutlinedButton.icon(
+                                    onPressed: _loadMoreEvents,
+                                    icon: const Icon(
+                                      Icons.arrow_downward_rounded,
+                                      size: 14,
+                                    ),
+                                    label: Text(
+                                      'Load More Events',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppTheme.primaryColor,
+                                      side: const BorderSide(
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
                                     ),
                                   ),
-                                )
-                              : OutlinedButton.icon(
-                                  onPressed: _loadMoreEvents,
-                                  icon: const Icon(
-                                    Icons.arrow_downward_rounded,
-                                    size: 14,
-                                  ),
-                                  label: Text(
-                                    'Load More Events',
-                                    style: GoogleFonts.outfit(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.primaryColor,
-                                    side: const BorderSide(
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
+                          ),
                         ),
                       ),
-                    ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 

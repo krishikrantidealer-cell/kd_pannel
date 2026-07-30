@@ -477,833 +477,834 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
         _searchQuery.isNotEmpty ||
         _breakdownMode != 'None';
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Executive Title Header & Segmented Controls
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 850;
-              return Flex(
-                direction: isDesktop ? Axis.horizontal : Axis.vertical,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+    return SelectionArea(
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: AppTheme.borderColor.withOpacity(0.8)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Executive Title Header & Segmented Controls
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth > 850;
+                return Flex(
+                  direction: isDesktop ? Axis.horizontal : Axis.vertical,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF2E7D32).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF2E7D32).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                          child: const Icon(Icons.analytics_rounded, size: 22, color: Colors.white),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dealer District & Product Intelligence',
+                              style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Real Database Categorised & Product-Wise Demand Heatmap',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.analytics_rounded, size: 22, color: Colors.white),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Dealer District & Product Intelligence',
-                            style: GoogleFonts.outfit(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Real Database Categorised & Product-Wise Demand Heatmap',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: isDesktop ? 0 : 12),
-
-                  // Segmented Breakdown Mode Selector
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.backgroundColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.borderColor),
+                      ],
                     ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildModeSegmentTab('None', '📊 Overview'),
-                          _buildModeSegmentTab('Product', '📦 Product Breakdown'),
-                          _buildModeSegmentTab('Category', '🏷️ Category'),
-                          _buildModeSegmentTab('SubCategory', '📁 SubCategory'),
-                        ],
+                    SizedBox(height: isDesktop ? 0 : 12),
+
+                    // Segmented Breakdown Mode Selector
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildModeSegmentTab('None', '📊 Overview'),
+                            _buildModeSegmentTab('Product', '📦 Product Breakdown'),
+                            _buildModeSegmentTab('Category', '🏷️ Category'),
+                            _buildModeSegmentTab('SubCategory', '📁 SubCategory'),
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Filters Bar Container
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth > 950;
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundColor.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderColor),
                   ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-
-          // Filters Bar Container
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 950;
-              return Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundColor.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Flex(
-                      direction: isDesktop ? Axis.horizontal : Axis.vertical,
-                      crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-                      children: [
-                        // 0. Activity Filter Dropdown
-                        Expanded(
-                          flex: isDesktop ? 2 : 0,
-                          child: _buildFilterDropdownColumn(
-                            label: 'ACTIVITY',
-                            value: activeFilterValue,
-                            icon: Icons.filter_alt_rounded,
-                            items: activityOptions,
-                            activeColor: const Color(0xFF00897B),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  if (val.startsWith('Active Only')) {
-                                    _selectedActivityFilter = 'Active Only';
-                                  } else if (val.startsWith('Untapped Only')) {
-                                    _selectedActivityFilter = 'Untapped Only';
-                                  } else {
-                                    _selectedActivityFilter = 'All';
-                                  }
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-
-                        // 1. State Dropdown
-                        Expanded(
-                          flex: isDesktop ? 2 : 0,
-                          child: _buildFilterDropdownColumn(
-                            label: 'STATE',
-                            value: safeState,
-                            icon: Icons.map_rounded,
-                            items: availableStates,
-                            itemCounts: stateOrderCounts,
-                            totalCount: grandTotalOrders,
-                            activeColor: AppTheme.primaryColor,
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedState = val;
-                                  _selectedDistrict = 'All';
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-
-                        // 2. District Dropdown
-                        Expanded(
-                          flex: isDesktop ? 2 : 0,
-                          child: _buildFilterDropdownColumn(
-                            label: 'DISTRICT',
-                            value: safeDistrict,
-                            icon: Icons.location_city_rounded,
-                            items: availableDistricts,
-                            itemCounts: districtOrderCounts,
-                            totalCount: stateFilteredTotalOrders,
-                            activeColor: const Color(0xFF0288D1),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedDistrict = val;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-
-                        // 3. Category Dropdown
-                        Expanded(
-                          flex: isDesktop ? 3 : 0,
-                          child: _buildFilterDropdownColumn(
-                            label: 'CATEGORY',
-                            value: safeCategory,
-                            icon: Icons.category_rounded,
-                            items: availableCategories,
-                            activeColor: const Color(0xFF7B1FA2),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedCategory = val;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-
-                        // 4. Product Dropdown
-                        if (availableProducts.length > 1) ...[
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Flex(
+                        direction: isDesktop ? Axis.horizontal : Axis.vertical,
+                        crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                        children: [
+                          // 0. Activity Filter Dropdown
                           Expanded(
-                            flex: isDesktop ? 3 : 0,
+                            flex: isDesktop ? 2 : 0,
                             child: _buildFilterDropdownColumn(
-                              label: 'PRODUCT',
-                              value: safeProduct,
-                              icon: Icons.inventory_2_rounded,
-                              items: availableProducts,
-                              activeColor: const Color(0xFFE65100),
+                              label: 'ACTIVITY',
+                              value: activeFilterValue,
+                              icon: Icons.filter_alt_rounded,
+                              items: activityOptions,
+                              activeColor: const Color(0xFF00897B),
                               onChanged: (val) {
                                 if (val != null) {
                                   setState(() {
-                                    _selectedProduct = val;
+                                    if (val.startsWith('Active Only')) {
+                                      _selectedActivityFilter = 'Active Only';
+                                    } else if (val.startsWith('Untapped Only')) {
+                                      _selectedActivityFilter = 'Untapped Only';
+                                    } else {
+                                      _selectedActivityFilter = 'All';
+                                    }
                                   });
                                 }
                               },
                             ),
                           ),
                           SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-                        ],
 
-                        // 5. Search Bar
-                        Expanded(
-                          flex: isDesktop ? 3 : 0,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          // 1. State Dropdown
+                          Expanded(
+                            flex: isDesktop ? 2 : 0,
+                            child: _buildFilterDropdownColumn(
+                              label: 'STATE',
+                              value: safeState,
+                              icon: Icons.map_rounded,
+                              items: availableStates,
+                              itemCounts: stateOrderCounts,
+                              totalCount: grandTotalOrders,
+                              activeColor: AppTheme.primaryColor,
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedState = val;
+                                    _selectedDistrict = 'All';
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+
+                          // 2. District Dropdown
+                          Expanded(
+                            flex: isDesktop ? 2 : 0,
+                            child: _buildFilterDropdownColumn(
+                              label: 'DISTRICT',
+                              value: safeDistrict,
+                              icon: Icons.location_city_rounded,
+                              items: availableDistricts,
+                              itemCounts: districtOrderCounts,
+                              totalCount: stateFilteredTotalOrders,
+                              activeColor: const Color(0xFF0288D1),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedDistrict = val;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+
+                          // 3. Category Dropdown
+                          Expanded(
+                            flex: isDesktop ? 3 : 0,
+                            child: _buildFilterDropdownColumn(
+                              label: 'CATEGORY',
+                              value: safeCategory,
+                              icon: Icons.category_rounded,
+                              items: availableCategories,
+                              activeColor: const Color(0xFF7B1FA2),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedCategory = val;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+
+                          // 4. Product Dropdown
+                          if (availableProducts.length > 1) ...[
+                            Expanded(
+                              flex: isDesktop ? 3 : 0,
+                              child: _buildFilterDropdownColumn(
+                                label: 'PRODUCT',
+                                value: safeProduct,
+                                icon: Icons.inventory_2_rounded,
+                                items: availableProducts,
+                                activeColor: const Color(0xFFE65100),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _selectedProduct = val;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+                          ],
+
+                          // 5. Search Bar
+                          Expanded(
+                            flex: isDesktop ? 3 : 0,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'SEARCH',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textSecondary,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.cardColor,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _searchQuery.isNotEmpty ? AppTheme.primaryColor : AppTheme.borderColor,
+                                      width: _searchQuery.isNotEmpty ? 1.5 : 1.0,
+                                    ),
+                                  ),
+                                  child: TextField(
+                                    controller: _searchController,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search district, product...',
+                                      hintStyle: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textSecondary),
+                                      suffixIcon: _searchQuery.isNotEmpty
+                                          ? IconButton(
+                                              icon: const Icon(Icons.close_rounded, size: 16),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _searchQuery = '';
+                                                  _searchController.clear();
+                                                });
+                                              },
+                                            )
+                                          : null,
+                                      border: InputBorder.none,
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _searchQuery = val.trim();
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Reset Button
+                          if (hasActiveFilters) ...[
+                            SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: InkWell(
+                                onTap: _resetFilters,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  height: 42,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Reset',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+
+                      // Quick Category Pills
+                      if (availableCategories.length > 2) ...[
+                        const SizedBox(height: 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
                             children: [
                               Text(
-                                'SEARCH',
+                                'DATABASE CATEGORIES: ',
                                 style: GoogleFonts.outfit(
-                                  fontSize: 10,
+                                  fontSize: 10.5,
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.textSecondary,
                                   letterSpacing: 0.5,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Container(
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.cardColor,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: _searchQuery.isNotEmpty ? AppTheme.primaryColor : AppTheme.borderColor,
-                                    width: _searchQuery.isNotEmpty ? 1.5 : 1.0,
-                                  ),
-                                ),
-                                child: TextField(
-                                  controller: _searchController,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Search district, product...',
-                                    hintStyle: GoogleFonts.outfit(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textSecondary,
+                              const SizedBox(width: 8),
+                              ...availableCategories.where((c) => c != 'All').map((catName) {
+                                final isSelected = _selectedCategory.toLowerCase() == catName.toLowerCase();
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedCategory = isSelected ? 'All' : catName;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppTheme.primaryColor
+                                            : AppTheme.primaryColor.withOpacity(0.08),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppTheme.primaryColor
+                                              : AppTheme.primaryColor.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        catName,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: isSelected ? Colors.white : AppTheme.primaryColor,
+                                        ),
+                                      ),
                                     ),
-                                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textSecondary),
-                                    suffixIcon: _searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.close_rounded, size: 16),
-                                            onPressed: () {
-                                              setState(() {
-                                                _searchQuery = '';
-                                                _searchController.clear();
-                                              });
-                                            },
-                                          )
-                                        : null,
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                                   ),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _searchQuery = val.trim();
-                                    });
-                                  },
-                                ),
-                              ),
+                                );
+                              }).toList(),
                             ],
                           ),
                         ),
-
-                        // Reset Button
-                        if (hasActiveFilters) ...[
-                          SizedBox(width: isDesktop ? 10 : 0, height: isDesktop ? 0 : 10),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 14),
-                            child: InkWell(
-                              onTap: _resetFilters,
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                height: 42,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Reset',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.red,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
-
-                    // Quick Category Pills
-                    if (availableCategories.length > 2) ...[
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            Text(
-                              'DATABASE CATEGORIES: ',
-                              style: GoogleFonts.outfit(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.textSecondary,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ...availableCategories.where((c) => c != 'All').map((catName) {
-                              final isSelected = _selectedCategory.toLowerCase() == catName.toLowerCase();
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedCategory = isSelected ? 'All' : catName;
-                                    });
-                                  },
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? AppTheme.primaryColor
-                                          : AppTheme.primaryColor.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? AppTheme.primaryColor
-                                            : AppTheme.primaryColor.withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      catName,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: isSelected ? Colors.white : AppTheme.primaryColor,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ],
-                        ),
-                      ),
                     ],
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Executive Summary Metric Ribbon
-          Container(
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.primaryColor.withOpacity(0.08),
-                  const Color(0xFF0288D1).withOpacity(0.08),
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+                  ),
+                );
+              },
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Districts Displayed: ',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textSecondary,
+            const SizedBox(height: 16),
+
+            // Executive Summary Metric Ribbon
+            Container(
+              clipBehavior: Clip.antiAlias,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primaryColor.withOpacity(0.08),
+                    const Color(0xFF0288D1).withOpacity(0.08),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Districts Displayed: ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${filteredDistricts.length}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.primaryColor,
+                      Text(
+                        '${filteredDistricts.length}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primaryColor,
+                        ),
                       ),
-                    ),
-                    Text(
-                      ' / ${widget.districts.length}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textSecondary,
+                      Text(
+                        ' / ${widget.districts.length}',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                    ),
-                    if (_selectedProduct != 'All') ...[
-                      const SizedBox(width: 10),
+                      if (_selectedProduct != 'All') ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE65100),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '📦 $_selectedProduct',
+                            style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                        ),
+                      ] else if (_selectedCategory != 'All') ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0288D1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '🏷️ $_selectedCategory',
+                            style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        _selectedProduct != 'All'
+                            ? 'PRODUCT REVENUE: '
+                            : (_selectedCategory == 'All' ? 'TOTAL REVENUE: ' : 'CATEGORY REVENUE: '),
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        _formatCurrency(totalRevenue),
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
+                        width: 1,
+                        height: 20,
+                        color: AppTheme.borderColor,
+                      ),
+                      const SizedBox(width: 18),
+                      Text(
+                        _selectedActivityFilter.startsWith('Untapped Only')
+                            ? 'UNTAPPED DEALERS: '
+                            : (_selectedActivityFilter.startsWith('Active Only')
+                                ? 'ACTIVE BUYERS: '
+                                : 'ACTIVE DEALERS: '),
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        '$totalDealers',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Container(
+                        width: 1,
+                        height: 20,
+                        color: AppTheme.borderColor,
+                      ),
+                      const SizedBox(width: 18),
+                      Text(
+                        'REGISTERED DEALERS: ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        '$totalRegisteredDealers',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Container(
+                        width: 1,
+                        height: 20,
+                        color: AppTheme.borderColor,
+                      ),
+                      const SizedBox(width: 18),
+                      Text(
+                        'TOTAL ORDERS: ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        '$totalOrders',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                           color: const Color(0xFFE65100),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '📦 $_selectedProduct',
-                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
                         ),
                       ),
-                    ] else if (_selectedCategory != 'All') ...[
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 18),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0288D1),
-                          borderRadius: BorderRadius.circular(6),
+                        width: 1,
+                        height: 20,
+                        color: AppTheme.borderColor,
+                      ),
+                      const SizedBox(width: 18),
+                      Text(
+                        'AVG CONVERSION: ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
                         ),
-                        child: Text(
-                          '🏷️ $_selectedCategory',
-                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                      Text(
+                        '${avgConversionRate.toStringAsFixed(1)}%',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF7B1FA2),
                         ),
                       ),
                     ],
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // District Intelligence Cards Grid
+            if (filteredDistricts.isEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.borderColor),
                 ),
-                Row(
+                child: Column(
                   children: [
+                    const Icon(Icons.search_off_rounded, size: 44, color: AppTheme.textSecondary),
+                    const SizedBox(height: 12),
                     Text(
-                      _selectedProduct != 'All'
-                          ? 'PRODUCT REVENUE: '
-                          : (_selectedCategory == 'All' ? 'TOTAL REVENUE: ' : 'CATEGORY REVENUE: '),
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      _formatCurrency(totalRevenue),
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.success,
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: AppTheme.borderColor,
-                    ),
-                    const SizedBox(width: 18),
-                    Text(
-                      _selectedActivityFilter.startsWith('Untapped Only')
-                          ? 'UNTAPPED DEALERS: '
-                          : (_selectedActivityFilter.startsWith('Active Only')
-                              ? 'ACTIVE BUYERS: '
-                              : 'ACTIVE DEALERS: '),
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      '$totalDealers',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: AppTheme.borderColor,
-                    ),
-                    const SizedBox(width: 18),
-                    Text(
-                      'REGISTERED DEALERS: ',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      '$totalRegisteredDealers',
+                      'No dealer districts match your filter criteria',
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(width: 18),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: AppTheme.borderColor,
-                    ),
-                    const SizedBox(width: 18),
+                    const SizedBox(height: 4),
                     Text(
-                      'TOTAL ORDERS: ',
+                      'Try modifying your Product, Category, State, or District selection.',
                       style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                         color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
                       ),
                     ),
-                    Text(
-                      '$totalOrders',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFFE65100),
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: AppTheme.borderColor,
-                    ),
-                    const SizedBox(width: 18),
-                    Text(
-                      'AVG CONVERSION: ',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      '${avgConversionRate.toStringAsFixed(1)}%',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF7B1FA2),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _resetFilters,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Reset All Filters'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        textStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
+              )
+            else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 700;
+                  return Wrap(
+                    spacing: 14,
+                    runSpacing: 14,
+                    children: filteredDistricts.map((district) {
+                      final double width = isWide
+                          ? (constraints.maxWidth - 28) / 3
+                          : (constraints.maxWidth - 14) / 2;
 
-          // District Intelligence Cards Grid
-          if (filteredDistricts.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.search_off_rounded, size: 44, color: AppTheme.textSecondary),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No dealer districts match your filter criteria',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Try modifying your Product, Category, State, or District selection.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _resetFilters,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Reset All Filters'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      textStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 700;
-                return Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: filteredDistricts.map((district) {
-                    final double width = isWide
-                        ? (constraints.maxWidth - 28) / 3
-                        : (constraints.maxWidth - 14) / 2;
+                      final bool isHighDemand = district.searchVolumeIndex > 75;
+                      final bool isMedDemand = district.searchVolumeIndex > 50;
 
-                    final bool isHighDemand = district.searchVolumeIndex > 75;
-                    final bool isMedDemand = district.searchVolumeIndex > 50;
+                      final List<Color> topGradient = isHighDemand
+                          ? [const Color(0xFFFF5722), const Color(0xFFF4511E)]
+                          : (isMedDemand
+                              ? [const Color(0xFFFF9800), const Color(0xFFFB8C00)]
+                              : [const Color(0xFF2E7D32), const Color(0xFF43A047)]);
 
-                    final List<Color> topGradient = isHighDemand
-                        ? [const Color(0xFFFF5722), const Color(0xFFF4511E)]
-                        : (isMedDemand
-                            ? [const Color(0xFFFF9800), const Color(0xFFFB8C00)]
-                            : [const Color(0xFF2E7D32), const Color(0xFF43A047)]);
+                      final Color convColor = district.conversionRate >= 50.0
+                          ? const Color(0xFF2E7D32)
+                          : (district.conversionRate >= 25.0
+                              ? const Color(0xFF0288D1)
+                              : const Color(0xFFE65100));
 
-                    final Color convColor = district.conversionRate >= 50.0
-                        ? const Color(0xFF2E7D32)
-                        : (district.conversionRate >= 25.0
-                            ? const Color(0xFF0288D1)
-                            : const Color(0xFFE65100));
+                      final Map<String, double> activeBreakdownMap = _breakdownMode == 'Product'
+                          ? _getEffectiveProductBreakdown(district)
+                          : (_breakdownMode == 'SubCategory'
+                              ? _getEffectiveSubCategoryBreakdown(district)
+                              : _getEffectiveCategoryBreakdown(district));
 
-                    final Map<String, double> activeBreakdownMap = _breakdownMode == 'Product'
-                        ? _getEffectiveProductBreakdown(district)
-                        : (_breakdownMode == 'SubCategory'
-                            ? _getEffectiveSubCategoryBreakdown(district)
-                            : _getEffectiveCategoryBreakdown(district));
-
-                    return Container(
-                      width: width,
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        color: AppTheme.backgroundColor,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                        border: Border.all(color: AppTheme.borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // High-Impact Demand Gradient Strip - Submerged 100% Flush
-                          Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: topGradient),
+                      return Container(
+                        width: width,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundColor,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
-                          ),
+                          ],
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // High-Impact Demand Gradient Strip - Submerged 100% Flush
+                            Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: topGradient),
+                              ),
+                            ),
 
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // District Name & Volume Index Pill
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        district.districtName,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppTheme.textPrimary,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: topGradient.first.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: topGradient.first.withOpacity(0.3)),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            isHighDemand
-                                                ? Icons.local_fire_department_rounded
-                                                : (isMedDemand ? Icons.trending_up_rounded : Icons.check_circle_rounded),
-                                            size: 13,
-                                            color: topGradient.first,
-                                          ),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            '${district.searchVolumeIndex.toInt()} Index',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w800,
-                                              color: topGradient.first,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-
-                                // State & Main Category Badge
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on_rounded, size: 13, color: AppTheme.textSecondary),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      district.stateName,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '•',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.primaryColor.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(5),
-                                        ),
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // District Name & Volume Index Pill
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
                                         child: Text(
-                                          district.category,
+                                          district.districtName,
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.outfit(
-                                            fontSize: 10.5,
+                                            fontSize: 16,
                                             fontWeight: FontWeight.w800,
-                                            color: AppTheme.primaryColor,
+                                            color: AppTheme.textPrimary,
+                                            letterSpacing: -0.2,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: topGradient.first.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: topGradient.first.withOpacity(0.3)),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              isHighDemand
+                                                  ? Icons.local_fire_department_rounded
+                                                  : (isMedDemand ? Icons.trending_up_rounded : Icons.check_circle_rounded),
+                                              size: 13,
+                                              color: topGradient.first,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              '${district.searchVolumeIndex.toInt()} Index',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                color: topGradient.first,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
 
-                                // Breakdown View Mode or Standard Metrics
-                                if (_breakdownMode != 'None') ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.cardColor,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: AppTheme.borderColor),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _breakdownMode == 'Product'
-                                              ? '📦 TOP PRODUCT DEMAND SHARE'
-                                              : (_breakdownMode == 'SubCategory'
-                                                  ? '📁 SUBCATEGORY REVENUE SHARE'
-                                                  : '🏷️ CATEGORY REVENUE SHARE'),
+                                  // State & Main Category Badge
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.location_on_rounded, size: 13, color: AppTheme.textSecondary),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        district.stateName,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '•',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(5),
+                                          ),
+                                          child: Text(
+                                            district.category,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Breakdown View Mode or Standard Metrics
+                                  if (_breakdownMode != 'None') ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.cardColor,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: AppTheme.borderColor),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _breakdownMode == 'Product'
+                                                ? '📦 TOP PRODUCT DEMAND SHARE'
+                                                : (_breakdownMode == 'SubCategory'
+                                                    ? '📁 SUBCATEGORY REVENUE SHARE'
+                                                    : '🏷️ CATEGORY REVENUE SHARE'),
                                           style: GoogleFonts.outfit(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w800,

@@ -94,52 +94,54 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Bar
-          _buildHeader(overallConversion),
-
-          const SizedBox(height: 20),
-
-          // KPI Metric Summary Grid
-          _buildKpiSummary(maxCount, finalStep.userCount, overallConversion, maxDropIndex, maxDropPercent),
-
-          const SizedBox(height: 24),
-
-          // View Mode Selector
-          _buildViewModeSelector(),
-
-          const SizedBox(height: 20),
-
-          // Render Active View Mode
-          if (_selectedViewMode == 'Flow')
-            _buildFlowView(maxCount)
-          else if (_selectedViewMode == 'Bars')
-            _buildBarsView(maxCount)
-          else
-            _buildMetricsView(maxCount),
-
-          // Detailed Selected Step Inspector Card
-          if (_selectedIndex != null && _selectedIndex! < widget.steps.length) ...[
-            const SizedBox(height: 20),
-            _buildStepDetailCard(widget.steps[_selectedIndex!], _selectedIndex!),
+    return SelectionArea(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
           ],
-        ],
+          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Bar
+            _buildHeader(overallConversion),
+
+            const SizedBox(height: 20),
+
+            // KPI Metric Summary Grid
+            _buildKpiSummary(maxCount, finalStep.userCount, overallConversion, maxDropIndex, maxDropPercent),
+
+            const SizedBox(height: 24),
+
+            // View Mode Selector
+            _buildViewModeSelector(),
+
+            const SizedBox(height: 20),
+
+            // Render Active View Mode
+            if (_selectedViewMode == 'Flow')
+              _buildFlowView(maxCount)
+            else if (_selectedViewMode == 'Bars')
+              _buildBarsView(maxCount)
+            else
+              _buildMetricsView(maxCount),
+
+            // Detailed Selected Step Inspector Card
+            if (_selectedIndex != null && _selectedIndex! < widget.steps.length) ...[
+              const SizedBox(height: 20),
+              _buildStepDetailCard(widget.steps[_selectedIndex!], _selectedIndex!),
+            ],
+          ],
+        ),
       ),
     );
   }

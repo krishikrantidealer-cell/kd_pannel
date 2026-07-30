@@ -1050,10 +1050,11 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            children: [
-              // Handle
-              Center(
+          child: SelectionArea(
+            child: Column(
+              children: [
+                // Handle
+                Center(
                 child: Container(
                   margin: const EdgeInsets.only(top: 12, bottom: 8),
                   width: 44,
@@ -1394,6 +1395,7 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
                 ),
               ),
             ],
+          ),
           ),
         );
       },

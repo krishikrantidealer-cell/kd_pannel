@@ -119,41 +119,43 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       return matchesSearch && matchesFilter;
     }).toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.all(isDesktop ? 24 : 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Enterprise Command Bar Header
-          _buildHeaderCommandBar(isDesktop),
-          const SizedBox(height: 20),
+    return SelectionArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(isDesktop ? 24 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Enterprise Command Bar Header
+            _buildHeaderCommandBar(isDesktop),
+            const SizedBox(height: 20),
 
-          // 2. High-Impact Real-time Intent KPI Cards
-          _buildIntentKpiBar(hotCount, warmCount, browsingCount, widget.realTimeUsers.length, isDesktop),
-          const SizedBox(height: 20),
+            // 2. High-Impact Real-time Intent KPI Cards
+            _buildIntentKpiBar(hotCount, warmCount, browsingCount, widget.realTimeUsers.length, isDesktop),
+            const SizedBox(height: 20),
 
-          // 3. Search & Filter Tool Bar
-          _buildFilterToolBar(isDesktop),
-          const SizedBox(height: 16),
+            // 3. Search & Filter Tool Bar
+            _buildFilterToolBar(isDesktop),
+            const SizedBox(height: 16),
 
-          // 4. Live Pulse Customer Cards Grid
-          if (filteredUsers.isEmpty)
-            _buildEmptyPulseState()
-          else
-            _buildPulseGrid(filteredUsers, isDesktop),
-        ],
+            // 4. Live Pulse Customer Cards Grid
+            if (filteredUsers.isEmpty)
+              _buildEmptyPulseState()
+            else
+              _buildPulseGrid(filteredUsers, isDesktop),
+          ],
+        ),
       ),
     );
   }
