@@ -1097,6 +1097,17 @@ class _UserEventsPageState extends State<UserEventsPage> {
     bool isBackground = false,
   }) async {
     if (!mounted || _isLoadingEvents) return;
+    
+    // Refresh Funnel Future too
+    _funnelDataFuture = AnalyticsService().fetchFunnelData(
+      days: _selectedAnalyticsTimeRange,
+      customRange: _customAnalyticsDateRange,
+    );
+    _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(
+      days: _selectedAnalyticsTimeRange,
+      customRange: _customAnalyticsDateRange,
+    );
+
     _isLoadingEvents = true;
     _isBackgroundLoading = isBackground;
 
@@ -2617,55 +2628,48 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final int step3Events = checkoutEvents;
 
     final int step4Users = orderUsers.length;
-    final int step4Events = orderEvents;
+    // --- Strict Cumulative Logic: Ensure downstream intent is inherited upstream ---
+    // This handles users whose temporary records (Carts/Sessions) were deleted but Orders remain.
+    final Set<String> cumulativeCheckoutUsers = {...checkoutUsers, ...orderUsers};
+    final Set<String> cumulativeCartUsers = {...cartUsers, ...cumulativeCheckoutUsers};
+    final Set<String> cumulativeBrowseUsers = {...viewUsers, ...cumulativeCartUsers};
 
-    final int maxDownstreamUsers = [
-      step2Users,
-      step3Users,
-      step4Users,
-    ].fold(0, (max, v) => v > max ? v : max);
-    if (step1Users < maxDownstreamUsers) {
-      step1Users = maxDownstreamUsers;
-      if (step1Events < maxDownstreamUsers) step1Events = maxDownstreamUsers;
-    }
+    final int s1 = cumulativeBrowseUsers.length;
+    final int s2 = cumulativeCartUsers.length;
+    final int s3 = cumulativeCheckoutUsers.length;
+    final int s4 = orderUsers.length;
 
-    final double rate1 = step1Users > 0 ? 100.0 : 0.0;
-    final double rate2 = step1Users > 0
-        ? ((step2Users / step1Users) * 100).clamp(0.0, 100.0)
-        : 0.0;
-    final double rate3 = step1Users > 0
-        ? ((step3Users / step1Users) * 100).clamp(0.0, 100.0)
-        : 0.0;
-    final double rate4 = step1Users > 0
-        ? ((step4Users / step1Users) * 100).clamp(0.0, 100.0)
-        : 0.0;
+    final double rate1 = s1 > 0 ? 100.0 : 0.0;
+    final double rate2 = s1 > 0 ? ((s2 / s1) * 100).clamp(0.0, 100.0) : 0.0;
+    final double rate3 = s1 > 0 ? ((s3 / s1) * 100).clamp(0.0, 100.0) : 0.0;
+    final double rate4 = s1 > 0 ? ((s4 / s1) * 100).clamp(0.0, 100.0) : 0.0;
 
     return [
       FunnelStepData(
         stepName: '1. App Browse & Search',
-        userCount: step1Users,
-        eventCount: step1Events,
+        userCount: s1,
+        eventCount: viewEvents > s1 ? viewEvents : s1,
         conversionRate: rate1,
         stepColor: const Color(0xFF1E88E5),
       ),
       FunnelStepData(
         stepName: '2. Add To Cart',
-        userCount: step2Users,
-        eventCount: step2Events,
+        userCount: s2,
+        eventCount: cartEvents > s2 ? cartEvents : s2,
         conversionRate: rate2,
         stepColor: const Color(0xFF43A047),
       ),
       FunnelStepData(
         stepName: '3. Checkout Started',
-        userCount: step3Users,
-        eventCount: step3Events,
+        userCount: s3,
+        eventCount: checkoutEvents > s3 ? checkoutEvents : s3,
         conversionRate: rate3,
         stepColor: const Color(0xFFFB8C00),
       ),
       FunnelStepData(
         stepName: '4. Order Completed',
-        userCount: step4Users,
-        eventCount: step4Events,
+        userCount: s4,
+        eventCount: orderEvents > s4 ? orderEvents : s4,
         conversionRate: rate4,
         stepColor: const Color(0xFFE53935),
       ),
@@ -2693,8 +2697,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
       _selectedMetricFilter = 'All';
       _selectedPriority = 'All';
       _selectedEventCategory = targetCategory;
+      _activeAnalyticsTab = 0; // Switch to User Feed tab to show results
     });
     _rebuildCache();
+
+    // Scroll to the users list
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        350,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   final Set<String> _resolvingPincodes = {};
