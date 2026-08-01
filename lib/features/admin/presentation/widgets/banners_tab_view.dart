@@ -1049,6 +1049,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
   late TextEditingController _titleController;
   late TextEditingController _priorityController;
   late TextEditingController _redirectTargetController;
+  late SearchController _productSearchController;
 
   int _selectedTab = 0; // 0 = Form Setup, 1 = Live Mobile Preview
   String _selectedType = 'home';
@@ -1072,6 +1073,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
     _titleController = TextEditingController(text: b?['title'] ?? '');
     _priorityController = TextEditingController(text: (b?['priority'] ?? 0).toString());
     _redirectTargetController = TextEditingController(text: b?['redirectTarget'] ?? '');
+    _productSearchController = SearchController();
     _selectedType = b?['type'] ?? 'home';
     _selectedRedirectType = b?['redirectType'] ?? 'none';
     _isActive = b?['isActive'] ?? true;
@@ -1104,6 +1106,17 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
         final raw = decoded is List ? decoded : (decoded['products'] ?? decoded['data'] ?? []);
         if (raw is List) {
           _backendProducts = List<Map<String, dynamic>>.from(raw);
+          // Update product search controller text if editing and it's a product redirect
+          if (widget.existingBanner != null && _selectedRedirectType == 'product') {
+            final targetId = _redirectTargetController.text;
+            final product = _backendProducts.firstWhere(
+              (p) => (p['_id'] ?? p['id']).toString() == targetId,
+              orElse: () => {},
+            );
+            if (product.isNotEmpty) {
+              _productSearchController.text = (product['title'] ?? product['name'] ?? '').toString();
+            }
+          }
         }
       }
 
@@ -1129,6 +1142,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
     _titleController.dispose();
     _priorityController.dispose();
     _redirectTargetController.dispose();
+    _productSearchController.dispose();
     super.dispose();
   }
 
@@ -1975,31 +1989,96 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                         ] else if (_selectedRedirectType == 'product' && _backendProducts.isNotEmpty) ...[
                           Text('Select Backend Product:', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
                           const SizedBox(height: 6),
-                          DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
-                            decoration: InputDecoration(
-                              hintText: '-- Select Product from Backend --',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            ),
-                            items: _backendProducts.map((prod) {
-                              final name = prod['title'] ?? prod['name'] ?? 'Product';
-                              final id = prod['_id'] ?? prod['id'] ?? '';
-                              return DropdownMenuItem<String>(
-                                value: id.toString(),
-                                child: Text(
-                                  '$name (ID: ${id.toString().substring(0, id.toString().length > 8 ? 8 : id.toString().length)})',
-                                  overflow: TextOverflow.ellipsis,
+                          SearchAnchor(
+                            searchController: _productSearchController,
+                            builder: (context, controller) {
+                              return TextFormField(
+                                controller: controller,
+                                readOnly: true,
+                                style: GoogleFonts.outfit(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: '-- Click to Search Product --',
+                                  prefixIcon: const Icon(Icons.inventory_2_outlined, size: 18, color: AppTheme.primaryColor),
+                                  suffixIcon: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (controller.text.isNotEmpty)
+                                        IconButton(
+                                          icon: const Icon(Icons.clear_rounded, size: 18),
+                                          onPressed: () {
+                                            setState(() {
+                                              controller.clear();
+                                              _redirectTargetController.clear();
+                                            });
+                                          },
+                                        ),
+                                      const Icon(Icons.arrow_drop_down_rounded),
+                                      const SizedBox(width: 8),
+                                    ],
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
                                 ),
+                                onTap: () => controller.openView(),
                               );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _redirectTargetController.text = val;
-                                });
+                            },
+                            suggestionsBuilder: (context, controller) {
+                              final query = controller.text.toLowerCase();
+                              final filtered = _backendProducts.where((p) {
+                                final name = (p['title'] ?? p['name'] ?? '').toString().toLowerCase();
+                                return name.contains(query);
+                              }).toList();
+
+                              if (filtered.isEmpty) {
+                                return [
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Center(
+                                      child: Column(
+                                        children: [
+                                          Icon(Icons.search_off_rounded, size: 40, color: Colors.grey.shade400),
+                                          const SizedBox(height: 8),
+                                          Text('No products match "$query"', style: GoogleFonts.outfit(color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                ];
                               }
+
+                              return filtered.map((p) {
+                                final name = (p['title'] ?? p['name'] ?? '').toString();
+                                final id = (p['_id'] ?? p['id']).toString();
+                                final images = p['images'] as List?;
+                                final imageUrl = (images != null && images.isNotEmpty) ? images.first.toString() : null;
+
+                                return ListTile(
+                                  leading: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: imageUrl != null
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined, size: 20)),
+                                          )
+                                        : const Icon(Icons.inventory_2_outlined, size: 20, color: Colors.grey),
+                                  ),
+                                  title: Text(name, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600)),
+                                  subtitle: Text('ID: ${id.substring(0, id.length > 8 ? 8 : id.length)}...', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+                                  onTap: () {
+                                    setState(() {
+                                      _redirectTargetController.text = id;
+                                      controller.closeView(name);
+                                    });
+                                  },
+                                );
+                              });
                             },
                           ),
                         ] else if (_selectedRedirectType == 'collection' && _backendCollections.isNotEmpty) ...[
