@@ -220,6 +220,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
 
   Future<void> _createCategory() async {
     final TextEditingController controller = TextEditingController();
+    final TextEditingController bannerTitleController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -227,6 +228,7 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
       builder: (ctx) {
         bool isLoading = false;
         Uint8List? categoryImage;
+        Uint8List? categoryIcon;
         fp.PlatformFile? cataloguePdfFile;
         double? uploadProgress; // null = not uploading, 0.0-1.0 = progress
 
@@ -259,6 +261,14 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: bannerTitleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Banner Title (Optional)',
+                          hintText: 'e.g. Special Fertilizer Discount',
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Text(
@@ -367,6 +377,96 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                       'Click to upload banner image',
                                       style: GoogleFonts.outfit(
                                         fontSize: 13,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Icon Image (Dynamic App Icon)',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final XFile? image = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 400,
+                              maxHeight: 400,
+                              imageQuality: 90,
+                            );
+                            if (image != null) {
+                              final bytes = await image.readAsBytes();
+                              setState(() {
+                                categoryIcon = bytes;
+                              });
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Failed to pick icon: $e')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 72,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: categoryIcon != null
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 16),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Image.memory(
+                                        categoryIcon!,
+                                        width: 44,
+                                        height: 44,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'Category Icon Selected',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18),
+                                      onPressed: () => setState(() => categoryIcon = null),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.category_rounded,
+                                      color: AppTheme.textSecondary,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Click to upload category icon (1:1 PNG/WebP)',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
                                         color: AppTheme.textSecondary,
                                       ),
                                     ),
@@ -531,25 +631,40 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             // 3. Submit category creation request
                             final Map<String, String> fields = {
                               'name': controller.text.trim(),
+                              'bannerTitle': bannerTitleController.text.trim(),
                             };
                             if (publicPdfUrl != null) {
                               fields['cataloguePdf'] = publicPdfUrl;
                             }
 
-                            if (categoryImage != null) {
+                            if (categoryImage != null || categoryIcon != null) {
                               response = await ApiClient().multipartRequest(
                                 method: 'POST',
                                 endpoint: '/products/categories',
                                 fields: fields,
                                 filesBuilder: () {
-                                  return [
-                                    http.MultipartFile.fromBytes(
-                                      'image',
-                                      categoryImage!,
-                                      filename: 'category_banner.jpg',
-                                      contentType: MediaType('image', 'jpeg'),
-                                    ),
-                                  ];
+                                  final files = <http.MultipartFile>[];
+                                  if (categoryImage != null) {
+                                    files.add(
+                                      http.MultipartFile.fromBytes(
+                                        'image',
+                                        categoryImage!,
+                                        filename: 'category_banner.jpg',
+                                        contentType: MediaType('image', 'jpeg'),
+                                      ),
+                                    );
+                                  }
+                                  if (categoryIcon != null) {
+                                    files.add(
+                                      http.MultipartFile.fromBytes(
+                                        'icon',
+                                        categoryIcon!,
+                                        filename: 'category_icon.png',
+                                        contentType: MediaType('image', 'png'),
+                                      ),
+                                    );
+                                  }
+                                  return files;
                                 },
                               );
                             } else {
@@ -617,9 +732,10 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
   }
 
   Future<void> _editCategory(dynamic cat) async {
-    final TextEditingController controller = TextEditingController(
-      text: cat['name'],
-    );
+    final TextEditingController controller =
+        TextEditingController(text: cat['name']);
+    final TextEditingController bannerTitleController =
+        TextEditingController(text: cat['bannerTitle'] ?? '');
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -628,6 +744,9 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         Uint8List? categoryImage;
         String? existingImageUrl = cat['bannerImage'];
+        Uint8List? categoryIcon;
+        String? existingIconUrl = cat['iconImage'];
+        bool deletedExistingIcon = false;
         fp.PlatformFile? cataloguePdfFile;
         String? existingPdfUrl = cat['cataloguePdf'];
         bool deletedExistingPdf = false;
@@ -661,6 +780,14 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: bannerTitleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Banner Title (Optional)',
+                          hintText: 'e.g. Special Fertilizer Discount',
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Text(
@@ -789,6 +916,117 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                                       'Click to upload banner image',
                                       style: GoogleFonts.outfit(
                                         fontSize: 13,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Category Icon Image (Dynamic App Icon)',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final XFile? image = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 400,
+                              maxHeight: 400,
+                              imageQuality: 90,
+                            );
+                            if (image != null) {
+                              final bytes = await image.readAsBytes();
+                              setState(() {
+                                categoryIcon = bytes;
+                                existingIconUrl = null;
+                                deletedExistingIcon = false;
+                              });
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Failed to pick icon: $e')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 72,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: (categoryIcon != null || existingIconUrl != null)
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 16),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: categoryIcon != null
+                                          ? Image.memory(
+                                              categoryIcon!,
+                                              width: 44,
+                                              height: 44,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Image.network(
+                                              existingIconUrl!,
+                                              width: 44,
+                                              height: 44,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        categoryIcon != null
+                                            ? 'New Icon Selected'
+                                            : 'Current Active Category Icon',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18),
+                                      onPressed: () {
+                                        setState(() {
+                                          categoryIcon = null;
+                                          existingIconUrl = null;
+                                          deletedExistingIcon = true;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.category_rounded,
+                                      color: AppTheme.textSecondary,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Click to upload category icon (1:1 PNG/WebP)',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
                                         color: AppTheme.textSecondary,
                                       ),
                                     ),
@@ -963,11 +1201,17 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                             http.Response response;
                             final Map<String, String> fields = {
                               'name': controller.text.trim(),
+                              'bannerTitle': bannerTitleController.text.trim(),
                             };
 
                             if (categoryImage == null &&
                                 existingImageUrl == null) {
                               fields['bannerImage'] = '';
+                            }
+                            if (categoryIcon == null &&
+                                existingIconUrl == null &&
+                                deletedExistingIcon) {
+                              fields['iconImage'] = '';
                             }
 
                             String? publicPdfUrl;
@@ -996,20 +1240,34 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
                               fields['cataloguePdf'] = publicPdfUrl;
                             }
 
-                            if (categoryImage != null) {
+                            if (categoryImage != null || categoryIcon != null) {
                               response = await ApiClient().multipartRequest(
                                 method: 'PUT',
                                 endpoint: '/products/categories/${cat['_id']}',
                                 fields: fields,
                                 filesBuilder: () {
-                                  return [
-                                    http.MultipartFile.fromBytes(
-                                      'image',
-                                      categoryImage!,
-                                      filename: 'category_banner.jpg',
-                                      contentType: MediaType('image', 'jpeg'),
-                                    ),
-                                  ];
+                                  final files = <http.MultipartFile>[];
+                                  if (categoryImage != null) {
+                                    files.add(
+                                      http.MultipartFile.fromBytes(
+                                        'image',
+                                        categoryImage!,
+                                        filename: 'category_banner.jpg',
+                                        contentType: MediaType('image', 'jpeg'),
+                                      ),
+                                    );
+                                  }
+                                  if (categoryIcon != null) {
+                                    files.add(
+                                      http.MultipartFile.fromBytes(
+                                        'icon',
+                                        categoryIcon!,
+                                        filename: 'category_icon.png',
+                                        contentType: MediaType('image', 'png'),
+                                      ),
+                                    );
+                                  }
+                                  return files;
                                 },
                               );
                             } else {
@@ -2649,7 +2907,9 @@ class _CategoryDetailsPanelState extends State<_CategoryDetailsPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      catName,
+                      (widget.category['bannerTitle'] != null && widget.category['bannerTitle'].toString().trim().isNotEmpty)
+                          ? widget.category['bannerTitle'].toString().trim()
+                          : catName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(

@@ -287,6 +287,16 @@ class ApiClient {
     });
   }
 
+  Future<http.Response> patch(String endpoint, [Map<String, dynamic>? body]) async {
+    await _ensureTokensLoaded();
+    return await _requestWithRetry((timeoutDuration) async {
+      final uri = Uri.parse('$baseUrl$endpoint');
+      return await http
+          .patch(uri, headers: _getHeaders(), body: body != null ? jsonEncode(body) : null)
+          .timeout(timeoutDuration);
+    });
+  }
+
   Future<http.Response> delete(String endpoint) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {

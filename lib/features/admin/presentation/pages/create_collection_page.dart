@@ -31,6 +31,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
+  final _bannerTitleController = TextEditingController();
   final _priorityController = TextEditingController(text: '0');
 
   Uint8List? _collectionImage;
@@ -79,6 +80,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
     if (data != null) {
       _nameController.text = data['name'] ?? '';
       _descController.text = data['description'] ?? '';
+      _bannerTitleController.text = data['bannerTitle'] ?? '';
       _isActive = data['isActive'] ?? true;
       _isParentCollection = data['parentId'] == null;
       if (_isParentCollection) {
@@ -150,6 +152,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
     }
     _nameController.dispose();
     _descController.dispose();
+    _bannerTitleController.dispose();
     _priorityController.dispose();
     super.dispose();
   }
@@ -244,10 +247,15 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
           ],
         );
       } else {
+        final bannerTitleRaw = _bannerTitleController.text.trim();
+        // If left blank, default to the collection name so the mobile app
+        // always has a title to display on section header strip banners.
+        final bannerTitle = bannerTitleRaw.isNotEmpty ? bannerTitleRaw : name;
         final responseBody = _isParentCollection
             ? {
                 'name': name,
                 'description': _descController.text.trim(),
+                'bannerTitle': bannerTitle,
                 'isActive': isActive,
                 'priority': int.tryParse(_priorityController.text) ?? 0,
               }
@@ -804,6 +812,84 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                         width: 1.5,
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Banner Title
+                Text(
+                  'Banner Display Title (Optional)',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Shown on the mobile app section header. Leave blank to use the collection name automatically.',
+                  style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _bannerTitleController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: _nameController.text.trim().isNotEmpty
+                        ? 'Default: "${_nameController.text.trim()}"'
+                        : 'Auto-filled from collection name...',
+                    prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                    hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Quick-fill chips — only for the fixed system-section keywords
+                Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 13, color: AppTheme.primaryColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Override with a system section:',
+                      style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      'Dealer First Choice',
+                      'Shop By Crop Section',
+                      'Featured Products Section',
+                      'Categories Section',
+                      'Best Offers Showcase',
+                    ].map((preset) {
+                      final isSelected = _bannerTitleController.text.trim().toLowerCase() == preset.toLowerCase();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(preset, style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600)),
+                          selected: isSelected,
+                          selectedColor: AppTheme.primaryColor.withValues(alpha: 0.15),
+                          backgroundColor: Colors.grey.shade100,
+                          onSelected: (_) => setState(() => _bannerTitleController.text = isSelected ? '' : preset),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
                 const SizedBox(height: 16),

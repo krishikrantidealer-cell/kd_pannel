@@ -9,6 +9,7 @@ import 'create_collection_page.dart';
 import '../widgets/products_tab_view.dart';
 import '../widgets/collections_tab_view.dart';
 import '../widgets/categories_tab_view.dart';
+import '../widgets/banners_tab_view.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_state.dart';
@@ -132,7 +133,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                   ? 'Product Catalogue'
                                   : _selectedTab == 'Collections'
                                   ? 'Product Collections'
-                                  : 'Product Categories',
+                                  : _selectedTab == 'Categories'
+                                  ? 'Product Categories'
+                                  : 'Carousel Banners',
                               style: GoogleFonts.outfit(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
@@ -145,14 +148,16 @@ class _ProductsPageState extends State<ProductsPage> {
                                   ? 'View and manage agricultural products, categories and sub-categories'
                                   : _selectedTab == 'Collections'
                                   ? 'Organize products into curated thematic groups and bundles'
-                                  : 'Configure categories and custom sub-categories hierarchy',
+                                  : _selectedTab == 'Categories'
+                                  ? 'Configure categories and custom sub-categories hierarchy'
+                                  : 'Upload and manage app home screen carousel banners',
                               style: GoogleFonts.outfit(
                                 fontSize: 13,
                                 color: AppTheme.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            if (_selectedTab != 'Categories')
+                            if (_selectedTab == 'Products' || _selectedTab == 'Collections')
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
@@ -196,7 +201,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                         ? 'Product Catalogue'
                                         : _selectedTab == 'Collections'
                                         ? 'Product Collections'
-                                        : 'Product Categories',
+                                        : _selectedTab == 'Categories'
+                                        ? 'Product Categories'
+                                        : 'Carousel Banners',
                                     style: GoogleFonts.outfit(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
@@ -209,7 +216,9 @@ class _ProductsPageState extends State<ProductsPage> {
                                         ? 'View and manage agricultural products, categories and sub-categories'
                                         : _selectedTab == 'Collections'
                                         ? 'Organize products into curated thematic groups and bundles'
-                                        : 'Configure categories and custom sub-categories hierarchy',
+                                        : _selectedTab == 'Categories'
+                                        ? 'Configure categories and custom sub-categories hierarchy'
+                                        : 'Upload and manage app home screen carousel banners',
                                     style: GoogleFonts.outfit(
                                       fontSize: 13,
                                       color: AppTheme.textSecondary,
@@ -219,7 +228,7 @@ class _ProductsPageState extends State<ProductsPage> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            if (_selectedTab != 'Categories')
+                            if (_selectedTab == 'Products' || _selectedTab == 'Collections')
                               ElevatedButton.icon(
                                 onPressed: () {
                                   if (_selectedTab == 'Products') {
@@ -258,27 +267,36 @@ class _ProductsPageState extends State<ProductsPage> {
                       color: const Color(0xFFF3F4F6),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildSegmentButton(
-                          title: 'Products',
-                          isActive: _selectedTab == 'Products',
-                          onTap: () => setState(() => _selectedTab = 'Products'),
-                        ),
-                        _buildSegmentButton(
-                          title: 'Collections',
-                          isActive: _selectedTab == 'Collections',
-                          onTap: () =>
-                              setState(() => _selectedTab = 'Collections'),
-                        ),
-                        _buildSegmentButton(
-                          title: 'Categories',
-                          isActive: _selectedTab == 'Categories',
-                          onTap: () =>
-                              setState(() => _selectedTab = 'Categories'),
-                        ),
-                      ],
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildSegmentButton(
+                            title: 'Products',
+                            isActive: _selectedTab == 'Products',
+                            onTap: () => setState(() => _selectedTab = 'Products'),
+                          ),
+                          _buildSegmentButton(
+                            title: 'Collections',
+                            isActive: _selectedTab == 'Collections',
+                            onTap: () =>
+                                setState(() => _selectedTab = 'Collections'),
+                          ),
+                          _buildSegmentButton(
+                            title: 'Categories',
+                            isActive: _selectedTab == 'Categories',
+                            onTap: () =>
+                                setState(() => _selectedTab = 'Categories'),
+                          ),
+                          _buildSegmentButton(
+                            title: 'Banners',
+                            isActive: _selectedTab == 'Banners',
+                            onTap: () =>
+                                setState(() => _selectedTab = 'Banners'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   SizedBox(height: AppTheme.spacingLarge),
@@ -287,7 +305,9 @@ class _ProductsPageState extends State<ProductsPage> {
                         ? 0
                         : _selectedTab == 'Collections'
                         ? 1
-                        : 2,
+                        : _selectedTab == 'Categories'
+                        ? 2
+                        : 3,
                     children: [
                       ProductsTabView(
                         products: products,
@@ -312,6 +332,13 @@ class _ProductsPageState extends State<ProductsPage> {
                       CategoriesTabView(
                         categories: categories,
                         products: products,
+                        onRefresh: () {
+                          context.read<ProductsBloc>().add(
+                            const LoadProductsEvent(forceRefresh: true),
+                          );
+                        },
+                      ),
+                      BannersTabView(
                         onRefresh: () {
                           context.read<ProductsBloc>().add(
                             const LoadProductsEvent(forceRefresh: true),
