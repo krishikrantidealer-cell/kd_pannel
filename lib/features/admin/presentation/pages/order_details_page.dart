@@ -14,6 +14,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 
 class OrderDetailsPage extends StatefulWidget {
   const OrderDetailsPage({super.key});
@@ -27,6 +28,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   OrderModel get _order => _orderRaw!;
   bool _isInitialized = false;
   bool _isPrintHovered = false;
+  bool _isSyncingDelivery = false;
 
   @override
   void didChangeDependencies() {
@@ -90,6 +92,142 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       );
     } catch (e) {
       debugPrint('Error refreshing order details: $e');
+    }
+  }
+
+  Future<void> _syncDeliveryStatus() async {
+    if (_orderRaw == null || _isSyncingDelivery) return;
+    setState(() => _isSyncingDelivery = true);
+    try {
+      final response = await ApiClient().post('/orders/admin/${_order.id}/sync-delivery', {});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['order'] != null) {
+          final updatedOrder = OrderModel.fromJson(data['order']);
+          setState(() {
+            _orderRaw = updatedOrder;
+          });
+          _saveOrderToCache(updatedOrder);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Delivery status synced: ${updatedOrder.orderStatus}'),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to sync tracking: HTTP ${response.statusCode}'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync error: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingDelivery = false);
+    }
+  }
+
+  bool _isCancellingOrder = false;
+
+  Future<void> _showCancelOrderDialog() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AppTheme.error, size: 22),
+            const SizedBox(width: 8),
+            Text('Cancel Order?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to cancel Order #${_order.orderId}? This will mark the order as Cancelled and send cancellation notifications to the customer.',
+          style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Keep Order', style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Yes, Cancel Order', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      _cancelOrderAdmin();
+    }
+  }
+
+  Future<void> _cancelOrderAdmin() async {
+    if (_orderRaw == null || _isCancellingOrder) return;
+    setState(() => _isCancellingOrder = true);
+    try {
+      final response = await ApiClient().put('/orders/admin/${_order.id}/status', {
+        'status': 'Cancelled',
+      });
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['order'] != null) {
+          final updatedOrder = OrderModel.fromJson(data['order']);
+          setState(() {
+            _orderRaw = updatedOrder;
+          });
+          _saveOrderToCache(updatedOrder);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Order cancelled successfully! Customer notified.'),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+          }
+        }
+      } else {
+        final errJson = jsonDecode(response.body);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errJson['message'] ?? 'Failed to cancel order'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cancellation error: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCancellingOrder = false);
     }
   }
 
@@ -498,6 +636,35 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ],
             ),
           ),
+          if (_order.orderStatus != 'Cancelled' &&
+              _order.orderStatus != 'Delivered' &&
+              _order.orderStatus != 'RTO' &&
+              (_order.awbNumber == null || _order.awbNumber!.trim().isEmpty)) ...[
+            const SizedBox(width: 12),
+            _isCancellingOrder
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.error),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: _showCancelOrderDialog,
+                    icon: const Icon(Icons.cancel_outlined, size: 14, color: AppTheme.error),
+                    label: Text(
+                      'Cancel Order',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.error,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.error),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+          ],
         ],
       ),
     );
@@ -1132,17 +1299,44 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             label: 'AWB / TRACKING NUMBER',
             value: hasAwb ? _order.awbNumber! : 'Pending Assignment',
             action: hasAwb
-                ? IconButton(
-                    icon: const Icon(
-                      Icons.copy_rounded,
-                      size: 12,
-                      color: AppTheme.textSecondary,
-                    ),
-                    onPressed: () =>
-                        _copyToClipboard(_order.awbNumber!, 'Tracking ID'),
-                    splashRadius: 14,
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.copy_rounded,
+                          size: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                        onPressed: () =>
+                            _copyToClipboard(_order.awbNumber!, 'Tracking ID'),
+                        splashRadius: 14,
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(width: 8),
+                      _isSyncingDelivery
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.primaryColor,
+                              ),
+                            )
+                          : IconButton(
+                              icon: const Icon(
+                                Icons.sync_rounded,
+                                size: 16,
+                                color: AppTheme.primaryColor,
+                              ),
+                              tooltip: 'Sync Live Delivery Status',
+                              onPressed: _syncDeliveryStatus,
+                              splashRadius: 14,
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                            ),
+                    ],
                   )
                 : null,
           ),

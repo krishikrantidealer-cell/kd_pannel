@@ -11,6 +11,11 @@ class Dealer {
   final bool isInactive;
   final String source;
   final String? deepLinkUrl;
+  final String? utmSource;
+  final String? utmMedium;
+  final String? utmCampaign;
+  final String? utmTerm;
+  final String? utmContent;
   final String? id;
   final String? agentId;
   final String? licenceImage;
@@ -41,6 +46,11 @@ class Dealer {
     required this.isInactive,
     this.source = 'App',
     this.deepLinkUrl,
+    this.utmSource,
+    this.utmMedium,
+    this.utmCampaign,
+    this.utmTerm,
+    this.utmContent,
     this.id,
     this.agentId,
     this.licenceImage,
@@ -73,6 +83,11 @@ class Dealer {
       'isInactive': isInactive,
       'source': source,
       'deepLinkUrl': deepLinkUrl,
+      'utmSource': utmSource,
+      'utmMedium': utmMedium,
+      'utmCampaign': utmCampaign,
+      'utmTerm': utmTerm,
+      'utmContent': utmContent,
       'id': id,
       'agentId': agentId,
       'licenceImage': licenceImage,
@@ -131,6 +146,11 @@ class Dealer {
       isInactive: map['isInactive'] ?? false,
       source: map['source'] ?? 'App',
       deepLinkUrl: map['deepLinkUrl'],
+      utmSource: map['utmSource'] ?? map['utm_source'],
+      utmMedium: map['utmMedium'] ?? map['utm_medium'],
+      utmCampaign: map['utmCampaign'] ?? map['utm_campaign'],
+      utmTerm: map['utmTerm'] ?? map['utm_term'],
+      utmContent: map['utmContent'] ?? map['utm_content'],
       id: (map['id'] ?? map['_id'])?.toString(),
       agentId: resolvedAgentId,
       licenceImage: map['licenceImage'],

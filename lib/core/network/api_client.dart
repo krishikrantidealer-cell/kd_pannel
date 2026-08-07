@@ -499,7 +499,9 @@ class ApiClient {
   void _handleTerminalAuthFailure(http.Response response) {
     if (response.statusCode == 401) {
       final path = response.request?.url.path ?? '';
-      if (!path.endsWith('/auth/admin/login')) {
+      if (!path.contains('/auth/admin/login') &&
+          !path.contains('/auth/sales/login') &&
+          !path.contains('/auth/login')) {
         // Only log and redirect if we aren't already doing so
         if (!NavigationService.isRedirectingToLogin) {
           debugPrint('[ApiClient] Terminal auth failure (${response.statusCode}) at path: $path. Redirecting to login.');

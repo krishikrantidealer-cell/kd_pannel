@@ -21,6 +21,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     FetchOrdersEvent event,
     Emitter<OrdersState> emit,
   ) async {
+    if (state.status == OrdersStatus.loading) return;
+
     emit(state.copyWith(status: OrdersStatus.loading));
     try {
       String queryParams = '';

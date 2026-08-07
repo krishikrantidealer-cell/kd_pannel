@@ -28,12 +28,24 @@ class NavigationService {
     final context = navigatorKey.currentContext;
     if (context != null) {
       try {
-        context.read<OrdersBloc>().add(const ResetOrdersEvent());
-        context.read<LeadsBloc>().add(const ResetLeadsEvent());
-        context.read<DealersBloc>().add(const ResetDealersEvent());
-        context.read<ProductsBloc>().add(const ResetProductsEvent());
+        context.read<OrdersBloc>().add(ResetOrdersEvent());
       } catch (e) {
-        debugPrint('[NavigationService] Error resetting blocs: $e');
+        debugPrint('[NavigationService] OrdersBloc reset skipped: $e');
+      }
+      try {
+        context.read<LeadsBloc>().add(ResetLeadsEvent());
+      } catch (e) {
+        debugPrint('[NavigationService] LeadsBloc reset skipped: $e');
+      }
+      try {
+        context.read<DealersBloc>().add(ResetDealersEvent());
+      } catch (e) {
+        debugPrint('[NavigationService] DealersBloc reset skipped: $e');
+      }
+      try {
+        context.read<ProductsBloc>().add(ResetProductsEvent());
+      } catch (e) {
+        debugPrint('[NavigationService] ProductsBloc reset skipped: $e');
       }
     }
 

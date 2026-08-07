@@ -333,6 +333,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             isInactive: isInactiveDealer,
             source: u['source'] ?? 'App',
             deepLinkUrl: u['deepLinkUrl'],
+            utmSource: u['utmSource'] ?? u['utm_source'],
+            utmMedium: u['utmMedium'] ?? u['utm_medium'],
+            utmCampaign: u['utmCampaign'] ?? u['utm_campaign'],
+            utmTerm: u['utmTerm'] ?? u['utm_term'],
+            utmContent: u['utmContent'] ?? u['utm_content'],
             id: userId,
             agentId: resolvedAgentId,
             licenceImage: u['licenceImage'],
@@ -3478,70 +3483,16 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
 
 class _SourceBadge extends StatelessWidget {
   final String source;
+  final String? utmSource;
+  final String? utmCampaign;
+  final String? utmMedium;
 
-  const _SourceBadge({required this.source});
-
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 250,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  const _SourceBadge({
+    required this.source,
+    this.utmSource,
+    this.utmCampaign,
+    this.utmMedium,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3549,7 +3500,8 @@ class _SourceBadge extends StatelessWidget {
     Color textColor;
     IconData icon;
 
-    final String sourceLower = source.toLowerCase();
+    final String displaySource = utmSource ?? source;
+    final String sourceLower = displaySource.toLowerCase();
 
     if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
       badgeColor = const Color(0xFFE8F8EF);
@@ -3580,7 +3532,13 @@ class _SourceBadge extends StatelessWidget {
       icon = Icons.phone_android_rounded;
     }
 
-    return Container(
+    final String tooltipText = [
+      if (utmSource != null) 'UTM Source: $utmSource',
+      if (utmCampaign != null) 'UTM Campaign: $utmCampaign',
+      if (utmMedium != null) 'UTM Medium: $utmMedium',
+    ].join('\n');
+
+    final badgeChild = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: badgeColor,
@@ -3593,7 +3551,9 @@ class _SourceBadge extends StatelessWidget {
           Icon(icon, size: 12, color: textColor),
           const SizedBox(width: 4),
           Text(
-            source,
+            utmCampaign != null && utmCampaign!.isNotEmpty
+                ? '$displaySource ($utmCampaign)'
+                : displaySource,
             style: GoogleFonts.outfit(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
@@ -3603,5 +3563,14 @@ class _SourceBadge extends StatelessWidget {
         ],
       ),
     );
+
+    if (tooltipText.isNotEmpty) {
+      return Tooltip(
+        message: tooltipText,
+        child: badgeChild,
+      );
+    }
+
+    return badgeChild;
   }
 }

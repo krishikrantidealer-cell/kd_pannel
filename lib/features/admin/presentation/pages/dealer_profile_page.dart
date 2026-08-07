@@ -2454,11 +2454,31 @@ class _DealerInformationCard extends StatelessWidget {
     required this.onAssignAgent,
   });
 
+  String _cleanUtmValue(String val) {
+    if (val.trim().isEmpty) return val;
+    try {
+      final decoded = Uri.decodeComponent(val);
+      if (decoded.startsWith('{') && decoded.endsWith('}')) {
+        final parsed = jsonDecode(decoded);
+        if (parsed is Map && parsed.containsKey('app')) {
+          return 'Meta App ID: ${parsed['app']}';
+        }
+      }
+      if (decoded.length > 70) return '${decoded.substring(0, 65)}...';
+      return decoded;
+    } catch (e) {
+      if (val.length > 70) return '${val.substring(0, 65)}...';
+      return val;
+    }
+  }
+
   Map<String, String> _getDeepLinkAttributes(String? urlString) {
     if (urlString == null || urlString.trim().isEmpty) return {};
     try {
-      final uri = Uri.parse(urlString);
-      return uri.queryParameters;
+      final Uri uri = urlString.contains('?')
+          ? Uri.parse(urlString)
+          : Uri.parse('https://dummy.com?$urlString');
+      return uri.queryParameters.map((k, v) => MapEntry(k, _cleanUtmValue(v)));
     } catch (e) {
       return {};
     }

@@ -2906,14 +2906,51 @@ class _LeadInformationCard extends StatelessWidget {
     );
   }
 
-  Map<String, String> _getDeepLinkAttributes(String? urlString) {
-    if (urlString == null || urlString.trim().isEmpty) return {};
+  String _cleanUtmValue(String val) {
+    if (val.trim().isEmpty) return val;
     try {
-      final uri = Uri.parse(urlString);
-      return uri.queryParameters;
+      final decoded = Uri.decodeComponent(val);
+      if (decoded.startsWith('{') && decoded.endsWith('}')) {
+        final parsed = jsonDecode(decoded);
+        if (parsed is Map && parsed.containsKey('app')) {
+          return 'Meta App ID: ${parsed['app']}';
+        }
+      }
+      if (decoded.length > 70) {
+        return '${decoded.substring(0, 65)}...';
+      }
+      return decoded;
     } catch (e) {
-      return {};
+      if (val.length > 70) return '${val.substring(0, 65)}...';
+      return val;
     }
+  }
+
+  Map<String, String> _getDeepLinkAttributes(String? urlString, {Map<String, dynamic>? leadMap}) {
+    final Map<String, String> result = {};
+    if (leadMap != null) {
+      final s = leadMap['utmSource'] ?? leadMap['utm_source'];
+      final m = leadMap['utmMedium'] ?? leadMap['utm_medium'];
+      final c = leadMap['utmCampaign'] ?? leadMap['utm_campaign'];
+      final t = leadMap['utmTerm'] ?? leadMap['utm_term'];
+      final cnt = leadMap['utmContent'] ?? leadMap['utm_content'];
+      if (s != null && s.toString().isNotEmpty) result['utm_source'] = _cleanUtmValue(s.toString());
+      if (m != null && m.toString().isNotEmpty) result['utm_medium'] = _cleanUtmValue(m.toString());
+      if (c != null && c.toString().isNotEmpty) result['utm_campaign'] = _cleanUtmValue(c.toString());
+      if (t != null && t.toString().isNotEmpty) result['utm_term'] = _cleanUtmValue(t.toString());
+      if (cnt != null && cnt.toString().isNotEmpty) result['utm_content'] = _cleanUtmValue(cnt.toString());
+    }
+    if (urlString != null && urlString.trim().isNotEmpty) {
+      try {
+        final Uri uri = urlString.contains('?')
+            ? Uri.parse(urlString)
+            : Uri.parse('https://dummy.com?$urlString');
+        uri.queryParameters.forEach((k, v) {
+          result.putIfAbsent(k, () => _cleanUtmValue(v));
+        });
+      } catch (e) {}
+    }
+    return result;
   }
 
   Widget _buildSectionHeader(String title, IconData icon) {
@@ -3139,8 +3176,8 @@ class _LeadInformationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (lead['deepLinkUrl'] != null &&
-                    lead['deepLinkUrl'].toString().trim().isNotEmpty) ...[
+                if ((lead['deepLinkUrl'] != null && lead['deepLinkUrl'].toString().trim().isNotEmpty) ||
+                    (lead['utmSource'] ?? lead['utm_source'] ?? lead['utmCampaign'] ?? lead['utm_campaign'] ?? lead['source']) != null) ...[
                   _buildSectionHeader(
                     'Campaign & UTM Attribution',
                     Icons.insights_outlined,
@@ -3156,45 +3193,48 @@ class _LeadInformationCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.link_outlined,
-                              size: 14,
-                              color: Color(0xFF8B5CF6),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                lead['deepLinkUrl'].toString(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF6B21A8),
+                        if (lead['deepLinkUrl'] != null && lead['deepLinkUrl'].toString().trim().isNotEmpty) ...[
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.link_outlined,
+                                size: 14,
+                                color: Color(0xFF8B5CF6),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  lead['deepLinkUrl'].toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF6B21A8),
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            IconButton(
-                              icon: const Icon(Icons.copy_outlined, size: 14),
-                              color: const Color(0xFF8B5CF6),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () => _copyToClipboard(
-                                lead['deepLinkUrl'].toString(),
-                                'Deep link url',
-                                context,
+                              const SizedBox(width: 6),
+                              IconButton(
+                                icon: const Icon(Icons.copy_outlined, size: 14),
+                                color: const Color(0xFF8B5CF6),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _copyToClipboard(
+                                  lead['deepLinkUrl'].toString(),
+                                  'Deep link url',
+                                  context,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         Builder(
                           builder: (context) {
                             final attributes = _getDeepLinkAttributes(
-                              lead['deepLinkUrl'].toString(),
+                              lead['deepLinkUrl']?.toString(),
+                              leadMap: lead,
                             );
                             if (attributes.isEmpty) {
                               return Text(

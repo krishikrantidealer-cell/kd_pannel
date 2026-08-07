@@ -225,12 +225,14 @@ class _LeadsPageState extends State<LeadsPage> {
     WebSocketService().connect();
 
     DateTime? lastLeadsFetch;
-    _wsSubscription = WebSocketService().leadsUpdates.listen((unused) {
-      if (mounted && _leadsBloc != null) {
+    _wsSubscription = WebSocketService().leadsUpdates.listen((dynamic event) {
+      if (mounted) {
         final now = DateTime.now();
         if (lastLeadsFetch == null || now.difference(lastLeadsFetch!) > const Duration(seconds: 5)) {
           lastLeadsFetch = now;
-          _leadsBloc!.add(FetchLeadsDataEvent(forceRefresh: true));
+          if (mounted) {
+            context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+          }
         }
       }
     });

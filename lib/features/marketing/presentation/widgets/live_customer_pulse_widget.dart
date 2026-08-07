@@ -17,7 +17,8 @@ class LiveCustomerPulseWidget extends StatefulWidget {
   });
 
   @override
-  State<LiveCustomerPulseWidget> createState() => _LiveCustomerPulseWidgetState();
+  State<LiveCustomerPulseWidget> createState() =>
+      _LiveCustomerPulseWidgetState();
 }
 
 class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
@@ -101,7 +102,8 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       final action = (u['action'] ?? '').toString().toLowerCase();
       final label = (u['intentLabel'] ?? '').toString();
 
-      final matchesSearch = _searchQuery.isEmpty ||
+      final matchesSearch =
+          _searchQuery.isEmpty ||
           name.contains(_searchQuery.toLowerCase()) ||
           phone.contains(_searchQuery.toLowerCase()) ||
           screen.contains(_searchQuery.toLowerCase()) ||
@@ -109,9 +111,15 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
 
       bool matchesFilter = true;
       if (_selectedFilter == 'Hot Intent') {
-        matchesFilter = label.contains('Hot') || screen.contains('checkout') || screen.contains('payment');
+        matchesFilter =
+            label.contains('Hot') ||
+            screen.contains('checkout') ||
+            screen.contains('payment');
       } else if (_selectedFilter == 'Warm Interest') {
-        matchesFilter = label.contains('Warm') || screen.contains('cart') || screen.contains('product');
+        matchesFilter =
+            label.contains('Warm') ||
+            screen.contains('cart') ||
+            screen.contains('product');
       } else if (_selectedFilter == 'Browsing') {
         matchesFilter = label.contains('Browsing') || screen.contains('home');
       }
@@ -119,43 +127,47 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       return matchesSearch && matchesFilter;
     }).toList();
 
-    return SelectionArea(
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        padding: EdgeInsets.all(isDesktop ? 24 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Enterprise Command Bar Header
-            _buildHeaderCommandBar(isDesktop),
-            const SizedBox(height: 20),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(isDesktop ? 24 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Enterprise Command Bar Header
+          _buildHeaderCommandBar(isDesktop),
+          const SizedBox(height: 20),
 
-            // 2. High-Impact Real-time Intent KPI Cards
-            _buildIntentKpiBar(hotCount, warmCount, browsingCount, widget.realTimeUsers.length, isDesktop),
-            const SizedBox(height: 20),
+          // 2. High-Impact Real-time Intent KPI Cards
+          _buildIntentKpiBar(
+            hotCount,
+            warmCount,
+            browsingCount,
+            widget.realTimeUsers.length,
+            isDesktop,
+          ),
+          const SizedBox(height: 20),
 
-            // 3. Search & Filter Tool Bar
-            _buildFilterToolBar(isDesktop),
-            const SizedBox(height: 16),
+          // 3. Search & Filter Tool Bar
+          _buildFilterToolBar(isDesktop),
+          const SizedBox(height: 16),
 
-            // 4. Live Pulse Customer Cards Grid
-            if (filteredUsers.isEmpty)
-              _buildEmptyPulseState()
-            else
-              _buildPulseGrid(filteredUsers, isDesktop),
-          ],
-        ),
+          // 4. Live Pulse Customer Cards Grid
+          if (filteredUsers.isEmpty)
+            _buildEmptyPulseState()
+          else
+            _buildPulseGrid(filteredUsers, isDesktop),
+        ],
       ),
     );
   }
@@ -221,7 +233,11 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF10B981)),
+                  const Icon(
+                    Icons.bolt_rounded,
+                    size: 14,
+                    color: Color(0xFF10B981),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'WebSocket Syncing',
@@ -263,7 +279,8 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       builder: (context, constraints) {
         final double spacing = 12.0;
         final int columns = isDesktop ? 4 : 2;
-        final double cardWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+        final double cardWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
         return Wrap(
           spacing: spacing,
@@ -388,7 +405,11 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
             ),
             child: Row(
               children: [
-                const Icon(Icons.search_rounded, size: 18, color: AppTheme.textSecondary),
+                const Icon(
+                  Icons.search_rounded,
+                  size: 18,
+                  color: AppTheme.textSecondary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -396,7 +417,10 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                     style: GoogleFonts.outfit(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'Search active customer, phone, screen...',
-                      hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+                      hintStyle: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                      ),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
@@ -406,7 +430,11 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                 if (_searchQuery.isNotEmpty)
                   GestureDetector(
                     onTap: () => setState(() => _searchQuery = ''),
-                    child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textSecondary),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
               ],
             ),
@@ -425,7 +453,9 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                     filter,
                     style: GoogleFonts.outfit(
                       fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
                       color: isSelected ? Colors.white : AppTheme.textPrimary,
                     ),
                   ),
@@ -451,28 +481,37 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
         final int columns = isDesktop
             ? (constraints.maxWidth > 1200 ? 3 : 2)
             : 1;
-        final double cardWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+        final double cardWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children: users.map((user) {
-            final displayName = (user['userName'] ?? user['user'] ?? 'New Customer').toString();
+            final displayName =
+                (user['userName'] ?? user['user'] ?? 'New Customer').toString();
             final displayPhone = (user['userPhone'] ?? '').toString();
             final currentScreen = (user['currentScreen'] ?? 'Home').toString();
             final action = (user['action'] ?? 'Browsing').toString();
-            final intentLabel = (user['intentLabel'] ?? 'Browsing 🍃').toString();
+            final intentLabel = (user['intentLabel'] ?? 'Browsing 🍃')
+                .toString();
             final journeyPath = (user['journeyPath'] ?? '').toString();
-            final relativeSeen = _getRelativeLastSeen(user['lastSeen'] ?? user['_localLastSeen']);
+            final relativeSeen = _getRelativeLastSeen(
+              user['lastSeen'] ?? user['_localLastSeen'],
+            );
 
-            final isHot = intentLabel.contains('Hot') || currentScreen.toLowerCase().contains('checkout');
-            final isWarm = intentLabel.contains('Warm') || currentScreen.toLowerCase().contains('cart');
+            final isHot =
+                intentLabel.contains('Hot') ||
+                currentScreen.toLowerCase().contains('checkout');
+            final isWarm =
+                intentLabel.contains('Warm') ||
+                currentScreen.toLowerCase().contains('cart');
 
             final accentColor = isHot
                 ? Colors.redAccent
                 : isWarm
-                    ? Colors.orange
-                    : AppTheme.primaryColor;
+                ? Colors.orange
+                : AppTheme.primaryColor;
 
             return MouseRegion(
               cursor: SystemMouseCursors.click,
@@ -510,9 +549,13 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                             children: [
                               CircleAvatar(
                                 radius: 18,
-                                backgroundColor: accentColor.withValues(alpha: 0.15),
+                                backgroundColor: accentColor.withValues(
+                                  alpha: 0.15,
+                                ),
                                 child: Text(
-                                  displayName.isNotEmpty ? displayName[0].toUpperCase() : 'C',
+                                  displayName.isNotEmpty
+                                      ? displayName[0].toUpperCase()
+                                      : 'C',
                                   style: GoogleFonts.outfit(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -529,7 +572,10 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF10B981),
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 1.5),
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -550,7 +596,8 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (displayPhone.isNotEmpty && displayPhone != displayName)
+                                if (displayPhone.isNotEmpty &&
+                                    displayPhone != displayName)
                                   Text(
                                     displayPhone,
                                     style: GoogleFonts.outfit(
@@ -563,7 +610,10 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: accentColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
@@ -583,11 +633,16 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
 
                       // Current Operational Location
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.backgroundColor,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+                          border: Border.all(
+                            color: AppTheme.borderColor.withValues(alpha: 0.5),
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -595,8 +650,8 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                               currentScreen.toLowerCase().contains('checkout')
                                   ? Icons.shopping_cart_checkout_rounded
                                   : currentScreen.toLowerCase().contains('cart')
-                                      ? Icons.shopping_cart_outlined
-                                      : Icons.screen_search_desktop_outlined,
+                                  ? Icons.shopping_cart_outlined
+                                  : Icons.screen_search_desktop_outlined,
                               size: 14,
                               color: accentColor,
                             ),
@@ -621,7 +676,11 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            const Icon(Icons.alt_route_rounded, size: 12, color: AppTheme.primaryColor),
+                            const Icon(
+                              Icons.alt_route_rounded,
+                              size: 12,
+                              color: AppTheme.primaryColor,
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
@@ -654,35 +713,68 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                                   onTap: () => _makePhoneCall(displayPhone),
                                   borderRadius: BorderRadius.circular(4),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      color: AppTheme.primaryColor.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       children: [
-                                        const Icon(Icons.phone_rounded, size: 12, color: AppTheme.primaryColor),
-                                        const SizedBox(width: 4),
-                                        Text('Call', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                                        Icon(
+                                          Icons.phone_rounded,
+                                          size: 12,
+                                          color: AppTheme.primaryColor,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Call',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 InkWell(
-                                  onTap: () => _openWhatsApp(displayPhone, displayName),
+                                  onTap: () =>
+                                      _openWhatsApp(displayPhone, displayName),
                                   borderRadius: BorderRadius.circular(4),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                                      color: const Color(
+                                        0xFF10B981,
+                                      ).withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       children: [
-                                        const Icon(Icons.chat_rounded, size: 12, color: Color(0xFF10B981)),
-                                        const SizedBox(width: 4),
-                                        Text('WhatsApp', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF10B981))),
+                                        Icon(
+                                          Icons.chat_rounded,
+                                          size: 12,
+                                          color: Color(0xFF10B981),
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'WhatsApp',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF10B981),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -691,9 +783,14 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                             ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -729,7 +826,11 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       ),
       child: Column(
         children: [
-          const Icon(Icons.sensors_off_rounded, size: 40, color: AppTheme.textSecondary),
+          const Icon(
+            Icons.sensors_off_rounded,
+            size: 40,
+            color: AppTheme.textSecondary,
+          ),
           const SizedBox(height: 12),
           Text(
             'No Active Customers Match Filter',
