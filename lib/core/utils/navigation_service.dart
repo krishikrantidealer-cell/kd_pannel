@@ -28,25 +28,17 @@ class NavigationService {
     final context = navigatorKey.currentContext;
     if (context != null) {
       try {
-        context.read<OrdersBloc>().add(ResetOrdersEvent());
-      } catch (e) {
-        debugPrint('[NavigationService] OrdersBloc reset skipped: $e');
-      }
+        BlocProvider.of<OrdersBloc>(context, listen: false).add(ResetOrdersEvent());
+      } catch (_) {}
       try {
-        context.read<LeadsBloc>().add(ResetLeadsEvent());
-      } catch (e) {
-        debugPrint('[NavigationService] LeadsBloc reset skipped: $e');
-      }
+        BlocProvider.of<LeadsBloc>(context, listen: false).add(ResetLeadsEvent());
+      } catch (_) {}
       try {
-        context.read<DealersBloc>().add(ResetDealersEvent());
-      } catch (e) {
-        debugPrint('[NavigationService] DealersBloc reset skipped: $e');
-      }
+        BlocProvider.of<DealersBloc>(context, listen: false).add(ResetDealersEvent());
+      } catch (_) {}
       try {
-        context.read<ProductsBloc>().add(ResetProductsEvent());
-      } catch (e) {
-        debugPrint('[NavigationService] ProductsBloc reset skipped: $e');
-      }
+        BlocProvider.of<ProductsBloc>(context, listen: false).add(ResetProductsEvent());
+      } catch (_) {}
     }
 
     // Redirect to login screen and clear the navigation stack

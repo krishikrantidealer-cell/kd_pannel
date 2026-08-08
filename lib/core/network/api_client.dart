@@ -109,63 +109,64 @@ class ApiClient {
     if (_refreshFuture != null) {
       return _refreshFuture!;
     }
+    _refreshFuture = _executeTokenRefresh();
+    try {
+      return await _refreshFuture!;
+    } finally {
+      _refreshFuture = null;
+    }
+  }
 
-    _refreshFuture = () async {
-      try {
-        await _ensureTokensLoaded();
-        if (_refreshToken == null || _refreshToken!.isEmpty) return false;
+  Future<bool> _executeTokenRefresh() async {
+    try {
+      await _ensureTokensLoaded();
+      if (_refreshToken == null || _refreshToken!.isEmpty) return false;
 
-        final uri = Uri.parse('$baseUrl/auth/refresh');
-        final response = await http
-            .post(
-              uri,
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: jsonEncode({'refreshToken': _refreshToken}),
-            )
-            .timeout(const Duration(seconds: 15));
+      final uri = Uri.parse('$baseUrl/auth/refresh');
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'refreshToken': _refreshToken}),
+          )
+          .timeout(const Duration(seconds: 15));
 
-        if (response.statusCode == 200) {
-          try {
-            final decoded = jsonDecode(response.body);
-            if (decoded is Map) {
-              final bool hasSuccess = decoded['success'] == true;
-              final bool hasToken = decoded['token'] != null || decoded['accessToken'] != null;
-              
-              if (hasSuccess || hasToken) {
-                final String? newAccess = (decoded['accessToken'] ?? decoded['token'])?.toString();
-                if (newAccess != null) {
-                  // Update but keep old refresh token if a new one isn't provided
-                  final String newRefresh = decoded['refreshToken']?.toString() ?? _refreshToken!;
-                  await setTokens(newAccess, newRefresh, persistent: true);
-                  return true;
-                }
+      if (response.statusCode == 200) {
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map) {
+            final bool hasSuccess = decoded['success'] == true;
+            final bool hasToken = decoded['token'] != null || decoded['accessToken'] != null;
+
+            if (hasSuccess || hasToken) {
+              final String? newAccess = (decoded['accessToken'] ?? decoded['token'])?.toString();
+              if (newAccess != null && newAccess.isNotEmpty) {
+                final String newRefresh = decoded['refreshToken']?.toString() ?? _refreshToken!;
+                await setTokens(newAccess, newRefresh, persistent: true);
+                return true;
               }
             }
-          } catch (e) {
-            debugPrint('[ApiClient] Token refresh logic error: $e');
           }
+        } catch (e) {
+          debugPrint('[ApiClient] Token refresh logic error: $e');
         }
-
-        // If refresh failed with authorization error, clear tokens
-        if (response.statusCode == 401 ||
-            response.statusCode == 403 ||
-            response.statusCode == 400) {
-          await clearTokens();
-          NavigationService.navigateToLogin();
-        }
-        return false;
-      } catch (e) {
-        debugPrint('Token refresh error: $e');
-        return false;
-      } finally {
-        _refreshFuture = null;
       }
-    }();
 
-    return _refreshFuture!;
+      // If refresh failed with authorization error, clear tokens
+      if (response.statusCode == 401 ||
+          response.statusCode == 403 ||
+          response.statusCode == 400) {
+        await clearTokens();
+        NavigationService.navigateToLogin();
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[ApiClient] Token refresh error: $e');
+      return false;
+    }
   }
 
   /// Helper to run request with automatic retries and exponential backoff.
@@ -198,6 +199,20 @@ class ApiClient {
               isRetryAfterRefresh: true,
             );
           }
+        }
+
+        // Handle 429 Rate Limiting silently with gentle backoff
+        if (response.statusCode == 429 && attempt < maxRetries) {
+          int retryAfterSeconds = 1 + attempt;
+          final retryAfterHeader = response.headers['retry-after'];
+          if (retryAfterHeader != null) {
+            final parsed = int.tryParse(retryAfterHeader);
+            if (parsed != null && parsed > 0 && parsed <= 15) {
+              retryAfterSeconds = parsed;
+            }
+          }
+          await Future.delayed(Duration(seconds: retryAfterSeconds));
+          continue;
         }
 
         // Server cold start might return 502 / 503 / 504 gateway errors while booting
@@ -257,14 +272,31 @@ class ApiClient {
     }
   }
 
+  final Map<String, Future<http.Response>> _inFlightGetRequests = {};
+
   Future<http.Response> get(String endpoint) async {
     await _ensureTokensLoaded();
-    return await _requestWithRetry((timeoutDuration) async {
+    final key = '$endpoint|${_accessToken ?? ""}';
+    if (_inFlightGetRequests.containsKey(key)) {
+      return _inFlightGetRequests[key]!;
+    }
+
+    final future = _requestWithRetry((timeoutDuration) async {
       final uri = Uri.parse('$baseUrl$endpoint');
       return await http
           .get(uri, headers: _getHeaders())
           .timeout(timeoutDuration);
     });
+
+    _inFlightGetRequests[key] = future;
+    try {
+      final response = await future;
+      return response;
+    } finally {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _inFlightGetRequests.remove(key);
+      });
+    }
   }
 
   Future<http.Response> post(String endpoint, Map<String, dynamic> body) async {

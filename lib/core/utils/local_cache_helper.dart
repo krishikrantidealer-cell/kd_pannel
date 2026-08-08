@@ -6,7 +6,9 @@ class LocalCacheHelper {
   static const String _keyCollections = 'kd_cached_collections';
   static const String _keyCategories = 'kd_cached_categories';
 
-  static Future<void> saveCachedProducts(List<Map<String, dynamic>> products) async {
+  static Future<void> saveCachedProducts(
+    List<Map<String, dynamic>> products,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyProducts, jsonEncode(products));
@@ -29,7 +31,9 @@ class LocalCacheHelper {
     return null;
   }
 
-  static Future<void> saveCachedCollections(List<Map<String, dynamic>> collections) async {
+  static Future<void> saveCachedCollections(
+    List<Map<String, dynamic>> collections,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyCollections, jsonEncode(collections));

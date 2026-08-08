@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/util/dealers.dart';
 
 class SalesCustomerEventsPage extends StatefulWidget {
@@ -101,7 +105,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   }
 
   void _startRealTimePoll() {
-    _realTimeTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _realTimeTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _loadRealTimeUsers();
     });
     _loadRealTimeUsers();
@@ -166,20 +170,28 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       final Map<String, Map<String, List<Map<String, dynamic>>>> userEventsGrouped = {};
       final Set<String> usersSet = {};
 
+      // 1. Group events by user and category (only users with actual event logs)
       _eventsLogs.forEach((category, logs) {
         for (final log in logs) {
           final String? userName = log['user'] as String?;
           if (userName != null && userName.isNotEmpty) {
-            usersSet.add(userName);
-            final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
-            final categoryList = userMap.putIfAbsent(category, () => []);
-            categoryList.add(log);
+            if (_isUserAssignedToSales(
+              rawUser: _nameToId[userName] ?? userName,
+              displayName: userName,
+              userDetails: log['userDetails'],
+            )) {
+              usersSet.add(userName);
+              final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
+              final categoryList = userMap.putIfAbsent(category, () => []);
+              categoryList.add(log);
+            }
           }
         }
       });
 
       final Map<String, String> userTypes = {};
 
+      // Populate user types and _nameToId lookups without injecting 0-event users
       try {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
@@ -193,12 +205,12 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           final isDealer = kycStatus == 'verified';
           final type = isDealer ? 'Dealer' : 'Lead';
 
-          if (_isUserAssignedToSales(rawUser: rawUser, displayName: displayName, userDetails: u)) {
-            usersSet.add(displayName);
-            if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
-            userTypes[displayName] = type;
-            if (rawUser.isNotEmpty) userTypes[rawUser] = type;
+          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+            _nameToId[displayPhone] = rawUser.isNotEmpty ? rawUser : displayPhone;
           }
+          userTypes[displayName] = type;
+          if (rawUser.isNotEmpty) userTypes[rawUser] = type;
         }
       } catch (_) {}
 
@@ -215,14 +227,28 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           final isDealer = kycStatus == 'verified';
           final type = isDealer ? 'Dealer' : 'Lead';
 
-          if (_isUserAssignedToSales(rawUser: rawUser, displayName: displayName, userDetails: u)) {
-            usersSet.add(displayName);
-            if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
-            userTypes.putIfAbsent(displayName, () => type);
-            if (rawUser.isNotEmpty) userTypes.putIfAbsent(rawUser, () => type);
+          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+            _nameToId[displayPhone] = rawUser.isNotEmpty ? rawUser : displayPhone;
           }
+          userTypes.putIfAbsent(displayName, () => type);
+          if (rawUser.isNotEmpty) userTypes.putIfAbsent(rawUser, () => type);
         }
       } catch (_) {}
+
+      // Add currently active online real-time users
+      for (final u in _realTimeUsers) {
+        final uName = (u['userName'] ?? u['user'] ?? '').toString();
+        if (uName.isNotEmpty && uName != 'New Customer' && uName != 'Guest') {
+          if (_isUserAssignedToSales(
+            rawUser: (u['user'] ?? '').toString(),
+            displayName: uName,
+            userDetails: u,
+          )) {
+            usersSet.add(uName);
+          }
+        }
+      }
 
       _cachedUserTypes = userTypes;
 
@@ -299,7 +325,11 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       _cachedHighPriority = highPriority;
       _cachedPriorityReason = priorityReason;
 
-      final sortedUsers = usersSet.toList();
+      final sortedUsers = usersSet.where((u) {
+        final hasEvents = userEventsGrouped[u]?.isNotEmpty ?? false;
+        final isOnline = _isUserOnline(u);
+        return hasEvents || isOnline;
+      }).toList();
       sortedUsers.sort((a, b) {
         final aOnline = _isUserOnline(a);
         final bOnline = _isUserOnline(b);
@@ -799,6 +829,22 @@ class _SalesUserCard extends StatefulWidget {
 class _SalesUserCardState extends State<_SalesUserCard> {
   bool _isExpanded = false;
 
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleanPhone.isEmpty) return;
+    final uri = Uri.parse('tel:$cleanPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  void _openWhatsApp(BuildContext context, String phoneNumber, String name) {
+    showDialog(
+      context: context,
+      builder: (context) => WhatsAppChatDialog(phone: phoneNumber, name: name),
+    );
+  }
+
   String _getCategoryName(Map<String, dynamic> log) {
     final explicitCat = log['category']?.toString() ?? log['categoryName']?.toString();
     if (explicitCat != null &&
@@ -845,8 +891,8 @@ class _SalesUserCardState extends State<_SalesUserCard> {
     final isDealer = type.toLowerCase() == 'dealer';
     final label = isDealer ? 'Dealer' : 'Lead';
     final bgColor = isDealer
-        ? const Color(0xFF10B981).withOpacity(0.12)
-        : const Color(0xFFF59E0B).withOpacity(0.12);
+        ? const Color(0xFF10B981).withValues(alpha: 0.12)
+        : const Color(0xFFF59E0B).withValues(alpha: 0.12);
     final textColor = isDealer
         ? const Color(0xFF059669)
         : const Color(0xFFD97706);
@@ -857,7 +903,7 @@ class _SalesUserCardState extends State<_SalesUserCard> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: textColor.withOpacity(0.25)),
+        border: Border.all(color: textColor.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -877,13 +923,102 @@ class _SalesUserCardState extends State<_SalesUserCard> {
     );
   }
 
+  Widget _buildJourneyMilestonePipeline({
+    required bool hasSearch,
+    required bool hasCart,
+    required bool hasCheckout,
+    required bool hasPaid,
+    required bool hasFailed,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildMilestoneDot('Search', hasSearch, const Color(0xFF0284C7)),
+          _buildMilestoneConnector(hasCart),
+          _buildMilestoneDot('Cart', hasCart, const Color(0xFFF59E0B)),
+          _buildMilestoneConnector(hasCheckout),
+          _buildMilestoneDot('Checkout', hasCheckout, const Color(0xFFFB923C)),
+          _buildMilestoneConnector(hasPaid || hasFailed),
+          _buildMilestoneDot(
+            hasFailed ? 'Failed ❌' : 'Paid',
+            hasPaid || hasFailed,
+            hasFailed ? Colors.redAccent : const Color(0xFF10B981),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMilestoneDot(String label, bool completed, Color activeColor) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: completed ? activeColor : AppTheme.borderColor,
+            boxShadow: completed
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+        ),
+        const SizedBox(width: 3.5),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 9,
+            fontWeight: completed ? FontWeight.bold : FontWeight.w500,
+            color: completed ? activeColor : AppTheme.textSecondary.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMilestoneConnector(bool active) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        width: 12,
+        height: 1.5,
+        color: active
+            ? AppTheme.primaryColor.withValues(alpha: 0.6)
+            : AppTheme.borderColor.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> allEvents = [];
     final Set<String> seenKeys = {};
 
+    String? userPhone;
+    String? intentLabel;
+
     widget.groupedEvents.forEach((_, logs) {
       for (final log in logs) {
+        if (userPhone == null && log['userPhone'] != null) {
+          userPhone = log['userPhone'] as String?;
+        }
+        if (intentLabel == null && log['intentLabel'] != null) {
+          intentLabel = log['intentLabel'] as String?;
+        }
         final key = log['eventId']?.toString() ?? '${log['rawTimestamp']}_${log['details']}';
         if (!seenKeys.contains(key)) {
           seenKeys.add(key);
@@ -900,11 +1035,47 @@ class _SalesUserCardState extends State<_SalesUserCard> {
 
     final recentEvents = allEvents.take(10).toList();
 
+    final bool hasSearch = widget.groupedEvents.containsKey('product_search') ||
+        widget.groupedEvents.containsKey('product_view') ||
+        widget.groupedEvents.containsKey('category_view') ||
+        widget.groupedEvents.containsKey('login_success');
+    final bool hasCart = widget.groupedEvents.containsKey('add_to_cart') ||
+        widget.groupedEvents.containsKey('cart_add') ||
+        widget.groupedEvents.containsKey('cart_view');
+    final bool hasCheckout = widget.groupedEvents.containsKey('checkout_started') ||
+        widget.groupedEvents.containsKey('checkout_init') ||
+        widget.groupedEvents.containsKey('payment_initiated') ||
+        widget.groupedEvents.containsKey('apply_coupon');
+    final bool hasPaid = widget.groupedEvents.containsKey('payment_success') ||
+        widget.groupedEvents.containsKey('order_placed') ||
+        widget.groupedEvents.containsKey('order_completed') ||
+        widget.groupedEvents.containsKey('order_created');
+    final bool hasFailedPayment = widget.groupedEvents.containsKey('payment_failed');
+
+    int totalEvents = 0;
+    widget.groupedEvents.forEach((_, logs) {
+      totalEvents += logs.length;
+    });
+
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        border: Border.all(color: widget.isOnline ? const Color(0xFF10B981).withOpacity(0.4) : AppTheme.borderColor),
+        border: Border.all(
+          color: widget.isOnline
+              ? const Color(0xFF10B981).withValues(alpha: 0.5)
+              : AppTheme.borderColor.withValues(alpha: 0.7),
+          width: widget.isOnline ? 1.5 : 1.0,
+        ),
+        boxShadow: widget.isOnline
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
       ),
       child: InkWell(
         onTap: () => setState(() => _isExpanded = !_isExpanded),
@@ -917,10 +1088,17 @@ class _SalesUserCardState extends State<_SalesUserCard> {
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: widget.isOnline ? const Color(0xFF10B981).withOpacity(0.15) : AppTheme.primaryColor.withOpacity(0.1),
+                    backgroundColor: widget.isOnline
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : AppTheme.primaryColor.withValues(alpha: 0.1),
                     child: Text(
                       widget.name.isNotEmpty ? widget.name[0].toUpperCase() : 'C',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: widget.isOnline ? const Color(0xFF10B981) : AppTheme.primaryColor),
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: widget.isOnline
+                            ? const Color(0xFF10B981)
+                            : AppTheme.primaryColor,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -928,18 +1106,22 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               widget.name,
-                              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                              style: GoogleFonts.outfit(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
-                            const SizedBox(width: 8),
                             _buildUserTypeBadge(widget.userType),
                             if (widget.isOnline) ...[
-                              const SizedBox(width: 8),
                               const _LivePulsingDot(),
-                              const SizedBox(width: 4),
                               Text(
                                 'LIVE',
                                 style: GoogleFonts.outfit(
@@ -950,17 +1132,178 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                                 ),
                               ),
                             ],
+                            if (intentLabel != null) ...[
+                              Builder(
+                                builder: (context) {
+                                  final String currentIntent = intentLabel!;
+                                  final Color badgeColor = currentIntent.contains('Hot')
+                                      ? Colors.redAccent
+                                      : currentIntent.contains('Warm')
+                                          ? Colors.orange
+                                          : Colors.blue;
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: badgeColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: badgeColor.withValues(alpha: 0.25),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      currentIntent,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        color: badgeColor,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${recentEvents.length} recent event${recentEvents.length == 1 ? "" : "s"}',
-                          style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                        if (userPhone != null && userPhone!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                userPhone!,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textSecondary.withValues(
+                                    alpha: 0.85,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: 'Copy Phone Number',
+                                child: InkWell(
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: userPhone!));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.check_circle_rounded,
+                                              color: Colors.white,
+                                              size: 15,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Phone number ($userPhone) copied to clipboard!',
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        backgroundColor: const Color(0xFF0F172A),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        width: 360,
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.copy_rounded,
+                                      size: 13,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '• ${formatUnits(totalEvents)} event${totalEvents == 1 ? "" : "s"}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              /*
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'Call Customer',
+                                child: InkWell(
+                                  onTap: () => _makePhoneCall(userPhone!),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.phone_rounded,
+                                      size: 13,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'WhatsApp Message',
+                                child: InkWell(
+                                  onTap: () => _openWhatsApp(context, userPhone!, widget.name),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.chat_bubble_rounded,
+                                      size: 13,
+                                      color: Color(0xFF25D366),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              */
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        _buildJourneyMilestonePipeline(
+                          hasSearch: hasSearch,
+                          hasCart: hasCart,
+                          hasCheckout: hasCheckout,
+                          hasPaid: hasPaid,
+                          hasFailed: hasFailedPayment,
                         ),
                       ],
                     ),
                   ),
-                  Icon(_isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                  Icon(
+                    _isExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: AppTheme.textSecondary,
+                  ),
                 ],
               ),
               if (_isExpanded) ...[
@@ -970,12 +1313,31 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Recent Activity (Latest ${recentEvents.length})', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                    TextButton.icon(
-                      onPressed: () => widget.onViewProfile(widget.name),
-                      icon: const Icon(Icons.launch_rounded, size: 13),
-                      label: Text('View Profile', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: TextButton.styleFrom(foregroundColor: AppTheme.primaryColor),
+                    Text(
+                      'Recent Activity (Latest ${recentEvents.length})',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => widget.onViewProfile(widget.name),
+                          icon: const Icon(Icons.launch_rounded, size: 13),
+                          label: Text(
+                            'View Profile',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -994,7 +1356,9 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                         decoration: BoxDecoration(
                           color: AppTheme.backgroundColor,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+                          border: Border.all(
+                            color: AppTheme.borderColor.withValues(alpha: 0.5),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1004,7 +1368,11 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                               children: [
                                 Text(
                                   _getCategoryName(log),
-                                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
                                 ),
                                 Text(
                                   log['time']?.toString() ?? '',
@@ -1019,7 +1387,10 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                               const SizedBox(height: 4),
                               Text(
                                 log['details'].toString(),
-                                style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
                               ),
                             ],
                           ],
@@ -1030,10 +1401,21 @@ class _SalesUserCardState extends State<_SalesUserCard> {
                 else if (widget.isLoadingEvents)
                   const Padding(
                     padding: EdgeInsets.all(12),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor)),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
                   )
                 else
-                  Text('No recent events recorded.', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text(
+                    'No recent events recorded.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
               ],
             ],
           ),

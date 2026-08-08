@@ -25,6 +25,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 import 'user_events_page.dart';
 import 'orders_page.dart';
 import 'leads_page.dart';
@@ -347,9 +348,10 @@ class _DashboardPageState extends State<DashboardPage> {
             final metrics = results[1] as Map<String, dynamic>;
 
             setState(() {
-              _cachedEventsToday = eventsCount;
-              _cachedHighPriorityCount = (metrics['highPriority'] ?? '0')
-                  .toString();
+              final rawEventsNum = num.tryParse(eventsCount) ?? 0;
+              _cachedEventsToday = formatUnits(rawEventsNum);
+              final rawHpNum = num.tryParse(metrics['highPriority']?.toString() ?? '0') ?? 0;
+              _cachedHighPriorityCount = formatUnits(rawHpNum);
               _isEventsLoading = false;
               _isStatsRefreshing = false;
               _isStatsLoading = false;
@@ -1167,7 +1169,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       AdvancedStatCardWidget(
                         width: width,
                         title: 'Orders $periodSuffix',
-                        value: '$periodOrdersCount',
+                        value: formatUnits(periodOrdersCount),
                         color: AppTheme.lightGreen,
                         trendLabel: 'Market activity',
                         trendIcon: Icons.analytics_outlined,
@@ -1193,7 +1195,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       AdvancedStatCardWidget(
                         width: width,
                         title: 'Total Dealers',
-                        value: '$verifiedDealersCount',
+                        value: formatUnits(verifiedDealersCount),
                         color: AppTheme.info,
                         trendLabel: 'Verified on platform',
                         trendIcon: Icons.verified_user_outlined,
@@ -1212,7 +1214,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         title: selectedDropdown == 'Total'
                             ? 'Total Leads'
                             : 'New Leads',
-                        value: '$periodNewLeads',
+                        value: formatUnits(periodNewLeads),
                         color: AppTheme.warning,
                         trendLabel: 'Recent prospects',
                         trendIcon: Icons.person_add_outlined,

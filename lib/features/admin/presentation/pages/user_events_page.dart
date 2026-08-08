@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shimmer/shimmer.dart';
@@ -18,6 +19,7 @@ import 'package:kd_pannel/features/marketing/presentation/widgets/funnel_chart_w
 import 'package:kd_pannel/features/marketing/presentation/widgets/agri_heatmap_widget.dart';
 import 'package:kd_pannel/features/marketing/presentation/widgets/live_customer_pulse_widget.dart';
 import 'package:kd_pannel/core/services/pincode_service.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 import '../../../../core/auth/auth_service.dart';
 import '../bloc/dealers_state.dart';
 import '../bloc/leads_state.dart';
@@ -432,92 +434,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
           });
         }
       }
-
-      // 2. Process Assigned Dealers (Verified KYC only)
-      for (final u in dealersState.allRawUsers) {
-        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-        if (kycStatus != 'verified') continue;
-
-        final rawUser = _normalizeId(u['_id']);
-        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
-        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-            .trim();
-        if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-        if (displayName.isEmpty)
-          displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
-
-        final userKey = 'dealer_${rawUser}_$displayName';
-        if (_mergedUserIds.contains(userKey)) continue;
-
-        if (!AuthService().isSales ||
-            _isUserAssignedToCurrentSalesAgent(
-              rawUser: rawUser,
-              displayName: displayName,
-              displayPhone: displayPhone,
-              userDetails: u,
-            )) {
-          final eventType = 'kyc_verified';
-          final categoryList = _eventsLogs.putIfAbsent(eventType, () => []);
-
-          _mergedUserIds.add(userKey);
-          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
-          categoryList.add({
-            'user': displayName,
-            'userPhone': displayPhone,
-            'rawUser': rawUser,
-            'time': _formatTimestamp(u['createdAt']?.toString()),
-            'rawTimestamp':
-                u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
-            'device': 'Mobile App',
-            'details':
-                'Verified Dealer - ${u['city'] ?? u['state'] ?? 'Active'} (${u['shopName'] ?? 'Agro Shop'})',
-            'payload': Map<String, dynamic>.from(u),
-          });
-        }
-      }
-
-      // 3. Process Assigned Leads (Pending/Unverified KYC)
-      for (final u in leadsState.allRawUsers) {
-        final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-        if (kycStatus == 'verified') continue;
-
-        final rawUser = _normalizeId(u['_id']);
-        final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
-        String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-            .trim();
-        if (displayName.isEmpty) displayName = (u['shopName'] ?? '').toString();
-        if (displayName.isEmpty)
-          displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
-
-        final userKey = 'lead_${rawUser}_$displayName';
-        if (_mergedUserIds.contains(userKey)) continue;
-
-        if (!AuthService().isSales ||
-            _isUserAssignedToCurrentSalesAgent(
-              rawUser: rawUser,
-              displayName: displayName,
-              displayPhone: displayPhone,
-              userDetails: u,
-            )) {
-          final eventType = 'lead_created';
-          final categoryList = _eventsLogs.putIfAbsent(eventType, () => []);
-
-          _mergedUserIds.add(userKey);
-          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
-          categoryList.add({
-            'user': displayName,
-            'userPhone': displayPhone,
-            'rawUser': rawUser,
-            'time': _formatTimestamp(u['createdAt']?.toString()),
-            'rawTimestamp':
-                u['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
-            'device': (u['source'] ?? 'Direct Lead').toString(),
-            'details':
-                'Assigned Lead - Source: ${u['source'] ?? 'CTWA'} (${u['city'] ?? 'Active'})',
-            'payload': Map<String, dynamic>.from(u),
-          });
-        }
-      }
     } catch (e) {
       debugPrint('[UserEventsPage] Error merging customer record events: $e');
     }
@@ -681,21 +597,29 @@ class _UserEventsPageState extends State<UserEventsPage> {
       userEventsGrouped = {};
       final Set<String> usersSet = {};
 
-      // 1. Group events by user and category
+      // 1. Group events by user and category (only users with actual event logs)
       _eventsLogs.forEach((category, logs) {
         for (final log in logs) {
           final String? userName = log['user'] as String?;
           if (userName != null && userName.isNotEmpty) {
-            usersSet.add(userName);
+            if (!AuthService().isSales ||
+                _isUserAssignedToCurrentSalesAgent(
+                  rawUser: _nameToId[userName] ?? userName,
+                  displayName: userName,
+                  displayPhone: log['userPhone']?.toString() ?? '',
+                  userDetails: log['userDetails'],
+                )) {
+              usersSet.add(userName);
 
-            final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
-            final categoryList = userMap.putIfAbsent(category, () => []);
-            categoryList.add(log);
+              final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
+              final categoryList = userMap.putIfAbsent(category, () => []);
+              categoryList.add(log);
+            }
           }
         }
       });
 
-      // Also populate usersSet with assigned Dealers and Leads
+      // Populate _nameToId mappings for lookups without injecting 0-event users
       try {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
@@ -709,15 +633,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
           if (displayName.isEmpty)
             displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
-          if (!AuthService().isSales ||
-              _isUserAssignedToCurrentSalesAgent(
-                rawUser: rawUser,
-                displayName: displayName,
-                displayPhone: displayPhone,
-                userDetails: u,
-              )) {
-            usersSet.add(displayName);
-            if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+            _nameToId[displayPhone] = rawUser.isNotEmpty ? rawUser : displayPhone;
           }
         }
       } catch (_) {}
@@ -735,18 +653,28 @@ class _UserEventsPageState extends State<UserEventsPage> {
           if (displayName.isEmpty)
             displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
 
-          if (!AuthService().isSales ||
-              _isUserAssignedToCurrentSalesAgent(
-                rawUser: rawUser,
-                displayName: displayName,
-                displayPhone: displayPhone,
-                userDetails: u,
-              )) {
-            usersSet.add(displayName);
-            if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (rawUser.isNotEmpty) _nameToId[displayName] = rawUser;
+          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+            _nameToId[displayPhone] = rawUser.isNotEmpty ? rawUser : displayPhone;
           }
         }
       } catch (_) {}
+
+      // Add currently active online users from Live Pulse
+      for (final u in _realTimeUsers) {
+        final uName = (u['userName'] ?? u['user'] ?? '').toString();
+        if (uName.isNotEmpty && uName != 'New Customer' && uName != 'Guest') {
+          if (!AuthService().isSales ||
+              _isUserAssignedToCurrentSalesAgent(
+                rawUser: (u['user'] ?? '').toString(),
+                displayName: uName,
+                displayPhone: (u['userPhone'] ?? '').toString(),
+                userDetails: u,
+              )) {
+            usersSet.add(uName);
+          }
+        }
+      }
 
       // Sort logs inside each category by timestamp descending
       userEventsGrouped.forEach((userName, categories) {
@@ -852,7 +780,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
       }
       _cachedUserSearchIndex = userSearchIndex;
 
-      final sortedUsers = usersSet.toList();
+      final sortedUsers = usersSet.where((u) {
+        final hasEvents = userEventsGrouped[u]?.isNotEmpty ?? false;
+        final isOnline = _isUserOnline(u);
+        return hasEvents || isOnline;
+      }).toList();
       sortedUsers.sort((a, b) {
         final aOnline = _isUserOnline(a);
         final bOnline = _isUserOnline(b);
@@ -973,7 +905,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   }
 
   void _startRealTimePoll() {
-    _realTimeTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _realTimeTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _loadRealTimeUsers();
     });
     _loadRealTimeUsers();
@@ -2292,177 +2224,175 @@ class _UserEventsPageState extends State<UserEventsPage> {
           child: Divider(height: 1, color: AppTheme.lightBorderColor),
         ),
       ),
-      body: SelectionArea(
-        child: _isLoading
-            ? _buildShimmerLoading(isDesktop)
-            : RefreshIndicator(
-                onRefresh: _loadEvents,
-                color: AppTheme.primaryColor,
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  slivers: [
-                    if (_isLoadingEvents && !_isLoading && !_isBackgroundLoading)
-                      const SliverToBoxAdapter(
-                        child: LinearProgressIndicator(
-                          minHeight: 2,
-                          color: AppTheme.primaryColor,
-                          backgroundColor: Colors.transparent,
-                        ),
+      body: _isLoading
+          ? _buildShimmerLoading(isDesktop)
+          : RefreshIndicator(
+              onRefresh: _loadEvents,
+              color: AppTheme.primaryColor,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                slivers: [
+                  if (_isLoadingEvents && !_isLoading && !_isBackgroundLoading)
+                    const SliverToBoxAdapter(
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: AppTheme.primaryColor,
+                        backgroundColor: Colors.transparent,
                       ),
+                    ),
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 28 : 16,
+                      vertical: isDesktop ? 20 : 12,
+                    ),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        if (_isFallbackMode) _buildFallbackBanner(),
+                        _buildAnalyticsTabsBar(),
+                        const SizedBox(height: 16),
+                        _buildActiveAnalyticsView(),
+                        if (_activeAnalyticsTab == 0) ...[
+                          const SizedBox(height: 20),
+                          _buildUsersListHeader(isDesktop, filtered.length),
+                        ],
+                      ]),
+                    ),
+                  ),
+                  if (_activeAnalyticsTab == 0)
                     SliverPadding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isDesktop ? 28 : 16,
-                        vertical: isDesktop ? 20 : 12,
                       ),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                          if (_isFallbackMode) _buildFallbackBanner(),
-                          _buildAnalyticsTabsBar(),
-                          const SizedBox(height: 16),
-                          _buildActiveAnalyticsView(),
-                          if (_activeAnalyticsTab == 0) ...[
-                            const SizedBox(height: 20),
-                            _buildUsersListHeader(isDesktop, filtered.length),
-                          ],
-                        ]),
-                      ),
-                    ),
-                    if (_activeAnalyticsTab == 0)
-                      SliverPadding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isDesktop ? 28 : 16,
-                        ),
-                        sliver: filtered.isEmpty
-                            ? SliverToBoxAdapter(child: _buildEmptyUsersList())
-                            : SliverList(
-                                delegate: SliverChildBuilderDelegate((
-                                  context,
-                                  index,
-                                ) {
-                                  final userName = filtered[index];
-                                  final isSelected = _selectedUser == userName;
-                                  final grouped = _getUserEventsGrouped(userName);
-                                  final userId = _nameToId[userName];
-                                  final isOnline = _realTimeUsers.any((u) {
-                                    final uName = u['userName'] ?? u['user'] ?? '';
-                                    return uName == userName ||
-                                        (userId != null && u['user'] == userId);
-                                  });
+                      sliver: filtered.isEmpty
+                          ? SliverToBoxAdapter(child: _buildEmptyUsersList())
+                          : SliverList(
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                final userName = filtered[index];
+                                final isSelected = _selectedUser == userName;
+                                final grouped = _getUserEventsGrouped(userName);
+                                final userId = _nameToId[userName];
+                                final isOnline = _realTimeUsers.any((u) {
+                                  final uName = u['userName'] ?? u['user'] ?? '';
+                                  return uName == userName ||
+                                      (userId != null && u['user'] == userId);
+                                });
 
-                                  final bool isHighPriority = _isHighPriority(
-                                    userName,
-                                  );
-                                  final String priorityReason = isHighPriority
-                                      ? _getPriorityReason(userName)
-                                      : '';
+                                final bool isHighPriority = _isHighPriority(
+                                  userName,
+                                );
+                                final String priorityReason = isHighPriority
+                                    ? _getPriorityReason(userName)
+                                    : '';
 
-                                  final cardKey = _userCardKeys.putIfAbsent(
-                                    userName,
-                                    () => GlobalKey(),
-                                  );
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: _UserCard(
-                                      key: cardKey,
-                                      name: userName,
-                                      userType: _getUserType(userName),
-                                      isOnline: isOnline,
-                                      isHighPriority: isHighPriority,
-                                      priorityReason: priorityReason,
-                                      groupedEvents: grouped,
-                                      isSelected: isSelected,
-                                      selectedEventType: _selectedEventType,
-                                      eventTypes: _eventTypes,
-                                      isLoadingEvents: _loadingUserEvents.contains(
-                                        userName,
-                                      ),
-                                      onCategorySelected: (catId) {
-                                        setState(() {
+                                final cardKey = _userCardKeys.putIfAbsent(
+                                  userName,
+                                  () => GlobalKey(),
+                                );
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _UserCard(
+                                    key: cardKey,
+                                    name: userName,
+                                    userType: _getUserType(userName),
+                                    isOnline: isOnline,
+                                    isHighPriority: isHighPriority,
+                                    priorityReason: priorityReason,
+                                    groupedEvents: grouped,
+                                    isSelected: isSelected,
+                                    selectedEventType: _selectedEventType,
+                                    eventTypes: _eventTypes,
+                                    isLoadingEvents: _loadingUserEvents.contains(
+                                      userName,
+                                    ),
+                                    onCategorySelected: (catId) {
+                                      setState(() {
+                                        _selectedUser = userName;
+                                        _selectedEventType = catId;
+                                      });
+                                    },
+                                    onTap: () {
+                                      setState(() {
+                                        if (_selectedUser == userName) {
+                                          _selectedUser = null;
+                                          _selectedEventType = null;
+                                        } else {
                                           _selectedUser = userName;
-                                          _selectedEventType = catId;
-                                        });
-                                      },
-                                      onTap: () {
-                                        setState(() {
-                                          if (_selectedUser == userName) {
-                                            _selectedUser = null;
-                                            _selectedEventType = null;
+                                          if (_selectedEventCategory != 'All' &&
+                                              grouped.containsKey(
+                                                _selectedEventCategory,
+                                              )) {
+                                            _selectedEventType =
+                                                _selectedEventCategory;
+                                          } else if (grouped.isNotEmpty) {
+                                            _selectedEventType =
+                                                grouped.keys.first;
                                           } else {
-                                            _selectedUser = userName;
-                                            if (_selectedEventCategory != 'All' &&
-                                                grouped.containsKey(
-                                                  _selectedEventCategory,
-                                                )) {
-                                              _selectedEventType =
-                                                  _selectedEventCategory;
-                                            } else if (grouped.isNotEmpty) {
-                                              _selectedEventType =
-                                                  grouped.keys.first;
-                                            } else {
-                                              _selectedEventType = null;
-                                            }
-                                            _fetchEventsForUser(userName);
+                                            _selectedEventType = null;
                                           }
-                                        });
-                                      },
-                                      onViewProfile: (name) =>
-                                          _navigateToProfile(context, userId ?? name),
-                                    ),
-                                  );
-                                }, childCount: filtered.length),
-                              ),
-                      ),
-                    if (_activeAnalyticsTab == 0 && !AuthService().isSales && _nextCursor != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: _isLoadingMore
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        AppTheme.primaryColor,
-                                      ),
-                                    ),
-                                  )
-                                : OutlinedButton.icon(
-                                    onPressed: _loadMoreEvents,
-                                    icon: const Icon(
-                                      Icons.arrow_downward_rounded,
-                                      size: 14,
-                                    ),
-                                    label: Text(
-                                      'Load More Events',
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppTheme.primaryColor,
-                                      side: const BorderSide(
-                                        color: AppTheme.primaryColor,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
+                                          _fetchEventsForUser(userName);
+                                        }
+                                      });
+                                    },
+                                    onViewProfile: (name) =>
+                                        _navigateToProfile(context, userId ?? name),
+                                  ),
+                                );
+                              }, childCount: filtered.length),
+                            ),
+                    ),
+                  if (_activeAnalyticsTab == 0 && !AuthService().isSales && _nextCursor != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: _isLoadingMore
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppTheme.primaryColor,
                                     ),
                                   ),
-                          ),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: _loadMoreEvents,
+                                  icon: const Icon(
+                                    Icons.arrow_downward_rounded,
+                                    size: 14,
+                                  ),
+                                  label: Text(
+                                    'Load More Events',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryColor,
+                                    side: const BorderSide(
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                  ],
-                ),
+                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                ],
               ),
-      ),
+            ),
     );
   }
 
@@ -3827,7 +3757,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           children: [
             _buildMetricCard(
               'High Priority',
-              '$highPriorityCount',
+              formatUnits(highPriorityCount),
               'Users needing action',
               Icons.priority_high_rounded,
               Colors.redAccent,
@@ -3848,7 +3778,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             ),
             _buildMetricCard(
               'Abandoned Carts',
-              '$abandonedCartsCount',
+              formatUnits(abandonedCartsCount),
               'Incomplete purchases',
               Icons.shopping_cart_checkout_rounded,
               Colors.orange,
@@ -3868,7 +3798,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             ),
             _buildMetricCard(
               'Failed Payments',
-              '$failedPaymentsCount',
+              formatUnits(failedPaymentsCount),
               'Checkout errors',
               Icons.error_outline_rounded,
               Colors.red,
@@ -3888,7 +3818,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             ),
             _buildMetricCard(
               'Live Users',
-              '${_realTimeUsers.length}',
+              formatUnits(_realTimeUsers.length),
               'Currently active',
               Icons.bolt_rounded,
               const Color(0xFF10B981),
@@ -4222,24 +4152,102 @@ class _UserEventsPageState extends State<UserEventsPage> {
     VoidCallback? onTap,
     bool isSelected = false,
   }) {
+    return _InteractiveMetricCard(
+      title: title,
+      value: value,
+      subtitle: subtitle,
+      icon: icon,
+      color: color,
+      width: width,
+      isSelected: isSelected,
+      onTap: onTap,
+    );
+  }
+
+  String _getUserType(String userName) {
+    return _cachedUserTypes[userName] ?? 'Guest';
+  }
+}
+
+class _InteractiveMetricCard extends StatefulWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final double width;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  const _InteractiveMetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.width,
+    this.isSelected = false,
+    this.onTap,
+  });
+
+  @override
+  State<_InteractiveMetricCard> createState() => _InteractiveMetricCardState();
+}
+
+class _InteractiveMetricCardState extends State<_InteractiveMetricCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isSelected = widget.isSelected;
+    final Color color = widget.color;
+
     return MouseRegion(
-      cursor: onTap != null
+      cursor: widget.onTap != null
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: onTap,
+        onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: width,
+          curve: Curves.easeInOut,
+          width: widget.width,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.08) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            color: isSelected
+                ? color.withValues(alpha: 0.08)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? color : AppTheme.borderColor,
-              width: isSelected ? 2 : 1,
+              color: isSelected
+                  ? color
+                  : _hovered
+                      ? color.withValues(alpha: 0.6)
+                      : AppTheme.borderColor.withValues(alpha: 0.8),
+              width: isSelected ? 1.8 : 1.0,
             ),
-            boxShadow: AppTheme.cardShadow,
+            boxShadow: [
+              if (isSelected)
+                BoxShadow(
+                  color: color.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                )
+              else if (_hovered)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              else
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4250,35 +4258,47 @@ class _UserEventsPageState extends State<UserEventsPage> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      shape: BoxShape.circle,
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, size: 18, color: color),
+                    child: Icon(widget.icon, size: 18, color: color),
                   ),
                   if (isSelected)
-                    Icon(Icons.check_circle_rounded, size: 16, color: color),
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 11,
+                        color: Colors.white,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
               Text(
-                value,
+                widget.value,
                 style: GoogleFonts.outfit(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                   color: AppTheme.textPrimary,
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
-                title,
+                widget.title,
                 style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
+                  color: isSelected ? color : AppTheme.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                subtitle,
+                widget.subtitle,
                 style: GoogleFonts.outfit(
                   fontSize: 11,
                   color: AppTheme.textSecondary,
@@ -4289,10 +4309,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
         ),
       ),
     );
-  }
-
-  String _getUserType(String userName) {
-    return _cachedUserTypes[userName] ?? 'Guest';
   }
 }
 
@@ -4460,6 +4476,23 @@ class _UserCardState extends State<_UserCard>
         }
       }
     }
+    // Calculate journey milestone completion
+    final bool hasSearch = widget.groupedEvents.containsKey('product_search') ||
+        widget.groupedEvents.containsKey('product_view') ||
+        widget.groupedEvents.containsKey('category_view') ||
+        widget.groupedEvents.containsKey('login_success');
+    final bool hasCart = widget.groupedEvents.containsKey('add_to_cart') ||
+        widget.groupedEvents.containsKey('cart_add') ||
+        widget.groupedEvents.containsKey('cart_view');
+    final bool hasCheckout = widget.groupedEvents.containsKey('checkout_started') ||
+        widget.groupedEvents.containsKey('checkout_init') ||
+        widget.groupedEvents.containsKey('payment_initiated') ||
+        widget.groupedEvents.containsKey('apply_coupon');
+    final bool hasPaid = widget.groupedEvents.containsKey('payment_success') ||
+        widget.groupedEvents.containsKey('order_placed') ||
+        widget.groupedEvents.containsKey('order_completed') ||
+        widget.groupedEvents.containsKey('order_created');
+    final bool hasFailedPayment = widget.groupedEvents.containsKey('payment_failed');
 
     final String initials = widget.name.isNotEmpty
         ? widget.name
@@ -4476,20 +4509,20 @@ class _UserCardState extends State<_UserCard>
     Color avatarBg;
 
     if (isSelected) {
-      bg = AppTheme.primaryColor.withOpacity(0.04);
-      border = AppTheme.primaryColor.withOpacity(0.25);
+      bg = AppTheme.primaryColor.withValues(alpha: 0.04);
+      border = AppTheme.primaryColor.withValues(alpha: 0.35);
       titleColor = AppTheme.primaryColor;
-      avatarBg = AppTheme.primaryColor.withOpacity(0.12);
+      avatarBg = AppTheme.primaryColor.withValues(alpha: 0.12);
     } else if (isHovered) {
-      bg = AppTheme.primaryColor.withOpacity(0.015);
-      border = AppTheme.borderColor.withOpacity(0.8);
+      bg = AppTheme.primaryColor.withValues(alpha: 0.015);
+      border = AppTheme.borderColor.withValues(alpha: 0.8);
       titleColor = AppTheme.textPrimary;
-      avatarBg = AppTheme.textSecondary.withOpacity(0.1);
+      avatarBg = AppTheme.textSecondary.withValues(alpha: 0.1);
     } else {
       bg = Colors.transparent;
-      border = AppTheme.borderColor.withOpacity(0.4);
+      border = AppTheme.borderColor.withValues(alpha: 0.45);
       titleColor = AppTheme.textPrimary;
-      avatarBg = AppTheme.borderColor.withOpacity(0.4);
+      avatarBg = AppTheme.borderColor.withValues(alpha: 0.3);
     }
 
     return MouseRegion(
@@ -4501,23 +4534,33 @@ class _UserCardState extends State<_UserCard>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: border, width: 1.0),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: 1.1),
+            boxShadow: isHovered
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Stack(
                     children: [
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        width: 42,
-                        height: 42,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: avatarBg,
                           shape: BoxShape.circle,
@@ -4535,10 +4578,10 @@ class _UserCardState extends State<_UserCard>
                         ),
                       ),
                       if (widget.isOnline)
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: const _LivePulsingBadge(
+                        const Positioned(
+                          right: -1,
+                          bottom: -1,
+                          child: _LivePulsingBadge(
                             color: Color(0xFF10B981),
                           ),
                         ),
@@ -4555,7 +4598,7 @@ class _UserCardState extends State<_UserCard>
                               child: Text(
                                 widget.name,
                                 style: GoogleFonts.outfit(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w800,
                                   color: titleColor,
                                 ),
@@ -4569,7 +4612,7 @@ class _UserCardState extends State<_UserCard>
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
+                                  horizontal: 7,
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
@@ -4590,7 +4633,7 @@ class _UserCardState extends State<_UserCard>
                                 child: Text(
                                   intentLabel,
                                   style: GoogleFonts.outfit(
-                                    fontSize: 9,
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.bold,
                                     color: intentLabel.contains('Hot')
                                         ? Colors.redAccent
@@ -4623,10 +4666,10 @@ class _UserCardState extends State<_UserCard>
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: badgeColor.withOpacity(0.08),
+                                      color: badgeColor.withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: badgeColor.withOpacity(0.2),
+                                        color: badgeColor.withValues(alpha: 0.25),
                                       ),
                                     ),
                                     child: Row(
@@ -4637,7 +4680,7 @@ class _UserCardState extends State<_UserCard>
                                           size: 10,
                                           color: badgeColor,
                                         ),
-                                        const SizedBox(width: 2),
+                                        const SizedBox(width: 3),
                                         Text(
                                           widget.priorityReason.isNotEmpty
                                               ? widget.priorityReason
@@ -4667,85 +4710,140 @@ class _UserCardState extends State<_UserCard>
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: AppTheme.textSecondary.withValues(
-                                    alpha: 0.8,
+                                    alpha: 0.85,
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () => _makePhoneCall(userPhone!),
-                                borderRadius: BorderRadius.circular(4),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(2.0),
-                                  child: Icon(
-                                    Icons.phone_rounded,
-                                    size: 14,
-                                    color: AppTheme.primaryColor,
+                              Tooltip(
+                                message: 'Copy Phone Number',
+                                child: InkWell(
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: userPhone!));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.check_circle_rounded,
+                                              color: Colors.white,
+                                              size: 15,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Phone number ($userPhone) copied to clipboard!',
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        backgroundColor: const Color(0xFF0F172A),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        width: 360,
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.copy_rounded,
+                                      size: 13,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              /*
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'Call Customer',
+                                child: InkWell(
+                                  onTap: () => _makePhoneCall(userPhone!),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.phone_rounded,
+                                      size: 13,
+                                      color: AppTheme.primaryColor,
+                                    ),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              InkWell(
-                                onTap: () => _openWhatsApp(
-                                  context,
-                                  userPhone!,
-                                  widget.name,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(2.0),
-                                  child: Icon(
-                                    Icons.chat_rounded,
-                                    size: 14,
-                                    color: Color(0xFF10B981),
+                              Tooltip(
+                                message: 'WhatsApp Chat',
+                                child: InkWell(
+                                  onTap: () => _openWhatsApp(
+                                    context,
+                                    userPhone!,
+                                    widget.name,
                                   ),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.chat_rounded,
+                                      size: 13,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              */
+                              const SizedBox(width: 8),
+                              Text(
+                                '• ${formatUnits(totalEvents)} event${totalEvents == 1 ? "" : "s"}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
                         ],
-                        if (journeyPath != null && journeyPath.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.alt_route_rounded,
-                                size: 12,
-                                color: AppTheme.primaryColor,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  'Journey: $journeyPath',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    color: AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 2),
-                        Text(
-                          '$totalEvents event${totalEvents == 1 ? "" : "s"} • ${widget.groupedEvents.length} categor${widget.groupedEvents.length == 1 ? "y" : "ies"}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12.5,
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
+
+                        const SizedBox(height: 6),
+
+                        // Mini Journey Funnel Milestone Tracker
+                        _buildJourneyMilestonePipeline(
+                          hasSearch: hasSearch,
+                          hasCart: hasCart,
+                          hasCheckout: hasCheckout,
+                          hasPaid: hasPaid,
+                          hasFailed: hasFailedPayment,
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Icon(
                     isSelected
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    size: 18,
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 20,
                     color: isSelected
                         ? AppTheme.primaryColor
                         : AppTheme.textSecondary,
@@ -4764,7 +4862,7 @@ class _UserCardState extends State<_UserCard>
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Categories',
+                                'Activity Categories',
                                 style: GoogleFonts.outfit(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
@@ -4781,9 +4879,9 @@ class _UserCardState extends State<_UserCard>
                                       size: 13,
                                     ),
                                     label: Text(
-                                      'View Profile',
+                                      'View CRM Profile',
                                       style: GoogleFonts.outfit(
-                                        fontSize: 12,
+                                        fontSize: 11.5,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -5056,6 +5154,86 @@ class _UserCardState extends State<_UserCard>
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildJourneyMilestonePipeline({
+    required bool hasSearch,
+    required bool hasCart,
+    required bool hasCheckout,
+    required bool hasPaid,
+    required bool hasFailed,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildMilestoneDot('Search', hasSearch, const Color(0xFF0284C7)),
+          _buildMilestoneConnector(hasCart),
+          _buildMilestoneDot('Cart', hasCart, const Color(0xFFF59E0B)),
+          _buildMilestoneConnector(hasCheckout),
+          _buildMilestoneDot('Checkout', hasCheckout, const Color(0xFFFB923C)),
+          _buildMilestoneConnector(hasPaid || hasFailed),
+          _buildMilestoneDot(
+            hasFailed ? 'Failed ❌' : 'Paid',
+            hasPaid || hasFailed,
+            hasFailed ? Colors.redAccent : const Color(0xFF10B981),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMilestoneDot(String label, bool completed, Color activeColor) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: completed ? activeColor : AppTheme.borderColor,
+            boxShadow: completed
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+        ),
+        const SizedBox(width: 3.5),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 9,
+            fontWeight: completed ? FontWeight.bold : FontWeight.w500,
+            color: completed ? activeColor : AppTheme.textSecondary.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMilestoneConnector(bool active) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        width: 12,
+        height: 1.5,
+        color: active
+            ? AppTheme.primaryColor.withValues(alpha: 0.6)
+            : AppTheme.borderColor.withValues(alpha: 0.6),
+      ),
     );
   }
 

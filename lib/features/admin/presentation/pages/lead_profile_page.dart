@@ -17,6 +17,7 @@ import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart'
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
 import '../../../../core/network/websocket_service.dart';
@@ -4572,7 +4573,7 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '$totalEvents logs',
+                    '${formatUnits(totalEvents)} logs',
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
