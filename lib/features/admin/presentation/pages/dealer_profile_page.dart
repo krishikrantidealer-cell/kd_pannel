@@ -1220,156 +1220,164 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       _buildAdvancedProfileTabs(),
                       const SizedBox(height: 24),
                       // 4. TABBED CONTENT CHANNELS
-                      SelectionContainer.disabled(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          child: _activeTab == 0
-                              ? Column(
-                                  key: const ValueKey(0),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _StatsCardsSection(
+                      Builder(
+                        builder: (context) {
+                          final tabs = _getProfileTabs();
+                          final safeIdx = (_activeTab >= 0 && _activeTab < tabs.length) ? _activeTab : 0;
+                          final currentTabKey = tabs[safeIdx]['key'];
+
+                          return SelectionContainer.disabled(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: currentTabKey == 'overview'
+                                  ? Column(
+                                      key: const ValueKey('overview'),
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _StatsCardsSection(
+                                          dealer: currentDealer,
+                                          orders: orders,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        if (!isMobile) ...[
+                                          IntrinsicHeight(
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                Expanded(
+                                                  child: _DealerInformationCard(
+                                                    dealer: currentDealer,
+                                                    salesAgents: salesAgents,
+                                                    currentAgentId: _agentId,
+                                                    onAssignAgent: _assignAgent,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 32),
+                                                Expanded(
+                                                  flex: 1,
+                                                  child: _DealerKycDocumentsCard(
+                                                    dealer: currentDealer,
+                                                    onViewDocument: _launchUrl,
+                                                    onUpload: _showUploadKycDialog,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ] else ...[
+                                          _DealerInformationCard(
+                                            dealer: currentDealer,
+                                            salesAgents: salesAgents,
+                                            currentAgentId: _agentId,
+                                            onAssignAgent: _assignAgent,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          _DealerKycDocumentsCard(
+                                            dealer: currentDealer,
+                                            onViewDocument: _launchUrl,
+                                            onUpload: _showUploadKycDialog,
+                                          ),
+                                        ],
+                                      ],
+                                    )
+                                  : currentTabKey == 'orders'
+                                  ? _OrderHistoryCard(
+                                      key: const ValueKey('orders'),
                                       dealer: currentDealer,
                                       orders: orders,
+                                      isLoading: isLoadingOrders,
+                                    )
+                                  : currentTabKey == 'activities'
+                                  ? _UserEventsCard(
+                                      key: const ValueKey('activities'),
+                                      dealerIdentifiers: [
+                                        if (currentDealer.id != null)
+                                          currentDealer.id!,
+                                        if (currentDealer.email != null)
+                                          currentDealer.email!,
+                                        if (currentDealer.phone.isNotEmpty)
+                                          currentDealer.phone,
+                                      ],
+                                      events: events,
+                                      isLoading: isLoadingEvents,
+                                      isLoadingMore: isLoadingMoreEvents,
+                                      hasReachedMax: hasReachedMaxEvents,
+                                      onRefresh: () =>
+                                          context.read<DealersBloc>().add(
+                                            FetchDealerEventsEvent(
+                                              (currentDealer.email != null &&
+                                                      currentDealer
+                                                          .email!
+                                                          .isNotEmpty)
+                                                  ? currentDealer.email!
+                                                  : (currentDealer.phone.isNotEmpty
+                                                        ? currentDealer.phone
+                                                        : (currentDealer.id ?? '')),
+                                              forceRefresh: true,
+                                            ),
+                                          ),
+                                      onLoadMore: () =>
+                                          context.read<DealersBloc>().add(
+                                            FetchDealerEventsMoreEvent(
+                                              (currentDealer.email != null &&
+                                                      currentDealer
+                                                          .email!
+                                                          .isNotEmpty)
+                                                  ? currentDealer.email!
+                                                  : (currentDealer.phone.isNotEmpty
+                                                        ? currentDealer.phone
+                                                        : (currentDealer.id ?? '')),
+                                            ),
+                                          ),
+                                    )
+                                  : Column(
+                                      key: const ValueKey('notes'),
+                                      children: [
+                                        if (currentDealer.id != null)
+                                          SelectionContainer.disabled(
+                                            child: UserStatusNotesWidget(
+                                              userId: currentDealer.id!,
+                                              initialStatus:
+                                                  currentDealer.status ??
+                                                  'prospect',
+                                              initialNotes:
+                                                  currentDealer.notes ?? '',
+                                              notesHistory:
+                                                  currentDealer.notesHistory,
+                                              isSubmitting:
+                                                  context
+                                                      .watch<DealersBloc>()
+                                                      .state
+                                                      .status ==
+                                                  DealersStatus.submitting,
+                                              onSave:
+                                                  (
+                                                    status,
+                                                    notes,
+                                                    noteType,
+                                                    notePriority,
+                                                  ) {
+                                                    context.read<DealersBloc>().add(
+                                                      UpdateDealerDetailsEvent(
+                                                        userId: currentDealer.id!,
+                                                        updateData: {
+                                                          'leadStatus': status,
+                                                          'leadNotes': notes,
+                                                          'noteType': noteType,
+                                                          'notePriority':
+                                                              notePriority,
+                                                        },
+                                                      ),
+                                                    );
+                                                  },
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 24),
-                                    if (!isMobile) ...[
-                                      IntrinsicHeight(
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(
-                                              child: _DealerInformationCard(
-                                                dealer: currentDealer,
-                                                salesAgents: salesAgents,
-                                                currentAgentId: _agentId,
-                                                onAssignAgent: _assignAgent,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 32),
-                                            Expanded(
-                                              flex: 1,
-                                              child: _DealerKycDocumentsCard(
-                                                dealer: currentDealer,
-                                                onViewDocument: _launchUrl,
-                                                onUpload: _showUploadKycDialog,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      _DealerInformationCard(
-                                        dealer: currentDealer,
-                                        salesAgents: salesAgents,
-                                        currentAgentId: _agentId,
-                                        onAssignAgent: _assignAgent,
-                                      ),
-                                      const SizedBox(height: 24),
-                                      _DealerKycDocumentsCard(
-                                        dealer: currentDealer,
-                                        onViewDocument: _launchUrl,
-                                        onUpload: _showUploadKycDialog,
-                                      ),
-                                    ],
-                                  ],
-                                )
-                              : _activeTab == 1
-                              ? _OrderHistoryCard(
-                                  key: const ValueKey(1),
-                                  dealer: currentDealer,
-                                  orders: orders,
-                                  isLoading: isLoadingOrders,
-                                )
-                              : _activeTab == 2
-                              ? _UserEventsCard(
-                                  key: const ValueKey(2),
-                                  dealerIdentifiers: [
-                                    if (currentDealer.id != null)
-                                      currentDealer.id!,
-                                    if (currentDealer.email != null)
-                                      currentDealer.email!,
-                                    if (currentDealer.phone.isNotEmpty)
-                                      currentDealer.phone,
-                                  ],
-                                  events: events,
-                                  isLoading: isLoadingEvents,
-                                  isLoadingMore: isLoadingMoreEvents,
-                                  hasReachedMax: hasReachedMaxEvents,
-                                  onRefresh: () =>
-                                      context.read<DealersBloc>().add(
-                                        FetchDealerEventsEvent(
-                                          (currentDealer.email != null &&
-                                                  currentDealer
-                                                      .email!
-                                                      .isNotEmpty)
-                                              ? currentDealer.email!
-                                              : (currentDealer.phone.isNotEmpty
-                                                    ? currentDealer.phone
-                                                    : (currentDealer.id ?? '')),
-                                          forceRefresh: true,
-                                        ),
-                                      ),
-                                  onLoadMore: () =>
-                                      context.read<DealersBloc>().add(
-                                        FetchDealerEventsMoreEvent(
-                                          (currentDealer.email != null &&
-                                                  currentDealer
-                                                      .email!
-                                                      .isNotEmpty)
-                                              ? currentDealer.email!
-                                              : (currentDealer.phone.isNotEmpty
-                                                    ? currentDealer.phone
-                                                    : (currentDealer.id ?? '')),
-                                        ),
-                                      ),
-                                )
-                              : Column(
-                                  key: const ValueKey(3),
-                                  children: [
-                                    if (currentDealer.id != null)
-                                      SelectionContainer.disabled(
-                                        child: UserStatusNotesWidget(
-                                          userId: currentDealer.id!,
-                                          initialStatus:
-                                              currentDealer.status ??
-                                              'prospect',
-                                          initialNotes:
-                                              currentDealer.notes ?? '',
-                                          notesHistory:
-                                              currentDealer.notesHistory,
-                                          isSubmitting:
-                                              context
-                                                  .watch<DealersBloc>()
-                                                  .state
-                                                  .status ==
-                                              DealersStatus.submitting,
-                                          onSave:
-                                              (
-                                                status,
-                                                notes,
-                                                noteType,
-                                                notePriority,
-                                              ) {
-                                                context.read<DealersBloc>().add(
-                                                  UpdateDealerDetailsEvent(
-                                                    userId: currentDealer.id!,
-                                                    updateData: {
-                                                      'leadStatus': status,
-                                                      'leadNotes': notes,
-                                                      'noteType': noteType,
-                                                      'notePriority':
-                                                          notePriority,
-                                                    },
-                                                  ),
-                                                );
-                                              },
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -1379,13 +1387,19 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     );
   }
 
-  Widget _buildAdvancedProfileTabs() {
-    final List<Map<String, dynamic>> tabs = [
-      {'icon': Icons.dashboard_outlined, 'label': 'Overview'},
-      {'icon': Icons.shopping_bag_outlined, 'label': 'Orders'},
-      {'icon': Icons.analytics_outlined, 'label': 'Activities'},
-      {'icon': Icons.rate_review_outlined, 'label': 'Notes'},
+  List<Map<String, dynamic>> _getProfileTabs() {
+    final bool isSales = AuthService().isSales;
+    return [
+      {'icon': Icons.dashboard_outlined, 'label': 'Overview', 'key': 'overview'},
+      {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
+      if (!isSales)
+        {'icon': Icons.analytics_outlined, 'label': 'Activities', 'key': 'activities'},
+      {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
     ];
+  }
+
+  Widget _buildAdvancedProfileTabs() {
+    final List<Map<String, dynamic>> tabs = _getProfileTabs();
 
     return Container(
       padding: const EdgeInsets.all(6),

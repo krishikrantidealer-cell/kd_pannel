@@ -1797,12 +1797,18 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
-  Widget _buildAdvancedProfileTabs() {
-    final List<Map<String, dynamic>> tabs = [
-      {'icon': Icons.dashboard_outlined, 'label': 'Overview'},
-      {'icon': Icons.analytics_outlined, 'label': 'Activities'},
-      {'icon': Icons.rate_review_outlined, 'label': 'Notes'},
+  List<Map<String, dynamic>> _getProfileTabs() {
+    final bool isSales = AuthService().isSales;
+    return [
+      {'icon': Icons.dashboard_outlined, 'label': 'Overview', 'key': 'overview'},
+      if (!isSales)
+        {'icon': Icons.analytics_outlined, 'label': 'Activities', 'key': 'activities'},
+      {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
     ];
+  }
+
+  Widget _buildAdvancedProfileTabs() {
+    final List<Map<String, dynamic>> tabs = _getProfileTabs();
 
     return Container(
       padding: const EdgeInsets.all(6),
@@ -1977,6 +1983,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           );
         }
 
+        final Map<String, dynamic> activeLead = currentLead;
         final isMobile = Responsive.isMobile(context);
         final isTablet = Responsive.isTablet(context);
         final isLoading = state.status == LeadsStatus.submitting;
@@ -2067,7 +2074,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  currentLead['name'] ?? '',
+                                  activeLead['name'] ?? '',
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
@@ -2083,7 +2090,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
                         // 1. Flat Header section
                         _FlatHeaderSection(
-                          lead: currentLead,
+                          lead: activeLead,
                           isSales: AuthService().isSales,
                           onConvertDealer: _showConvertDealerDialog,
                           onRejectKyc: _showRejectDialog,
@@ -2098,138 +2105,146 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         const SizedBox(height: 24),
 
                         // 3. TABBED CONTENT CHANNELS
-                        SelectionContainer.disabled(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 250),
-                            child: _activeTab == 0
-                                ? Column(
-                                    key: const ValueKey(0),
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (!isMobile) ...[
-                                        IntrinsicHeight(
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Expanded(
-                                                flex: 1,
-                                                child: _LeadInformationCard(
-                                                  lead: currentLead,
-                                                  salesAgents:
-                                                      state.salesAgents,
-                                                  onAssignAgent: _assignAgent,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 32),
-                                              Expanded(
-                                                flex: 1,
-                                                child: _DealerKycDocumentsCard(
-                                                  lead: currentLead,
-                                                  onViewDocument: _launchUrl,
-                                                  onUpload:
-                                                      _showUploadKycDialog,
-                                                  isVertical: true,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ] else ...[
-                                        _LeadInformationCard(
-                                          lead: currentLead,
-                                          salesAgents: state.salesAgents,
-                                          onAssignAgent: _assignAgent,
-                                        ),
-                                        const SizedBox(height: 24),
-                                        _DealerKycDocumentsCard(
-                                          lead: currentLead,
-                                          onViewDocument: _launchUrl,
-                                          onUpload: _showUploadKycDialog,
-                                        ),
-                                      ],
-                                    ],
-                                  )
-                                : _activeTab == 1
-                                ? Column(
-                                    key: const ValueKey(1),
-                                    children: [
-                                      if (leadId != null)
-                                        _UserEventsCard(
-                                          userIdentifiers: [
-                                            leadId!,
-                                            if (currentLead?['email'] != null)
-                                              currentLead!['email'].toString(),
-                                            if (currentLead?['phone'] != null)
-                                              currentLead!['phone'].toString(),
-                                            if (currentLead?['phoneNumber'] !=
-                                                null)
-                                              currentLead!['phoneNumber']
-                                                  .toString(),
-                                          ],
-                                          events: events,
-                                          isLoading: isLoadingEvents,
-                                          onRefresh: () =>
-                                              context.read<LeadsBloc>().add(
-                                                FetchLeadEventsEvent(
-                                                  currentLead?['email'] ??
-                                                      currentLead?['phone'] ??
-                                                      currentLead?['phoneNumber'] ??
-                                                      leadId ??
-                                                      '',
-                                                ),
-                                              ),
-                                        ),
-                                    ],
-                                  )
-                                : Column(
-                                    key: const ValueKey(2),
-                                    children: [
-                                      if (leadId != null)
-                                        SelectionContainer.disabled(
-                                          child: UserStatusNotesWidget(
-                                            userId: leadId,
-                                            initialStatus:
-                                                currentLead?['status'] ??
-                                                'prospect',
-                                            initialNotes:
-                                                currentLead?['notes'] ?? '',
-                                            notesHistory:
-                                                currentLead?['notesHistory'] !=
-                                                    null
-                                                ? List<
-                                                    Map<String, dynamic>
-                                                  >.from(
-                                                    currentLead!['notesHistory'],
-                                                  )
-                                                : null,
-                                            isSubmitting: isLoading,
-                                            onSave:
-                                                (
-                                                  status,
-                                                  notes,
-                                                  noteType,
-                                                  notePriority,
-                                                ) {
-                                                  context.read<LeadsBloc>().add(
-                                                    UpdateLeadDetailsEvent(
-                                                      userId: leadId,
-                                                      updateData: {
-                                                        'leadStatus': status,
-                                                        'leadNotes': notes,
-                                                        'noteType': noteType,
-                                                        'notePriority':
-                                                            notePriority,
-                                                      },
+                        Builder(
+                          builder: (context) {
+                            final tabs = _getProfileTabs();
+                            final safeIdx = (_activeTab >= 0 && _activeTab < tabs.length) ? _activeTab : 0;
+                            final currentTabKey = tabs[safeIdx]['key'];
+
+                            return SelectionContainer.disabled(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 250),
+                                child: currentTabKey == 'overview'
+                                    ? Column(
+                                        key: const ValueKey('overview'),
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          if (!isMobile) ...[
+                                            IntrinsicHeight(
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: _LeadInformationCard(
+                                                      lead: activeLead,
+                                                      salesAgents:
+                                                          state.salesAgents,
+                                                      onAssignAgent: _assignAgent,
                                                     ),
-                                                  );
-                                                },
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                          ),
+                                                  ),
+                                                  const SizedBox(width: 32),
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: _DealerKycDocumentsCard(
+                                                      lead: activeLead,
+                                                      onViewDocument: _launchUrl,
+                                                      onUpload:
+                                                          _showUploadKycDialog,
+                                                      isVertical: true,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            _LeadInformationCard(
+                                              lead: activeLead,
+                                              salesAgents: state.salesAgents,
+                                              onAssignAgent: _assignAgent,
+                                            ),
+                                            const SizedBox(height: 24),
+                                            _DealerKycDocumentsCard(
+                                              lead: activeLead,
+                                              onViewDocument: _launchUrl,
+                                              onUpload: _showUploadKycDialog,
+                                            ),
+                                          ],
+                                        ],
+                                      )
+                                    : currentTabKey == 'activities'
+                                    ? Column(
+                                        key: const ValueKey('activities'),
+                                        children: [
+                                          if (leadId != null)
+                                            _UserEventsCard(
+                                              userIdentifiers: [
+                                                leadId!,
+                                                if (activeLead['email'] != null)
+                                                  activeLead['email'].toString(),
+                                                if (activeLead['phone'] != null)
+                                                  activeLead['phone'].toString(),
+                                                if (activeLead['phoneNumber'] !=
+                                                    null)
+                                                  activeLead['phoneNumber']
+                                                      .toString(),
+                                              ],
+                                              events: events,
+                                              isLoading: isLoadingEvents,
+                                              onRefresh: () =>
+                                                  context.read<LeadsBloc>().add(
+                                                    FetchLeadEventsEvent(
+                                                      activeLead['email'] ??
+                                                          activeLead['phone'] ??
+                                                          activeLead['phoneNumber'] ??
+                                                          leadId ??
+                                                          '',
+                                                    ),
+                                                  ),
+                                            ),
+                                        ],
+                                      )
+                                    : Column(
+                                        key: const ValueKey('notes'),
+                                        children: [
+                                          if (leadId != null)
+                                            SelectionContainer.disabled(
+                                              child: UserStatusNotesWidget(
+                                                userId: leadId,
+                                                initialStatus:
+                                                    activeLead['status'] ??
+                                                    'prospect',
+                                                initialNotes:
+                                                    activeLead['notes'] ?? '',
+                                                notesHistory:
+                                                    activeLead['notesHistory'] !=
+                                                        null
+                                                    ? List<
+                                                        Map<String, dynamic>
+                                                      >.from(
+                                                        activeLead['notesHistory'],
+                                                      )
+                                                    : null,
+                                                isSubmitting: isLoading,
+                                                onSave:
+                                                    (
+                                                      status,
+                                                      notes,
+                                                      noteType,
+                                                      notePriority,
+                                                    ) {
+                                                      context.read<LeadsBloc>().add(
+                                                        UpdateLeadDetailsEvent(
+                                                          userId: leadId,
+                                                          updateData: {
+                                                            'leadStatus': status,
+                                                            'leadNotes': notes,
+                                                            'noteType': noteType,
+                                                            'notePriority':
+                                                                notePriority,
+                                                          },
+                                                        ),
+                                                      );
+                                                    },
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
