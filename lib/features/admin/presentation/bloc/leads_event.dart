@@ -76,6 +76,7 @@ class RejectKYCEvent extends LeadsEvent {
 
 class UpdateLeadsFilterEvent extends LeadsEvent {
   final String? searchQuery;
+  final String? selectedState;
   final String? selectedTimeframe;
   final PickerDateRange? selectedRange;
   final bool resetRange;
@@ -85,6 +86,7 @@ class UpdateLeadsFilterEvent extends LeadsEvent {
 
   const UpdateLeadsFilterEvent({
     this.searchQuery,
+    this.selectedState,
     this.selectedTimeframe,
     this.selectedRange,
     this.resetRange = false,
@@ -96,6 +98,7 @@ class UpdateLeadsFilterEvent extends LeadsEvent {
   @override
   List<Object?> get props => [
         searchQuery,
+        selectedState,
         selectedTimeframe,
         selectedRange,
         resetRange,

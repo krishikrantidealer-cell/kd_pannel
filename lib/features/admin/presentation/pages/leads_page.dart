@@ -611,7 +611,7 @@ class _LeadsPageState extends State<LeadsPage> {
             'villageArea': u['address']?['villageArea'] ?? '',
             'addressLine2': u['address']?['addressLine2'] ?? '',
             'city': u['address']?['cityTehsil'] ?? '',
-            'state': u['address']?['state'] ?? '',
+            'state': u['address']?['state'] ?? u['state'] ?? '',
             'pincode': u['address']?['pincode'] ?? '',
             'activity': u['updatedAt'] != null
                 ? _formatTimeAgo(u['updatedAt'])
@@ -636,6 +636,50 @@ class _LeadsPageState extends State<LeadsPage> {
           };
         })
         .toList();
+  }
+
+  static const List<String> _indianStatesAndUTs = [
+    'Andhra Pradesh',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chhattisgarh',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
+    // Union Territories
+    'Andaman and Nicobar Islands',
+    'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi',
+    'Jammu and Kashmir',
+    'Ladakh',
+    'Lakshadweep',
+    'Puducherry',
+  ];
+
+  List<String> get stateOptions {
+    return ['All States', ..._indianStatesAndUTs];
   }
 
   final List<String> dropdownOptions = [
@@ -673,6 +717,15 @@ class _LeadsPageState extends State<LeadsPage> {
   ) {
     List<Map<String, dynamic>> result = leads;
 
+    // 1. State Filtering
+    if (state.selectedState != 'All States') {
+      final filterState = state.selectedState.trim().toLowerCase();
+      result = result.where((l) {
+        final leadState = (l['state'] ?? '').toString().trim().toLowerCase();
+        return leadState == filterState;
+      }).toList();
+    }
+
     // 2. Chip Filtering
     if (state.selectedFilterChip != 'All') {
       if (state.selectedFilterChip == 'Unassigned') {
@@ -692,6 +745,8 @@ class _LeadsPageState extends State<LeadsPage> {
             .toList();
       } else if (state.selectedFilterChip == 'KYC Confirm') {
         result = result.where((l) => l['kycStatus'] == 'verified').toList();
+      } else if (state.selectedFilterChip == 'Deleted') {
+        result = result.where((l) => l['isDeleted'] == true).toList();
       }
     }
 
@@ -702,6 +757,7 @@ class _LeadsPageState extends State<LeadsPage> {
         return l['name'].toString().toLowerCase().contains(query) ||
             l['phone'].toString().toLowerCase().contains(query) ||
             l['city'].toString().toLowerCase().contains(query) ||
+            l['state'].toString().toLowerCase().contains(query) ||
             l['source'].toString().toLowerCase().contains(query) ||
             l['agent'].toString().toLowerCase().contains(query);
       }).toList();
@@ -1411,6 +1467,22 @@ class _LeadsPageState extends State<LeadsPage> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildSearchField(250), // Final refined width for perfect alignment
+          const SizedBox(width: 12),
+          _buildFilterDropdown(
+            'All States',
+            160,
+            stateOptions,
+            state.selectedState,
+            (val) {
+              context.read<LeadsBloc>().add(
+                UpdateLeadsFilterEvent(
+                  selectedState: val!,
+                  currentPage: 1,
+                ),
+              );
+            },
+            isMobile: false,
+          ),
           const SizedBox(width: 16), // Refined gap for grid rhythm
           Expanded(
             child: SingleChildScrollView(
@@ -1453,7 +1525,23 @@ class _LeadsPageState extends State<LeadsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSearchField(double.infinity),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          _buildFilterDropdown(
+            'States',
+            double.infinity,
+            stateOptions,
+            state.selectedState,
+            (val) {
+              context.read<LeadsBloc>().add(
+                UpdateLeadsFilterEvent(
+                  selectedState: val!,
+                  currentPage: 1,
+                ),
+              );
+            },
+            isMobile: true,
+          ),
+          const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -1485,6 +1573,71 @@ class _LeadsPageState extends State<LeadsPage> {
         ],
       );
     }
+  }
+
+  Widget _buildFilterDropdown(
+    String hint,
+    double? width,
+    List<String> options,
+    String currentValue,
+    ValueChanged<String?> onChanged, {
+    bool isMobile = false,
+  }) {
+    return Container(
+      height: isMobile ? 38 : 42,
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: options.contains(currentValue) ? currentValue : null,
+          isExpanded: true,
+          padding: EdgeInsets.zero,
+          hint: Text(
+            hint,
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down,
+            size: 18,
+            color: AppTheme.textSecondary,
+          ),
+          onChanged: onChanged,
+          items: options
+              .map<DropdownMenuItem<String>>(
+                (String value) => DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(
+                    value,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: GoogleFonts.outfit(
+                      fontSize: isMobile ? 12 : 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
   }
 
   IconData _getChipIcon(String chip) {

@@ -203,14 +203,17 @@ class ApiClient {
 
         // Handle 429 Rate Limiting silently with gentle backoff
         if (response.statusCode == 429 && attempt < maxRetries) {
-          int retryAfterSeconds = 1 + attempt;
+          int retryAfterSeconds = 1 + (attempt * 2);
           final retryAfterHeader = response.headers['retry-after'];
           if (retryAfterHeader != null) {
             final parsed = int.tryParse(retryAfterHeader);
-            if (parsed != null && parsed > 0 && parsed <= 15) {
+            if (parsed != null && parsed > 0 && parsed <= 30) {
               retryAfterSeconds = parsed;
             }
           }
+          debugPrint(
+            '[ApiClient] Rate limited (429) on attempt $attempt. Retrying after ${retryAfterSeconds}s...',
+          );
           await Future.delayed(Duration(seconds: retryAfterSeconds));
           continue;
         }
