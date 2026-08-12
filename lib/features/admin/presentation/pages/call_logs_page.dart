@@ -324,77 +324,84 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                     final date = DateTime.parse(log['createdAt']).toLocal();
                                     formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(date);
                                   }
-
-                                  return ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                    leading: CircleAvatar(
-                                      backgroundColor: isOutbound
-                                          ? Colors.blue.withValues(alpha: 0.1)
-                                          : Colors.green.withValues(alpha: 0.1),
-                                      child: Icon(
-                                        isOutbound ? Icons.call_made_rounded : Icons.call_received_rounded,
-                                        color: isOutbound ? Colors.blue : Colors.green,
-                                        size: 18,
+                                  return Material(
+                                    color: Colors.transparent,
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                      leading: CircleAvatar(
+                                        backgroundColor: isOutbound
+                                            ? Colors.blue.withValues(alpha: 0.1)
+                                            : Colors.green.withValues(alpha: 0.1),
+                                        child: Icon(
+                                          isOutbound ? Icons.call_made_rounded : Icons.call_received_rounded,
+                                          color: isOutbound ? Colors.blue : Colors.green,
+                                          size: 18,
+                                        ),
                                       ),
-                                    ),
-                                    title: Row(
-                                      children: [
-                                        Text(
-                                          '+$customerPhone',
-                                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF111B21)),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isAnswered
-                                                ? Colors.green.withValues(alpha: 0.1)
-                                                : Colors.red.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            log['status']?.toString().toUpperCase() ?? 'UNANSWERED',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: isAnswered ? Colors.green[800] : Colors.red[800],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Sales Rep: ${agentName.isNotEmpty ? agentName : "System"}  •  Time: $formattedDate  •  Duration: ${_formatDuration(seconds)}',
-                                          style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                        ),
-                                        if (log['callSummary'] != null && log['callSummary'].toString().isNotEmpty)
+                                      title: Row(
+                                        children: [
                                           Text(
-                                            'Summary: ${log['callSummary']}',
-                                            style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF008069), fontWeight: FontWeight.w500),
+                                            '+$customerPhone',
+                                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF111B21)),
                                           ),
-                                      ],
-                                    ),
-                                    trailing: recordingUrl.isNotEmpty
-                                        ? ElevatedButton.icon(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF008069).withValues(alpha: 0.1),
-                                              foregroundColor: const Color(0xFF008069),
-                                              elevation: 0,
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          const SizedBox(width: 10),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isAnswered
+                                                  ? const Color(0xFF008069).withValues(alpha: 0.1)
+                                                  : Colors.red.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(4),
                                             ),
-                                            icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                            label: Text('Listen Recording', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                            onPressed: () => _playRecording(recordingUrl),
-                                          )
-                                        : Text(
-                                            'No Recording',
-                                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
+                                            child: Text(
+                                              isAnswered ? 'ANSWERED' : 'MISSED / NO-ANSWER',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: isAnswered ? const Color(0xFF008069) : Colors.red,
+                                              ),
+                                            ),
                                           ),
+                                        ],
+                                      ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 4.0),
+                                        child: Row(
+                                          children: [
+                                            if (agentName.isNotEmpty) ...[
+                                              Icon(Icons.support_agent_rounded, size: 13, color: Colors.grey.shade600),
+                                              const SizedBox(width: 4),
+                                              Text('Agent: $agentName', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
+                                              const SizedBox(width: 12),
+                                            ],
+                                            Icon(Icons.timer_outlined, size: 13, color: Colors.grey.shade600),
+                                            const SizedBox(width: 4),
+                                            Text(_formatDuration(seconds), style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
+                                            const SizedBox(width: 12),
+                                            Icon(Icons.calendar_today_outlined, size: 13, color: Colors.grey.shade600),
+                                            const SizedBox(width: 4),
+                                            Text(formattedDate, style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
+                                          ],
+                                        ),
+                                      ),
+                                      trailing: recordingUrl.isNotEmpty
+                                          ? ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF008069).withValues(alpha: 0.1),
+                                                foregroundColor: const Color(0xFF008069),
+                                                elevation: 0,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              ),
+                                              icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                              label: Text('Listen Recording', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                              onPressed: () => _playRecording(recordingUrl),
+                                            )
+                                          : Text(
+                                              'No Recording',
+                                              style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
+                                            ),
+                                    ),
                                   );
                                 },
                               ),

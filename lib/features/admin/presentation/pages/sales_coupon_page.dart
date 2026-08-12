@@ -1249,9 +1249,11 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                     width: isSel ? 1.8 : 1,
                   ),
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   title: Text(
                     v['size'] ?? '',
                     style: GoogleFonts.outfit(
@@ -1305,8 +1307,9 @@ class _CreateCouponSheetState extends State<_CreateCouponSheet> {
                   ),
                   onTap: () => setState(() => _selectedVariant = v),
                 ),
-              );
-            },
+              ),
+            );
+          },
           ),
           const SizedBox(height: 24),
           Text(

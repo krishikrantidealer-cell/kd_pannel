@@ -234,496 +234,888 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
 
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Create Category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextFormField(
-                        controller: controller,
-                        decoration: const InputDecoration(
-                          labelText: 'Category Name',
-                          hintText: 'e.g. Fertilizers',
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return 'Please enter category name';
-                          }
-                          return null;
-                        },
+              elevation: 12,
+              child: Container(
+                width: 660,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.90,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // TOP HEADER BAR
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: bannerTitleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Banner Title (Optional)',
-                          hintText: 'e.g. Special Fertilizer Discount',
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Banner Image',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            final XFile? image = await ImagePicker().pickImage(
-                              source: ImageSource.gallery,
-                              maxWidth: 800,
-                              maxHeight: 600,
-                              imageQuality: 85,
-                            );
-                            if (image != null) {
-                              final bytes = await image.readAsBytes();
-                              final Uint8List? editedImage =
-                                  await Navigator.push(
-                                    ctx,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ProImageEditor.memory(
-                                            bytes,
-                                            callbacks: ProImageEditorCallbacks(
-                                              onImageEditingComplete: (Uint8List editedBytes) async {
-                                                Navigator.pop(context, editedBytes);
-                                              },
-                                            ),
-                                          ),
-                                    ),
-                                  );
-                              if (editedImage != null) {
-                                setState(() {
-                                  categoryImage = editedImage;
-                                });
-                              }
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to pick image: $e'),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFECFDF5),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                                ),
+                                child: const Icon(
+                                  Icons.grid_view_rounded,
+                                  color: Color(0xFF059669),
+                                  size: 20,
+                                ),
                               ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 120,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
-                          ),
-                          child: categoryImage != null
-                              ? Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.memory(
-                                        categoryImage!,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            categoryImage = null;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.cloud_upload_outlined,
-                                      color: AppTheme.textSecondary,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Click to upload banner image',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 13,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Icon Image (Dynamic App Icon)',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            final XFile? image = await ImagePicker().pickImage(
-                              source: ImageSource.gallery,
-                              maxWidth: 400,
-                              maxHeight: 400,
-                              imageQuality: 90,
-                            );
-                            if (image != null) {
-                              final bytes = await image.readAsBytes();
-                              setState(() {
-                                categoryIcon = bytes;
-                              });
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Failed to pick icon: $e')),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 72,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
-                          ),
-                          child: categoryIcon != null
-                              ? Row(
-                                  children: [
-                                    const SizedBox(width: 16),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: Image.memory(
-                                        categoryIcon!,
-                                        width: 44,
-                                        height: 44,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        'Category Icon Selected',
+                              const SizedBox(width: 14),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Create New Category',
                                         style: GoogleFonts.outfit(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.textPrimary,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0F172A),
                                         ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close, size: 18),
-                                      onPressed: () => setState(() => categoryIcon = null),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.category_rounded,
-                                      color: AppTheme.textSecondary,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Click to upload category icon (1:1 PNG/WebP)',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppTheme.textSecondary,
+                                      const SizedBox(width: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFECFDF5),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                                        ),
+                                        child: Text(
+                                          'NEW CATEGORY',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF059669),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
                                       ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Define category naming, promotional banner, app icon & catalogue',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
                                     ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Catalogue PDF',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            fp.FilePickerResult? result =
-                                await fp.FilePicker.pickFiles(
-                                  type: fp.FileType.custom,
-                                  allowedExtensions: ['pdf'],
-                                  withData: true,
-                                );
-                            if (result != null && result.files.isNotEmpty) {
-                              setState(() {
-                                cataloguePdfFile = result.files.first;
-                              });
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Failed to pick PDF: $e')),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 72,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          child: cataloguePdfFile != null
-                              ? Row(
+                          InkWell(
+                            onTap: isLoading ? null : () => Navigator.pop(ctx),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // SCROLLABLE BODY
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 1. SECTION CARD: IDENTITY
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(width: 16),
-                                    const Icon(
-                                      Icons.picture_as_pdf_rounded,
-                                      color: Colors.redAccent,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            cataloguePdfFile!.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.textPrimary,
-                                            ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 11,
-                                              color: AppTheme.textSecondary,
-                                            ),
+                                          child: const Icon(Icons.badge_outlined, size: 16, color: AppTheme.primaryColor),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'Category Identity',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0F172A),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.close,
-                                        color: AppTheme.textSecondary,
-                                        size: 18,
+                                    const SizedBox(height: 14),
+
+                                    Text('Category Name *', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5, color: const Color(0xFF334155))),
+                                    const SizedBox(height: 5),
+                                    TextFormField(
+                                      controller: controller,
+                                      style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF0F172A)),
+                                      decoration: InputDecoration(
+                                        hintText: 'e.g. Fertilizers, Crop Nutrition, Seeds...',
+                                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                                        prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF8FAFC),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                                        ),
                                       ),
-                                      onPressed: () {
-                                        setState(() {
-                                          cataloguePdfFile = null;
-                                        });
+                                      validator: (val) {
+                                        if (val == null || val.trim().isEmpty) {
+                                          return 'Please enter category name';
+                                        }
+                                        return null;
                                       },
                                     ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.document_scanner_outlined,
-                                      color: AppTheme.textSecondary,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Click to upload catalogue PDF',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppTheme.textSecondary,
+                                    const SizedBox(height: 12),
+
+                                    Text('Banner Title (Optional)', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5, color: const Color(0xFF334155))),
+                                    const SizedBox(height: 5),
+                                    TextFormField(
+                                      controller: bannerTitleController,
+                                      style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF0F172A)),
+                                      decoration: InputDecoration(
+                                        hintText: 'e.g. Special Discount on Organic Fertilizers',
+                                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                                        prefixIcon: const Icon(Icons.title_rounded, size: 18, color: AppTheme.primaryColor),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF8FAFC),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 2. SECTION CARD: BANNER ARTWORK (3:1)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.image_outlined, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category Banner Image',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            'Ratio 3:1  •  1200 × 400 px',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final XFile? image = await ImagePicker().pickImage(
+                                            source: ImageSource.gallery,
+                                            maxWidth: 800,
+                                            maxHeight: 600,
+                                            imageQuality: 85,
+                                          );
+                                          if (image != null) {
+                                            final bytes = await image.readAsBytes();
+                                            final Uint8List? editedImage = await Navigator.push(
+                                              ctx,
+                                              MaterialPageRoute(
+                                                builder: (context) => ProImageEditor.memory(
+                                                  bytes,
+                                                  callbacks: ProImageEditorCallbacks(
+                                                    onImageEditingComplete: (Uint8List editedBytes) async {
+                                                      Navigator.pop(context, editedBytes);
+                                                    },
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                            if (editedImage != null) {
+                                              setState(() {
+                                                categoryImage = editedImage;
+                                              });
+                                            }
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick image: $e')),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        height: 130,
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: categoryImage != null ? AppTheme.primaryColor : const Color(0xFFCBD5E1),
+                                            width: categoryImage != null ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: categoryImage != null
+                                            ? ClipRRect(
+                                                borderRadius: BorderRadius.circular(11),
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    Image.memory(categoryImage!, fit: BoxFit.cover),
+                                                    Positioned(
+                                                      bottom: 0,
+                                                      left: 0,
+                                                      right: 0,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                        color: Colors.black.withValues(alpha: 0.7),
+                                                        child: Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                              'Banner Image Attached',
+                                                              style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                                            ),
+                                                            Row(
+                                                              children: [
+                                                                TextButton.icon(
+                                                                  onPressed: () {
+                                                                    setState(() => categoryImage = null);
+                                                                  },
+                                                                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFCA5A5), size: 14),
+                                                                  label: Text('Remove', style: GoogleFonts.outfit(color: const Color(0xFFFCA5A5), fontSize: 11)),
+                                                                  style: TextButton.styleFrom(
+                                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                                    minimumSize: Size.zero,
+                                                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : Center(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    const Icon(Icons.cloud_upload_outlined, color: AppTheme.primaryColor, size: 28),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Click to upload category banner artwork',
+                                                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                                    ),
+                                                    Text(
+                                                      'Includes built-in image crop & editor tool',
+                                                      style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 3. SECTION CARD: ICON IMAGE (1:1)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.apps_rounded, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category App Icon (Dynamic 1:1)',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '1:1 PNG / WebP',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final XFile? image = await ImagePicker().pickImage(
+                                            source: ImageSource.gallery,
+                                            maxWidth: 400,
+                                            maxHeight: 400,
+                                            imageQuality: 90,
+                                          );
+                                          if (image != null) {
+                                            final bytes = await image.readAsBytes();
+                                            setState(() {
+                                              categoryIcon = bytes;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick icon: $e')),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: categoryIcon != null ? AppTheme.primaryColor : const Color(0xFFCBD5E1),
+                                          ),
+                                        ),
+                                        child: categoryIcon != null
+                                            ? Row(
+                                                children: [
+                                                  ClipRRect(
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    child: Image.memory(
+                                                      categoryIcon!,
+                                                      width: 44,
+                                                      height: 44,
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 14),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          'App Icon Selected',
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: const Color(0xFF0F172A),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          'Ready to upload for mobile navigation',
+                                                          style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                                    onPressed: () => setState(() => categoryIcon = null),
+                                                  ),
+                                                ],
+                                              )
+                                            : Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(Icons.add_photo_alternate_outlined, color: AppTheme.primaryColor, size: 20),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    'Click to attach 1:1 App Icon (PNG / WebP)',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF334155),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 4. SECTION CARD: CATALOGUE PDF
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category Catalogue PDF',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            'PDF Document',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          fp.FilePickerResult? result = await fp.FilePicker.pickFiles(
+                                            type: fp.FileType.custom,
+                                            allowedExtensions: ['pdf'],
+                                            withData: true,
+                                          );
+                                          if (result != null && result.files.isNotEmpty) {
+                                            setState(() {
+                                              cataloguePdfFile = result.files.first;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick PDF: $e')),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: cataloguePdfFile != null ? AppTheme.primaryColor : const Color(0xFFCBD5E1),
+                                          ),
+                                        ),
+                                        child: cataloguePdfFile != null
+                                            ? Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.picture_as_pdf_rounded,
+                                                    color: Color(0xFFEF4444),
+                                                    size: 30,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          cataloguePdfFile!.name,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: const Color(0xFF0F172A),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 11.5,
+                                                            color: const Color(0xFF64748B),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                                    onPressed: () => setState(() => cataloguePdfFile = null),
+                                                  ),
+                                                ],
+                                              )
+                                            : Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(Icons.upload_file_rounded, color: AppTheme.primaryColor, size: 20),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    'Click to attach downloadable catalogue PDF',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF334155),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+
+                    // PROGRESS BAR (if saving or chunk uploading)
+                    if (isLoading)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(color: Color(0xFF059669), strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                uploadProgress != null
+                                    ? 'Uploading PDF Catalogue (${(uploadProgress! * 100).toStringAsFixed(0)}%)...'
+                                    : 'Saving category to database...',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF065F46)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // FOOTER BAR
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+                        border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Publishes immediately to the catalog',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              OutlinedButton(
+                                onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF64748B),
+                                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 10),
+                              ElevatedButton(
+                                onPressed: isLoading
+                                    ? null
+                                    : () async {
+                                        if (!formKey.currentState!.validate()) return;
+                                        setState(() {
+                                          isLoading = true;
+                                        });
+                                        try {
+                                          http.Response response;
+                                          String? publicPdfUrl;
+
+                                          if (cataloguePdfFile != null &&
+                                              cataloguePdfFile!.bytes != null) {
+                                            setState(() => uploadProgress = 0.0);
+
+                                            final finalUrl = await ApiClient()
+                                                .uploadFileInChunks(
+                                                  fileBytes: cataloguePdfFile!.bytes!,
+                                                  fileName: cataloguePdfFile!.name,
+                                                  categoryName: controller.text.trim(),
+                                                  onProgress: (p) {
+                                                    if (mounted) {
+                                                      setState(() => uploadProgress = p);
+                                                    }
+                                                  },
+                                                );
+
+                                            publicPdfUrl = finalUrl;
+                                          }
+
+                                          // 3. Submit category creation request
+                                          final Map<String, String> fields = {
+                                            'name': controller.text.trim(),
+                                            'bannerTitle': bannerTitleController.text.trim(),
+                                          };
+                                          if (publicPdfUrl != null) {
+                                            fields['cataloguePdf'] = publicPdfUrl;
+                                          }
+
+                                          if (categoryImage != null || categoryIcon != null) {
+                                            response = await ApiClient().multipartRequest(
+                                              method: 'POST',
+                                              endpoint: '/products/categories',
+                                              fields: fields,
+                                              filesBuilder: () {
+                                                final files = <http.MultipartFile>[];
+                                                if (categoryImage != null) {
+                                                  files.add(
+                                                    http.MultipartFile.fromBytes(
+                                                      'image',
+                                                      categoryImage!,
+                                                      filename: 'category_banner.jpg',
+                                                      contentType: MediaType('image', 'jpeg'),
+                                                    ),
+                                                  );
+                                                }
+                                                if (categoryIcon != null) {
+                                                  files.add(
+                                                    http.MultipartFile.fromBytes(
+                                                      'icon',
+                                                      categoryIcon!,
+                                                      filename: 'category_icon.png',
+                                                      contentType: MediaType('image', 'png'),
+                                                    ),
+                                                  );
+                                                }
+                                                return files;
+                                              },
+                                            );
+                                          } else {
+                                            response = await ApiClient().post(
+                                              '/products/categories',
+                                              fields,
+                                            );
+                                          }
+                                          if (response.statusCode == 201) {
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Category created successfully',
+                                                  ),
+                                                  backgroundColor: AppTheme.success,
+                                                ),
+                                              );
+                                            }
+                                            widget.onRefresh();
+                                            Navigator.pop(ctx);
+                                          } else {
+                                            final err = jsonDecode(response.body);
+                                            throw Exception(
+                                              err['message'] ?? 'Failed to create category',
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Error: $e'),
+                                                backgroundColor: AppTheme.error,
+                                              ),
+                                            );
+                                          }
+                                        } finally {
+                                          if (mounted) {
+                                            setState(() {
+                                              isLoading = false;
+                                              uploadProgress = null;
+                                            });
+                                          }
+                                        }
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: isLoading
+                                    ? _buildUploadProgressButton(
+                                        uploadProgress: uploadProgress,
+                                        label: 'Create',
+                                      )
+                                    : Text(
+                                        'Create Category',
+                                        style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            http.Response response;
-                            String? publicPdfUrl;
-
-                            if (cataloguePdfFile != null &&
-                                cataloguePdfFile!.bytes != null) {
-                              setState(() => uploadProgress = 0.0);
-
-                              final finalUrl = await ApiClient()
-                                  .uploadFileInChunks(
-                                    fileBytes: cataloguePdfFile!.bytes!,
-                                    fileName: cataloguePdfFile!.name,
-                                    categoryName: controller.text.trim(),
-                                    onProgress: (p) {
-                                      if (mounted) {
-                                        setState(() => uploadProgress = p);
-                                      }
-                                    },
-                                  );
-
-                              publicPdfUrl = finalUrl;
-                            }
-
-                            // 3. Submit category creation request
-                            final Map<String, String> fields = {
-                              'name': controller.text.trim(),
-                              'bannerTitle': bannerTitleController.text.trim(),
-                            };
-                            if (publicPdfUrl != null) {
-                              fields['cataloguePdf'] = publicPdfUrl;
-                            }
-
-                            if (categoryImage != null || categoryIcon != null) {
-                              response = await ApiClient().multipartRequest(
-                                method: 'POST',
-                                endpoint: '/products/categories',
-                                fields: fields,
-                                filesBuilder: () {
-                                  final files = <http.MultipartFile>[];
-                                  if (categoryImage != null) {
-                                    files.add(
-                                      http.MultipartFile.fromBytes(
-                                        'image',
-                                        categoryImage!,
-                                        filename: 'category_banner.jpg',
-                                        contentType: MediaType('image', 'jpeg'),
-                                      ),
-                                    );
-                                  }
-                                  if (categoryIcon != null) {
-                                    files.add(
-                                      http.MultipartFile.fromBytes(
-                                        'icon',
-                                        categoryIcon!,
-                                        filename: 'category_icon.png',
-                                        contentType: MediaType('image', 'png'),
-                                      ),
-                                    );
-                                  }
-                                  return files;
-                                },
-                              );
-                            } else {
-                              response = await ApiClient().post(
-                                '/products/categories',
-                                fields,
-                              );
-                            }
-                            if (response.statusCode == 201) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Category created successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              final err = jsonDecode(response.body);
-                              throw Exception(
-                                err['message'] ?? 'Failed to create category',
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                                uploadProgress = null;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                  ),
-                  child: isLoading
-                      ? _buildUploadProgressButton(
-                          uploadProgress: uploadProgress,
-                          label: 'Create',
-                        )
-                      : Text(
-                          'Create',
-                          style: GoogleFonts.outfit(color: Colors.white),
-                        ),
-                ),
-              ],
             );
           },
         );
@@ -754,579 +1146,969 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
 
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Edit Category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextFormField(
-                        controller: controller,
-                        decoration: const InputDecoration(
-                          labelText: 'Category Name',
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return 'Please enter category name';
-                          }
-                          return null;
-                        },
+              elevation: 12,
+              child: Container(
+                width: 660,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.90,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // TOP HEADER BAR
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: bannerTitleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Banner Title (Optional)',
-                          hintText: 'e.g. Special Fertilizer Discount',
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Banner Image',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            final XFile? image = await ImagePicker().pickImage(
-                              source: ImageSource.gallery,
-                              maxWidth: 800,
-                              maxHeight: 600,
-                              imageQuality: 85,
-                            );
-                            if (image != null) {
-                              final bytes = await image.readAsBytes();
-                              final Uint8List? editedImage =
-                                  await Navigator.push(
-                                    ctx,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ProImageEditor.memory(
-                                            bytes,
-                                            callbacks: ProImageEditorCallbacks(
-                                              onImageEditingComplete: (Uint8List editedBytes) async {
-                                                Navigator.pop(context, editedBytes);
-                                              },
-                                            ),
-                                          ),
-                                    ),
-                                  );
-                              if (editedImage != null) {
-                                setState(() {
-                                  categoryImage = editedImage;
-                                  existingImageUrl = null;
-                                });
-                              }
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to pick image: $e'),
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 120,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
-                          ),
-                          child:
-                              (categoryImage != null ||
-                                  existingImageUrl != null)
-                              ? Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: categoryImage != null
-                                          ? Image.memory(
-                                              categoryImage!,
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Image.network(
-                                              existingImageUrl!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) => const Center(
-                                                    child: Icon(
-                                                      Icons.broken_image,
-                                                      color: Colors.grey,
-                                                    ),
-                                                  ),
-                                            ),
-                                    ),
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            categoryImage = null;
-                                            existingImageUrl = null;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.cloud_upload_outlined,
-                                      color: AppTheme.textSecondary,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Click to upload banner image',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 13,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Icon Image (Dynamic App Icon)',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            final XFile? image = await ImagePicker().pickImage(
-                              source: ImageSource.gallery,
-                              maxWidth: 400,
-                              maxHeight: 400,
-                              imageQuality: 90,
-                            );
-                            if (image != null) {
-                              final bytes = await image.readAsBytes();
-                              setState(() {
-                                categoryIcon = bytes;
-                                existingIconUrl = null;
-                                deletedExistingIcon = false;
-                              });
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Failed to pick icon: $e')),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 72,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
-                          ),
-                          child: (categoryIcon != null || existingIconUrl != null)
-                              ? Row(
-                                  children: [
-                                    const SizedBox(width: 16),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: categoryIcon != null
-                                          ? Image.memory(
-                                              categoryIcon!,
-                                              width: 44,
-                                              height: 44,
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Image.network(
-                                              existingIconUrl!,
-                                              width: 44,
-                                              height: 44,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(
-                                                Icons.broken_image,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        categoryIcon != null
-                                            ? 'New Icon Selected'
-                                            : 'Current Active Category Icon',
+                                child: const Icon(
+                                  Icons.edit_note_rounded,
+                                  color: Color(0xFF2563EB),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Edit Category Studio',
                                         style: GoogleFonts.outfit(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.textPrimary,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0F172A),
                                         ),
                                       ),
+                                      const SizedBox(width: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF6FF),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                                        ),
+                                        child: Text(
+                                          'EDITING',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF2563EB),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Update category naming, banner artwork, dynamic icon & catalogue',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close, size: 18),
-                                      onPressed: () {
-                                        setState(() {
-                                          categoryIcon = null;
-                                          existingIconUrl = null;
-                                          deletedExistingIcon = true;
-                                        });
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: isLoading ? null : () => Navigator.pop(ctx),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // SCROLLABLE BODY
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 1. SECTION CARD: IDENTITY
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(Icons.badge_outlined, size: 16, color: AppTheme.primaryColor),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'Category Identity',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+
+                                    Text('Category Name *', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5, color: const Color(0xFF334155))),
+                                    const SizedBox(height: 5),
+                                    TextFormField(
+                                      controller: controller,
+                                      style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF0F172A)),
+                                      decoration: InputDecoration(
+                                        hintText: 'e.g. Fertilizers, Crop Nutrition, Seeds...',
+                                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                                        prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF8FAFC),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                                        ),
+                                      ),
+                                      validator: (val) {
+                                        if (val == null || val.trim().isEmpty) {
+                                          return 'Please enter category name';
+                                        }
+                                        return null;
                                       },
                                     ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.category_rounded,
-                                      color: AppTheme.textSecondary,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Click to upload category icon (1:1 PNG/WebP)',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppTheme.textSecondary,
+                                    const SizedBox(height: 12),
+
+                                    Text('Banner Title (Optional)', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5, color: const Color(0xFF334155))),
+                                    const SizedBox(height: 5),
+                                    TextFormField(
+                                      controller: bannerTitleController,
+                                      style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF0F172A)),
+                                      decoration: InputDecoration(
+                                        hintText: 'e.g. Special Discount on Organic Fertilizers',
+                                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                                        prefixIcon: const Icon(Icons.title_rounded, size: 18, color: AppTheme.primaryColor),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF8FAFC),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Category Catalogue PDF',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          try {
-                            fp.FilePickerResult? result =
-                                await fp.FilePicker.pickFiles(
-                                  type: fp.FileType.custom,
-                                  allowedExtensions: ['pdf'],
-                                  withData: true,
-                                );
-                            if (result != null && result.files.isNotEmpty) {
-                              setState(() {
-                                cataloguePdfFile = result.files.first;
-                                existingPdfUrl = null;
-                                deletedExistingPdf = false;
-                              });
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Failed to pick PDF: $e')),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 72,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.borderColor),
-                          ),
-                          child:
-                              (cataloguePdfFile != null ||
-                                  (existingPdfUrl != null &&
-                                      existingPdfUrl!.isNotEmpty))
-                              ? Row(
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 2. SECTION CARD: BANNER ARTWORK (3:1)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(width: 16),
-                                    const Icon(
-                                      Icons.picture_as_pdf_rounded,
-                                      color: Colors.redAccent,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            cataloguePdfFile != null
-                                                ? cataloguePdfFile!.name
-                                                : 'catalogue_document.pdf',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.image_outlined, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category Banner Image',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            'Ratio 3:1  •  1200 × 400 px',
                                             style: GoogleFonts.outfit(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.textPrimary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
-                                          if (cataloguePdfFile != null)
-                                            Text(
-                                              '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                color: AppTheme.textSecondary,
-                                              ),
-                                            )
-                                          else
-                                            GestureDetector(
-                                              onTap: () async {
-                                                if (existingPdfUrl != null) {
-                                                  final uri = Uri.parse(
-                                                    existingPdfUrl!,
-                                                  );
-                                                  if (await canLaunchUrl(uri)) {
-                                                    await launchUrl(uri);
-                                                  }
-                                                }
-                                              },
-                                              child: Text(
-                                                'Click to view uploaded PDF',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 11,
-                                                  color: AppTheme.primaryColor,
-                                                  decoration:
-                                                      TextDecoration.underline,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final XFile? image = await ImagePicker().pickImage(
+                                            source: ImageSource.gallery,
+                                            maxWidth: 800,
+                                            maxHeight: 600,
+                                            imageQuality: 85,
+                                          );
+                                          if (image != null) {
+                                            final bytes = await image.readAsBytes();
+                                            final Uint8List? editedImage = await Navigator.push(
+                                              ctx,
+                                              MaterialPageRoute(
+                                                builder: (context) => ProImageEditor.memory(
+                                                  bytes,
+                                                  callbacks: ProImageEditorCallbacks(
+                                                    onImageEditingComplete: (Uint8List editedBytes) async {
+                                                      Navigator.pop(context, editedBytes);
+                                                    },
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.close,
-                                        color: AppTheme.textSecondary,
-                                        size: 18,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          cataloguePdfFile = null;
-                                          existingPdfUrl = null;
-                                          deletedExistingPdf = true;
-                                        });
+                                            );
+                                            if (editedImage != null) {
+                                              setState(() {
+                                                categoryImage = editedImage;
+                                                existingImageUrl = null;
+                                              });
+                                            }
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick image: $e')),
+                                          );
+                                        }
                                       },
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.document_scanner_outlined,
-                                      color: AppTheme.textSecondary,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Click to upload catalogue PDF',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppTheme.textSecondary,
+                                      child: Container(
+                                        height: 130,
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: (categoryImage != null || existingImageUrl != null)
+                                                ? AppTheme.primaryColor
+                                                : const Color(0xFFCBD5E1),
+                                            width: (categoryImage != null || existingImageUrl != null) ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: (categoryImage != null || existingImageUrl != null)
+                                            ? ClipRRect(
+                                                borderRadius: BorderRadius.circular(11),
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    categoryImage != null
+                                                        ? Image.memory(categoryImage!, fit: BoxFit.cover)
+                                                        : Image.network(
+                                                            existingImageUrl!,
+                                                            fit: BoxFit.cover,
+                                                            errorBuilder: (_, __, ___) => const Center(
+                                                              child: Icon(Icons.broken_image_rounded, color: Colors.grey),
+                                                            ),
+                                                          ),
+                                                    Positioned(
+                                                      bottom: 0,
+                                                      left: 0,
+                                                      right: 0,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                        color: Colors.black.withValues(alpha: 0.7),
+                                                        child: Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                              categoryImage != null ? 'New Banner Attached' : 'Current Active Banner',
+                                                              style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                                            ),
+                                                            Row(
+                                                              children: [
+                                                                TextButton.icon(
+                                                                  onPressed: () {
+                                                                    setState(() {
+                                                                      categoryImage = null;
+                                                                      existingImageUrl = null;
+                                                                    });
+                                                                  },
+                                                                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFCA5A5), size: 14),
+                                                                  label: Text('Remove', style: GoogleFonts.outfit(color: const Color(0xFFFCA5A5), fontSize: 11)),
+                                                                  style: TextButton.styleFrom(
+                                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                                    minimumSize: Size.zero,
+                                                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : Center(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    const Icon(Icons.cloud_upload_outlined, color: AppTheme.primaryColor, size: 28),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Click to upload category banner artwork',
+                                                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                                    ),
+                                                    Text(
+                                                      'Includes built-in image crop & editor tool',
+                                                      style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                       ),
                                     ),
                                   ],
                                 ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 3. SECTION CARD: ICON IMAGE (1:1)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.apps_rounded, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category App Icon (Dynamic 1:1)',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '1:1 PNG / WebP',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final XFile? image = await ImagePicker().pickImage(
+                                            source: ImageSource.gallery,
+                                            maxWidth: 400,
+                                            maxHeight: 400,
+                                            imageQuality: 90,
+                                          );
+                                          if (image != null) {
+                                            final bytes = await image.readAsBytes();
+                                            setState(() {
+                                              categoryIcon = bytes;
+                                              existingIconUrl = null;
+                                              deletedExistingIcon = false;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick icon: $e')),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: (categoryIcon != null || existingIconUrl != null)
+                                                ? AppTheme.primaryColor
+                                                : const Color(0xFFCBD5E1),
+                                          ),
+                                        ),
+                                        child: (categoryIcon != null || existingIconUrl != null)
+                                            ? Row(
+                                                children: [
+                                                  ClipRRect(
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    child: categoryIcon != null
+                                                        ? Image.memory(
+                                                            categoryIcon!,
+                                                            width: 44,
+                                                            height: 44,
+                                                            fit: BoxFit.cover,
+                                                          )
+                                                        : Image.network(
+                                                            existingIconUrl!,
+                                                            width: 44,
+                                                            height: 44,
+                                                            fit: BoxFit.cover,
+                                                            errorBuilder: (_, __, ___) => const Icon(
+                                                              Icons.broken_image,
+                                                              color: Colors.grey,
+                                                            ),
+                                                          ),
+                                                  ),
+                                                  const SizedBox(width: 14),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          categoryIcon != null
+                                                              ? 'New App Icon Attached'
+                                                              : 'Current Active Category Icon',
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: const Color(0xFF0F172A),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          categoryIcon != null
+                                                              ? 'Ready to update'
+                                                              : 'Click to replace with new icon',
+                                                          style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        categoryIcon = null;
+                                                        existingIconUrl = null;
+                                                        deletedExistingIcon = true;
+                                                      });
+                                                    },
+                                                  ),
+                                                ],
+                                              )
+                                            : Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(Icons.add_photo_alternate_outlined, color: AppTheme.primaryColor, size: 20),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    'Click to attach 1:1 App Icon (PNG / WebP)',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF334155),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 4. SECTION CARD: CATALOGUE PDF
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppTheme.primaryColor),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Category Catalogue PDF',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            'PDF Document',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          fp.FilePickerResult? result = await fp.FilePicker.pickFiles(
+                                            type: fp.FileType.custom,
+                                            allowedExtensions: ['pdf'],
+                                            withData: true,
+                                          );
+                                          if (result != null && result.files.isNotEmpty) {
+                                            setState(() {
+                                              cataloguePdfFile = result.files.first;
+                                              existingPdfUrl = null;
+                                              deletedExistingPdf = false;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text('Failed to pick PDF: $e')),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: (cataloguePdfFile != null || (existingPdfUrl != null && existingPdfUrl!.isNotEmpty))
+                                                ? AppTheme.primaryColor
+                                                : const Color(0xFFCBD5E1),
+                                          ),
+                                        ),
+                                        child: (cataloguePdfFile != null || (existingPdfUrl != null && existingPdfUrl!.isNotEmpty))
+                                            ? Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.picture_as_pdf_rounded,
+                                                    color: Color(0xFFEF4444),
+                                                    size: 30,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          cataloguePdfFile != null ? cataloguePdfFile!.name : 'catalogue_document.pdf',
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: const Color(0xFF0F172A),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        if (cataloguePdfFile != null)
+                                                          Text(
+                                                            '${(cataloguePdfFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                                            style: GoogleFonts.outfit(
+                                                              fontSize: 11.5,
+                                                              color: const Color(0xFF64748B),
+                                                            ),
+                                                          )
+                                                        else
+                                                          GestureDetector(
+                                                            onTap: () async {
+                                                              if (existingPdfUrl != null) {
+                                                                final uri = Uri.parse(existingPdfUrl!);
+                                                                if (await canLaunchUrl(uri)) {
+                                                                  await launchUrl(uri);
+                                                                }
+                                                              }
+                                                            },
+                                                            child: Text(
+                                                              'Click to preview currently uploaded PDF',
+                                                              style: GoogleFonts.outfit(
+                                                                fontSize: 11.5,
+                                                                color: AppTheme.primaryColor,
+                                                                decoration: TextDecoration.underline,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        cataloguePdfFile = null;
+                                                        existingPdfUrl = null;
+                                                        deletedExistingPdf = true;
+                                                      });
+                                                    },
+                                                  ),
+                                                ],
+                                              )
+                                            : Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(Icons.upload_file_rounded, color: AppTheme.primaryColor, size: 20),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    'Click to attach downloadable catalogue PDF',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF334155),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+
+                    // PROGRESS BAR (if saving or chunk uploading)
+                    if (isLoading)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(color: Color(0xFF2563EB), strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                uploadProgress != null
+                                    ? 'Uploading PDF Catalogue (${(uploadProgress! * 100).toStringAsFixed(0)}%)...'
+                                    : 'Updating category in database...',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF1E40AF)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // FOOTER BAR
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+                        border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Changes sync live across all user sessions',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              OutlinedButton(
+                                onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF64748B),
+                                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 10),
+                              ElevatedButton(
+                                onPressed: isLoading
+                                    ? null
+                                    : () async {
+                                        if (!formKey.currentState!.validate()) return;
+                                        setState(() {
+                                          isLoading = true;
+                                        });
+                                        try {
+                                          http.Response response;
+                                          final Map<String, String> fields = {
+                                            'name': controller.text.trim(),
+                                            'bannerTitle': bannerTitleController.text.trim(),
+                                          };
+
+                                          if (categoryImage == null &&
+                                              existingImageUrl == null) {
+                                            fields['bannerImage'] = '';
+                                          }
+                                          if (categoryIcon == null &&
+                                              existingIconUrl == null &&
+                                              deletedExistingIcon) {
+                                            fields['iconImage'] = '';
+                                          }
+
+                                          String? publicPdfUrl;
+                                          if (cataloguePdfFile != null &&
+                                              cataloguePdfFile!.bytes != null) {
+                                            setState(() => uploadProgress = 0.0);
+
+                                            final finalUrl = await ApiClient()
+                                                .uploadFileInChunks(
+                                                  fileBytes: cataloguePdfFile!.bytes!,
+                                                  fileName: cataloguePdfFile!.name,
+                                                  categoryName: controller.text.trim(),
+                                                  onProgress: (p) {
+                                                    if (mounted) {
+                                                      setState(() => uploadProgress = p);
+                                                    }
+                                                  },
+                                                );
+
+                                            publicPdfUrl = finalUrl;
+                                          } else if (deletedExistingPdf) {
+                                            fields['cataloguePdf'] = '';
+                                          }
+
+                                          if (publicPdfUrl != null) {
+                                            fields['cataloguePdf'] = publicPdfUrl;
+                                          }
+
+                                          if (categoryImage != null || categoryIcon != null) {
+                                            response = await ApiClient().multipartRequest(
+                                              method: 'PUT',
+                                              endpoint: '/products/categories/${cat['_id']}',
+                                              fields: fields,
+                                              filesBuilder: () {
+                                                final files = <http.MultipartFile>[];
+                                                if (categoryImage != null) {
+                                                  files.add(
+                                                    http.MultipartFile.fromBytes(
+                                                      'image',
+                                                      categoryImage!,
+                                                      filename: 'category_banner.jpg',
+                                                      contentType: MediaType('image', 'jpeg'),
+                                                    ),
+                                                  );
+                                                }
+                                                if (categoryIcon != null) {
+                                                  files.add(
+                                                    http.MultipartFile.fromBytes(
+                                                      'icon',
+                                                      categoryIcon!,
+                                                      filename: 'category_icon.png',
+                                                      contentType: MediaType('image', 'png'),
+                                                    ),
+                                                  );
+                                                }
+                                                return files;
+                                              },
+                                            );
+                                          } else {
+                                            response = await ApiClient().put(
+                                              '/products/categories/${cat['_id']}',
+                                              fields,
+                                            );
+                                          }
+                                          if (response.statusCode == 200) {
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Category updated successfully',
+                                                  ),
+                                                  backgroundColor: AppTheme.success,
+                                                ),
+                                              );
+                                            }
+                                            widget.onRefresh();
+                                            Navigator.pop(ctx);
+                                          } else {
+                                            final err = jsonDecode(response.body);
+                                            throw Exception(
+                                              err['message'] ?? 'Failed to update category',
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Error: $e'),
+                                                backgroundColor: AppTheme.error,
+                                              ),
+                                            );
+                                          }
+                                        } finally {
+                                          if (mounted) {
+                                            setState(() {
+                                              isLoading = false;
+                                              uploadProgress = null;
+                                            });
+                                          }
+                                        }
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: isLoading
+                                    ? _buildUploadProgressButton(
+                                        uploadProgress: uploadProgress,
+                                        label: 'Save',
+                                      )
+                                    : Text(
+                                        'Save Changes',
+                                        style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            http.Response response;
-                            final Map<String, String> fields = {
-                              'name': controller.text.trim(),
-                              'bannerTitle': bannerTitleController.text.trim(),
-                            };
-
-                            if (categoryImage == null &&
-                                existingImageUrl == null) {
-                              fields['bannerImage'] = '';
-                            }
-                            if (categoryIcon == null &&
-                                existingIconUrl == null &&
-                                deletedExistingIcon) {
-                              fields['iconImage'] = '';
-                            }
-
-                            String? publicPdfUrl;
-                            if (cataloguePdfFile != null &&
-                                cataloguePdfFile!.bytes != null) {
-                              setState(() => uploadProgress = 0.0);
-
-                              final finalUrl = await ApiClient()
-                                  .uploadFileInChunks(
-                                    fileBytes: cataloguePdfFile!.bytes!,
-                                    fileName: cataloguePdfFile!.name,
-                                    categoryName: controller.text.trim(),
-                                    onProgress: (p) {
-                                      if (mounted) {
-                                        setState(() => uploadProgress = p);
-                                      }
-                                    },
-                                  );
-
-                              publicPdfUrl = finalUrl;
-                            } else if (deletedExistingPdf) {
-                              fields['cataloguePdf'] = '';
-                            }
-
-                            if (publicPdfUrl != null) {
-                              fields['cataloguePdf'] = publicPdfUrl;
-                            }
-
-                            if (categoryImage != null || categoryIcon != null) {
-                              response = await ApiClient().multipartRequest(
-                                method: 'PUT',
-                                endpoint: '/products/categories/${cat['_id']}',
-                                fields: fields,
-                                filesBuilder: () {
-                                  final files = <http.MultipartFile>[];
-                                  if (categoryImage != null) {
-                                    files.add(
-                                      http.MultipartFile.fromBytes(
-                                        'image',
-                                        categoryImage!,
-                                        filename: 'category_banner.jpg',
-                                        contentType: MediaType('image', 'jpeg'),
-                                      ),
-                                    );
-                                  }
-                                  if (categoryIcon != null) {
-                                    files.add(
-                                      http.MultipartFile.fromBytes(
-                                        'icon',
-                                        categoryIcon!,
-                                        filename: 'category_icon.png',
-                                        contentType: MediaType('image', 'png'),
-                                      ),
-                                    );
-                                  }
-                                  return files;
-                                },
-                              );
-                            } else {
-                              response = await ApiClient().put(
-                                '/products/categories/${cat['_id']}',
-                                fields,
-                              );
-                            }
-                            if (response.statusCode == 200) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Category updated successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              final err = jsonDecode(response.body);
-                              throw Exception(
-                                err['message'] ?? 'Failed to update category',
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                                uploadProgress = null;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                  ),
-                  child: isLoading
-                      ? _buildUploadProgressButton(
-                          uploadProgress: uploadProgress,
-                          label: 'Save',
-                        )
-                      : Text(
-                          'Save',
-                          style: GoogleFonts.outfit(color: Colors.white),
-                        ),
-                ),
-              ],
             );
           },
         );
@@ -1341,90 +2123,160 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Delete Category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: Text(
-                'Are you sure you want to delete category "${cat['name']}"? All associated products will have their category removed. This action cannot be undone.',
-                style: GoogleFonts.outfit(fontSize: 13.5, height: 1.5),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
+              elevation: 12,
+              child: Container(
+                width: 460,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            final response = await ApiClient().delete(
-                              '/products/categories/${cat['_id']}',
-                            );
-                            if (response.statusCode == 200) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Category deleted successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              throw Exception('Failed to delete category');
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.error,
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFECACA)),
                           ),
-                        )
-                      : Text(
-                          'Delete',
-                          style: GoogleFonts.outfit(color: Colors.white),
+                          child: const Icon(
+                            Icons.delete_forever_rounded,
+                            color: Color(0xFFDC2626),
+                            size: 22,
+                          ),
                         ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Delete Category',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'Irreversible catalogue action',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Are you sure you want to delete category "${cat['name']}"? All associated products will have their category reference cleared.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        color: const Color(0xFF475569),
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    isLoading = true;
+                                  });
+                                  try {
+                                    final response = await ApiClient().delete(
+                                      '/products/categories/${cat['_id']}',
+                                    );
+                                    if (response.statusCode == 200) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Category deleted successfully',
+                                            ),
+                                            backgroundColor: AppTheme.success,
+                                          ),
+                                        );
+                                      }
+                                      widget.onRefresh();
+                                      Navigator.pop(ctx);
+                                    } else {
+                                      throw Exception('Failed to delete category');
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: AppTheme.error,
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        isLoading = false;
+                                      });
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  'Delete Category',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );
@@ -1442,104 +2294,220 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Add Sub-category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Sub-category Name',
-                    hintText: 'e.g. Organic, Chemical',
-                  ),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Please enter sub-category name';
-                    }
-                    return null;
-                  },
+              elevation: 12,
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            final response = await ApiClient().post(
-                              '/products/categories/${cat['_id']}/subcategories',
-                              {'name': controller.text.trim()},
-                            );
-                            if (response.statusCode == 201) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Sub-category added successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              throw Exception('Failed to add sub-category');
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFECFDF5),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFA7F3D0)),
                                 ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                                child: const Icon(
+                                  Icons.folder_open_rounded,
+                                  color: Color(0xFF059669),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Add Sub-category',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF0F172A),
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Under "${cat['name']}"',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFF64748B),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: isLoading ? null : () => Navigator.pop(ctx),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: Color(0xFF64748B),
+                              ),
                             ),
                           ),
-                        )
-                      : Text(
-                          'Add',
-                          style: GoogleFonts.outfit(color: Colors.white),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      Text(
+                        'Sub-category Name *',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.5,
+                          color: const Color(0xFF334155),
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: controller,
+                        style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF0F172A)),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Organic, Bio-Granules, Liquid...',
+                          hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                          prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                          ),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter sub-category name';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton(
+                            onPressed: isLoading
+                                ? null
+                                : () async {
+                                    if (!formKey.currentState!.validate()) return;
+                                    setState(() {
+                                      isLoading = true;
+                                    });
+                                    try {
+                                      final response = await ApiClient().post(
+                                        '/products/categories/${cat['_id']}/subcategories',
+                                        {'name': controller.text.trim()},
+                                      );
+                                      if (response.statusCode == 201) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Sub-category added successfully',
+                                              ),
+                                              backgroundColor: AppTheme.success,
+                                            ),
+                                          );
+                                        }
+                                        widget.onRefresh();
+                                        Navigator.pop(ctx);
+                                      } else {
+                                        throw Exception('Failed to add sub-category');
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error: $e'),
+                                            backgroundColor: AppTheme.error,
+                                          ),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() {
+                                          isLoading = false;
+                                        });
+                                      }
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    'Add Sub-category',
+                                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             );
           },
         );
@@ -1559,103 +2527,220 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Rename Sub-category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Sub-category Name',
-                  ),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Please enter sub-category name';
-                    }
-                    return null;
-                  },
+              elevation: 12,
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            final response = await ApiClient().put(
-                              '/products/categories/${cat['_id']}/subcategories/${sub['_id']}',
-                              {'name': controller.text.trim()},
-                            );
-                            if (response.statusCode == 200) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Sub-category renamed successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              throw Exception('Failed to rename sub-category');
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
                                 ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                                child: const Icon(
+                                  Icons.edit_note_rounded,
+                                  color: Color(0xFF2563EB),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Rename Sub-category',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF0F172A),
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Parent category: "${cat['name']}"',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFF64748B),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: isLoading ? null : () => Navigator.pop(ctx),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: Color(0xFF64748B),
+                              ),
                             ),
                           ),
-                        )
-                      : Text(
-                          'Save',
-                          style: GoogleFonts.outfit(color: Colors.white),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      Text(
+                        'Sub-category Name *',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.5,
+                          color: const Color(0xFF334155),
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: controller,
+                        style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF0F172A)),
+                        decoration: InputDecoration(
+                          hintText: 'Sub-category Name',
+                          hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                          prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                          ),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter sub-category name';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton(
+                            onPressed: isLoading
+                                ? null
+                                : () async {
+                                    if (!formKey.currentState!.validate()) return;
+                                    setState(() {
+                                      isLoading = true;
+                                    });
+                                    try {
+                                      final response = await ApiClient().put(
+                                        '/products/categories/${cat['_id']}/subcategories/${sub['_id']}',
+                                        {'name': controller.text.trim()},
+                                      );
+                                      if (response.statusCode == 200) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Sub-category renamed successfully',
+                                              ),
+                                              backgroundColor: AppTheme.success,
+                                            ),
+                                          );
+                                        }
+                                        widget.onRefresh();
+                                        Navigator.pop(ctx);
+                                      } else {
+                                        throw Exception('Failed to rename sub-category');
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error: $e'),
+                                            backgroundColor: AppTheme.error,
+                                          ),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() {
+                                          isLoading = false;
+                                        });
+                                      }
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    'Save Changes',
+                                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             );
           },
         );
@@ -1670,90 +2755,160 @@ class _CategoriesTabViewState extends State<CategoriesTabView> {
         bool isLoading = false;
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Delete Sub-category',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: Text(
-                'Are you sure you want to delete sub-category "${sub['name']}"? Associated products will have their sub-category reference cleared.',
-                style: GoogleFonts.outfit(fontSize: 13.5, height: 1.5),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                  ),
+              elevation: 12,
+              child: Container(
+                width: 460,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          setState(() {
-                            isLoading = true;
-                          });
-                          try {
-                            final response = await ApiClient().delete(
-                              '/products/categories/${cat['_id']}/subcategories/${sub['_id']}',
-                            );
-                            if (response.statusCode == 200) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Sub-category deleted successfully',
-                                    ),
-                                    backgroundColor: AppTheme.success,
-                                  ),
-                                );
-                              }
-                              widget.onRefresh();
-                              Navigator.pop(ctx);
-                            } else {
-                              throw Exception('Failed to delete sub-category');
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                isLoading = false;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.error,
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFECACA)),
                           ),
-                        )
-                      : Text(
-                          'Delete',
-                          style: GoogleFonts.outfit(color: Colors.white),
+                          child: const Icon(
+                            Icons.delete_forever_rounded,
+                            color: Color(0xFFDC2626),
+                            size: 22,
+                          ),
                         ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Delete Sub-category',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'Under "${cat['name']}"',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Are you sure you want to delete sub-category "${sub['name']}"? Associated products will have their sub-category reference cleared.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        color: const Color(0xFF475569),
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Cancel', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    isLoading = true;
+                                  });
+                                  try {
+                                    final response = await ApiClient().delete(
+                                      '/products/categories/${cat['_id']}/subcategories/${sub['_id']}',
+                                    );
+                                    if (response.statusCode == 200) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Sub-category deleted successfully',
+                                            ),
+                                            backgroundColor: AppTheme.success,
+                                          ),
+                                        );
+                                      }
+                                      widget.onRefresh();
+                                      Navigator.pop(ctx);
+                                    } else {
+                                      throw Exception('Failed to delete sub-category');
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: AppTheme.error,
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        isLoading = false;
+                                      });
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  'Delete Sub-category',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );

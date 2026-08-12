@@ -1109,45 +1109,48 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                           .toString();
                       final isSelected = _selectedProductIds.contains(prodId);
 
-                      return CheckboxListTile(
-                        value: isSelected,
-                        onChanged: (val) {
-                          setState(() {
-                            if (val == true) {
-                              _selectedProductIds.add(prodId);
-                            } else {
-                              _selectedProductIds.remove(prodId);
-                            }
-                          });
-                        },
-                        title: Text(
-                          product['name'] as String,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
+                      return Material(
+                        color: Colors.transparent,
+                        child: CheckboxListTile(
+                          value: isSelected,
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedProductIds.add(prodId);
+                              } else {
+                                _selectedProductIds.remove(prodId);
+                              }
+                            });
+                          },
+                          title: Text(
+                            product['name'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          ((product['vendor'] == null ||
-                                      product['vendor'] == 'N/A' ||
-                                      product['vendor'].toString().isEmpty)
-                                  ? 'No Brand'
-                                  : product['vendor'])
-                              .toString(),
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
+                          subtitle: Text(
+                            ((product['vendor'] == null ||
+                                        product['vendor'] == 'N/A' ||
+                                        product['vendor'].toString().isEmpty)
+                                    ? 'No Brand'
+                                    : product['vendor'])
+                                .toString(),
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
+                          activeColor: AppTheme.primaryColor,
+                          checkboxShape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
                         ),
-                        activeColor: AppTheme.primaryColor,
-                        checkboxShape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
                       );
                     },
                   ),

@@ -3351,155 +3351,235 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
+            return Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Create New Category',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                  fontSize: 18,
+              elevation: 12,
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Enter name of the category to add to catalog.',
-                    style: GoogleFonts.outfit(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: textCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Category Name',
-                      labelStyle: GoogleFonts.outfit(fontSize: 14),
-                      errorText: errorText,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: AppTheme.borderColor,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // HEADER
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFA7F3D0)),
+                              ),
+                              child: const Icon(
+                                Icons.grid_view_rounded,
+                                color: Color(0xFF059669),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Create Category',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                    fontSize: 17,
+                                  ),
+                                ),
+                                Text(
+                                  'Add new primary product category',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF64748B),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: AppTheme.primaryColor,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                    style: GoogleFonts.outfit(fontSize: 14),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(context),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          final name = textCtrl.text.trim();
-                          if (name.isEmpty) {
-                            setDialogState(
-                              () => errorText = 'Name cannot be empty',
-                            );
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isLoading = true;
-                            errorText = null;
-                          });
-
-                          try {
-                            final response = await ApiClient().post(
-                              '/products/categories',
-                              {'name': name},
-                            );
-
-                            if (response.statusCode == 201) {
-                              final body = jsonDecode(response.body);
-                              if (body['success'] == true) {
-                                // Reload categories
-                                await _loadCategories();
-                                setState(() {
-                                  if (!_formCategories.contains(name)) {
-                                    _formCategories.add(name);
-                                    _updateDosageMethod();
-                                  }
-                                });
-                                if (context.mounted) Navigator.pop(context);
-                                return;
-                              }
-                            }
-
-                            final errMsg =
-                                jsonDecode(response.body)['message'] ??
-                                'Failed to create category';
-                            setDialogState(() {
-                              isLoading = false;
-                              errorText = errMsg;
-                            });
-                          } catch (e) {
-                            setDialogState(() {
-                              isLoading = false;
-                              errorText = 'Error: $e';
-                            });
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                        InkWell(
+                          onTap: isLoading ? null : () => Navigator.pop(dialogCtx),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Color(0xFF64748B),
                             ),
                           ),
-                        )
-                      : Text(
-                          'Create',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Text(
+                      'Category Name *',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: textCtrl,
+                      style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF0F172A)),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Bio-Fertilizers, Insecticides...',
+                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        errorText: errorText,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ACTIONS
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: isLoading ? null : () => Navigator.pop(dialogCtx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  final name = textCtrl.text.trim();
+                                  if (name.isEmpty) {
+                                    setDialogState(
+                                      () => errorText = 'Name cannot be empty',
+                                    );
+                                    return;
+                                  }
+
+                                  setDialogState(() {
+                                    isLoading = true;
+                                    errorText = null;
+                                  });
+
+                                  try {
+                                    final response = await ApiClient().post(
+                                      '/products/categories',
+                                      {'name': name},
+                                    );
+
+                                    if (response.statusCode == 201) {
+                                      final body = jsonDecode(response.body);
+                                      if (body['success'] == true) {
+                                        // Reload categories
+                                        await _loadCategories();
+                                        setState(() {
+                                          if (!_formCategories.contains(name)) {
+                                            _formCategories.add(name);
+                                            _updateDosageMethod();
+                                          }
+                                        });
+                                        if (context.mounted) Navigator.pop(dialogCtx);
+                                        return;
+                                      }
+                                    }
+
+                                    final errMsg =
+                                        jsonDecode(response.body)['message'] ??
+                                        'Failed to create category';
+                                    setDialogState(() {
+                                      isLoading = false;
+                                      errorText = errMsg;
+                                    });
+                                  } catch (e) {
+                                    setDialogState(() {
+                                      isLoading = false;
+                                      errorText = 'Error: $e';
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 10,
+                            ),
+                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  'Create Category',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );
@@ -3526,7 +3606,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             String? categoryId;
@@ -3542,197 +3622,277 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   matchingCat['_id']?.toString();
             }
 
-            return AlertDialog(
+            return Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
-              title: Text(
-                'Create New Sub-category',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                  fontSize: 18,
+              elevation: 12,
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_formCategories.length > 1) ...[
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // HEADER
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: const Icon(
+                                Icons.folder_open_rounded,
+                                color: Color(0xFF2563EB),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Create Sub-category',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                    fontSize: 17,
+                                  ),
+                                ),
+                                Text(
+                                  'Add sub-division under category',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF64748B),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: isLoading ? null : () => Navigator.pop(dialogCtx),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    if (_formCategories.length > 1) ...[
+                      Text(
+                        'Parent Category',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: targetCategoryName,
+                            items: _formCategories
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(
+                                      c,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF0F172A)),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() {
+                                  targetCategoryName = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
                     Text(
-                      'Select Category:',
+                      'Sub-category Name *',
                       style: GoogleFonts.outfit(
-                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
+                        fontSize: 12.5,
+                        color: const Color(0xFF334155),
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.borderColor),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          padding: EdgeInsets.zero,
-                          value: targetCategoryName,
-                          items: _formCategories
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    c,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    style: GoogleFonts.outfit(fontSize: 14),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setDialogState(() {
-                                targetCategoryName = val;
-                              });
-                            }
-                          },
+                    TextField(
+                      controller: textCtrl,
+                      style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF0F172A)),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Granules, Liquid, Organic...',
+                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.label_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        errorText: errorText,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-                  Text(
-                    'Enter sub-category name to add under $targetCategoryName.',
-                    style: GoogleFonts.outfit(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: textCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Sub-category Name',
-                      labelStyle: GoogleFonts.outfit(fontSize: 14),
-                      errorText: errorText,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: AppTheme.borderColor,
+
+                    const SizedBox(height: 24),
+
+                    // ACTIONS
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: isLoading ? null : () => Navigator.pop(dialogCtx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: AppTheme.primaryColor,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                    style: GoogleFonts.outfit(fontSize: 14),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(context),
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.outfit(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading || categoryId == null
-                      ? null
-                      : () async {
-                          final name = textCtrl.text.trim();
-                          if (name.isEmpty) {
-                            setDialogState(
-                              () => errorText = 'Name cannot be empty',
-                            );
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isLoading = true;
-                            errorText = null;
-                          });
-
-                          try {
-                            final response = await ApiClient().post(
-                              '/products/categories/$categoryId/subcategories',
-                              {'name': name},
-                            );
-
-                            if (response.statusCode == 201) {
-                              final body = jsonDecode(response.body);
-                              if (body['success'] == true) {
-                                // Reload categories
-                                await _loadCategories();
-                                setState(() {
-                                  if (!_formSubCategories.contains(name)) {
-                                    _formSubCategories.add(name);
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: isLoading || categoryId == null
+                              ? null
+                              : () async {
+                                  final name = textCtrl.text.trim();
+                                  if (name.isEmpty) {
+                                    setDialogState(
+                                      () => errorText = 'Name cannot be empty',
+                                    );
+                                    return;
                                   }
-                                });
-                                if (context.mounted) Navigator.pop(context);
-                                return;
-                              }
-                            }
 
-                            final errMsg =
-                                jsonDecode(response.body)['message'] ??
-                                'Failed to create sub-category';
-                            setDialogState(() {
-                              isLoading = false;
-                              errorText = errMsg;
-                            });
-                          } catch (e) {
-                            setDialogState(() {
-                              isLoading = false;
-                              errorText = 'Error: $e';
-                            });
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                                  setDialogState(() {
+                                    isLoading = true;
+                                    errorText = null;
+                                  });
+
+                                  try {
+                                    final response = await ApiClient().post(
+                                      '/products/categories/$categoryId/subcategories',
+                                      {'name': name},
+                                    );
+
+                                    if (response.statusCode == 201) {
+                                      final body = jsonDecode(response.body);
+                                      if (body['success'] == true) {
+                                        // Reload categories
+                                        await _loadCategories();
+                                        setState(() {
+                                          if (!_formSubCategories.contains(name)) {
+                                            _formSubCategories.add(name);
+                                          }
+                                        });
+                                        if (context.mounted) Navigator.pop(dialogCtx);
+                                        return;
+                                      }
+                                    }
+
+                                    final errMsg =
+                                        jsonDecode(response.body)['message'] ??
+                                        'Failed to create sub-category';
+                                    setDialogState(() {
+                                      isLoading = false;
+                                      errorText = errMsg;
+                                    });
+                                  } catch (e) {
+                                    setDialogState(() {
+                                      isLoading = false;
+                                      errorText = 'Error: $e';
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 10,
                             ),
                           ),
-                        )
-                      : Text(
-                          'Create',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  'Add Sub-category',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                         ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );
