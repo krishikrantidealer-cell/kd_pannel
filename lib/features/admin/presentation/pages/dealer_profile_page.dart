@@ -85,25 +85,31 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_dealer == null) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Dealer) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Dealer) {
+      if (_dealer == null || _dealer?.id != args.id || _dealer?.phone != args.phone) {
         _dealer = args;
         _agentId = args.agentId;
         _agentName = args.agent;
         _isCacheLoaded = true;
         _saveDealerToCache(_dealer!);
 
-        final bloc = context.read<DealersBloc>();
-        bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
-        bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
+        if (_dealer!.id != null &&
+            _dealer!.id!.isNotEmpty &&
+            RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
+          final bloc = context.read<DealersBloc>();
+          bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
+          bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
+        }
         final identifier =
             (_dealer!.email != null && _dealer!.email!.isNotEmpty)
             ? _dealer!.email!
             : (_dealer!.phone.isNotEmpty
                   ? _dealer!.phone
                   : (_dealer!.id ?? ''));
-        bloc.add(FetchDealerEventsEvent(identifier));
+        if (identifier.isNotEmpty) {
+          context.read<DealersBloc>().add(FetchDealerEventsEvent(identifier));
+        }
 
         // Track profile view event
         AnalyticsService().logEvent(
@@ -114,13 +120,27 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             'details': 'Viewed dealer profile for ${args.name ?? ''}',
           },
         );
-      } else {
-        _loadDealerFromCache();
+
+        WebSocketService().connect();
+        _dealersWsSubscription?.cancel();
+        _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
+          if (mounted && _dealer?.id != null && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
+            final bloc = context.read<DealersBloc>();
+            bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
+            bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
+          }
+        });
+        if (AuthService().isAdmin) {
+          _listenToRealTimeEvents();
+        }
+        _fetchSalesAgents();
       }
+    } else if (_dealer == null) {
+      _loadDealerFromCache();
       WebSocketService().connect();
       _dealersWsSubscription?.cancel();
       _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
-        if (mounted && _dealer?.id != null) {
+        if (mounted && _dealer?.id != null && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
           final bloc = context.read<DealersBloc>();
           bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
           bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
@@ -1084,35 +1104,53 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         : dealersState.salesAgents;
 
     // Dynamic dealer updated by agent selection
-    final currentDealer = dealersState.currentDealerDetails != null
+    final bool isDetailsMatching = dealersState.currentDealerDetails != null &&
+        _dealer?.id != null &&
+        dealersState.currentDealerDetails!['_id']?.toString() == _dealer!.id;
+
+    final currentDealer = isDetailsMatching
         ? Dealer.fromMap(dealersState.currentDealerDetails!)
-        : Dealer(
-            name: _dealer!.name,
-            phone: _dealer!.phone,
-            city: _dealer!.city,
-            state: _dealer!.state,
-            agent: _agentName ?? _dealer!.agent,
-            gstStatus: _dealer!.gstStatus,
-            totalOrders: _orders.length,
-            purchaseValue: _dealer!.purchaseValue,
-            isHighValue: _dealer!.isHighValue,
-            isInactive: _orders.isEmpty,
-            source: _dealer?.source ?? 'App',
-            deepLinkUrl: _dealer?.deepLinkUrl,
-            id: _dealer!.id,
-            agentId: _agentId ?? _dealer!.agentId,
-            licenceImage: _dealer!.licenceImage,
-            shopImage: _dealer!.shopImage,
-            gstNumber: _dealer!.gstNumber,
-            email: _dealer!.email,
-            userType: _dealer!.userType,
-            kycStatus: _dealer!.kycStatus,
-            address: _dealer!.address,
-            isBlocked: _dealer!.isBlocked,
-            status: _dealer!.status,
-            notes: _dealer!.notes,
-            notesHistory: _dealer!.notesHistory,
-          );
+        : (_dealer != null
+            ? Dealer(
+                name: _dealer!.name,
+                phone: _dealer!.phone,
+                city: _dealer!.city,
+                state: _dealer!.state,
+                agent: _agentName ?? _dealer!.agent,
+                gstStatus: _dealer!.gstStatus,
+                totalOrders: _orders.length,
+                purchaseValue: _dealer!.purchaseValue,
+                isHighValue: _dealer!.isHighValue,
+                isInactive: _orders.isEmpty,
+                source: _dealer?.source ?? 'App',
+                deepLinkUrl: _dealer?.deepLinkUrl,
+                id: _dealer!.id,
+                agentId: _agentId ?? _dealer!.agentId,
+                licenceImage: _dealer!.licenceImage,
+                shopImage: _dealer!.shopImage,
+                gstNumber: _dealer!.gstNumber,
+                email: _dealer!.email,
+                userType: _dealer!.userType,
+                kycStatus: _dealer!.kycStatus,
+                shopName: _dealer!.shopName,
+                address: _dealer!.address,
+                isBlocked: _dealer!.isBlocked,
+                status: _dealer!.status,
+                notes: _dealer!.notes,
+                notesHistory: _dealer!.notesHistory,
+              )
+            : Dealer(
+                name: 'Dealer',
+                phone: '',
+                city: '',
+                state: '',
+                agent: '-',
+                gstStatus: 'Pending',
+                totalOrders: 0,
+                purchaseValue: '₹0',
+                isHighValue: false,
+                isInactive: true,
+              ));
 
     final orders = dealersState.currentDealerOrders.isNotEmpty
         ? dealersState.currentDealerOrders

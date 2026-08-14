@@ -72,10 +72,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_lead == null) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Map) {
-        _lead = Map<String, dynamic>.from(args);
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final newLead = Map<String, dynamic>.from(args);
+      final newId = (newLead['_id'] ?? newLead['id'])?.toString();
+      final oldId = (_lead?['_id'] ?? _lead?['id'])?.toString();
+      final newPhone = (newLead['phone'] ?? newLead['phoneNumber'])?.toString();
+      final oldPhone = (_lead?['phone'] ?? _lead?['phoneNumber'])?.toString();
+
+      if (_lead == null || newId != oldId || newPhone != oldPhone) {
+        _lead = newLead;
         _isCacheLoaded = true;
         _saveLeadToCache(_lead!);
         _refreshLeadDetails();
@@ -95,18 +101,18 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         AnalyticsService().logEvent(
           'profile_view',
           properties: {
-            'leadId': _lead!['_id'] ?? '',
+            'leadId': _lead!['_id'] ?? _lead!['id'] ?? '',
             'leadName':
-                '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
-                    .trim(),
+                '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim().isNotEmpty
+                    ? '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim()
+                    : (_lead!['name'] ?? ''),
             'details':
-                'Viewed lead profile for ${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
-                    .trim(),
+                'Viewed lead profile for ${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim(),
           },
         );
-      } else {
-        _loadLeadFromCache();
       }
+    } else if (_lead == null) {
+      _loadLeadFromCache();
     }
   }
 
@@ -161,9 +167,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   }
 
   void _refreshLeadDetails() {
-    final id = _lead?['_id'] ?? _lead?['id'];
-    if (id != null) {
-      context.read<LeadsBloc>().add(FetchLeadDetailsEvent(id.toString()));
+    final id = (_lead?['_id'] ?? _lead?['id'])?.toString();
+    if (id != null && id.isNotEmpty && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(id)) {
+      context.read<LeadsBloc>().add(FetchLeadDetailsEvent(id));
     }
   }
 
@@ -1911,8 +1917,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         }
       },
       builder: (context, state) {
-        final String? leadId = _lead?['_id'] ?? _lead?['id'];
-        Map<String, dynamic>? currentLead = state.currentLeadDetails != null
+        final String? leadId = (_lead?['_id'] ?? _lead?['id'])?.toString();
+        final bool isDetailsMatching = state.currentLeadDetails != null &&
+            leadId != null &&
+            state.currentLeadDetails!['_id']?.toString() == leadId;
+
+        Map<String, dynamic>? currentLead = isDetailsMatching
             ? _mapUserToLead(state.currentLeadDetails!)
             : _lead;
 
@@ -1924,7 +1934,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
         if (leadId != null && state.allRawUsers.isNotEmpty) {
           final rawUser = state.allRawUsers.firstWhere(
-            (u) => u['_id'] == leadId,
+            (u) => u['_id']?.toString() == leadId,
             orElse: () => <String, dynamic>{},
           );
           if (rawUser.isNotEmpty) {

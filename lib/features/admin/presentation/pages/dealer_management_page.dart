@@ -2859,51 +2859,50 @@ class _DealerRowState extends State<_DealerRow> {
               ),
               color: rowBgColor,
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  if (AuthService().isAdmin)
-                    SizedBox(
-                      width: 40,
-                      child: Center(
-                        child: (isHovered || widget.isSelected)
-                            ? _CustomCheckbox(
-                                isSelected: widget.isSelected,
-                                onTap: widget.onToggleSelection,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  Expanded(
-                    flex: 32,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 12,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.dealer.shopName != null &&
-                                    widget.dealer.shopName!.isNotEmpty
-                                ? widget.dealer.shopName!
-                                : 'Unnamed Shop',
-                            style: _shopNameStyle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            widget.dealer.name,
-                            style: _dealerNameStyle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+            child: Row(
+              children: [
+                if (AuthService().isAdmin)
+                  SizedBox(
+                    width: 40,
+                    child: Center(
+                      child: (isHovered || widget.isSelected)
+                          ? _CustomCheckbox(
+                              isSelected: widget.isSelected,
+                              onTap: widget.onToggleSelection,
+                            )
+                          : const SizedBox.shrink(),
                     ),
                   ),
+                Expanded(
+                  flex: 32,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 12,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.dealer.shopName != null &&
+                                  widget.dealer.shopName!.isNotEmpty
+                              ? widget.dealer.shopName!
+                              : 'Unnamed Shop',
+                          style: _shopNameStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          widget.dealer.name,
+                          style: _dealerNameStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                   _cell(widget.dealer.phone, flex: 20, isSecondary: true),
                   _cell(
                     (widget.dealer.city.isNotEmpty &&
@@ -3064,8 +3063,7 @@ class _DealerRowState extends State<_DealerRow> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _cell(
