@@ -41,9 +41,14 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
 
   IconData _getStepIcon(int index, String name) {
     final nameLower = name.toLowerCase();
-    if (nameLower.contains('visit') || nameLower.contains('app') || nameLower.contains('launch') || index == 0) {
+    if (nameLower.contains('visit') ||
+        nameLower.contains('app') ||
+        nameLower.contains('launch') ||
+        index == 0) {
       return Icons.touch_app_rounded;
-    } else if (nameLower.contains('search') || nameLower.contains('view') || nameLower.contains('product')) {
+    } else if (nameLower.contains('search') ||
+        nameLower.contains('view') ||
+        nameLower.contains('product')) {
       return Icons.search_rounded;
     } else if (nameLower.contains('cart') || nameLower.contains('add')) {
       return Icons.shopping_cart_rounded;
@@ -55,7 +60,8 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
   }
 
   String _getStepRecommendation(int index, double dropOffPercent) {
-    if (index == 0) return 'Top of funnel audience. Focus on high-converting landing pages.';
+    if (index == 0)
+      return 'Top of funnel audience. Focus on high-converting landing pages.';
     if (dropOffPercent > 50) {
       return 'Critical Drop-off (${dropOffPercent.toStringAsFixed(1)}%)! High churn step requiring immediate campaign/UX optimization.';
     } else if (dropOffPercent > 25) {
@@ -75,7 +81,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       return _buildEmptyState();
     }
 
-    final maxCount = widget.steps.first.userCount > 0 ? widget.steps.first.userCount : 1;
+    final maxCount = widget.steps.first.userCount > 0
+        ? widget.steps.first.userCount
+        : 1;
     final finalStep = widget.steps.last;
     final overallConversion = finalStep.conversionRate;
 
@@ -118,7 +126,13 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
             const SizedBox(height: 20),
 
             // KPI Metric Summary Grid
-            _buildKpiSummary(maxCount, finalStep.userCount, overallConversion, maxDropIndex, maxDropPercent),
+            _buildKpiSummary(
+              maxCount,
+              finalStep.userCount,
+              overallConversion,
+              maxDropIndex,
+              maxDropPercent,
+            ),
 
             const SizedBox(height: 24),
 
@@ -136,9 +150,13 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
               _buildMetricsView(maxCount),
 
             // Detailed Selected Step Inspector Card
-            if (_selectedIndex != null && _selectedIndex! < widget.steps.length) ...[
+            if (_selectedIndex != null &&
+                _selectedIndex! < widget.steps.length) ...[
               const SizedBox(height: 20),
-              _buildStepDetailCard(widget.steps[_selectedIndex!], _selectedIndex!),
+              _buildStepDetailCard(
+                widget.steps[_selectedIndex!],
+                _selectedIndex!,
+              ),
             ],
           ],
         ),
@@ -168,7 +186,11 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.filter_alt_rounded, color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.filter_alt_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 14),
             Column(
@@ -187,26 +209,39 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                     ),
                     const SizedBox(width: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: overallConversion > 15
                             ? Colors.green.shade50
-                            : (overallConversion > 5 ? Colors.amber.shade50 : Colors.red.shade50),
+                            : (overallConversion > 5
+                                  ? Colors.amber.shade50
+                                  : Colors.red.shade50),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: overallConversion > 15
                               ? Colors.green.shade300
-                              : (overallConversion > 5 ? Colors.amber.shade300 : Colors.red.shade300),
+                              : (overallConversion > 5
+                                    ? Colors.amber.shade300
+                                    : Colors.red.shade300),
                         ),
                       ),
                       child: Text(
-                        overallConversion > 15 ? 'HIGH CONVERSION' : (overallConversion > 5 ? 'HEALTHY' : 'NEEDS ATTENTION'),
+                        overallConversion > 15
+                            ? 'HIGH CONVERSION'
+                            : (overallConversion > 5
+                                  ? 'HEALTHY'
+                                  : 'NEEDS ATTENTION'),
                         style: GoogleFonts.outfit(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           color: overallConversion > 15
                               ? Colors.green.shade800
-                              : (overallConversion > 5 ? Colors.amber.shade900 : Colors.red.shade800),
+                              : (overallConversion > 5
+                                    ? Colors.amber.shade900
+                                    : Colors.red.shade800),
                         ),
                       ),
                     ),
@@ -228,7 +263,13 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
     );
   }
 
-  Widget _buildKpiSummary(int initialAudience, int convertedBuyers, double overallRate, int maxDropIndex, double maxDropPercent) {
+  Widget _buildKpiSummary(
+    int initialAudience,
+    int convertedBuyers,
+    double overallRate,
+    int maxDropIndex,
+    double maxDropPercent,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 700;
@@ -240,10 +281,14 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
               child: _buildKpiCard(
                 title: 'OVERALL CONVERSION RATE',
                 value: '${overallRate.toStringAsFixed(1)}%',
-                subtitle: '$convertedBuyers converted out of $initialAudience dealers',
+                subtitle:
+                    '$convertedBuyers converted out of $initialAudience dealers',
                 icon: Icons.auto_graph_rounded,
                 color: const Color(0xFF00897B),
-                gradientColors: [const Color(0xFF00897B), const Color(0xFF004D40)],
+                gradientColors: [
+                  const Color(0xFF00897B),
+                  const Color(0xFF004D40),
+                ],
               ),
             ),
             SizedBox(width: isCompact ? 0 : 12, height: isCompact ? 10 : 0),
@@ -255,7 +300,10 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                 subtitle: 'Placed ≥1 completed non-cancelled order',
                 icon: Icons.verified_user_rounded,
                 color: const Color(0xFF1E88E5),
-                gradientColors: [const Color(0xFF1E88E5), const Color(0xFF1565C0)],
+                gradientColors: [
+                  const Color(0xFF1E88E5),
+                  const Color(0xFF1565C0),
+                ],
               ),
             ),
             SizedBox(width: isCompact ? 0 : 12, height: isCompact ? 10 : 0),
@@ -263,11 +311,18 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
               flex: isCompact ? 0 : 1,
               child: _buildKpiCard(
                 title: 'HIGHEST CHURN STEP',
-                value: maxDropIndex > 0 ? widget.steps[maxDropIndex].stepName : 'None',
-                subtitle: maxDropIndex > 0 ? '${maxDropPercent.toStringAsFixed(1)}% lost at this milestone' : 'Smooth conversion flow',
+                value: maxDropIndex > 0
+                    ? widget.steps[maxDropIndex].stepName
+                    : 'None',
+                subtitle: maxDropIndex > 0
+                    ? '${maxDropPercent.toStringAsFixed(1)}% lost at this milestone'
+                    : 'Smooth conversion flow',
                 icon: Icons.trending_down_rounded,
                 color: const Color(0xFFE53935),
-                gradientColors: [const Color(0xFFE53935), const Color(0xFFC62828)],
+                gradientColors: [
+                  const Color(0xFFE53935),
+                  const Color(0xFFC62828),
+                ],
               ),
             ),
           ],
@@ -299,7 +354,11 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
               gradient: LinearGradient(colors: gradientColors),
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
-                BoxShadow(color: color.withOpacity(0.25), blurRadius: 6, offset: const Offset(0, 2)),
+                BoxShadow(
+                  color: color.withOpacity(0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
               ],
             ),
             child: Icon(icon, color: Colors.white, size: 18),
@@ -349,9 +408,17 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
 
   Widget _buildViewModeSelector() {
     final modes = [
-      {'id': 'Flow', 'label': 'Funnel Flow', 'icon': Icons.account_tree_rounded},
+      {
+        'id': 'Flow',
+        'label': 'Funnel Flow',
+        'icon': Icons.account_tree_rounded,
+      },
       {'id': 'Bars', 'label': 'Progress Bars', 'icon': Icons.bar_chart_rounded},
-      {'id': 'Metrics', 'label': 'Drop-off Matrix', 'icon': Icons.grid_view_rounded},
+      {
+        'id': 'Metrics',
+        'label': 'Drop-off Matrix',
+        'icon': Icons.grid_view_rounded,
+      },
     ];
 
     return Row(
@@ -377,12 +444,18 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
             children: modes.map((m) {
               final isSelected = _selectedViewMode == m['id'];
               return InkWell(
-                onTap: () => setState(() => _selectedViewMode = m['id'] as String),
+                onTap: () =>
+                    setState(() => _selectedViewMode = m['id'] as String),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -390,15 +463,21 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                       Icon(
                         m['icon'] as IconData,
                         size: 14,
-                        color: isSelected ? Colors.white : AppTheme.textSecondary,
+                        color: isSelected
+                            ? Colors.white
+                            : AppTheme.textSecondary,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         m['label'] as String,
                         style: GoogleFonts.outfit(
                           fontSize: 11,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                          color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : AppTheme.textSecondary,
                         ),
                       ),
                     ],
@@ -419,14 +498,20 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
         final isHovered = _hoveredIndex == index;
         final isSelected = _selectedIndex == index;
 
-        final double widthRatio = maxCount > 0 ? (step.userCount / maxCount).clamp(0.12, 1.0) : 0.12;
+        final double widthRatio = maxCount > 0
+            ? (step.userCount / maxCount).clamp(0.12, 1.0)
+            : 0.12;
 
-        final double dropOffPercent = index > 0 && widget.steps[index - 1].userCount > 0
-            ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100).clamp(0.0, 100.0)
+        final double dropOffPercent =
+            index > 0 && widget.steps[index - 1].userCount > 0
+            ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100)
+                  .clamp(0.0, 100.0)
             : 0.0;
 
-        final double stepToStepRetained = index > 0 && widget.steps[index - 1].userCount > 0
-            ? ((step.userCount / widget.steps[index - 1].userCount) * 100).clamp(0.0, 100.0)
+        final double stepToStepRetained =
+            index > 0 && widget.steps[index - 1].userCount > 0
+            ? ((step.userCount / widget.steps[index - 1].userCount) * 100)
+                  .clamp(0.0, 100.0)
             : 100.0;
 
         return Column(
@@ -445,21 +530,32 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                     ),
                     const SizedBox(width: 14),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
-                        color: dropOffPercent > 40 ? Colors.red.shade50 : Colors.grey.shade100,
+                        color: dropOffPercent > 40
+                            ? Colors.red.shade50
+                            : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: dropOffPercent > 40 ? Colors.red.shade200 : Colors.grey.shade300,
+                          color: dropOffPercent > 40
+                              ? Colors.red.shade200
+                              : Colors.grey.shade300,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            dropOffPercent > 40 ? Icons.warning_amber_rounded : Icons.south_rounded,
+                            dropOffPercent > 40
+                                ? Icons.warning_amber_rounded
+                                : Icons.south_rounded,
                             size: 12,
-                            color: dropOffPercent > 40 ? Colors.red.shade700 : AppTheme.textSecondary,
+                            color: dropOffPercent > 40
+                                ? Colors.red.shade700
+                                : AppTheme.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -467,7 +563,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                             style: GoogleFonts.outfit(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: dropOffPercent > 40 ? Colors.red.shade800 : AppTheme.textSecondary,
+                              color: dropOffPercent > 40
+                                  ? Colors.red.shade800
+                                  : AppTheme.textSecondary,
                             ),
                           ),
                         ],
@@ -494,12 +592,16 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? step.stepColor.withOpacity(0.08)
-                        : (isHovered ? step.stepColor.withOpacity(0.03) : AppTheme.cardColor),
+                        : (isHovered
+                              ? step.stepColor.withOpacity(0.03)
+                              : AppTheme.cardColor),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isSelected
                           ? step.stepColor
-                          : (isHovered ? step.stepColor.withOpacity(0.5) : AppTheme.borderColor),
+                          : (isHovered
+                                ? step.stepColor.withOpacity(0.5)
+                                : AppTheme.borderColor),
                       width: isSelected ? 2 : 1,
                     ),
                     boxShadow: isHovered || isSelected
@@ -508,7 +610,7 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                               color: step.stepColor.withOpacity(0.12),
                               blurRadius: 12,
                               offset: const Offset(0, 3),
-                            )
+                            ),
                           ]
                         : null,
                   ),
@@ -521,7 +623,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                         decoration: BoxDecoration(
                           color: step.stepColor.withOpacity(0.12),
                           shape: BoxShape.circle,
-                          border: Border.all(color: step.stepColor.withOpacity(0.3)),
+                          border: Border.all(
+                            color: step.stepColor.withOpacity(0.3),
+                          ),
                         ),
                         child: Center(
                           child: Icon(
@@ -597,11 +701,14 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                                       ),
                                     ],
                                   ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
                                   alignment: Alignment.centerLeft,
                                   child: ClipRect(
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Flexible(
                                           child: Text(
@@ -615,7 +722,8 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                                             ),
                                           ),
                                         ),
-                                        if (constraints.maxWidth * widthRatio > 240) ...[
+                                        if (constraints.maxWidth * widthRatio >
+                                            240) ...[
                                           const SizedBox(width: 8),
                                           Flexible(
                                             child: Text(
@@ -625,7 +733,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                                               style: GoogleFonts.outfit(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.white.withOpacity(0.9),
+                                                color: Colors.white.withOpacity(
+                                                  0.9,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -645,11 +755,16 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                       // Conversion Badge
                       Container(
                         width: 80,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: step.stepColor.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: step.stepColor.withOpacity(0.2)),
+                          border: Border.all(
+                            color: step.stepColor.withOpacity(0.2),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -688,7 +803,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       children: List.generate(widget.steps.length, (index) {
         final step = widget.steps[index];
         final isSelected = _selectedIndex == index;
-        final double widthRatio = maxCount > 0 ? (step.userCount / maxCount).clamp(0.05, 1.0) : 0.05;
+        final double widthRatio = maxCount > 0
+            ? (step.userCount / maxCount).clamp(0.05, 1.0)
+            : 0.05;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -709,12 +826,16 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                 decoration: BoxDecoration(
                   color: isSelected
                       ? step.stepColor.withOpacity(0.08)
-                      : (_hoveredIndex == index ? step.stepColor.withOpacity(0.03) : AppTheme.cardColor),
+                      : (_hoveredIndex == index
+                            ? step.stepColor.withOpacity(0.03)
+                            : AppTheme.cardColor),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
                         ? step.stepColor
-                        : (_hoveredIndex == index ? step.stepColor.withOpacity(0.5) : AppTheme.borderColor),
+                        : (_hoveredIndex == index
+                              ? step.stepColor.withOpacity(0.5)
+                              : AppTheme.borderColor),
                     width: isSelected ? 2 : 1,
                   ),
                 ),
@@ -727,7 +848,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: isSelected ? step.stepColor : AppTheme.textPrimary,
+                          color: isSelected
+                              ? step.stepColor
+                              : AppTheme.textPrimary,
                         ),
                       ),
                     ),
@@ -744,7 +867,10 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 500),
                             height: 24,
-                            width: MediaQuery.of(context).size.width * widthRatio * 0.4,
+                            width:
+                                MediaQuery.of(context).size.width *
+                                widthRatio *
+                                0.4,
                             decoration: BoxDecoration(
                               color: step.stepColor,
                               borderRadius: BorderRadius.circular(6),
@@ -786,8 +912,10 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       itemBuilder: (context, index) {
         final step = widget.steps[index];
         final isSelected = _selectedIndex == index;
-        final dropOffPercent = index > 0 && widget.steps[index - 1].userCount > 0
-            ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100).clamp(0.0, 100.0)
+        final dropOffPercent =
+            index > 0 && widget.steps[index - 1].userCount > 0
+            ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100)
+                  .clamp(0.0, 100.0)
             : 0.0;
 
         return MouseRegion(
@@ -807,12 +935,16 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
               decoration: BoxDecoration(
                 color: isSelected
                     ? step.stepColor.withOpacity(0.08)
-                    : (_hoveredIndex == index ? step.stepColor.withOpacity(0.03) : step.stepColor.withOpacity(0.04)),
+                    : (_hoveredIndex == index
+                          ? step.stepColor.withOpacity(0.03)
+                          : step.stepColor.withOpacity(0.04)),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isSelected
                       ? step.stepColor
-                      : (_hoveredIndex == index ? step.stepColor.withOpacity(0.5) : step.stepColor.withOpacity(0.2)),
+                      : (_hoveredIndex == index
+                            ? step.stepColor.withOpacity(0.5)
+                            : step.stepColor.withOpacity(0.2)),
                   width: isSelected ? 2 : 1,
                 ),
               ),
@@ -832,7 +964,11 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      Icon(_getStepIcon(index, step.stepName), size: 16, color: step.stepColor),
+                      Icon(
+                        _getStepIcon(index, step.stepName),
+                        size: 16,
+                        color: step.stepColor,
+                      ),
                     ],
                   ),
                   Row(
@@ -898,7 +1034,8 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
 
   Widget _buildStepDetailCard(FunnelStepData step, int index) {
     final dropOffPercent = index > 0 && widget.steps[index - 1].userCount > 0
-        ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100).clamp(0.0, 100.0)
+        ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100)
+              .clamp(0.0, 100.0)
         : 0.0;
 
     return Container(
@@ -963,7 +1100,10 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -973,12 +1113,19 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                     const SizedBox(
                       width: 12,
                       height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Aggregating database milestones...',
-                      style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryColor),
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryColor,
+                      ),
                     ),
                   ],
                 ),
@@ -986,16 +1133,19 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
             ],
           ),
           const SizedBox(height: 24),
-          ...List.generate(4, (i) => Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
+          ...List.generate(
+            4,
+            (i) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
-          )),
+          ),
         ],
       ),
     );
@@ -1012,16 +1162,27 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.filter_alt_off_rounded, size: 48, color: Colors.grey.shade400),
+            Icon(
+              Icons.filter_alt_off_rounded,
+              size: 48,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 12),
             Text(
               'No Conversion Funnel Records Found',
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'No order or milestone data matches the selected time range filter.',
-              style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ],
         ),
