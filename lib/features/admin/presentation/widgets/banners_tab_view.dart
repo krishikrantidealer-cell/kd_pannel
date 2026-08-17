@@ -259,6 +259,10 @@ class _BannersTabViewState extends State<BannersTabView> {
         return const Color(0xFF8B5CF6);
       case 'best_offers':
         return const Color(0xFFF59E0B);
+      case 'home_trust':
+        return const Color(0xFF059669);
+      case 'category_trust':
+        return const Color(0xFF0284C7);
       default:
         return const Color(0xFF6B7280);
     }
@@ -276,6 +280,10 @@ class _BannersTabViewState extends State<BannersTabView> {
         return 'Category Card';
       case 'best_offers':
         return 'Best Offers';
+      case 'home_trust':
+        return 'Home Trust';
+      case 'category_trust':
+        return 'Category Trust';
       default:
         return type.toUpperCase();
     }
@@ -469,6 +477,10 @@ class _BannersTabViewState extends State<BannersTabView> {
                           _buildFilterChip('category_card', 'Category Card'),
                           const SizedBox(width: 6),
                           _buildFilterChip('best_offers', 'Best Offers'),
+                          const SizedBox(width: 6),
+                          _buildFilterChip('home_trust', 'Home Trust'),
+                          const SizedBox(width: 6),
+                          _buildFilterChip('category_trust', 'Category Trust'),
                         ],
                       ),
                     ),
@@ -1205,6 +1217,18 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
           'resolution': '800 × 450 px',
           'description': 'Best Offers Showcase Section',
         };
+      case 'home_trust':
+        return {
+          'ratio': '3.3 : 1',
+          'resolution': '1200 × 360 px',
+          'description': 'Home Screen Trust Badges Footer Banner',
+        };
+      case 'category_trust':
+        return {
+          'ratio': '5 : 1',
+          'resolution': '1200 × 240 px',
+          'description': 'Category Screen Trust Badges Footer Banner',
+        };
       default:
         return {
           'ratio': '16 : 9',
@@ -1937,6 +1961,8 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                                             DropdownMenuItem(value: 'category', child: Text('Category Top Banner')),
                                             DropdownMenuItem(value: 'category_card', child: Text('Category Card Banner')),
                                             DropdownMenuItem(value: 'best_offers', child: Text('Best Offers Showcase')),
+                                            DropdownMenuItem(value: 'home_trust', child: Text('Home Trust Badges Banner')),
+                                            DropdownMenuItem(value: 'category_trust', child: Text('Category Trust Badges Banner')),
                                           ],
                                           onChanged: (val) {
                                             if (val != null) setState(() => _selectedType = val);
@@ -2118,6 +2144,12 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                                       hintText: 'Enter descriptive title or pick from placement above...',
                                       prefixIcon: Icons.title_rounded,
                                     ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) {
+                                        return 'Banner title is required';
+                                      }
+                                      return null;
+                                    },
                                   ),
                                 ],
                               ),
@@ -2567,7 +2599,11 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                                                 ? 6 / 1
                                                 : _selectedType == 'category_card'
                                                     ? 1.2 / 1
-                                                    : 2.2 / 1,
+                                                    : _selectedType == 'home_trust'
+                                                        ? 3.3 / 1
+                                                        : _selectedType == 'category_trust'
+                                                            ? 5 / 1
+                                                            : 2.2 / 1,
                                             child: _pickedImageFile != null
                                                 ? Image.memory(_pickedImageFile!.bytes!, fit: BoxFit.cover)
                                                 : (existingImageUrl != null && existingImageUrl.isNotEmpty)
