@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/services/pincode_service.dart';
 
 class CreateDealerDialog extends StatefulWidget {
   final List<Map<String, dynamic>> salesAgents;
@@ -54,6 +55,8 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
 
   String _selectedState = 'Madhya Pradesh';
   String? _selectedAgentId;
+  bool _isFetchingLocation = false;
+  String? _pincodeFeedback;
 
   static const List<String> _indianStates = [
     'Andhra Pradesh',
@@ -101,6 +104,7 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
     if (auth.isSales) {
       _selectedAgentId = auth.currentUserId;
     }
+    PincodeService().init();
   }
 
   @override
@@ -117,6 +121,68 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
     _pincodeController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePincodeChange(String val) async {
+    final cleanPin = val.trim().replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanPin.length != 6) {
+      if (_pincodeFeedback != null) {
+        setState(() {
+          _pincodeFeedback = null;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _isFetchingLocation = true;
+      _pincodeFeedback = null;
+    });
+
+    try {
+      await PincodeService().init();
+      final resolved = await PincodeService().resolve(cleanPin);
+      if (!mounted) return;
+
+      if (resolved) {
+        final data = PincodeService().lookup(cleanPin);
+        if (data != null) {
+          final district = data['district'] ?? '';
+          final rawState = data['state'] ?? '';
+
+          // Match state in predefined list
+          final matchedState = _indianStates.firstWhere(
+            (s) =>
+                s.toLowerCase() == rawState.toLowerCase() ||
+                s.toLowerCase().contains(rawState.toLowerCase()) ||
+                rawState.toLowerCase().contains(s.toLowerCase()),
+            orElse: () => _selectedState,
+          );
+
+          setState(() {
+            if (district.isNotEmpty) {
+              _cityController.text = district;
+            }
+            if (matchedState.isNotEmpty) {
+              _selectedState = matchedState;
+            }
+            _isFetchingLocation = false;
+            _pincodeFeedback = '✓ Location auto-filled: $district, $matchedState';
+          });
+          return;
+        }
+      }
+      setState(() {
+        _isFetchingLocation = false;
+        _pincodeFeedback = 'Pincode not found in directory. Please enter manually.';
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFetchingLocation = false;
+        });
+      }
+    }
   }
 
   void _handleSubmit() {
@@ -355,8 +421,75 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
                       ],
 
                       const SizedBox(height: 20),
-                      // Section 2: Address
+                      // Section 2: Address with Pincode Auto-Lookup
                       _buildSectionTitle('2. Location & Address', Icons.location_on_rounded),
+                      const SizedBox(height: 12),
+
+                      // Pincode Input (with auto lookup)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildInputField(
+                              label: 'Pincode (6 digits) *',
+                              controller: _pincodeController,
+                              hint: 'e.g. 452001',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(6),
+                              ],
+                              onChanged: _handlePincodeChange,
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) return 'Pincode required';
+                                if (val.trim().length != 6) return 'Must be 6 digits';
+                                return null;
+                              },
+                              suffixWidget: _isFetchingLocation
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (_pincodeFeedback != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              _pincodeFeedback!.startsWith('✓')
+                                  ? Icons.check_circle_rounded
+                                  : Icons.info_outline_rounded,
+                              size: 14,
+                              color: _pincodeFeedback!.startsWith('✓')
+                                  ? AppTheme.success
+                                  : AppTheme.warning,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _pincodeFeedback!,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _pincodeFeedback!.startsWith('✓')
+                                      ? AppTheme.success
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
                       const SizedBox(height: 12),
 
                       _buildInputField(
@@ -369,30 +502,19 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
 
                       if (isMobile) ...[
                         _buildInputField(
-                          label: 'City / Tehsil *',
+                          label: 'City / Tehsil (Auto-filled) *',
                           controller: _cityController,
                           hint: 'e.g. Indore',
                           validator: (val) => val == null || val.trim().isEmpty ? 'City required' : null,
                         ),
                         const SizedBox(height: 12),
                         _buildStateDropdown(),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          label: 'Pincode (6 digits)',
-                          controller: _pincodeController,
-                          hint: '452001',
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
-                        ),
                       ] else ...[
                         Row(
                           children: [
                             Expanded(
                               child: _buildInputField(
-                                label: 'City / Tehsil *',
+                                label: 'City / Tehsil (Auto-filled) *',
                                 controller: _cityController,
                                 hint: 'e.g. Indore',
                                 validator: (val) => val == null || val.trim().isEmpty ? 'City required' : null,
@@ -400,19 +522,6 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
                             ),
                             const SizedBox(width: 14),
                             Expanded(child: _buildStateDropdown()),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: _buildInputField(
-                                label: 'Pincode (6 digits)',
-                                controller: _pincodeController,
-                                hint: '452001',
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(6),
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       ],
@@ -525,6 +634,8 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
+    void Function(String)? onChanged,
+    Widget? suffixWidget,
     TextCapitalization textCapitalization = TextCapitalization.none,
     int maxLines = 1,
   }) {
@@ -545,6 +656,7 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
           validator: validator,
+          onChanged: onChanged,
           textCapitalization: textCapitalization,
           maxLines: maxLines,
           style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textPrimary),
@@ -553,6 +665,12 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
             hintStyle: GoogleFonts.outfit(color: const Color(0xFF9CA3AF), fontSize: 14),
             prefixText: prefixText,
             prefixStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+            suffixIcon: suffixWidget != null
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Center(widthFactor: 1, child: suffixWidget),
+                  )
+                : null,
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -583,7 +701,7 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'State *',
+          'State (Auto-selected) *',
           style: GoogleFonts.outfit(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -600,7 +718,7 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: _selectedState,
+              value: _indianStates.contains(_selectedState) ? _selectedState : _indianStates.first,
               isExpanded: true,
               icon: const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.textSecondary),
               style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textPrimary),
