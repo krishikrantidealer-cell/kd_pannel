@@ -58,6 +58,145 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   Map<String, bool> _cachedHighPriority = {};
   Map<String, String> _cachedPriorityReason = {};
   Map<String, String> _cachedUserTypes = {};
+  Set<String>? _cachedAssignedUserKeys;
+
+  String _normalizeId(dynamic id) {
+    if (id == null) return '';
+    if (id is Map) {
+      if (id.containsKey(r'$oid')) return id[r'$oid'].toString();
+      if (id.containsKey('_id')) return _normalizeId(id['_id']);
+      if (id.containsKey('id')) return _normalizeId(id['id']);
+    }
+    final str = id.toString();
+    if (str.startsWith('ObjectId("') && str.endsWith('")')) {
+      return str.substring(10, str.length - 2);
+    }
+    if (str.startsWith("ObjectId('") && str.endsWith("')")) {
+      return str.substring(10, str.length - 2);
+    }
+    return str;
+  }
+
+  bool _isKnownSalesAgent(String? identifier) {
+    if (identifier == null) return false;
+    final lower = identifier.trim().toLowerCase();
+    if (lower.isEmpty) return false;
+    if (lower == 'admin' ||
+        lower == 'sales' ||
+        lower.contains('admin') ||
+        lower.contains('sales')) {
+      return true;
+    }
+
+    final cleanDigits = lower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanDigits.length >= 10
+        ? cleanDigits.substring(cleanDigits.length - 10)
+        : '';
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final leadsState = context.read<LeadsBloc>().state;
+      final allSalesAgents = [
+        ...dealersState.salesAgents,
+        ...leadsState.salesAgents,
+      ];
+      return allSalesAgents.any((a) {
+        final fn =
+            '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim().toLowerCase();
+        final name = (a['name'] ?? '').toString().trim().toLowerCase();
+        final email = (a['email'] ?? '').toString().trim().toLowerCase();
+        final phone = (a['phoneNumber'] ?? a['phone'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final p10 =
+            cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+        final uid = _normalizeId(a['_id'] ?? a['id']).toLowerCase();
+
+        return (fn.isNotEmpty && fn == lower) ||
+            (name.isNotEmpty && name == lower) ||
+            (email.isNotEmpty && email == lower) ||
+            (phone.isNotEmpty && phone == lower) ||
+            (last10.isNotEmpty && p10 == last10) ||
+            (uid.isNotEmpty && uid == lower);
+      });
+    } catch (_) {}
+    return false;
+  }
+
+  void _buildUserLookupIndexes() {
+    final assignedKeys = <String>{};
+    final currentUserId =
+        _normalizeId(AuthService().currentUserId).toLowerCase();
+    final currentUserEmail =
+        (AuthService().currentUserEmail ?? '').toLowerCase();
+
+    bool isRawUserAssigned(Map<String, dynamic> u) {
+      final assignedAgent =
+          u['assignedAgent'] ?? u['assignedSalesAgent'] ?? u['salesAgent'];
+      if (assignedAgent != null) {
+        if (assignedAgent is Map) {
+          final aId = _normalizeId(
+            assignedAgent['_id'] ??
+                assignedAgent[r'$oid'] ??
+                assignedAgent['id'],
+          ).toLowerCase();
+          final aEmail =
+              (assignedAgent['email'] ?? '').toString().toLowerCase();
+          return (currentUserId.isNotEmpty && aId == currentUserId) ||
+              (currentUserEmail.isNotEmpty && aEmail == currentUserEmail);
+        } else if (assignedAgent is String) {
+          final aId = _normalizeId(assignedAgent).toLowerCase();
+          return (currentUserId.isNotEmpty && aId == currentUserId) ||
+              (currentUserEmail.isNotEmpty && aId == currentUserEmail);
+        }
+      }
+      return false;
+    }
+
+    void indexUser(Map<String, dynamic> u) {
+      final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+      if (dbRole != 'user') return;
+
+      final uId = _normalizeId(u['_id']).toLowerCase();
+      final uEmail = (u['email'] ?? '').toString().toLowerCase();
+      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
+      final cleanPhone = uPhone.replaceAll(RegExp(r'\D'), '');
+      final uName =
+          '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim().toLowerCase();
+      final uShop = (u['shopName'] ?? '').toString().trim().toLowerCase();
+
+      if (isRawUserAssigned(u)) {
+        if (uId.isNotEmpty) assignedKeys.add(uId);
+        if (uEmail.isNotEmpty) assignedKeys.add(uEmail);
+        if (uPhone.isNotEmpty) {
+          assignedKeys.add(uPhone.toLowerCase());
+          if (cleanPhone.length >= 10) {
+            assignedKeys.add(cleanPhone.substring(cleanPhone.length - 10));
+          }
+        }
+        if (uName.isNotEmpty) assignedKeys.add(uName);
+        if (uShop.isNotEmpty) assignedKeys.add(uShop);
+      }
+    }
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      for (final u in dealersState.allRawUsers) {
+        indexUser(u);
+      }
+    } catch (_) {}
+
+    try {
+      final leadsState = context.read<LeadsBloc>().state;
+      for (final u in leadsState.allRawUsers) {
+        indexUser(u);
+      }
+    } catch (_) {}
+
+    _cachedAssignedUserKeys = assignedKeys;
+  }
 
   @override
   void initState() {
@@ -187,11 +326,12 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     if (_isRebuildingCache) return;
     _isRebuildingCache = true;
     try {
+      _buildUserLookupIndexes();
       final Map<String, Map<String, List<Map<String, dynamic>>>>
       userEventsGrouped = {};
       final Set<String> usersSet = {};
 
-      // 1. Group events by user and category (only users with actual event logs)
+      // 1. Group events by user and category (only users with actual event logs who are assigned)
       _eventsLogs.forEach((category, logs) {
         for (final log in logs) {
           final String? userName = log['user'] as String?;
@@ -199,6 +339,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
             if (_isUserAssignedToSales(
               rawUser: _nameToId[userName] ?? userName,
               displayName: userName,
+              displayPhone: log['userPhone']?.toString(),
               userDetails: log['userDetails'],
             )) {
               usersSet.add(userName);
@@ -212,11 +353,14 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
       final Map<String, String> userTypes = {};
 
-      // Populate user types and add all assigned dealers and leads
+      // Populate user types and add all assigned dealers and leads (only role == 'user')
       try {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
-          final String rawUser = (u['_id'] ?? '').toString();
+          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+          if (dbRole != 'user') continue;
+
+          final String rawUser = _normalizeId(u['_id']);
           final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
               .toString();
           String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
@@ -249,6 +393,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           if (_isUserAssignedToSales(
             rawUser: rawUser,
             displayName: displayName,
+            displayPhone: displayPhone,
             userDetails: u,
           )) {
             usersSet.add(displayName);
@@ -259,7 +404,10 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       try {
         final leadsState = context.read<LeadsBloc>().state;
         for (final u in leadsState.allRawUsers) {
-          final String rawUser = (u['_id'] ?? '').toString();
+          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+          if (dbRole != 'user') continue;
+
+          final String rawUser = _normalizeId(u['_id']);
           final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
               .toString();
           String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
@@ -292,6 +440,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           if (_isUserAssignedToSales(
             rawUser: rawUser,
             displayName: displayName,
+            displayPhone: displayPhone,
             userDetails: u,
           )) {
             usersSet.add(displayName);
@@ -299,13 +448,14 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         }
       } catch (_) {}
 
-      // Add currently active online real-time users
+      // Add currently active online real-time users (only if assigned to this agent)
       for (final u in _realTimeUsers) {
         final uName = (u['userName'] ?? u['user'] ?? '').toString();
         if (uName.isNotEmpty && uName != 'New Customer' && uName != 'Guest') {
           if (_isUserAssignedToSales(
             rawUser: (u['user'] ?? '').toString(),
             displayName: uName,
+            displayPhone: (u['userPhone'] ?? '').toString(),
             userDetails: u,
           )) {
             usersSet.add(uName);
@@ -459,6 +609,44 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       }
       return false;
     }
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final leadsState = context.read<LeadsBloc>().state;
+      final allSalesAgents = [
+        ...dealersState.salesAgents,
+        ...leadsState.salesAgents,
+      ];
+      final matchedSalesAgent = allSalesAgents.firstWhere(
+        isMatch,
+        orElse: () => <String, dynamic>{},
+      );
+      if (matchedSalesAgent.isNotEmpty) {
+        final fName =
+            '${matchedSalesAgent['firstName'] ?? ''} ${matchedSalesAgent['lastName'] ?? ''}'
+                .trim();
+        final sName = (matchedSalesAgent['name'] ?? '').toString().trim();
+        final p = (matchedSalesAgent['phoneNumber'] ??
+                matchedSalesAgent['phone'] ??
+                '')
+            .toString()
+            .trim();
+        final id = (matchedSalesAgent['_id'] ??
+                matchedSalesAgent['id'] ??
+                cleanRaw)
+            .toString();
+        String name = fName.isNotEmpty
+            ? fName
+            : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Sales Agent'));
+        return {
+          'name': name,
+          'phone': p.isNotEmpty ? p : cleanPhone,
+          'id': id,
+          'userDetails': matchedSalesAgent,
+          'userType': 'Sales',
+        };
+      }
+    } catch (_) {}
 
     try {
       final dealersState = context.read<DealersBloc>().state;
@@ -639,23 +827,66 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   bool _isUserAssignedToSales({
     required String rawUser,
     required String displayName,
+    String? displayPhone,
     Map<String, dynamic>? userDetails,
   }) {
+    if (_isKnownSalesAgent(rawUser) ||
+        _isKnownSalesAgent(displayName) ||
+        _isKnownSalesAgent(displayPhone)) {
+      return false;
+    }
+
     final curEmail = AuthService().currentUserEmail?.toLowerCase() ?? '';
-    final curUid = AuthService().currentUserId?.toLowerCase() ?? '';
-    if (curEmail.isEmpty && curUid.isEmpty) return true;
+    final curUid = _normalizeId(AuthService().currentUserId).toLowerCase();
+    if (curEmail.isEmpty && curUid.isEmpty) return false;
 
     if (userDetails != null) {
+      final dbRole = (userDetails['role'] ?? 'user').toString().toLowerCase();
+      if (dbRole != 'user') return false;
+
       final assigned =
           userDetails['assignedAgent'] ??
           userDetails['assignedSalesAgent'] ??
           userDetails['salesAgent'];
       if (assigned != null) {
-        final assStr = assigned.toString().toLowerCase();
-        if (assStr.contains(curEmail) || assStr.contains(curUid)) return true;
+        if (assigned is Map) {
+          final aId = _normalizeId(
+            assigned['_id'] ?? assigned[r'$oid'] ?? assigned['id'],
+          ).toLowerCase();
+          final aEmail = (assigned['email'] ?? '').toString().toLowerCase();
+          if ((curUid.isNotEmpty && aId == curUid) ||
+              (curEmail.isNotEmpty && aEmail == curEmail)) {
+            return true;
+          }
+        } else if (assigned is String) {
+          final aId = _normalizeId(assigned).toLowerCase();
+          if ((curUid.isNotEmpty && aId == curUid) ||
+              (curEmail.isNotEmpty && aId == curEmail)) {
+            return true;
+          }
+        }
       }
     }
-    return true;
+
+    if (_cachedAssignedUserKeys == null) {
+      _buildUserLookupIndexes();
+    }
+
+    final keys = _cachedAssignedUserKeys ?? {};
+    final rawUserLower = _normalizeId(rawUser).trim().toLowerCase();
+    final nameLower = displayName.trim().toLowerCase();
+    final phoneLower = displayPhone?.trim().toLowerCase() ?? '';
+    final cleanPhone = phoneLower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanPhone.length >= 10
+        ? cleanPhone.substring(cleanPhone.length - 10)
+        : '';
+
+    if (rawUserLower.isNotEmpty && keys.contains(rawUserLower)) return true;
+    if (nameLower.isNotEmpty && keys.contains(nameLower)) return true;
+    if (phoneLower.isNotEmpty && keys.contains(phoneLower)) return true;
+    if (last10.isNotEmpty && keys.contains(last10)) return true;
+
+    return false;
   }
 
   void _processEventsList(
@@ -697,6 +928,24 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           (canonical['id'] != null && (canonical['id'] as String).isNotEmpty)
           ? canonical['id']
           : (rawUser ?? '');
+
+      if (_isKnownSalesAgent(rawUser) ||
+          _isKnownSalesAgent(displayName) ||
+          _isKnownSalesAgent(phone) ||
+          _isKnownSalesAgent(resolvedId) ||
+          canonical['userType'] == 'Sales' ||
+          canonical['userType'] == 'Admin') {
+        continue;
+      }
+
+      if (!_isUserAssignedToSales(
+        rawUser: resolvedId,
+        displayName: displayName,
+        displayPhone: phone,
+        userDetails: userDetails,
+      )) {
+        continue;
+      }
 
       if (resolvedId.isNotEmpty &&
           displayName != 'New Customer' &&
@@ -1982,26 +2231,25 @@ class _SalesUserCardState extends State<_SalesUserCard> {
     }
 
     // Try finding phone in Dealers or Leads
-    if (userPhone == null || userPhone!.isEmpty) {
-      try {
-        final dealersState = context.read<DealersBloc>().state;
-        final matchedDealer = dealersState.allRawUsers.firstWhere(
-          (u) =>
-              '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim() ==
-                  widget.name ||
-              (u['shopName'] ?? '').toString().trim() == widget.name ||
-              (u['_id'] ?? '').toString() == widget.name,
-          orElse: () => <String, dynamic>{},
-        );
-        if (matchedDealer.isNotEmpty) {
-          final p =
-              (matchedDealer['phoneNumber'] ?? matchedDealer['phone'] ?? '')
-                  .toString()
-                  .trim();
-          if (p.isNotEmpty) userPhone = p;
-        }
-      } catch (_) {}
-    }
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final matchedDealer = dealersState.allRawUsers.firstWhere(
+        (u) =>
+            '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim() ==
+                widget.name ||
+            (u['shopName'] ?? '').toString().trim() == widget.name ||
+            (u['_id'] ?? '').toString() == widget.name,
+        orElse: () => <String, dynamic>{},
+      );
+      if (matchedDealer.isNotEmpty) {
+        final p =
+            (matchedDealer['phoneNumber'] ?? matchedDealer['phone'] ?? '')
+                .toString()
+                .trim();
+        if (p.isNotEmpty) userPhone = p;
+      }
+    } catch (_) {}
+
     if (userPhone == null || userPhone!.isEmpty) {
       try {
         final leadsState = context.read<LeadsBloc>().state;

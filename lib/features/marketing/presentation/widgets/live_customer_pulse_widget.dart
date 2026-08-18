@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class LiveCustomerPulseWidget extends StatefulWidget {
@@ -80,11 +83,70 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
+    List<Map<String, dynamic>> allSalesAgents = [];
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final leadsState = context.read<LeadsBloc>().state;
+      allSalesAgents = [...dealersState.salesAgents, ...leadsState.salesAgents];
+    } catch (_) {}
+
+    final validUsers = widget.realTimeUsers.where((u) {
+      final role = (u['role'] ?? u['userDetails']?['role'] ?? 'user')
+          .toString()
+          .toLowerCase();
+      if (role != 'user') return false;
+
+      final name = (u['userName'] ?? u['user'] ?? '')
+          .toString()
+          .toLowerCase()
+          .trim();
+      final phone = (u['userPhone'] ?? '').toString().toLowerCase().trim();
+      final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+      final p10 = cleanP.length >= 10
+          ? cleanP.substring(cleanP.length - 10)
+          : '';
+      final uid = (u['user'] ?? u['_id'] ?? '').toString().toLowerCase().trim();
+
+      if (name.contains('admin') || name.contains('sales')) return false;
+
+      // Check against known sales agents list
+      final isSalesAgent = allSalesAgents.any((a) {
+        final aFn = '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'
+            .trim()
+            .toLowerCase();
+        final aName = (a['name'] ?? '').toString().trim().toLowerCase();
+        final aPhone = (a['phoneNumber'] ?? a['phone'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final aCleanP = aPhone.replaceAll(RegExp(r'\D'), '');
+        final aP10 = aCleanP.length >= 10
+            ? aCleanP.substring(aCleanP.length - 10)
+            : '';
+        final aEmail = (a['email'] ?? '').toString().trim().toLowerCase();
+        final aUid = (a['_id'] ?? a['id'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        return (aFn.isNotEmpty && aFn == name) ||
+            (aName.isNotEmpty && aName == name) ||
+            (aEmail.isNotEmpty && aEmail == name) ||
+            (aPhone.isNotEmpty && aPhone == phone) ||
+            (p10.isNotEmpty && aP10.isNotEmpty && p10 == aP10) ||
+            (aUid.isNotEmpty && (aUid == uid || aUid == name));
+      });
+
+      if (isSalesAgent) return false;
+
+      return true;
+    }).toList();
+
     int hotCount = 0;
     int warmCount = 0;
     int browsingCount = 0;
 
-    for (final u in widget.realTimeUsers) {
+    for (final u in validUsers) {
       final label = u['intentLabel']?.toString() ?? '';
       if (label.contains('Hot')) {
         hotCount++;
@@ -95,7 +157,7 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
       }
     }
 
-    final filteredUsers = widget.realTimeUsers.where((u) {
+    final filteredUsers = validUsers.where((u) {
       final name = (u['userName'] ?? u['user'] ?? '').toString().toLowerCase();
       final phone = (u['userPhone'] ?? '').toString().toLowerCase();
       final screen = (u['currentScreen'] ?? '').toString().toLowerCase();
@@ -153,7 +215,7 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
             hotCount,
             warmCount,
             browsingCount,
-            widget.realTimeUsers.length,
+            validUsers.length,
             isDesktop,
           ),
           const SizedBox(height: 20),
@@ -513,6 +575,37 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                 ? Colors.orange
                 : AppTheme.primaryColor;
 
+            String? agentName;
+            final assignedAgent =
+                user['assignedAgent'] ?? user['userDetails']?['assignedAgent'];
+            if (assignedAgent is Map) {
+              final fn = (assignedAgent['firstName'] ?? '').toString().trim();
+              final ln = (assignedAgent['lastName'] ?? '').toString().trim();
+              final full = '$fn $ln'.trim();
+              if (full.isNotEmpty) {
+                agentName = full;
+              } else if (assignedAgent['name'] != null &&
+                  assignedAgent['name'].toString().trim().isNotEmpty) {
+                agentName = assignedAgent['name'].toString().trim();
+              }
+            } else if (assignedAgent is String &&
+                assignedAgent.trim().isNotEmpty &&
+                !RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(assignedAgent)) {
+              agentName = assignedAgent.trim();
+            }
+            if (agentName == null || agentName.isEmpty) {
+              final direct =
+                  (user['assignedAgentName'] ??
+                          user['agentName'] ??
+                          user['agent'] ??
+                          user['userDetails']?['assignedAgentName'])
+                      ?.toString()
+                      .trim();
+              if (direct != null && direct.isNotEmpty) {
+                agentName = direct;
+              }
+            }
+
             return MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
@@ -596,16 +689,64 @@ class _LiveCustomerPulseWidgetState extends State<LiveCustomerPulseWidget>
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (displayPhone.isNotEmpty &&
-                                    displayPhone != displayName)
-                                  Text(
-                                    displayPhone,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 2,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (displayPhone.isNotEmpty &&
+                                        displayPhone != displayName)
+                                      Text(
+                                        displayPhone,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    if (agentName != null &&
+                                        agentName.isNotEmpty) ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 1.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF6366F1,
+                                          ).withValues(alpha: 0.09),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(
+                                              0xFF6366F1,
+                                            ).withValues(alpha: 0.25),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.support_agent_rounded,
+                                              size: 10,
+                                              color: Color(0xFF6366F1),
+                                            ),
+                                            const SizedBox(width: 2.5),
+                                            Text(
+                                              agentName,
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF4F46E5),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ],
                             ),
                           ),

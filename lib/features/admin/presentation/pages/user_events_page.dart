@@ -172,6 +172,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   Set<String>? _cachedAssignedUserKeys;
   Map<String, String>? _cachedUserTypeLookup;
+  Map<String, String>? _cachedAssignedAgentLookup;
   Map<String, String> _cachedUserSearchIndex = {};
 
   DealersState? _lastDealersState;
@@ -183,7 +184,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     if (_lastDealersState == dealersState &&
         _lastLeadsState == leadsState &&
-        _cachedAssignedUserKeys != null) {
+        _cachedAssignedUserKeys != null &&
+        _cachedAssignedAgentLookup != null) {
       return;
     }
 
@@ -192,9 +194,70 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     final Set<String> assignedKeys = {};
     final Map<String, String> typeLookup = {};
+    final Map<String, String> agentLookup = {};
 
     final currentUserId = AuthService().currentUserId;
     final currentUserEmail = AuthService().currentUserEmail;
+
+    final List<Map<String, dynamic>> allSalesAgents = [
+      ...dealersState.salesAgents,
+      ...leadsState.salesAgents,
+    ];
+
+    String? resolveAgentName(Map<String, dynamic> u) {
+      final assignedAgent = u['assignedAgent'];
+      if (assignedAgent != null) {
+        if (assignedAgent is Map) {
+          final fn = (assignedAgent['firstName'] ?? '').toString().trim();
+          final ln = (assignedAgent['lastName'] ?? '').toString().trim();
+          final full = '$fn $ln'.trim();
+          if (full.isNotEmpty) return full;
+          final name = (assignedAgent['name'] ?? '').toString().trim();
+          if (name.isNotEmpty) return name;
+          final phone = (assignedAgent['phoneNumber'] ?? assignedAgent['phone'] ?? '').toString().trim();
+          if (phone.isNotEmpty) return phone;
+        } else if (assignedAgent is String && assignedAgent.trim().isNotEmpty) {
+          final str = assignedAgent.trim();
+          final matched = allSalesAgents.firstWhere(
+            (a) => (a['_id'] ?? a['id'] ?? '').toString() == str,
+            orElse: () => <String, dynamic>{},
+          );
+          if (matched.isNotEmpty) {
+            final fn = (matched['firstName'] ?? '').toString().trim();
+            final ln = (matched['lastName'] ?? '').toString().trim();
+            final full = '$fn $ln'.trim();
+            if (full.isNotEmpty) return full;
+            final name = (matched['name'] ?? '').toString().trim();
+            if (name.isNotEmpty) return name;
+          }
+          if (!RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(str) && !RegExp(r'^\d+$').hasMatch(str)) {
+            return str;
+          }
+        }
+      }
+
+      final directName = (u['assignedAgentName'] ?? u['agentName'] ?? u['agent'])?.toString().trim();
+      if (directName != null && directName.isNotEmpty) {
+        return directName;
+      }
+
+      final agentId = u['assignedAgentId']?.toString();
+      if (agentId != null && agentId.isNotEmpty) {
+        final matched = allSalesAgents.firstWhere(
+          (a) => (a['_id'] ?? a['id'] ?? '').toString() == agentId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (matched.isNotEmpty) {
+          final fn = (matched['firstName'] ?? '').toString().trim();
+          final ln = (matched['lastName'] ?? '').toString().trim();
+          final full = '$fn $ln'.trim();
+          if (full.isNotEmpty) return full;
+          final name = (matched['name'] ?? '').toString().trim();
+          if (name.isNotEmpty) return name;
+        }
+      }
+      return null;
+    }
 
     bool isRawUserAssigned(Map<String, dynamic> u) {
       if (!AuthService().isSales) return true;
@@ -231,19 +294,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final rawLastName = (u['lastName'] ?? '').toString().toLowerCase();
       final rawShopName = (u['shopName'] ?? '').toString().toLowerCase();
 
-      final dbRole = u['role']?.toString().toLowerCase();
+      final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+      if (dbRole != 'user') return;
+
       final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
 
-      // Determine Type: Staff always comes first
-      String type = 'Lead';
-      if (dbRole == 'admin') {
-        type = 'Admin';
-      } else if (dbRole == 'sales') {
-        type = 'Sales';
-      } else if (kycStatus == 'verified') {
-        type = 'Dealer';
-      }
-
+      // Determine Type: verified = Dealer, pending = Lead
+      String type = kycStatus == 'verified' ? 'Dealer' : 'Lead';
       if (defaultType != null) type = defaultType;
 
       final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
@@ -260,6 +317,21 @@ class _UserEventsPageState extends State<UserEventsPage> {
           final last10 = cleanPhone.substring(cleanPhone.length - 10);
           typeLookup[last10] = type;
         }
+      }
+
+      final agentName = resolveAgentName(u);
+      if (agentName != null && agentName.isNotEmpty) {
+        if (uId.isNotEmpty) agentLookup[uId] = agentName;
+        if (uEmail.isNotEmpty) agentLookup[uEmail] = agentName;
+        if (uPhone.isNotEmpty) {
+          agentLookup[uPhone.toLowerCase()] = agentName;
+          if (cleanPhone.length >= 10) {
+            final last10 = cleanPhone.substring(cleanPhone.length - 10);
+            agentLookup[last10] = agentName;
+          }
+        }
+        if (uName.isNotEmpty) agentLookup[uName] = agentName;
+        if (uShop.isNotEmpty) agentLookup[uShop] = agentName;
       }
 
       if (uName.isNotEmpty) typeLookup[uName] ??= type;
@@ -298,6 +370,29 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     _cachedAssignedUserKeys = assignedKeys;
     _cachedUserTypeLookup = typeLookup;
+    _cachedAssignedAgentLookup = agentLookup;
+  }
+
+  String? _getAssignedAgent(String userName) {
+    if (_cachedAssignedAgentLookup == null) {
+      _buildUserLookupIndexes();
+    }
+    final nameLower = userName.toLowerCase().trim();
+    var agent = _cachedAssignedAgentLookup?[nameLower];
+    if (agent != null && agent.isNotEmpty) return agent;
+
+    final clean = nameLower.replaceAll(RegExp(r'\D'), '');
+    if (clean.length >= 10) {
+      final last10 = clean.substring(clean.length - 10);
+      agent = _cachedAssignedAgentLookup?[last10];
+      if (agent != null && agent.isNotEmpty) return agent;
+    }
+    final rawId = _nameToId[userName]?.toLowerCase().trim();
+    if (rawId != null && rawId.isNotEmpty) {
+      agent = _cachedAssignedAgentLookup?[rawId];
+      if (agent != null && agent.isNotEmpty) return agent;
+    }
+    return null;
   }
 
   bool _isUserAssignedToCurrentSalesAgent({
@@ -391,11 +486,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
       _lastDealersCount = dealersState.allRawUsers.length;
       _lastLeadsCount = leadsState.allRawUsers.length;
 
-      // 1. Process Orders from assigned dealers
       for (final order in dealersState.allRawOrders) {
         if (order['orderStatus'] == 'Cancelled') continue;
         final user = order['user'];
         if (user == null) continue;
+
+        final uRole = (user is Map ? (user['role'] ?? 'user') : 'user')
+            .toString()
+            .toLowerCase();
+        if (uRole != 'user') continue;
 
         final orderId = (order['orderId'] ?? order['_id'] ?? '').toString();
         if (orderId.isNotEmpty && _mergedOrderIds.contains(orderId)) continue;
@@ -451,10 +550,63 @@ class _UserEventsPageState extends State<UserEventsPage> {
     }
   }
 
+  bool _isKnownSalesAgent(String? identifier) {
+    if (identifier == null) return false;
+    final lower = identifier.trim().toLowerCase();
+    if (lower.isEmpty) return false;
+    if (lower == 'admin' ||
+        lower == 'sales' ||
+        lower.contains('admin') ||
+        lower.contains('sales')) {
+      return true;
+    }
+
+    final cleanDigits = lower.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanDigits.length >= 10
+        ? cleanDigits.substring(cleanDigits.length - 10)
+        : '';
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
+      final leadsState = context.read<LeadsBloc>().state;
+      final allSalesAgents = [
+        ...dealersState.salesAgents,
+        ...leadsState.salesAgents,
+      ];
+      return allSalesAgents.any((a) {
+        final fn =
+            '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim().toLowerCase();
+        final name = (a['name'] ?? '').toString().trim().toLowerCase();
+        final email = (a['email'] ?? '').toString().trim().toLowerCase();
+        final phone = (a['phoneNumber'] ?? a['phone'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+        final p10 =
+            cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : '';
+        final uid = (a['_id'] ?? a['id'] ?? '').toString().trim().toLowerCase();
+
+        return (fn.isNotEmpty && fn == lower) ||
+            (name.isNotEmpty && name == lower) ||
+            (email.isNotEmpty && email == lower) ||
+            (phone.isNotEmpty && phone == lower) ||
+            (last10.isNotEmpty && p10 == last10) ||
+            (uid.isNotEmpty && uid == lower);
+      });
+    } catch (_) {}
+    return false;
+  }
+
   String? _getUserRole(String userIdentifier, String? currentRole) {
     if (currentRole?.toLowerCase() == 'admin' ||
-        currentRole?.toLowerCase() == 'sales')
+        currentRole?.toLowerCase() == 'sales') {
       return currentRole;
+    }
+
+    if (_isKnownSalesAgent(userIdentifier)) {
+      return 'sales';
+    }
 
     final idLower = userIdentifier.toLowerCase();
     final cleanId = idLower.replaceAll(RegExp(r'\D'), '');
@@ -643,10 +795,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
       });
 
-      // Populate _nameToId mappings and add all assigned dealers and leads
+      // Populate _nameToId mappings and add all assigned dealers and leads (only role == 'user')
       try {
         final dealersState = context.read<DealersBloc>().state;
         for (final u in dealersState.allRawUsers) {
+          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+          if (dbRole != 'user') continue;
+
           final String rawUser = _normalizeId(u['_id']);
           final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
               .toString();
@@ -685,6 +840,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
       try {
         final leadsState = context.read<LeadsBloc>().state;
         for (final u in leadsState.allRawUsers) {
+          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+          if (dbRole != 'user') continue;
+
           final String rawUser = _normalizeId(u['_id']);
           final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
               .toString();
@@ -720,10 +878,16 @@ class _UserEventsPageState extends State<UserEventsPage> {
         }
       } catch (_) {}
 
-      // Add currently active online users from Live Pulse
+      // Add currently active online users from Live Pulse (only role == 'user')
       for (final u in _realTimeUsers) {
+        final role = _getUserRole((u['user'] ?? '').toString(), u['role']?.toString())?.toLowerCase() ?? 'user';
+        if (role != 'user') continue;
+
         final uName = (u['userName'] ?? u['user'] ?? '').toString();
         if (uName.isNotEmpty && uName != 'New Customer' && uName != 'Guest') {
+          if (uName.toLowerCase().contains('admin') ||
+              uName.toLowerCase().contains('sales')) continue;
+
           if (!AuthService().isSales ||
               _isUserAssignedToCurrentSalesAgent(
                 rawUser: (u['user'] ?? '').toString(),
@@ -1094,6 +1258,44 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
     try {
       final dealersState = context.read<DealersBloc>().state;
+      final leadsState = context.read<LeadsBloc>().state;
+      final allSalesAgents = [
+        ...dealersState.salesAgents,
+        ...leadsState.salesAgents,
+      ];
+      final matchedSalesAgent = allSalesAgents.firstWhere(
+        isMatch,
+        orElse: () => <String, dynamic>{},
+      );
+      if (matchedSalesAgent.isNotEmpty) {
+        final fName =
+            '${matchedSalesAgent['firstName'] ?? ''} ${matchedSalesAgent['lastName'] ?? ''}'
+                .trim();
+        final sName = (matchedSalesAgent['name'] ?? '').toString().trim();
+        final p = (matchedSalesAgent['phoneNumber'] ??
+                matchedSalesAgent['phone'] ??
+                '')
+            .toString()
+            .trim();
+        final id = (matchedSalesAgent['_id'] ??
+                matchedSalesAgent['id'] ??
+                cleanRaw)
+            .toString();
+        String name = fName.isNotEmpty
+            ? fName
+            : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Sales Agent'));
+        return {
+          'name': name,
+          'phone': p.isNotEmpty ? p : cleanPhone,
+          'id': id,
+          'userDetails': matchedSalesAgent,
+          'userType': 'Sales',
+        };
+      }
+    } catch (_) {}
+
+    try {
+      final dealersState = context.read<DealersBloc>().state;
       final matchedDealer = dealersState.allRawUsers.firstWhere(
         isMatch,
         orElse: () => <String, dynamic>{},
@@ -1238,23 +1440,25 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final currentRole =
           userDetails?['role']?.toString() ?? event['role']?.toString();
 
-      final role = _getUserRole(rawUser, currentRole);
+      final role = _getUserRole(rawUser, currentRole)?.toLowerCase() ?? 'user';
 
-      final isNameOrEmailAdmin =
+      final isNameOrEmailAdminOrSales =
           rawUser.toLowerCase().contains('admin') ||
+          rawUser.toLowerCase().contains('sales') ||
           displayName.toLowerCase().contains('admin') ||
-          displayName.toLowerCase().contains('sales');
+          displayName.toLowerCase().contains('sales') ||
+          _isKnownSalesAgent(rawUser) ||
+          _isKnownSalesAgent(displayName) ||
+          _isKnownSalesAgent(phone) ||
+          _isKnownSalesAgent(resolvedId);
 
+      // Strictly only allow users with role == 'user'. Exclude admin, sales, staff, etc.
       if (rawUser == AuthService().currentUserEmail ||
-          role?.toLowerCase() == 'admin' ||
-          role?.toLowerCase() == 'sales' ||
-          isNameOrEmailAdmin) {
-        if (role?.toLowerCase() == 'user' &&
-            !rawUser.toLowerCase().contains('admin')) {
-          // Keep processing as a customer
-        } else {
-          continue;
-        }
+          isNameOrEmailAdminOrSales ||
+          canonical['userType'] == 'Sales' ||
+          canonical['userType'] == 'Admin' ||
+          role != 'user') {
+        continue;
       }
 
       if (AuthService().isSales &&
@@ -2574,6 +2778,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                     key: cardKey,
                                     name: userName,
                                     userType: _getUserType(userName),
+                                    assignedAgent: _getAssignedAgent(userName),
                                     isOnline: isOnline,
                                     isHighPriority: isHighPriority,
                                     priorityReason: priorityReason,
@@ -4769,6 +4974,7 @@ class _LivePulsingBadgeState extends State<_LivePulsingBadge>
 class _UserCard extends StatefulWidget {
   final String name;
   final String userType;
+  final String? assignedAgent;
   final Map<String, List<Map<String, dynamic>>> groupedEvents;
   final bool isSelected;
   final String? selectedEventType;
@@ -4785,6 +4991,7 @@ class _UserCard extends StatefulWidget {
     super.key,
     required this.name,
     required this.userType,
+    this.assignedAgent,
     required this.groupedEvents,
     required this.isSelected,
     required this.selectedEventType,
@@ -4869,8 +5076,12 @@ class _UserCardState extends State<_UserCard>
       }
     }
 
-    // Try finding phone in Dealers or Leads
-    if (userPhone == null || userPhone.isEmpty) {
+    // Try finding phone and agent in Dealers or Leads
+    Map<String, dynamic>? matchedUser;
+    if (userPhone == null ||
+        userPhone.isEmpty ||
+        widget.assignedAgent == null ||
+        widget.assignedAgent!.isEmpty) {
       try {
         final dealersState = context.read<DealersBloc>().state;
         final matchedDealer = dealersState.allRawUsers.firstWhere(
@@ -4882,15 +5093,16 @@ class _UserCardState extends State<_UserCard>
           orElse: () => <String, dynamic>{},
         );
         if (matchedDealer.isNotEmpty) {
+          matchedUser = matchedDealer;
           final p =
               (matchedDealer['phoneNumber'] ?? matchedDealer['phone'] ?? '')
                   .toString()
                   .trim();
-          if (p.isNotEmpty) userPhone = p;
+          if (p.isNotEmpty && (userPhone == null || userPhone.isEmpty)) userPhone = p;
         }
       } catch (_) {}
     }
-    if (userPhone == null || userPhone.isEmpty) {
+    if (matchedUser == null || matchedUser.isEmpty) {
       try {
         final leadsState = context.read<LeadsBloc>().state;
         final matchedLead = leadsState.allRawUsers.firstWhere(
@@ -4902,12 +5114,83 @@ class _UserCardState extends State<_UserCard>
           orElse: () => <String, dynamic>{},
         );
         if (matchedLead.isNotEmpty) {
+          matchedUser = matchedLead;
           final p = (matchedLead['phoneNumber'] ?? matchedLead['phone'] ?? '')
               .toString()
               .trim();
-          if (p.isNotEmpty) userPhone = p;
+          if (p.isNotEmpty && (userPhone == null || userPhone.isEmpty)) userPhone = p;
         }
       } catch (_) {}
+    }
+
+    // Resolve assigned agent name
+    String? assignedAgentName = widget.assignedAgent;
+    if ((assignedAgentName == null || assignedAgentName.isEmpty) &&
+        matchedUser != null &&
+        matchedUser.isNotEmpty) {
+      final assigned = matchedUser['assignedAgent'];
+      if (assigned is Map) {
+        final fn = (assigned['firstName'] ?? '').toString().trim();
+        final ln = (assigned['lastName'] ?? '').toString().trim();
+        final full = '$fn $ln'.trim();
+        if (full.isNotEmpty) {
+          assignedAgentName = full;
+        } else if (assigned['name'] != null &&
+            assigned['name'].toString().trim().isNotEmpty) {
+          assignedAgentName = assigned['name'].toString().trim();
+        } else if (assigned['phoneNumber'] != null &&
+            assigned['phoneNumber'].toString().trim().isNotEmpty) {
+          assignedAgentName = assigned['phoneNumber'].toString().trim();
+        }
+      } else if (assigned is String &&
+          assigned.trim().isNotEmpty &&
+          !RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(assigned)) {
+        assignedAgentName = assigned.trim();
+      }
+
+      if (assignedAgentName == null || assignedAgentName.isEmpty) {
+        final direct = (matchedUser['assignedAgentName'] ??
+                matchedUser['agentName'] ??
+                matchedUser['agent'])
+            ?.toString()
+            .trim();
+        if (direct != null && direct.isNotEmpty) {
+          assignedAgentName = direct;
+        }
+      }
+    }
+
+    if (assignedAgentName == null || assignedAgentName.isEmpty) {
+      for (final logs in widget.groupedEvents.values) {
+        for (final log in logs) {
+          if (assignedAgentName != null && assignedAgentName.isNotEmpty) break;
+          final direct = log['assignedAgentName'] ??
+              log['agentName'] ??
+              log['agent'];
+          if (direct != null && direct.toString().trim().isNotEmpty) {
+            assignedAgentName = direct.toString().trim();
+            break;
+          }
+          final details = log['userDetails'];
+          if (details is Map) {
+            final agentObj = details['assignedAgent'];
+            if (agentObj is Map) {
+              final fn = (agentObj['firstName'] ?? '').toString().trim();
+              final ln = (agentObj['lastName'] ?? '').toString().trim();
+              final full = '$fn $ln'.trim();
+              if (full.isNotEmpty) {
+                assignedAgentName = full;
+                break;
+              }
+            } else if (agentObj is String &&
+                agentObj.trim().isNotEmpty &&
+                !RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(agentObj)) {
+              assignedAgentName = agentObj.trim();
+              break;
+            }
+          }
+        }
+      }
     }
 
     final String? copyablePhone = (userPhone != null && userPhone.isNotEmpty)
@@ -5033,22 +5316,20 @@ class _UserCardState extends State<_UserCard>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Flexible(
-                              child: Text(
-                                widget.name,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: titleColor,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              widget.name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: titleColor,
                               ),
                             ),
                             if (nameIsPhone && copyablePhone != null) ...[
-                              const SizedBox(width: 6),
                               Tooltip(
                                 message: 'Copy Phone Number',
                                 child: InkWell(
@@ -5109,10 +5390,11 @@ class _UserCardState extends State<_UserCard>
                                 ),
                               ),
                             ],
-                            const SizedBox(width: 8),
                             _buildUserTypeBadge(context, widget.name),
+                            if (assignedAgentName != null &&
+                                assignedAgentName.isNotEmpty)
+                              _buildAssignedAgentBadge(assignedAgentName),
                             if (intentLabel != null) ...[
-                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 7,
@@ -5150,7 +5432,6 @@ class _UserCardState extends State<_UserCard>
                               ),
                             ],
                             if (widget.isHighPriority) ...[
-                              const SizedBox(width: 8),
                               Builder(
                                 builder: (context) {
                                   final bool isCartIssue =
@@ -5291,6 +5572,16 @@ class _UserCardState extends State<_UserCard>
                                 ),
                               ),
                             ],
+                          ),
+                        ] else if (nameIsPhone) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${formatUnits(totalEvents)} event${totalEvents == 1 ? "" : "s"}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
 
@@ -5776,6 +6067,42 @@ class _UserCardState extends State<_UserCard>
               fontSize: 9,
               fontWeight: FontWeight.w900,
               color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignedAgentBadge(String? agentName) {
+    if (agentName == null || agentName.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final clean = agentName.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6366F1).withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.support_agent_rounded,
+            size: 11,
+            color: Color(0xFF6366F1),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            'Agent: $clean',
+            style: GoogleFonts.outfit(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF4F46E5),
             ),
           ),
         ],
