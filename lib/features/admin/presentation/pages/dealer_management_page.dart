@@ -17,7 +17,7 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
-import 'package:kd_pannel/features/admin/presentation/widgets/create_dealer_dialog.dart';
+import 'create_dealer_page.dart';
 import 'create_order_page.dart';
 
 class DealerManagementPage extends StatefulWidget {
@@ -895,28 +895,11 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
-  void _openCreateDealerDialog(BuildContext context, DealersState state) {
-    CreateDealerDialog.show(
-      context,
-      salesAgents: state.salesAgents,
-      isSubmitting: state.status == DealersStatus.submitting,
-      onSubmit: ({
-        required dealerData,
-        licenceBytes,
-        licenceFileName,
-        shopBytes,
-        shopFileName,
-      }) {
-        _dealersBloc?.add(
-          CreateDealerEvent(
-            dealerData: dealerData,
-            licenceBytes: licenceBytes,
-            licenceFileName: licenceFileName,
-            shopBytes: shopBytes,
-            shopFileName: shopFileName,
-          ),
-        );
-      },
+  void _openCreateDealerPage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CreateDealerPage(),
+      ),
     );
   }
 
@@ -939,7 +922,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _openCreateDealerDialog(context, state),
+                  onPressed: () => _openCreateDealerPage(context),
                   icon: const Icon(Icons.add_rounded, size: 16),
                   label: Text(
                     'Create Dealer',
@@ -1013,7 +996,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ElevatedButton.icon(
-              onPressed: () => _openCreateDealerDialog(context, state),
+              onPressed: () => _openCreateDealerPage(context),
               icon: const Icon(Icons.add_rounded, size: 18),
               label: Text(
                 'Create Dealer',
