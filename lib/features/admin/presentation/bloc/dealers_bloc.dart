@@ -8,6 +8,7 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
+    on<CreateDealerEvent>(_onCreateDealer);
     on<AssignAgentToDealerEvent>(_onAssignAgentToDealer);
     on<BulkAssignAgentToDealersEvent>(_onBulkAssignAgentToDealers);
     on<CreateSalesAgentEvent>(_onCreateSalesAgent);
@@ -21,6 +22,40 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<FetchDealerOrdersEvent>(_onFetchDealerOrders);
     on<FetchDealerEventsEvent>(_onFetchDealerEvents);
     on<FetchDealerEventsMoreEvent>(_onFetchDealerEventsMore);
+  }
+
+  Future<void> _onCreateDealer(
+    CreateDealerEvent event,
+    Emitter<DealersState> emit,
+  ) async {
+    emit(state.copyWith(status: DealersStatus.submitting));
+    try {
+      final res = await ApiClient().post('/users/dealer', event.dealerData);
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        if (data['success'] == true) {
+          emit(
+            state.copyWith(
+              status: DealersStatus.success,
+              actionSuccessMessage: data['message'] ?? 'Dealer created successfully',
+            ),
+          );
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } else {
+          throw Exception(data['message'] ?? 'Failed to create dealer');
+        }
+      } else {
+        throw Exception(data['message'] ?? 'Failed to create dealer: ${res.statusCode}');
+      }
+    } catch (e) {
+      emit(
+        state.copyWith(
+          status: DealersStatus.failure,
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
+        ),
+      );
+    }
   }
 
   Future<void> _onFetchDealerDetails(

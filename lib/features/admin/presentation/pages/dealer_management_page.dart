@@ -17,6 +17,7 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/create_dealer_dialog.dart';
 import 'create_order_page.dart';
 
 class DealerManagementPage extends StatefulWidget {
@@ -894,6 +895,17 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     );
   }
 
+  void _openCreateDealerDialog(BuildContext context, DealersState state) {
+    CreateDealerDialog.show(
+      context,
+      salesAgents: state.salesAgents,
+      isSubmitting: state.status == DealersStatus.submitting,
+      onSubmit: (dealerData) {
+        _dealersBloc?.add(CreateDealerEvent(dealerData));
+      },
+    );
+  }
+
   Widget _buildHeader(BuildContext context, DealersState state, bool isMobile) {
     if (isMobile) {
       return Column(
@@ -911,6 +923,30 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           ],
           Row(
             children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openCreateDealerDialog(context, state),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: Text(
+                    'Create Dealer',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(child: _buildTimeframeFilter(context, state, isMobile)),
               const SizedBox(width: 8),
               Container(
@@ -962,6 +998,30 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ElevatedButton.icon(
+              onPressed: () => _openCreateDealerDialog(context, state),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text(
+                'Create Dealer',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: _isExporting ? null : _exportDealersToCSV,
               icon: _isExporting

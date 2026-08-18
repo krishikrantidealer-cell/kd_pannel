@@ -15,6 +15,14 @@ class FetchDealersDataEvent extends DealersEvent {
   List<Object?> get props => [forceRefresh];
 }
 
+class CreateDealerEvent extends DealersEvent {
+  final Map<String, dynamic> dealerData;
+  const CreateDealerEvent(this.dealerData);
+
+  @override
+  List<Object?> get props => [dealerData];
+}
+
 class AssignAgentToDealerEvent extends DealersEvent {
   final String userId;
   final String? agentId;
