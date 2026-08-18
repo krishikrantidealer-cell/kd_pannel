@@ -15,6 +15,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 
 class OrderDetailsPage extends StatefulWidget {
   const OrderDetailsPage({super.key});
@@ -27,7 +28,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   OrderModel? _orderRaw;
   OrderModel get _order => _orderRaw!;
   bool _isInitialized = false;
-  bool _isPrintHovered = false;
   bool _isSyncingDelivery = false;
 
   @override
@@ -551,6 +551,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
   Widget _buildAppBar() {
     final bool isMobile = Responsive.isMobile(context);
+    final bool isSales = AuthService().currentUserRole == UserRole.sales;
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -636,7 +637,8 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ],
             ),
           ),
-          if (_order.orderStatus != 'Cancelled' &&
+          if (!isSales &&
+              _order.orderStatus != 'Cancelled' &&
               _order.orderStatus != 'Delivered' &&
               _order.orderStatus != 'RTO' &&
               (_order.awbNumber == null || _order.awbNumber!.trim().isEmpty)) ...[
@@ -1005,6 +1007,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                 basePacking: basePacking,
                                 volume: volume,
                                 amount: item.price * item.quantity,
+                                isCustomBasePack: item.isCustomBasePack,
                               );
                             },
                           ),
@@ -1713,6 +1716,7 @@ class _ItemTableRow extends StatefulWidget {
   final String basePacking;
   final String volume;
   final double amount;
+  final bool isCustomBasePack;
 
   const _ItemTableRow({
     required this.productName,
@@ -1722,6 +1726,7 @@ class _ItemTableRow extends StatefulWidget {
     required this.basePacking,
     required this.volume,
     required this.amount,
+    this.isCustomBasePack = false,
   });
 
   @override
@@ -1815,14 +1820,38 @@ class _ItemTableRowState extends State<_ItemTableRow> {
             ),
             Expanded(
               flex: 2,
-              child: Text(
-                widget.basePacking,
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.basePacking,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: widget.isCustomBasePack ? const Color(0xFFD97706) : AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (widget.isCustomBasePack) ...[
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                      ),
+                      child: Text(
+                        'Custom',
+                        style: GoogleFonts.outfit(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             //volume

@@ -9,6 +9,9 @@ class OrderItem {
   final double price;
   final String? variantSize;
   final String? basePacking;
+  final double? packVolume;
+  final String? basePackingUnit;
+  final bool isCustomBasePack;
 
   OrderItem({
     required this.productId,
@@ -21,12 +24,20 @@ class OrderItem {
     required this.price,
     this.variantSize,
     this.basePacking,
+    this.packVolume,
+    this.basePackingUnit,
+    this.isCustomBasePack = false,
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final productMap = json['product'] as Map<String, dynamic>?;
-    String? sizeVal;
-    String? basePackingVal;
+    String? sizeVal = json['variant']?.toString();
+    if (sizeVal == 'Standard' || sizeVal == '') sizeVal = null;
+    String? basePackingVal = json['basePacking']?.toString();
+    double? packVol = (json['packVolume'] as num?)?.toDouble();
+    String? baseUnit = json['basePackingUnit']?.toString();
+    bool customPack = json['isCustomBasePack'] == true;
+
     if (productMap != null && productMap['variants'] is List) {
       final variantsList = productMap['variants'] as List;
       final matchingVariant = variantsList.firstWhere(
@@ -35,9 +46,24 @@ class OrderItem {
         orElse: () => null,
       );
       if (matchingVariant != null && matchingVariant is Map) {
-        sizeVal = matchingVariant['size']?.toString();
-        basePackingVal = matchingVariant['basePacking']?.toString();
+        sizeVal ??= matchingVariant['size']?.toString() ?? matchingVariant['packSize']?.toString();
+        if (basePackingVal == null || basePackingVal.isEmpty) {
+          basePackingVal = matchingVariant['basePacking']?.toString();
+          if (basePackingVal == null || basePackingVal.isEmpty) {
+            final mvVol = matchingVariant['packVolume'];
+            final mvUnit = matchingVariant['basePackingUnit'];
+            if (mvVol != null) {
+              basePackingVal = '${mvVol % 1 == 0 ? mvVol.toInt() : mvVol} ${mvUnit ?? ''}'.trim();
+            }
+          }
+        }
+        packVol ??= (matchingVariant['packVolume'] as num?)?.toDouble();
+        baseUnit ??= matchingVariant['basePackingUnit']?.toString();
       }
+    }
+
+    if ((basePackingVal == null || basePackingVal.isEmpty) && packVol != null) {
+      basePackingVal = '${packVol % 1 == 0 ? packVol.toInt() : packVol} ${baseUnit ?? ''}'.trim();
     }
 
     return OrderItem(
@@ -53,6 +79,9 @@ class OrderItem {
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       variantSize: sizeVal,
       basePacking: basePackingVal,
+      packVolume: packVol,
+      basePackingUnit: baseUnit,
+      isCustomBasePack: customPack,
     );
   }
 
@@ -66,6 +95,11 @@ class OrderItem {
       'image': image,
       'quantity': quantity,
       'price': price,
+      'variant': variantSize,
+      'basePacking': basePacking,
+      'packVolume': packVolume,
+      'basePackingUnit': basePackingUnit,
+      'isCustomBasePack': isCustomBasePack,
     };
   }
 }
@@ -246,7 +280,7 @@ class OrderModel {
           final firstName = assignedAgent['firstName'] ?? '';
           final lastName = assignedAgent['lastName'] ?? '';
           agentName = '$firstName $lastName'.trim();
-          if (agentName!.isEmpty) agentName = assignedAgent['phoneNumber']?.toString();
+          if (agentName.isEmpty) agentName = assignedAgent['phoneNumber']?.toString();
         } else {
           // It's just an ID string
           agentId = assignedAgent.toString();

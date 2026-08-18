@@ -73,8 +73,13 @@ double? _parseRateValue(String? rateStr) {
   return double.tryParse(clean);
 }
 
-double _getVariantPrice(Map<String, dynamic> variant, int quantity) {
-  final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+double _getVariantPrice(
+  Map<String, dynamic> variant,
+  int quantity, {
+  double? customPackVolume,
+}) {
+  final double packVolume =
+      customPackVolume ?? ((variant['packVolume'] ?? 1) as num).toDouble();
   final double defaultPriceVal =
       ((variant['dealerPrice'] ?? variant['price'] ?? 0) as num).toDouble();
   final double fallbackPrice = variant['dealerPrice'] != null
@@ -146,24 +151,40 @@ class _CartItem {
   final Map<String, dynamic> variant;
   int quantity;
   double? priceOverride;
+  double? customPackVolume;
+  String? customBasePackingUnit;
 
   _CartItem({
     required this.product,
     required this.variant,
     this.quantity = 1,
     this.priceOverride,
+    this.customPackVolume,
+    this.customBasePackingUnit,
   });
+
+  double get effectivePackVolume =>
+      customPackVolume ?? ((variant['packVolume'] ?? 1) as num).toDouble();
+
+  String get effectiveBaseUnit {
+    if (customBasePackingUnit != null && customBasePackingUnit!.isNotEmpty) {
+      return customBasePackingUnit!;
+    }
+    return (variant['basePackingUnit'] ?? '').toString().trim();
+  }
+
+  bool get isCustomBasePack => customPackVolume != null;
 
   double get lineTotal => price * quantity;
 
   double get price {
     if (priceOverride != null) {
-      final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+      final double packVolume = effectivePackVolume;
       return variant['dealerPrice'] != null
           ? priceOverride!
           : priceOverride! * packVolume;
     }
-    return _getVariantPrice(variant, quantity);
+    return _getVariantPrice(variant, quantity, customPackVolume: customPackVolume);
   }
 }
 
@@ -190,6 +211,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
 
   final List<_CartItem> _cart = [];
   final Map<String, int> _selectedVariantIndex = {};
+  final Map<String, double> _customPackVolumes = {};
+  final Map<String, String> _customBaseUnits = {};
 
   // Shipping fields
   final _formKey = GlobalKey<FormState>();
@@ -354,6 +377,11 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   : null,
               'quantity': c.quantity,
               'price': c.price,
+              'variant': c.variant['size'] ?? c.variant['packSize'] ?? 'Standard',
+              'packVolume': c.effectivePackVolume,
+              'basePackingUnit': c.effectiveBaseUnit,
+              'basePacking': '${c.effectivePackVolume % 1 == 0 ? c.effectivePackVolume.toInt() : c.effectivePackVolume} ${c.effectiveBaseUnit}'.trim(),
+              'isCustomBasePack': c.isCustomBasePack,
             },
           )
           .toList();
@@ -474,12 +502,286 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     return null;
   }
 
+  void _openCustomBasePackingDialog({
+    required String productId,
+    required Map<String, dynamic> variant,
+    _CartItem? cartItem,
+  }) {
+    final variantId = variant['_id'] ?? '';
+    final defaultPackVol = ((variant['packVolume'] ?? 1) as num).toDouble();
+    final defaultUnit = (variant['basePackingUnit'] ?? 'L').toString().trim();
+
+    final currentVol = cartItem != null
+        ? cartItem.effectivePackVolume
+        : (_customPackVolumes[variantId] ?? defaultPackVol);
+    final currentUnit = cartItem != null
+        ? cartItem.effectiveBaseUnit
+        : (_customBaseUnits[variantId] ?? (defaultUnit.isEmpty ? 'L' : defaultUnit));
+
+    final volCtrl = TextEditingController(
+      text: currentVol % 1 == 0 ? currentVol.toInt().toString() : currentVol.toString(),
+    );
+    String selectedUnit = currentUnit.toLowerCase() == 'kg'
+        ? 'kg'
+        : (currentUnit.toLowerCase() == 'pcs' ? 'pcs' : 'L');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: Colors.white,
+              child: Container(
+                width: 440,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.inventory_2_rounded,
+                            color: AppTheme.primaryColor,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Custom Base Packing',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Specific to this order • Database unmodified',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close_rounded, size: 20, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(height: 1, color: AppTheme.lightBorderColor),
+                    const SizedBox(height: 16),
+
+                    // Variant Info Card
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Variant Size: ${variant['size'] ?? variant['packSize'] ?? 'Standard'}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Default: ${defaultPackVol % 1 == 0 ? defaultPackVol.toInt() : defaultPackVol} $defaultUnit',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Pack Volume input
+                    Text(
+                      'Base Pack Volume',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: volCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 25, 50, 10...',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Unit Selection Chips
+                    Text(
+                      'Base Unit',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: ['L', 'kg', 'pcs'].map((u) {
+                        final isSelected = selectedUnit.toLowerCase() == u.toLowerCase();
+                        final label = u == 'pcs' ? 'Pieces (Pcs)' : (u == 'kg' ? 'Kilograms (Kg)' : 'Liters (L)');
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: InkWell(
+                              onTap: () => setDialogState(() => selectedUnit = u),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor,
+                                    width: isSelected ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  label,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? AppTheme.primaryColor : AppTheme.textBody,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Action buttons
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              if (cartItem != null) {
+                                cartItem.customPackVolume = null;
+                                cartItem.customBasePackingUnit = null;
+                              } else {
+                                _customPackVolumes.remove(variantId);
+                                _customBaseUnits.remove(variantId);
+                              }
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: Text(
+                            'Reset Default',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        ElevatedButton(
+                          onPressed: () {
+                            final parsed = double.tryParse(volCtrl.text.trim());
+                            if (parsed != null && parsed > 0) {
+                              setState(() {
+                                if (cartItem != null) {
+                                  cartItem.customPackVolume = parsed;
+                                  cartItem.customBasePackingUnit = selectedUnit;
+                                } else {
+                                  _customPackVolumes[variantId] = parsed;
+                                  _customBaseUnits[variantId] = selectedUnit;
+                                  for (var item in _cart) {
+                                    if (item.variant['_id'] == variantId) {
+                                      item.customPackVolume = parsed;
+                                      item.customBasePackingUnit = selectedUnit;
+                                    }
+                                  }
+                                }
+                              });
+                              Navigator.pop(ctx);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            'Apply for Order',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _addToCart(Map<String, dynamic> product, Map<String, dynamic> variant) {
     final variantId = variant['_id'] ?? '';
+    final customVol = _customPackVolumes[variantId];
+    final customUnit = _customBaseUnits[variantId];
+
     final idx = _cart.indexWhere(
       (c) =>
           c.product['_id'] == product['_id'] &&
-          c.variant['_id'] == variantId,
+          c.variant['_id'] == variantId &&
+          c.customPackVolume == customVol &&
+          c.customBasePackingUnit == customUnit,
     );
     setState(() {
       if (idx >= 0) {
@@ -489,6 +791,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           product: product,
           variant: variant,
           priceOverride: _getSalesOverride(variantId),
+          customPackVolume: customVol,
+          customBasePackingUnit: customUnit,
         ));
       }
     });
@@ -519,10 +823,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   double get _cartTotal => _cart.fold(0.0, (s, c) => s + c.lineTotal);
 
   int _qtyInCart(String productId, String variantId) {
-    final item = _cart.where(
+    final items = _cart.where(
       (c) => c.product['_id'] == productId && c.variant['_id'] == variantId,
     );
-    return item.isEmpty ? 0 : item.first.quantity;
+    return items.fold(0, (sum, c) => sum + c.quantity);
   }
 
   // ---------------------------------------------------------------------------
@@ -843,9 +1147,11 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
 
     final variantId = variant['_id'] ?? '';
     final inCart = _qtyInCart(productId, variantId);
+    final customVol = _customPackVolumes[variantId];
     final double currentPrice = _getVariantPrice(
       variant,
       inCart > 0 ? inCart : 1,
+      customPackVolume: customVol,
     );
     final priceStr = '₹${_formatAmt(currentPrice)}';
 
@@ -982,8 +1288,12 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   const SizedBox(height: 4),
                   Builder(
                     builder: (context) {
-                      final packVolume = variant['packVolume'];
-                      final basePackingUnit = (variant['basePackingUnit'] ?? '')
+                      final customVol = _customPackVolumes[variantId];
+                      final customUnit = _customBaseUnits[variantId];
+                      final isCustom = customVol != null;
+
+                      final packVolume = customVol ?? variant['packVolume'];
+                      final basePackingUnit = (customUnit ?? variant['basePackingUnit'] ?? '')
                           .toString()
                           .trim();
                       if (packVolume == null || basePackingUnit.isEmpty) {
@@ -993,30 +1303,62 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                       final volStr = volNum % 1 == 0
                           ? volNum.toInt().toString()
                           : volNum.toStringAsFixed(1);
-                      final unitLabel = basePackingUnit == 'pcs'
+                      final unitLabel = basePackingUnit.toLowerCase() == 'pcs'
                           ? 'Pcs'
-                          : basePackingUnit == 'kg'
+                          : basePackingUnit.toLowerCase() == 'kg'
                           ? 'Kg'
                           : 'L';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.inventory_2_outlined,
-                              size: 10,
-                              color: AppTheme.textSecondary,
+                        child: InkWell(
+                          onTap: () => _openCustomBasePackingDialog(
+                            productId: productId,
+                            variant: variant,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Base Pack: $volStr $unitLabel',
-                              style: AppTheme.bodySM.copyWith(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
+                            decoration: BoxDecoration(
+                              color: isCustom
+                                  ? const Color(0xFFFEF3C7)
+                                  : AppTheme.primaryColor.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isCustom
+                                    ? const Color(0xFFF59E0B)
+                                    : AppTheme.primaryColor.withValues(alpha: 0.15),
+                                width: isCustom ? 1.2 : 1,
                               ),
                             ),
-                          ],
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 11,
+                                  color: isCustom ? const Color(0xFFD97706) : AppTheme.primaryColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Base Pack: $volStr $unitLabel${isCustom ? ' (Custom)' : ''}',
+                                  style: AppTheme.bodySM.copyWith(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: isCustom ? const Color(0xFFB45309) : AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.edit_outlined,
+                                  size: 10.5,
+                                  color: isCustom ? const Color(0xFFB45309) : AppTheme.primaryColor,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -1372,6 +1714,51 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                             ),
                           ),
                         ],
+                        const SizedBox(height: 3),
+                        InkWell(
+                          onTap: () => _openCustomBasePackingDialog(
+                            productId: item.product['_id'] ?? '',
+                            variant: item.variant,
+                            cartItem: item,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 11,
+                                  color: item.isCustomBasePack
+                                      ? const Color(0xFFD97706)
+                                      : AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Base Pack: ${item.effectivePackVolume % 1 == 0 ? item.effectivePackVolume.toInt() : item.effectivePackVolume} ${item.effectiveBaseUnit}${item.isCustomBasePack ? ' (Custom)' : ''}',
+                                  style: AppTheme.bodySM.copyWith(
+                                    fontSize: 10.5,
+                                    fontWeight: item.isCustomBasePack
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    color: item.isCustomBasePack
+                                        ? const Color(0xFFD97706)
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.edit_outlined,
+                                  size: 11,
+                                  color: item.isCustomBasePack
+                                      ? const Color(0xFFD97706)
+                                      : AppTheme.textSecondary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2808,8 +3195,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     required String productId,
     required String variantId,
   }) {
-    final String baseUnit = (variant['basePackingUnit'] ?? '').toString();
-    final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+    final customVol = _customPackVolumes[variantId];
+    final customUnit = _customBaseUnits[variantId];
+    final String baseUnit = customUnit ?? (variant['basePackingUnit'] ?? '').toString();
+    final double packVolume = customVol ?? ((variant['packVolume'] ?? 1) as num).toDouble();
     final double totalVolume = packVolume * inCart;
 
     final List<Map<String, dynamic>> validTiers = [];
@@ -2844,9 +3233,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       }
     }
 
-    final String volUnit = baseUnit == 'pcs'
+    final String volUnit = baseUnit.toLowerCase() == 'pcs'
         ? ' Pcs'
-        : baseUnit == 'kg'
+        : baseUnit.toLowerCase() == 'kg'
         ? 'Kg'
         : 'L';
 
@@ -2929,9 +3318,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   baseUnit: baseUnit,
                   onTap: () {
                     if (isUnlocked) {
-                      final unitLabel = baseUnit == 'pcs'
+                      final unitLabel = baseUnit.toLowerCase() == 'pcs'
                           ? 'pcs'
-                          : baseUnit == 'kg'
+                          : baseUnit.toLowerCase() == 'kg'
                           ? 'kg'
                           : 'lit.';
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -3012,9 +3401,11 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   int _getRequiredQtyForTier(
     Map<String, dynamic> variant,
     String tierKey,
-    double threshold,
-  ) {
-    final double packVolume = ((variant['packVolume'] ?? 1) as num).toDouble();
+    double threshold, {
+    double? customPackVolume,
+  }) {
+    final double packVolume =
+        customPackVolume ?? ((variant['packVolume'] ?? 1) as num).toDouble();
     int qty = 1;
     while (qty <= 10000) {
       final double vol = packVolume * qty;
@@ -3037,11 +3428,17 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     required String productId,
     required String variantId,
   }) {
-    final int requiredQty = _getRequiredQtyForTier(variant, tierKey, threshold);
+    final int requiredQty = _getRequiredQtyForTier(
+      variant,
+      tierKey,
+      threshold,
+      customPackVolume: packVolume,
+    );
     final int diffQty = (requiredQty - currentQty).clamp(0, 9999);
     final double currentUnitPrice = _getVariantPrice(
       variant,
       currentQty > 0 ? currentQty : 1,
+      customPackVolume: packVolume,
     );
     final double targetUnitPrice = tierPrice * packVolume;
     final double savings =
@@ -3050,9 +3447,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         : (requiredQty * currentUnitPrice) - (requiredQty * targetUnitPrice);
     final double currentVol = packVolume * currentQty;
     final double targetVol = packVolume * requiredQty;
-    final String unitLabel = baseUnit == 'pcs'
+    final String unitLabel = baseUnit.toLowerCase() == 'pcs'
         ? 'pcs'
-        : baseUnit == 'kg'
+        : baseUnit.toLowerCase() == 'kg'
         ? 'kg'
         : 'lit.';
 
@@ -3382,11 +3779,15 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                                 orElse: () => {},
                               );
                               if (product.isNotEmpty) {
+                                final customVol = _customPackVolumes[variantId];
+                                final customUnit = _customBaseUnits[variantId];
                                 _cart.add(
                                   _CartItem(
                                     product: product,
                                     variant: variant,
                                     quantity: requiredQty,
+                                    customPackVolume: customVol,
+                                    customBasePackingUnit: customUnit,
                                   ),
                                 );
                               }
@@ -3754,168 +4155,6 @@ class _PriceRow extends StatelessWidget {
   }
 }
 
-class _ProgressiveImage extends StatefulWidget {
-  final String? lowResUrl;
-  final String? highResUrl;
-  final double? width;
-  final double? height;
-  final BoxFit fit;
-  final double errorIconSize;
-
-  const _ProgressiveImage({
-    required this.lowResUrl,
-    required this.highResUrl,
-    this.width,
-    this.height,
-    this.fit = BoxFit.contain,
-    required this.errorIconSize,
-  });
-
-  @override
-  State<_ProgressiveImage> createState() => _ProgressiveImageState();
-}
-
-class _ProgressiveImageState extends State<_ProgressiveImage> {
-  bool _highResLoaded = false;
-  String? _loadedHighResUrl;
-
-  @override
-  void didUpdateWidget(covariant _ProgressiveImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.highResUrl != widget.highResUrl) {
-      setState(() {
-        _highResLoaded = false;
-        _loadedHighResUrl = null;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lowUrl = widget.lowResUrl;
-    final highUrl = widget.highResUrl;
-
-    if ((highUrl == null || highUrl.isEmpty) &&
-        (lowUrl == null || lowUrl.isEmpty)) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: Center(
-          child: Icon(
-            Icons.inventory_2_outlined,
-            size: widget.errorIconSize,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-      );
-    }
-
-    // When the high-res image has loaded completely and is the target URL,
-    // only show the sharp high-res image. This completely hides the blurry
-    // low-res image to prevent pixel bleed-through.
-    if (_highResLoaded &&
-        highUrl != null &&
-        highUrl.isNotEmpty &&
-        _loadedHighResUrl == highUrl) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: Image.network(
-          highUrl,
-          width: widget.width,
-          height: widget.height,
-          fit: widget.fit,
-          filterQuality: FilterQuality.medium,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint(
-              'Failed to load high-res image: $highUrl. Error: $error',
-            );
-            return Icon(
-              Icons.image_not_supported_outlined,
-              size: widget.errorIconSize,
-              color: AppTheme.textSecondary,
-            );
-          },
-        ),
-      );
-    }
-
-    final lowResWidget = lowUrl != null && lowUrl.isNotEmpty
-        ? Image.network(
-            lowUrl,
-            width: widget.width,
-            height: widget.height,
-            fit: widget.fit,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (context, error, stackTrace) {
-              debugPrint(
-                'Failed to load low-res image: $lowUrl. Error: $error',
-              );
-              return Icon(
-                Icons.image_not_supported_outlined,
-                size: widget.errorIconSize,
-                color: AppTheme.textSecondary,
-              );
-            },
-          )
-        : Icon(
-            Icons.inventory_2_outlined,
-            size: widget.errorIconSize,
-            color: AppTheme.textSecondary,
-          );
-
-    if (highUrl == null || highUrl.isEmpty) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: lowResWidget,
-      );
-    }
-
-    final highResWidget = Image.network(
-      highUrl,
-      width: widget.width,
-      height: widget.height,
-      fit: widget.fit,
-      filterQuality: FilterQuality.medium,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && (!_highResLoaded || _loadedHighResUrl != highUrl)) {
-              setState(() {
-                _highResLoaded = true;
-                _loadedHighResUrl = highUrl;
-              });
-            }
-          });
-          return child;
-        }
-        return const SizedBox.shrink();
-      },
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('Failed to load high-res image: $highUrl. Error: $error');
-        return const SizedBox.shrink();
-      },
-    );
-
-    if (lowUrl == null || lowUrl.isEmpty) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: highResWidget,
-      );
-    }
-
-    return SizedBox(
-      width: widget.width,
-      height: widget.height,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [lowResWidget, highResWidget],
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // _TierMilestoneCard — Animated, matches mobile app design exactly
