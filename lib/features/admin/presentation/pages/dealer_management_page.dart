@@ -900,8 +900,22 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       context,
       salesAgents: state.salesAgents,
       isSubmitting: state.status == DealersStatus.submitting,
-      onSubmit: (dealerData) {
-        _dealersBloc?.add(CreateDealerEvent(dealerData));
+      onSubmit: ({
+        required dealerData,
+        licenceBytes,
+        licenceFileName,
+        shopBytes,
+        shopFileName,
+      }) {
+        _dealersBloc?.add(
+          CreateDealerEvent(
+            dealerData: dealerData,
+            licenceBytes: licenceBytes,
+            licenceFileName: licenceFileName,
+            shopBytes: shopBytes,
+            shopFileName: shopFileName,
+          ),
+        );
       },
     );
   }

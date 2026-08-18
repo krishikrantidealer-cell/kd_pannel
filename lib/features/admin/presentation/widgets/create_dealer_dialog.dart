@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,9 +7,17 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/services/pincode_service.dart';
 
+typedef OnSubmitDealer = void Function({
+  required Map<String, dynamic> dealerData,
+  Uint8List? licenceBytes,
+  String? licenceFileName,
+  Uint8List? shopBytes,
+  String? shopFileName,
+});
+
 class CreateDealerDialog extends StatefulWidget {
   final List<Map<String, dynamic>> salesAgents;
-  final Function(Map<String, dynamic> dealerData) onSubmit;
+  final OnSubmitDealer onSubmit;
   final bool isSubmitting;
 
   const CreateDealerDialog({
@@ -20,7 +30,7 @@ class CreateDealerDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required List<Map<String, dynamic>> salesAgents,
-    required Function(Map<String, dynamic> dealerData) onSubmit,
+    required OnSubmitDealer onSubmit,
     bool isSubmitting = false,
   }) {
     return showDialog(
@@ -57,6 +67,12 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
   String? _selectedAgentId;
   bool _isFetchingLocation = false;
   String? _pincodeFeedback;
+
+  // KYC Upload Files
+  Uint8List? _licenceBytes;
+  String? _licenceFileName;
+  Uint8List? _shopBytes;
+  String? _shopFileName;
 
   static const List<String> _indianStates = [
     'Andhra Pradesh',
@@ -123,6 +139,48 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
     super.dispose();
   }
 
+  Future<void> _pickLicenceFile() async {
+    try {
+      final res = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        withData: true,
+      );
+      if (res != null && res.files.isNotEmpty) {
+        final f = res.files.first;
+        if (f.bytes != null) {
+          setState(() {
+            _licenceBytes = f.bytes;
+            _licenceFileName = f.name;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Licence pick error: $e');
+    }
+  }
+
+  Future<void> _pickShopFile() async {
+    try {
+      final res = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+      if (res != null && res.files.isNotEmpty) {
+        final f = res.files.first;
+        if (f.bytes != null) {
+          setState(() {
+            _shopBytes = f.bytes;
+            _shopFileName = f.name;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Shop photo pick error: $e');
+    }
+  }
+
   Future<void> _handlePincodeChange(String val) async {
     final cleanPin = val.trim().replaceAll(RegExp(r'[^\d]'), '');
     if (cleanPin.length != 6) {
@@ -150,7 +208,6 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
           final district = data['district'] ?? '';
           final rawState = data['state'] ?? '';
 
-          // Match state in predefined list
           final matchedState = _indianStates.firstWhere(
             (s) =>
                 s.toLowerCase() == rawState.toLowerCase() ||
@@ -220,7 +277,13 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
       if (notes.isNotEmpty) 'notes': notes,
     };
 
-    widget.onSubmit(payload);
+    widget.onSubmit(
+      dealerData: payload,
+      licenceBytes: _licenceBytes,
+      licenceFileName: _licenceFileName,
+      shopBytes: _shopBytes,
+      shopFileName: _shopFileName,
+    );
     Navigator.of(context).pop();
   }
 
@@ -527,8 +590,71 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
                       ],
 
                       const SizedBox(height: 20),
-                      // Section 3: Assignment & Notes
-                      _buildSectionTitle('3. Sales Agent & Notes', Icons.assignment_ind_rounded),
+                      // Section 3: KYC Documents Upload
+                      _buildSectionTitle('3. KYC Documents (Optional)', Icons.verified_user_rounded),
+                      const SizedBox(height: 12),
+
+                      if (isMobile) ...[
+                        _buildDocumentUploadCard(
+                          title: 'Fertilizer/Seed License',
+                          subtitle: 'Image or PDF (Max 10MB)',
+                          fileName: _licenceFileName,
+                          icon: Icons.description_rounded,
+                          onPick: _pickLicenceFile,
+                          onRemove: () => setState(() {
+                            _licenceBytes = null;
+                            _licenceFileName = null;
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDocumentUploadCard(
+                          title: 'Shop Front Photo',
+                          subtitle: 'Shop signboard / front photo',
+                          fileName: _shopFileName,
+                          icon: Icons.storefront_rounded,
+                          onPick: _pickShopFile,
+                          onRemove: () => setState(() {
+                            _shopBytes = null;
+                            _shopFileName = null;
+                          }),
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDocumentUploadCard(
+                                title: 'Fertilizer/Seed License',
+                                subtitle: 'Image or PDF (Max 10MB)',
+                                fileName: _licenceFileName,
+                                icon: Icons.description_rounded,
+                                onPick: _pickLicenceFile,
+                                onRemove: () => setState(() {
+                                  _licenceBytes = null;
+                                  _licenceFileName = null;
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _buildDocumentUploadCard(
+                                title: 'Shop Front Photo',
+                                subtitle: 'Shop signboard / front photo',
+                                fileName: _shopFileName,
+                                icon: Icons.storefront_rounded,
+                                onPick: _pickShopFile,
+                                onRemove: () => setState(() {
+                                  _shopBytes = null;
+                                  _shopFileName = null;
+                                }),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+                      // Section 4: Assignment & Notes
+                      _buildSectionTitle('4. Sales Agent & Notes', Icons.assignment_ind_rounded),
                       const SizedBox(height: 12),
 
                       if (!isSales) ...[
@@ -623,6 +749,89 @@ class _CreateDealerDialogState extends State<CreateDealerDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDocumentUploadCard({
+    required String title,
+    required String subtitle,
+    required String? fileName,
+    required IconData icon,
+    required VoidCallback onPick,
+    required VoidCallback onRemove,
+  }) {
+    final hasFile = fileName != null && fileName.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: hasFile ? AppTheme.primaryColor.withValues(alpha: 0.05) : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasFile ? AppTheme.primaryColor.withValues(alpha: 0.4) : AppTheme.borderColor,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: hasFile ? AppTheme.primaryColor.withValues(alpha: 0.15) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: hasFile ? AppTheme.primaryColor.withValues(alpha: 0.3) : AppTheme.borderColor),
+            ),
+            child: Icon(
+              hasFile ? Icons.check_circle_rounded : icon,
+              color: hasFile ? AppTheme.primaryColor : AppTheme.textSecondary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  hasFile ? fileName : subtitle,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: hasFile ? FontWeight.w600 : FontWeight.normal,
+                    color: hasFile ? AppTheme.primaryColor : AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (hasFile)
+            IconButton(
+              onPressed: onRemove,
+              icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.error),
+              tooltip: 'Remove',
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: onPick,
+              icon: const Icon(Icons.upload_file_rounded, size: 14),
+              label: const Text('Browse'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                textStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+        ],
+      ),
     );
   }
 

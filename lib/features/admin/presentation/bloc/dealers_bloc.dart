@@ -5,6 +5,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
+import 'package:http/http.dart' as http;
+
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
@@ -30,7 +32,49 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(status: DealersStatus.submitting));
     try {
-      final res = await ApiClient().post('/users/dealer', event.dealerData);
+      http.Response res;
+
+      if (event.licenceBytes != null || event.shopBytes != null) {
+        final fields = <String, String>{};
+        event.dealerData.forEach((k, v) {
+          if (v is Map) {
+            fields[k] = jsonEncode(v);
+          } else if (v != null) {
+            fields[k] = v.toString();
+          }
+        });
+
+        res = await ApiClient().multipartRequest(
+          method: 'POST',
+          endpoint: '/users/dealer',
+          fields: fields,
+          filesBuilder: () {
+            final files = <http.MultipartFile>[];
+            if (event.licenceBytes != null && event.licenceFileName != null) {
+              files.add(
+                http.MultipartFile.fromBytes(
+                  'licenceImage',
+                  event.licenceBytes!,
+                  filename: event.licenceFileName!,
+                ),
+              );
+            }
+            if (event.shopBytes != null && event.shopFileName != null) {
+              files.add(
+                http.MultipartFile.fromBytes(
+                  'shopImage',
+                  event.shopBytes!,
+                  filename: event.shopFileName!,
+                ),
+              );
+            }
+            return files;
+          },
+        );
+      } else {
+        res = await ApiClient().post('/users/dealer', event.dealerData);
+      }
+
       final data = jsonDecode(res.body);
 
       if (res.statusCode == 200 || res.statusCode == 201) {

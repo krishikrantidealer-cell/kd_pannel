@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:equatable/equatable.dart';
 
 abstract class DealersEvent extends Equatable {
@@ -17,10 +18,27 @@ class FetchDealersDataEvent extends DealersEvent {
 
 class CreateDealerEvent extends DealersEvent {
   final Map<String, dynamic> dealerData;
-  const CreateDealerEvent(this.dealerData);
+  final Uint8List? licenceBytes;
+  final String? licenceFileName;
+  final Uint8List? shopBytes;
+  final String? shopFileName;
+
+  const CreateDealerEvent({
+    required this.dealerData,
+    this.licenceBytes,
+    this.licenceFileName,
+    this.shopBytes,
+    this.shopFileName,
+  });
 
   @override
-  List<Object?> get props => [dealerData];
+  List<Object?> get props => [
+        dealerData,
+        licenceBytes,
+        licenceFileName,
+        shopBytes,
+        shopFileName,
+      ];
 }
 
 class AssignAgentToDealerEvent extends DealersEvent {
