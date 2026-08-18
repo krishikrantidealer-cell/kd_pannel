@@ -61,6 +61,7 @@ class _MainLayoutState extends State<MainLayout> {
   // Persistent static stack of Sales Pages (Preserves states!)
   final List<Widget> _salesPages = [
     const SalesDashboardPage(),
+    const ProductsPage(),
     const OrdersPage(),
     const LeadsPage(),
     const DealerManagementPage(),
@@ -132,24 +133,26 @@ class _MainLayoutState extends State<MainLayout> {
       } else {
         if (routeName == '/dashboard' || routeName == '/sales/dashboard') {
           _currentIdx = 0;
-        } else if (routeName.startsWith('/orders')) {
+        } else if (routeName.startsWith('/products')) {
           _currentIdx = 1;
-        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
+        } else if (routeName.startsWith('/orders')) {
           _currentIdx = 2;
-        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
+        } else if (routeName == '/leads' || routeName.startsWith('/leads/')) {
           _currentIdx = 3;
-        } else if (routeName == '/sales/coupons') {
+        } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 4;
-        } else if (routeName == '/marketing' || routeName == '/customer' || routeName == '/events') {
+        } else if (routeName == '/sales/coupons') {
           _currentIdx = 5;
-        } else if (routeName == '/alerts') {
+        } else if (routeName == '/marketing' || routeName == '/customer' || routeName == '/events') {
           _currentIdx = 6;
-        } else if (routeName == '/sales/estimates') {
+        } else if (routeName == '/alerts') {
           _currentIdx = 7;
-        } else if (routeName == '/support') {
+        } else if (routeName == '/sales/estimates') {
           _currentIdx = 8;
-        } else if (routeName == '/calls') {
+        } else if (routeName == '/support') {
           _currentIdx = 9;
+        } else if (routeName == '/calls') {
+          _currentIdx = 10;
         } else {
           _currentIdx = 0;
         }
@@ -182,15 +185,16 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 13) route = '/calls';
     } else {
       if (index == 0) route = '/dashboard';
-      if (index == 1) route = '/orders';
-      if (index == 2) route = '/leads';
-      if (index == 3) route = '/dealers';
-      if (index == 4) route = '/sales/coupons';
-      if (index == 5) route = '/marketing';
-      if (index == 6) route = '/alerts';
-      if (index == 7) route = '/sales/estimates';
-      if (index == 8) route = '/support';
-      if (index == 9) route = '/calls';
+      if (index == 1) route = '/products';
+      if (index == 2) route = '/orders';
+      if (index == 3) route = '/leads';
+      if (index == 4) route = '/dealers';
+      if (index == 5) route = '/sales/coupons';
+      if (index == 6) route = '/marketing';
+      if (index == 7) route = '/alerts';
+      if (index == 8) route = '/sales/estimates';
+      if (index == 9) route = '/support';
+      if (index == 10) route = '/calls';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;

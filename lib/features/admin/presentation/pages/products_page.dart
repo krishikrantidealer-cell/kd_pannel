@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
@@ -16,7 +17,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/products_state.dart';
 import 'package:animations/animations.dart';
 
 class ProductsPage extends StatefulWidget {
-  const ProductsPage({super.key});
+  final bool? isReadOnly;
+  const ProductsPage({super.key, this.isReadOnly});
 
   @override
   State<ProductsPage> createState() => _ProductsPageState();
@@ -104,132 +106,73 @@ class _ProductsPageState extends State<ProductsPage> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
+    final bool isSales = (widget.isReadOnly ?? false) ||
+        (AuthService().currentUserRole == UserRole.sales);
 
     return SelectionArea(
       child: BlocBuilder<ProductsBloc, ProductsState>(
-          builder: (context, state) {
-            final products = state.allProducts;
-            final collections = state.collections;
-            final categories = state.categories;
-            final isLoadingProducts = state.status == ProductsStatus.loading;
-            final isLoadingCollections = state.status == ProductsStatus.loading;
+        builder: (context, state) {
+          final products = state.allProducts;
+          final collections = state.collections;
+          final categories = state.categories;
+          final isLoadingProducts = state.status == ProductsStatus.loading;
+          final isLoadingCollections = state.status == ProductsStatus.loading;
 
-            return SingleChildScrollView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              padding: AppTheme.getResponsivePadding(context),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  isMobile
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _selectedTab == 'Products'
-                                  ? 'Product Catalogue'
-                                  : _selectedTab == 'Collections'
-                                  ? 'Product Collections'
-                                  : _selectedTab == 'Categories'
-                                  ? 'Product Categories'
-                                  : 'Carousel Banners',
-                              style: GoogleFonts.outfit(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
+          final String title = isSales
+              ? 'Products'
+              : (_selectedTab == 'Products'
+                  ? 'Product Catalogue'
+                  : _selectedTab == 'Collections'
+                  ? 'Product Collections'
+                  : _selectedTab == 'Categories'
+                  ? 'Product Categories'
+                  : 'Carousel Banners');
+
+          final String subtitle = isSales
+              ? 'Browse and view available products, technical specifications and pricing details'
+              : (_selectedTab == 'Products'
+                  ? 'View and manage agricultural products, categories and sub-categories'
+                  : _selectedTab == 'Collections'
+                  ? 'Organize products into curated thematic groups and bundles'
+                  : _selectedTab == 'Categories'
+                  ? 'Configure categories and custom sub-categories hierarchy'
+                  : 'Upload and manage app home screen carousel banners');
+
+          return SingleChildScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: AppTheme.getResponsivePadding(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.outfit(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _selectedTab == 'Products'
-                                  ? 'View and manage agricultural products, categories and sub-categories'
-                                  : _selectedTab == 'Collections'
-                                  ? 'Organize products into curated thematic groups and bundles'
-                                  : _selectedTab == 'Categories'
-                                  ? 'Configure categories and custom sub-categories hierarchy'
-                                  : 'Upload and manage app home screen carousel banners',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: AppTheme.textSecondary,
-                              ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
                             ),
+                          ),
+                          if (!isSales && (_selectedTab == 'Products' || _selectedTab == 'Collections')) ...[
                             const SizedBox(height: 16),
-                            if (_selectedTab == 'Products' || _selectedTab == 'Collections')
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    if (_selectedTab == 'Products') {
-                                      _startAddProduct(context);
-                                    } else {
-                                      _startCreateCollection(context, products);
-                                    }
-                                  },
-                                  icon: const Icon(Icons.add_rounded, size: 18),
-                                  label: Text(
-                                    _selectedTab == 'Products'
-                                        ? 'Add Product'
-                                        : 'Create Collection',
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primaryColor,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _selectedTab == 'Products'
-                                        ? 'Product Catalogue'
-                                        : _selectedTab == 'Collections'
-                                        ? 'Product Collections'
-                                        : _selectedTab == 'Categories'
-                                        ? 'Product Categories'
-                                        : 'Carousel Banners',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _selectedTab == 'Products'
-                                        ? 'View and manage agricultural products, categories and sub-categories'
-                                        : _selectedTab == 'Collections'
-                                        ? 'Organize products into curated thematic groups and bundles'
-                                        : _selectedTab == 'Categories'
-                                        ? 'Configure categories and custom sub-categories hierarchy'
-                                        : 'Upload and manage app home screen carousel banners',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            if (_selectedTab == 'Products' || _selectedTab == 'Collections')
-                              ElevatedButton.icon(
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
                                 onPressed: () {
                                   if (_selectedTab == 'Products') {
                                     _startAddProduct(context);
@@ -248,7 +191,6 @@ class _ProductsPageState extends State<ProductsPage> {
                                   foregroundColor: Colors.white,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
                                     vertical: 12,
                                   ),
                                   shape: RoundedRectangleBorder(
@@ -256,11 +198,72 @@ class _ProductsPageState extends State<ProductsPage> {
                                   ),
                                 ),
                               ),
+                            ),
                           ],
-                        ),
-                  const SizedBox(height: 16),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  subtitle,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!isSales && (_selectedTab == 'Products' || _selectedTab == 'Collections')) ...[
+                            const SizedBox(width: 16),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                if (_selectedTab == 'Products') {
+                                  _startAddProduct(context);
+                                } else {
+                                  _startCreateCollection(context, products);
+                                }
+                              },
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: Text(
+                                _selectedTab == 'Products'
+                                    ? 'Add Product'
+                                    : 'Create Collection',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                const SizedBox(height: 16),
 
-                  // Tab Selector
+                // Tab Selector (Only shown for Admin, hidden for Sales)
+                if (!isSales) ...[
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -300,6 +303,22 @@ class _ProductsPageState extends State<ProductsPage> {
                     ),
                   ),
                   SizedBox(height: AppTheme.spacingLarge),
+                ],
+
+                // Content View
+                if (isSales)
+                  ProductsTabView(
+                    products: products,
+                    backendCategories: categories,
+                    isLoadingProducts: isLoadingProducts,
+                    isReadOnly: true,
+                    onRefresh: () {
+                      context.read<ProductsBloc>().add(
+                        const LoadProductsEvent(forceRefresh: true),
+                      );
+                    },
+                  )
+                else
                   IndexedStack(
                     index: _selectedTab == 'Products'
                         ? 0
@@ -313,6 +332,7 @@ class _ProductsPageState extends State<ProductsPage> {
                         products: products,
                         backendCategories: categories,
                         isLoadingProducts: isLoadingProducts,
+                        isReadOnly: false,
                         onRefresh: () {
                           context.read<ProductsBloc>().add(
                             const LoadProductsEvent(forceRefresh: true),
@@ -347,12 +367,12 @@ class _ProductsPageState extends State<ProductsPage> {
                       ),
                     ],
                   ),
-                ],
-              ),
-            );
-          },
-        ),
-      );
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildSegmentButton({
