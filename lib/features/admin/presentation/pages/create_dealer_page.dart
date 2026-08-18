@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -99,10 +98,8 @@ class _CreateDealerPageState extends State<CreateDealerPage> {
 
     final auth = AuthService();
     if (auth.isSales) {
-      // Sales person is creating: lock to their own ID
       _selectedAgentId = auth.currentUserId;
     } else {
-      // Admin is creating: load sales agents list for the dropdown
       _loadSalesAgents();
     }
   }
@@ -332,7 +329,6 @@ class _CreateDealerPageState extends State<CreateDealerPage> {
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         if (data['success'] == true) {
-          // Trigger BLoC refresh
           try {
             context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
           } catch (_) {}
@@ -380,7 +376,9 @@ class _CreateDealerPageState extends State<CreateDealerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTwoColumn = screenWidth >= 1100;
+    final isMobile = screenWidth < 700;
     final auth = AuthService();
     final isSales = auth.isSales;
 
@@ -453,465 +451,521 @@ class _CreateDealerPageState extends State<CreateDealerPage> {
             horizontal: isMobile ? 16 : 32,
             vertical: 24,
           ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1000),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Section 1: Basic & Shop Info
-                  _buildCard(
-                    title: '1. Dealer & Business Profile',
-                    subtitle: 'Enter dealer contact name, mobile number, and firm details',
-                    icon: Icons.store_rounded,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isMobile) ...[
-                          _buildInputField(
-                            label: 'First Name *',
-                            controller: _firstNameController,
-                            hint: 'e.g. Ramesh',
-                            validator: (val) => val == null || val.trim().isEmpty ? 'First name is required' : null,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildInputField(
-                            label: 'Last Name',
-                            controller: _lastNameController,
-                            hint: 'e.g. Patel',
-                          ),
-                          const SizedBox(height: 16),
-                          _buildInputField(
-                            label: 'Mobile / Phone Number (10 digits) *',
-                            controller: _phoneController,
-                            hint: '9876543210',
-                            prefixText: '+91 ',
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(10),
-                            ],
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) return 'Phone number is required';
-                              if (val.trim().length != 10) return 'Must be exactly 10 digits';
-                              return null;
-                            },
-                          ),
-                        ] else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildInputField(
-                                  label: 'First Name *',
-                                  controller: _firstNameController,
-                                  hint: 'e.g. Ramesh',
-                                  validator: (val) => val == null || val.trim().isEmpty ? 'First name is required' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildInputField(
-                                  label: 'Last Name',
-                                  controller: _lastNameController,
-                                  hint: 'e.g. Patel',
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildInputField(
-                                  label: 'Mobile / Phone Number (10 digits) *',
-                                  controller: _phoneController,
-                                  hint: '9876543210',
-                                  prefixText: '+91 ',
-                                  keyboardType: TextInputType.phone,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(10),
-                                  ],
-                                  validator: (val) {
-                                    if (val == null || val.trim().isEmpty) return 'Phone number is required';
-                                    if (val.trim().length != 10) return 'Must be exactly 10 digits';
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isTwoColumn)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Column (Profile & Location)
+                    Expanded(
+                      flex: 6,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildProfileCard(isMobile: false),
+                          const SizedBox(height: 24),
+                          _buildLocationCard(isMobile: false),
                         ],
-                        const SizedBox(height: 16),
-                        if (isMobile) ...[
-                          _buildInputField(
-                            label: 'Shop / Firm / Business Name *',
-                            controller: _shopNameController,
-                            hint: 'e.g. Kisan Agro Mart & Krishi Kendra',
-                            validator: (val) => val == null || val.trim().isEmpty ? 'Shop name is required' : null,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildInputField(
-                            label: 'GST Number (Optional)',
-                            controller: _gstController,
-                            hint: '23AAAAA0000A1Z5',
-                            textCapitalization: TextCapitalization.characters,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildInputField(
-                            label: 'Email Address (Optional)',
-                            controller: _emailController,
-                            hint: 'dealer@example.com',
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                        ] else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: _buildInputField(
-                                  label: 'Shop / Firm / Business Name *',
-                                  controller: _shopNameController,
-                                  hint: 'e.g. Kisan Agro Mart & Krishi Kendra',
-                                  validator: (val) => val == null || val.trim().isEmpty ? 'Shop name is required' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                flex: 2,
-                                child: _buildInputField(
-                                  label: 'GST Number (Optional)',
-                                  controller: _gstController,
-                                  hint: '23AAAAA0000A1Z5',
-                                  textCapitalization: TextCapitalization.characters,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                flex: 2,
-                                child: _buildInputField(
-                                  label: 'Email Address (Optional)',
-                                  controller: _emailController,
-                                  hint: 'dealer@example.com',
-                                  keyboardType: TextInputType.emailAddress,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Section 2: Address & Location
-                  _buildCard(
-                    title: '2. Location & Address',
-                    subtitle: 'Enter 6-digit Pincode to auto-fill City and State',
-                    icon: Icons.location_on_rounded,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Pincode with Auto-Fetch
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: isMobile ? double.infinity : 320,
-                              child: _buildInputField(
-                                label: 'Pincode (6 digits) *',
-                                controller: _pincodeController,
-                                hint: 'e.g. 452001',
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(6),
-                                ],
-                                onChanged: _handlePincodeChange,
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) return 'Pincode is required';
-                                  if (val.trim().length != 6) return 'Must be exactly 6 digits';
-                                  return null;
-                                },
-                                suffixWidget: _isFetchingLocation
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        if (_pincodeFeedback != null) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(
-                                _pincodeFeedback!.startsWith('✓')
-                                    ? Icons.check_circle_rounded
-                                    : Icons.info_outline_rounded,
-                                size: 16,
-                                color: _pincodeFeedback!.startsWith('✓')
-                                    ? AppTheme.success
-                                    : AppTheme.warning,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _pincodeFeedback!,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _pincodeFeedback!.startsWith('✓')
-                                        ? AppTheme.success
-                                        : AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        const SizedBox(height: 16),
-
-                        _buildInputField(
-                          label: 'Village / Area / Street / Market *',
-                          controller: _villageAreaController,
-                          hint: 'Shop No. 12, Krishi Mandi Complex',
-                          validator: (val) => val == null || val.trim().isEmpty ? 'Address is required' : null,
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        if (isMobile) ...[
-                          _buildInputField(
-                            label: 'City / Tehsil (Auto-filled) *',
-                            controller: _cityController,
-                            hint: 'e.g. Indore',
-                            validator: (val) => val == null || val.trim().isEmpty ? 'City is required' : null,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildStateDropdown(),
-                          const SizedBox(height: 16),
-                          _buildInputField(
-                            label: 'Landmark / Address Line 2 (Optional)',
-                            controller: _addressLine2Controller,
-                            hint: 'Near SBI Branch',
-                          ),
-                        ] else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildInputField(
-                                  label: 'City / Tehsil (Auto-filled) *',
-                                  controller: _cityController,
-                                  hint: 'e.g. Indore',
-                                  validator: (val) => val == null || val.trim().isEmpty ? 'City is required' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildStateDropdown()),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildInputField(
-                                  label: 'Landmark / Address 2 (Optional)',
-                                  controller: _addressLine2Controller,
-                                  hint: 'Near SBI Branch',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Section 3: KYC Documents
-                  _buildCard(
-                    title: '3. KYC Documents (Optional)',
-                    subtitle: 'Attach license document or shop photo directly during onboarding',
-                    icon: Icons.verified_user_rounded,
-                    child: Column(
-                      children: [
-                        if (isMobile) ...[
-                          _buildDocumentUploadCard(
-                            title: 'Fertilizer / Seed / Pesticide License',
-                            subtitle: 'Upload PDF or photo of government license',
-                            fileName: _licenceFileName,
-                            icon: Icons.description_rounded,
-                            onPick: _pickLicenceFile,
-                            onRemove: () => setState(() {
-                              _licenceBytes = null;
-                              _licenceFileName = null;
-                            }),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDocumentUploadCard(
-                            title: 'Shop Front Photo',
-                            subtitle: 'Upload photo of shopfront with board',
-                            fileName: _shopFileName,
-                            icon: Icons.storefront_rounded,
-                            onPick: _pickShopFile,
-                            onRemove: () => setState(() {
-                              _shopBytes = null;
-                              _shopFileName = null;
-                            }),
-                          ),
-                        ] else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildDocumentUploadCard(
-                                  title: 'Fertilizer / Seed / Pesticide License',
-                                  subtitle: 'Upload PDF or photo of government license',
-                                  fileName: _licenceFileName,
-                                  icon: Icons.description_rounded,
-                                  onPick: _pickLicenceFile,
-                                  onRemove: () => setState(() {
-                                    _licenceBytes = null;
-                                    _licenceFileName = null;
-                                  }),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildDocumentUploadCard(
-                                  title: 'Shop Front Photo',
-                                  subtitle: 'Upload photo of shopfront with board',
-                                  fileName: _shopFileName,
-                                  icon: Icons.storefront_rounded,
-                                  onPick: _pickShopFile,
-                                  onRemove: () => setState(() {
-                                    _shopBytes = null;
-                                    _shopFileName = null;
-                                  }),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Section 4: Assignment & Initial Notes
-                  _buildCard(
-                    title: isSales ? '4. Assignment & Internal Notes' : '4. Sales Assignment & Internal Notes',
-                    subtitle: isSales
-                        ? 'This dealer will be directly assigned to your sales account'
-                        : 'Assign a sales executive to manage and support this dealer',
-                    icon: Icons.assignment_ind_rounded,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isSales) ...[
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: AppTheme.primaryColor, size: 20),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'As a Sales Agent, this dealer will automatically be assigned to you upon creation.',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ] else ...[
-                          _buildAgentDropdown(),
-                          const SizedBox(height: 16),
-                        ],
-
-                        _buildInputField(
-                          label: 'Initial Notes / Remarks (Optional)',
-                          controller: _notesController,
-                          hint: 'e.g. Met at agri-expo, interested in wholesale fertilizer supply',
-                          maxLines: 3,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Action Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          side: const BorderSide(color: AppTheme.borderColor),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
                       ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: _isSubmitting ? null : _handleSubmit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.check_circle_outline_rounded, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Create & Verify Dealer',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                    ),
+                    const SizedBox(width: 24),
+                    // Right Column (KYC & Notes & Actions)
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildKycCard(isMobile: false),
+                          const SizedBox(height: 24),
+                          _buildAssignmentCard(isSales: isSales),
+                          const SizedBox(height: 24),
+                          _buildActionCard(),
+                        ],
                       ),
+                    ),
+                  ],
+                )
+              else ...[
+                _buildProfileCard(isMobile: isMobile),
+                const SizedBox(height: 20),
+                _buildLocationCard(isMobile: isMobile),
+                const SizedBox(height: 20),
+                _buildKycCard(isMobile: isMobile),
+                const SizedBox(height: 20),
+                _buildAssignmentCard(isSales: isSales),
+                const SizedBox(height: 24),
+                _buildActionCard(),
+              ],
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard({required bool isMobile}) {
+    return _buildCard(
+      title: '1. Dealer & Business Profile',
+      subtitle: 'Enter dealer contact name, mobile number, and firm details',
+      icon: Icons.store_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isMobile) ...[
+            _buildInputField(
+              label: 'First Name *',
+              controller: _firstNameController,
+              hint: 'e.g. Ramesh',
+              validator: (val) => val == null || val.trim().isEmpty ? 'First name is required' : null,
+            ),
+            const SizedBox(height: 16),
+            _buildInputField(
+              label: 'Last Name',
+              controller: _lastNameController,
+              hint: 'e.g. Patel',
+            ),
+            const SizedBox(height: 16),
+            _buildInputField(
+              label: 'Mobile / Phone Number (10 digits) *',
+              controller: _phoneController,
+              hint: '9876543210',
+              prefixText: '+91 ',
+              keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) return 'Phone number is required';
+                if (val.trim().length != 10) return 'Must be exactly 10 digits';
+                return null;
+              },
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInputField(
+                    label: 'First Name *',
+                    controller: _firstNameController,
+                    hint: 'e.g. Ramesh',
+                    validator: (val) => val == null || val.trim().isEmpty ? 'First name is required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildInputField(
+                    label: 'Last Name',
+                    controller: _lastNameController,
+                    hint: 'e.g. Patel',
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildInputField(
+                    label: 'Mobile / Phone Number (10 digits) *',
+                    controller: _phoneController,
+                    hint: '9876543210',
+                    prefixText: '+91 ',
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
                     ],
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'Phone number is required';
+                      if (val.trim().length != 10) return 'Must be exactly 10 digits';
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 48),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (isMobile) ...[
+            _buildInputField(
+              label: 'Shop / Firm / Business Name *',
+              controller: _shopNameController,
+              hint: 'e.g. Kisan Agro Mart & Krishi Kendra',
+              validator: (val) => val == null || val.trim().isEmpty ? 'Shop name is required' : null,
+            ),
+            const SizedBox(height: 16),
+            _buildInputField(
+              label: 'GST Number (Optional)',
+              controller: _gstController,
+              hint: '23AAAAA0000A1Z5',
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 16),
+            _buildInputField(
+              label: 'Email Address (Optional)',
+              controller: _emailController,
+              hint: 'dealer@example.com',
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _buildInputField(
+                    label: 'Shop / Firm / Business Name *',
+                    controller: _shopNameController,
+                    hint: 'e.g. Kisan Agro Mart & Krishi Kendra',
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Shop name is required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: _buildInputField(
+                    label: 'GST Number (Optional)',
+                    controller: _gstController,
+                    hint: '23AAAAA0000A1Z5',
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: _buildInputField(
+                    label: 'Email Address (Optional)',
+                    controller: _emailController,
+                    hint: 'dealer@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationCard({required bool isMobile}) {
+    return _buildCard(
+      title: '2. Location & Address',
+      subtitle: 'Enter 6-digit Pincode to auto-fill City and State',
+      icon: Icons.location_on_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: isMobile ? double.infinity : 280,
+                child: _buildInputField(
+                  label: 'Pincode (6 digits) *',
+                  controller: _pincodeController,
+                  hint: 'e.g. 452001',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onChanged: _handlePincodeChange,
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) return 'Pincode is required';
+                    if (val.trim().length != 6) return 'Must be exactly 6 digits';
+                    return null;
+                  },
+                  suffixWidget: _isFetchingLocation
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryColor,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ],
+          ),
+          if (_pincodeFeedback != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  _pincodeFeedback!.startsWith('✓') ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                  size: 16,
+                  color: _pincodeFeedback!.startsWith('✓') ? AppTheme.success : AppTheme.warning,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _pincodeFeedback!,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _pincodeFeedback!.startsWith('✓') ? AppTheme.success : AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          _buildInputField(
+            label: 'Village / Area / Street / Market *',
+            controller: _villageAreaController,
+            hint: 'Shop No. 12, Krishi Mandi Complex',
+            validator: (val) => val == null || val.trim().isEmpty ? 'Address is required' : null,
+          ),
+          const SizedBox(height: 16),
+          if (isMobile) ...[
+            _buildInputField(
+              label: 'City / Tehsil (Auto-filled) *',
+              controller: _cityController,
+              hint: 'e.g. Indore',
+              validator: (val) => val == null || val.trim().isEmpty ? 'City is required' : null,
+            ),
+            const SizedBox(height: 16),
+            _buildStateDropdown(),
+            const SizedBox(height: 16),
+            _buildInputField(
+              label: 'Landmark / Address Line 2 (Optional)',
+              controller: _addressLine2Controller,
+              hint: 'Near SBI Branch',
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInputField(
+                    label: 'City / Tehsil (Auto-filled) *',
+                    controller: _cityController,
+                    hint: 'e.g. Indore',
+                    validator: (val) => val == null || val.trim().isEmpty ? 'City is required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(child: _buildStateDropdown()),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildInputField(
+                    label: 'Landmark / Address 2 (Optional)',
+                    controller: _addressLine2Controller,
+                    hint: 'Near SBI Branch',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKycCard({required bool isMobile}) {
+    return _buildCard(
+      title: '3. KYC Documents (Optional)',
+      subtitle: 'Attach license document or shop photo directly during onboarding',
+      icon: Icons.verified_user_rounded,
+      child: Column(
+        children: [
+          if (isMobile) ...[
+            _buildDocumentUploadCard(
+              title: 'Fertilizer / Seed License',
+              subtitle: 'Upload PDF or photo of government license',
+              fileName: _licenceFileName,
+              icon: Icons.description_rounded,
+              onPick: _pickLicenceFile,
+              onRemove: () => setState(() {
+                _licenceBytes = null;
+                _licenceFileName = null;
+              }),
+            ),
+            const SizedBox(height: 16),
+            _buildDocumentUploadCard(
+              title: 'Shop Front Photo',
+              subtitle: 'Upload photo of shopfront with board',
+              fileName: _shopFileName,
+              icon: Icons.storefront_rounded,
+              onPick: _pickShopFile,
+              onRemove: () => setState(() {
+                _shopBytes = null;
+                _shopFileName = null;
+              }),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDocumentUploadCard(
+                    title: 'Fertilizer / Seed License',
+                    subtitle: 'Upload PDF or photo of license',
+                    fileName: _licenceFileName,
+                    icon: Icons.description_rounded,
+                    onPick: _pickLicenceFile,
+                    onRemove: () => setState(() {
+                      _licenceBytes = null;
+                      _licenceFileName = null;
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildDocumentUploadCard(
+                    title: 'Shop Front Photo',
+                    subtitle: 'Upload photo of shop with board',
+                    fileName: _shopFileName,
+                    icon: Icons.storefront_rounded,
+                    onPick: _pickShopFile,
+                    onRemove: () => setState(() {
+                      _shopBytes = null;
+                      _shopFileName = null;
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentCard({required bool isSales}) {
+    return _buildCard(
+      title: isSales ? '4. Assignment & Internal Notes' : '4. Sales Assignment & Internal Notes',
+      subtitle: isSales
+          ? 'This dealer will be directly assigned to your sales account'
+          : 'Assign a sales executive to manage and support this dealer',
+      icon: Icons.assignment_ind_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isSales) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: AppTheme.primaryColor, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'As a Sales Agent, this dealer will automatically be assigned to you upon creation.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+          ] else ...[
+            _buildAgentDropdown(),
+            const SizedBox(height: 16),
+          ],
+          _buildInputField(
+            label: 'Initial Notes / Remarks (Optional)',
+            controller: _notesController,
+            hint: 'e.g. Met at agri-expo, interested in wholesale fertilizer supply',
+            maxLines: 3,
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Ready to onboard this dealer?',
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  side: const BorderSide(color: AppTheme.borderColor),
+                ),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              ElevatedButton(
+                onPressed: _isSubmitting ? null : _handleSubmit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_outline_rounded, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Create & Verify Dealer',
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
