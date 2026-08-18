@@ -49,8 +49,14 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           final List rawOrders = data['orders'] ?? [];
-          final List<OrderModel> parsedOrders =
-              rawOrders.map((o) => OrderModel.fromJson(o)).toList();
+          final List<OrderModel> parsedOrders = [];
+          for (final o in rawOrders) {
+            try {
+              parsedOrders.add(OrderModel.fromJson(o));
+            } catch (err) {
+              // Ignore single malformed order and keep loading the rest
+            }
+          }
           emit(state.copyWith(
             status: OrdersStatus.success,
             orders: parsedOrders,

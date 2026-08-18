@@ -14,6 +14,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/create_order_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/util/dealers.dart';
@@ -333,8 +335,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   .map((o) => Map<String, dynamic>.from(o))
                   .where(
                     (o) =>
-                        (o['user'] is Map && o['user']['_id'] == dealerId) ||
-                        o['user'] == dealerId,
+                        (o['user'] is Map &&
+                            (o['user']['_id']?.toString() == dealerId ||
+                                o['user']['id']?.toString() == dealerId)) ||
+                        o['user']?.toString() == dealerId,
                   )
                   .toList();
             });
@@ -1249,6 +1253,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                 FetchDealerOrdersEvent(currentDealer.id!),
                               );
                             }
+                            context.read<OrdersBloc>().add(
+                              const FetchOrdersEvent(),
+                            );
                           }
                         },
                       ),

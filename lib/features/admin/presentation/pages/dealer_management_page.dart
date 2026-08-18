@@ -19,6 +19,8 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'create_dealer_page.dart';
 import 'create_order_page.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 
 class DealerManagementPage extends StatefulWidget {
   final bool isStandalone;
@@ -2820,6 +2822,9 @@ class _DealerTableState extends State<_DealerTable> {
                 if (result == true && context.mounted) {
                   context.read<DealersBloc>().add(
                     const FetchDealersDataEvent(forceRefresh: true),
+                  );
+                  context.read<OrdersBloc>().add(
+                    const FetchOrdersEvent(),
                   );
                 }
               },

@@ -29,8 +29,20 @@ class OrderItem {
     this.isCustomBasePack = false,
   });
 
-  factory OrderItem.fromJson(Map<String, dynamic> json) {
-    final productMap = json['product'] as Map<String, dynamic>?;
+  factory OrderItem.fromJson(dynamic jsonRaw) {
+    if (jsonRaw is! Map) {
+      return OrderItem(
+        productId: '',
+        variantId: '',
+        title: '',
+        quantity: 0,
+        price: 0.0,
+      );
+    }
+    final json = Map<String, dynamic>.from(jsonRaw);
+    final dynamic rawProduct = json['product'];
+    final Map<String, dynamic>? productMap =
+        rawProduct is Map ? Map<String, dynamic>.from(rawProduct) : null;
     String? sizeVal = json['variant']?.toString();
     if (sizeVal == 'Standard' || sizeVal == '') sizeVal = null;
     String? basePackingVal = json['basePacking']?.toString();
@@ -40,20 +52,27 @@ class OrderItem {
 
     if (productMap != null && productMap['variants'] is List) {
       final variantsList = productMap['variants'] as List;
-      final matchingVariant = variantsList.firstWhere(
-        (v) =>
-            v is Map && v['_id']?.toString() == json['variantId']?.toString(),
-        orElse: () => null,
-      );
+      dynamic matchingVariant;
+      for (final v in variantsList) {
+        if (v is Map &&
+            (v['_id']?.toString() == json['variantId']?.toString() ||
+                v['id']?.toString() == json['variantId']?.toString())) {
+          matchingVariant = v;
+          break;
+        }
+      }
       if (matchingVariant != null && matchingVariant is Map) {
-        sizeVal ??= matchingVariant['size']?.toString() ?? matchingVariant['packSize']?.toString();
+        sizeVal ??= matchingVariant['size']?.toString() ??
+            matchingVariant['packSize']?.toString();
         if (basePackingVal == null || basePackingVal.isEmpty) {
           basePackingVal = matchingVariant['basePacking']?.toString();
           if (basePackingVal == null || basePackingVal.isEmpty) {
             final mvVol = matchingVariant['packVolume'];
             final mvUnit = matchingVariant['basePackingUnit'];
             if (mvVol != null) {
-              basePackingVal = '${mvVol % 1 == 0 ? mvVol.toInt() : mvVol} ${mvUnit ?? ''}'.trim();
+              basePackingVal =
+                  '${mvVol % 1 == 0 ? mvVol.toInt() : mvVol} ${mvUnit ?? ''}'
+                      .trim();
             }
           }
         }
@@ -63,19 +82,21 @@ class OrderItem {
     }
 
     if ((basePackingVal == null || basePackingVal.isEmpty) && packVol != null) {
-      basePackingVal = '${packVol % 1 == 0 ? packVol.toInt() : packVol} ${baseUnit ?? ''}'.trim();
+      basePackingVal =
+          '${packVol % 1 == 0 ? packVol.toInt() : packVol} ${baseUnit ?? ''}'
+              .trim();
     }
 
     return OrderItem(
       productId: json['product'] is Map
-          ? (json['product']['_id'] ?? '')
-          : (json['product'] ?? ''),
-      variantId: json['variantId'] ?? '',
-      title: json['title'] ?? '',
-      vendor: json['vendor'],
-      technicalName: json['technicalName'],
-      image: json['image'],
-      quantity: json['quantity'] ?? 0,
+          ? (json['product']['_id']?.toString() ?? '')
+          : (json['product']?.toString() ?? ''),
+      variantId: json['variantId']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      vendor: json['vendor']?.toString(),
+      technicalName: json['technicalName']?.toString(),
+      image: json['image']?.toString(),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       variantSize: sizeVal,
       basePacking: basePackingVal,
@@ -246,8 +267,30 @@ class OrderModel {
     this.assignedAgentId,
   });
 
-  factory OrderModel.fromJson(Map<String, dynamic> json) {
-    final userJson = json['user'] as Map<String, dynamic>?;
+  factory OrderModel.fromJson(dynamic jsonRaw) {
+    if (jsonRaw is! Map) {
+      return OrderModel(
+        id: '',
+        orderId: '',
+        customerName: 'Unknown',
+        customerPhone: '',
+        customerRole: 'Lead',
+        items: const [],
+        totalAmount: 0.0,
+        shippingAddress: ShippingAddress(
+          villageArea: '',
+          cityTehsil: '',
+          pincode: '',
+        ),
+        paymentMethod: 'Online',
+        paymentStatus: 'Pending',
+        orderStatus: 'Processing',
+        placedAt: DateTime.now(),
+      );
+    }
+    final json = Map<String, dynamic>.from(jsonRaw);
+    final userRaw = json['user'];
+    final userJson = userRaw is Map ? Map<String, dynamic>.from(userRaw) : null;
     String customerName = 'Unknown Customer';
     String? shopName;
     String customerPhone = '';
@@ -258,8 +301,8 @@ class OrderModel {
 
     if (userJson != null) {
       userId = userJson['_id']?.toString();
-      final firstName = userJson['firstName'] ?? '';
-      final lastName = userJson['lastName'] ?? '';
+      final firstName = userJson['firstName']?.toString() ?? '';
+      final lastName = userJson['lastName']?.toString() ?? '';
       shopName = userJson['shopName']?.toString();
       final fullName = '$firstName $lastName'.trim();
       if (fullName.isNotEmpty) {
@@ -267,7 +310,7 @@ class OrderModel {
       } else if (shopName != null && shopName.isNotEmpty) {
         customerName = shopName;
       }
-      customerPhone = userJson['phoneNumber'] ?? '';
+      customerPhone = userJson['phoneNumber']?.toString() ?? '';
       final isKycVerified =
           userJson['kycStatus'] == 'verified' ||
           (userJson['isKycComplete'] == true);
@@ -277,9 +320,9 @@ class OrderModel {
       if (assignedAgent != null) {
         if (assignedAgent is Map) {
           agentId = (assignedAgent['_id'] ?? assignedAgent['id'])?.toString();
-          final firstName = assignedAgent['firstName'] ?? '';
-          final lastName = assignedAgent['lastName'] ?? '';
-          agentName = '$firstName $lastName'.trim();
+          final aFirst = assignedAgent['firstName']?.toString() ?? '';
+          final aLast = assignedAgent['lastName']?.toString() ?? '';
+          agentName = '$aFirst $aLast'.trim();
           if (agentName.isEmpty) agentName = assignedAgent['phoneNumber']?.toString();
         } else {
           // It's just an ID string
@@ -288,20 +331,29 @@ class OrderModel {
       }
     }
 
-    final itemsList =
-        (json['items'] as List?)?.map((i) => OrderItem.fromJson(i)).toList() ??
+    final itemsList = (json['items'] as List?)
+            ?.map((i) => OrderItem.fromJson(i))
+            .toList() ??
         [];
-    final freeItemsList =
-        (json['freeItems'] as List?)
-            ?.map((f) => FreeItem.fromJson(f))
+    final freeItemsList = (json['freeItems'] as List?)
+            ?.map((f) => FreeItem.fromJson(f is Map ? Map<String, dynamic>.from(f) : {}))
             .toList() ??
         [];
 
     final placedAtRaw = json['placedAt'] ?? json['createdAt'];
+    DateTime placedAtParsed = DateTime.now();
+    if (placedAtRaw != null) {
+      try {
+        placedAtParsed = DateTime.parse(placedAtRaw.toString());
+      } catch (_) {}
+    }
+
+    final shippingRaw = json['shippingAddress'];
+    final shippingMap = shippingRaw is Map ? Map<String, dynamic>.from(shippingRaw) : <String, dynamic>{};
 
     return OrderModel(
-      id: json['_id'] ?? '',
-      orderId: json['orderId'] ?? '',
+      id: json['_id']?.toString() ?? '',
+      orderId: json['orderId']?.toString() ?? '',
       userId: userId,
       customerName: customerName,
       shopName: shopName,
@@ -310,39 +362,39 @@ class OrderModel {
       items: itemsList,
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
       discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
-      couponCode: json['couponCode'],
+      couponCode: json['couponCode']?.toString(),
       freeItems: freeItemsList,
-      shippingAddress: ShippingAddress.fromJson(json['shippingAddress'] ?? {}),
-      paymentMethod: json['paymentMethod'] ?? 'Online',
-      paymentStatus: json['paymentStatus'] ?? 'Pending',
-      razorpayPaymentId: json['razorpayPaymentId'],
+      shippingAddress: ShippingAddress.fromJson(shippingMap),
+      paymentMethod: json['paymentMethod']?.toString() ?? 'Online',
+      paymentStatus: json['paymentStatus']?.toString() ?? 'Pending',
+      razorpayPaymentId: json['razorpayPaymentId']?.toString(),
       advanceAmount: (json['advanceAmount'] as num?)?.toDouble() ?? 0.0,
       remainingAmount: (json['remainingAmount'] as num?)?.toDouble() ?? 0.0,
-      orderStatus: json['orderStatus'] ?? 'Processing',
-      courierStatus: json['courierStatus'],
-      awbNumber: json['awbNumber'],
-      courierName: json['courierName'],
-      trackingUrl: json['trackingUrl'],
-      placedAt: placedAtRaw != null
-          ? DateTime.parse(placedAtRaw)
-          : DateTime.now(),
+      orderStatus: json['orderStatus']?.toString() ?? 'Processing',
+      courierStatus: json['courierStatus']?.toString(),
+      awbNumber: json['awbNumber']?.toString(),
+      courierName: json['courierName']?.toString(),
+      trackingUrl: json['trackingUrl']?.toString(),
+      placedAt: placedAtParsed,
       processingAt: json['processingAt'] != null
-          ? DateTime.parse(json['processingAt'])
+          ? DateTime.tryParse(json['processingAt'].toString())
           : null,
       shippedAt: json['shippedAt'] != null
-          ? DateTime.parse(json['shippedAt'])
+          ? DateTime.tryParse(json['shippedAt'].toString())
           : null,
       outForDeliveryAt: json['outForDeliveryAt'] != null
-          ? DateTime.parse(json['outForDeliveryAt'])
+          ? DateTime.tryParse(json['outForDeliveryAt'].toString())
           : null,
       deliveredAt: json['deliveredAt'] != null
-          ? DateTime.parse(json['deliveredAt'])
+          ? DateTime.tryParse(json['deliveredAt'].toString())
           : null,
       cancelledAt: json['cancelledAt'] != null
-          ? DateTime.parse(json['cancelledAt'])
+          ? DateTime.tryParse(json['cancelledAt'].toString())
           : null,
-      rtoAt: json['rtoAt'] != null ? DateTime.parse(json['rtoAt']) : null,
-      assignedAgent: agentName ?? json['assignedAgent'],
+      rtoAt: json['rtoAt'] != null
+          ? DateTime.tryParse(json['rtoAt'].toString())
+          : null,
+      assignedAgent: agentName ?? json['assignedAgent']?.toString(),
       assignedAgentId: agentId,
     );
   }

@@ -147,8 +147,10 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               .map((o) => Map<String, dynamic>.from(o))
               .where(
                 (o) =>
-                    (o['user'] is Map && o['user']['_id'] == event.userId) ||
-                    o['user'] == event.userId,
+                    (o['user'] is Map &&
+                        (o['user']['_id']?.toString() == event.userId.toString() ||
+                            o['user']['id']?.toString() == event.userId.toString())) ||
+                    o['user']?.toString() == event.userId.toString(),
               )
               .toList();
 
