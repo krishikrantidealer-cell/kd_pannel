@@ -224,8 +224,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   late TextEditingController _phoneController;
 
   String? _paymentMethod;
+  String _paymentMode = 'UPI'; // 'UPI', 'Bank Transfer', 'Cheque', 'Cash'
   double _advanceAmount = 0;
   late TextEditingController _paymentIdController;
+  late TextEditingController _advanceAmountCtrl;
 
   // Coupon
   Map<String, dynamic>? _appliedCoupon;
@@ -256,6 +258,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     _nameController = TextEditingController(text: widget.dealer.name);
     _phoneController = TextEditingController(text: widget.dealer.phone);
     _paymentIdController = TextEditingController();
+    _advanceAmountCtrl = TextEditingController(
+      text: _advanceAmount > 0 ? _advanceAmount.toStringAsFixed(0) : '',
+    );
 
     _fetchProducts();
   }
@@ -269,6 +274,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     _nameController.dispose();
     _phoneController.dispose();
     _paymentIdController.dispose();
+    _advanceAmountCtrl.dispose();
     _searchCtrl.dispose();
     _manualDiscountCtrl.dispose();
     super.dispose();
@@ -324,6 +330,12 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   Future<void> _submitOrder() async {
     if (_cart.isEmpty) {
       _showSnack('Add at least one product to continue.', isError: true);
+      return;
+    }
+    if (_paymentMethod == null) {
+      _showSnack(
+          'Please select a payment type (Full Payment or Partial Payment).',
+          isError: true);
       return;
     }
     if (!_formKey.currentState!.validate()) return;
@@ -398,6 +410,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           'pincode': _pincodeController.text.trim(),
         },
         'paymentMethod': _paymentMethod,
+        'paymentMode': _paymentMode,
         'paymentId': _paymentIdController.text.trim(),
         'advanceAmount': _paymentMethod == 'Partial' ? _advanceAmount : finalTotal,
         'totalAmount': finalTotal,
@@ -811,16 +824,128 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   }
 
   void _removeFromCart(int index) {
-    setState(() => _cart.removeAt(index));
+    setState(() {
+      _cart.removeAt(index);
+      if (_cart.isEmpty && _step == 2) {
+        _step = 1;
+      }
+    });
   }
 
   void _updateQty(int index, int delta) {
     setState(() {
-      _cart[index].quantity = (_cart[index].quantity + delta).clamp(1, 999);
+      final newQty = _cart[index].quantity + delta;
+      if (newQty <= 0) {
+        _cart.removeAt(index);
+        if (_cart.isEmpty && _step == 2) {
+          _step = 1;
+        }
+      } else {
+        _cart[index].quantity = newQty.clamp(1, 999);
+      }
     });
   }
 
   double get _cartTotal => _cart.fold(0.0, (s, c) => s + c.lineTotal);
+
+  double get _finalOrderTotal {
+    final subtotal = _cartTotal;
+
+    // Calculate Sales Cart Discount
+    double salesCartDiscount = 0;
+    if (_appliedSalesCoupon != null) {
+      final type = _appliedSalesCoupon!['cartDiscountType'] ?? 'None';
+      final val = (_appliedSalesCoupon!['cartDiscountValue'] ?? 0) as num;
+      if (type == 'Fixed') {
+        salesCartDiscount = val.toDouble();
+      } else if (type == 'Percentage') {
+        salesCartDiscount = (subtotal * val.toDouble()) / 100;
+      }
+    }
+
+    // Calculate Manual Discount
+    double manualDiscountValue = 0;
+    final manualVal = double.tryParse(_manualDiscountCtrl.text.trim()) ?? 0;
+    if (_manualDiscountType == 'Fixed') {
+      manualDiscountValue = manualVal;
+    } else if (_manualDiscountType == 'Percentage') {
+      manualDiscountValue = (subtotal * manualVal) / 100;
+    }
+
+    return (subtotal - _discountAmount - salesCartDiscount - manualDiscountValue)
+        .clamp(0.0, double.infinity);
+  }
+
+  double get _totalDiscountSavings {
+    final subtotal = _cartTotal;
+    final finalTotal = _finalOrderTotal;
+    return (subtotal - finalTotal).clamp(0.0, double.infinity);
+  }
+
+  String _getOrderLogisticsSummary() {
+    int totalItems = 0;
+    double totalLiters = 0;
+    double totalKgs = 0;
+    double totalPcs = 0;
+
+    for (final item in _cart) {
+      totalItems += item.quantity;
+      final vol = item.effectivePackVolume * item.quantity;
+      final unit = item.effectiveBaseUnit.toLowerCase().trim();
+      if (unit.contains('lit') || unit == 'l' || unit == 'ml') {
+        if (unit == 'ml') {
+          totalLiters += vol / 1000.0;
+        } else {
+          totalLiters += vol;
+        }
+      } else if (unit.contains('kg') || unit == 'gm' || unit == 'g') {
+        if (unit == 'gm' || unit == 'g') {
+          totalKgs += vol / 1000.0;
+        } else {
+          totalKgs += vol;
+        }
+      } else {
+        totalPcs += vol;
+      }
+    }
+
+    final List<String> parts = [];
+    parts.add('$totalItems ${totalItems == 1 ? 'Unit' : 'Units'}');
+    if (totalLiters > 0) {
+      parts.add('${totalLiters % 1 == 0 ? totalLiters.toInt() : totalLiters.toStringAsFixed(1)} L');
+    }
+    if (totalKgs > 0) {
+      parts.add('${totalKgs % 1 == 0 ? totalKgs.toInt() : totalKgs.toStringAsFixed(1)} Kg');
+    }
+    if (totalPcs > 0 && totalLiters == 0 && totalKgs == 0) {
+      parts.add('${totalPcs % 1 == 0 ? totalPcs.toInt() : totalPcs.toStringAsFixed(0)} Pcs');
+    }
+
+    return parts.join(' • ');
+  }
+
+  void _resetShippingAddressToDealer() {
+    final addr = widget.dealer.address;
+    setState(() {
+      _nameController.text = widget.dealer.name;
+      _phoneController.text = widget.dealer.phone;
+      _villageController.text = addr?['villageArea'] ?? '';
+      _cityController.text = widget.dealer.city;
+      _stateController.text = widget.dealer.state;
+      _pincodeController.text = addr?['pincode'] ?? '';
+    });
+    _showSnack('Address reset to Dealer profile default.');
+  }
+
+  void _setAdvancePercentage(double percentage) {
+    final finalTotal = _finalOrderTotal;
+    final calculated = (finalTotal * percentage / 100).roundToDouble();
+    setState(() {
+      _advanceAmount = calculated;
+      _advanceAmountCtrl.text =
+          calculated > 0 ? calculated.toStringAsFixed(0) : '';
+    });
+  }
 
   int _qtyInCart(String productId, String variantId) {
     final items = _cart.where(
@@ -1567,507 +1692,111 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Step 2 – Shipping & Review (Mobile view helper)
+  // Step 2 – Shipping & Review (Advanced ERP Layout)
   // ---------------------------------------------------------------------------
 
   Widget _buildReviewStep(bool isMobile) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionHeader(
-                    Icons.shopping_bag_outlined,
-                    'Order Summary',
-                    '${_cart.fold(0, (s, c) => s + c.quantity)} items',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildOrderSummaryCard(),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader(
-                    Icons.location_on_outlined,
-                    'Shipping Address',
-                    'Pre-filled from dealer profile',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAddressForm(isMobile),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader(
-                    Icons.payments_outlined,
-                    'Payment Method',
-                    null,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPaymentSection(),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader(
-                    Icons.local_offer_outlined,
-                    'Coupon / Offer',
-                    _appliedCoupon == null ? 'Save more with a coupon' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildCouponRow(),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader(
-                    Icons.shopping_cart_checkout_rounded,
-                    'Manual Order Discount',
-                    'One-time adjustment for this order',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildManualDiscountSection(),
-                  const SizedBox(height: 24),
-                  _buildPriceBreakdown(),
-                ],
-              ),
-            ),
-          ),
-          _buildReviewBottomBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(IconData icon, String title, String? subtitle) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 18, color: AppTheme.primaryColor),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: AppTheme.headingSM.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 14.5,
-              ),
-            ),
-            if (subtitle != null)
-              Text(
-                subtitle,
-                style: AppTheme.bodySM.copyWith(
-                  fontSize: 11,
-                  color: AppTheme.textSecondary,
+    if (_cart.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
                 ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOrderSummaryCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
-        children: [
-          ..._cart.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final item = entry.value;
-            final size = item.variant['size'] ?? item.variant['packSize'] ?? '';
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: idx < _cart.length - 1
-                      ? const BorderSide(color: AppTheme.lightBorderColor)
-                      : BorderSide.none,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.product['title'] ?? item.product['name'] ?? '',
-                          style: AppTheme.bodyLG.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        if (size.toString().isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            size.toString(),
-                            style: AppTheme.bodySM.copyWith(
-                              fontSize: 11,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 3),
-                        InkWell(
-                          onTap: () => _openCustomBasePackingDialog(
-                            productId: item.product['_id'] ?? '',
-                            variant: item.variant,
-                            cartItem: item,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.inventory_2_outlined,
-                                  size: 11,
-                                  color: item.isCustomBasePack
-                                      ? const Color(0xFFD97706)
-                                      : AppTheme.textSecondary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Base Pack: ${item.effectivePackVolume % 1 == 0 ? item.effectivePackVolume.toInt() : item.effectivePackVolume} ${item.effectiveBaseUnit}${item.isCustomBasePack ? ' (Custom)' : ''}',
-                                  style: AppTheme.bodySM.copyWith(
-                                    fontSize: 10.5,
-                                    fontWeight: item.isCustomBasePack
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
-                                    color: item.isCustomBasePack
-                                        ? const Color(0xFFD97706)
-                                        : AppTheme.textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.edit_outlined,
-                                  size: 11,
-                                  color: item.isCustomBasePack
-                                      ? const Color(0xFFD97706)
-                                      : AppTheme.textSecondary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '₹${_formatAmt(item.price)} × ${item.quantity}',
-                        style: AppTheme.bodySM.copyWith(
-                          fontSize: 11.5,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        '₹${_formatAmt(item.lineTotal)}',
-                        style: AppTheme.headingSM.copyWith(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () => _removeFromCart(idx),
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.error.withValues(alpha: 0.05),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 14,
-                        color: AppTheme.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddressForm(bool isMobile) {
-    Widget field(
-      String label,
-      TextEditingController ctrl, {
-      String? hint,
-      bool required = true,
-      TextInputType? keyboardType,
-    }) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppTheme.labelMD.copyWith(color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: ctrl,
-            keyboardType: keyboardType,
-            style: AppTheme.bodyMD,
-            validator: required
-                ? (v) => v == null || v.trim().isEmpty ? 'Required' : null
-                : null,
-            decoration: InputDecoration(
-              hintText: hint ?? label,
-              hintStyle: AppTheme.hint.copyWith(
-                color: AppTheme.textSecondary.withValues(alpha: 0.6),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              filled: true,
-              fillColor: AppTheme.backgroundColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
+                child: const Icon(
+                  Icons.remove_shopping_cart_outlined,
+                  size: 48,
                   color: AppTheme.primaryColor,
-                  width: 1.5,
                 ),
               ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.error),
+              const SizedBox(height: 16),
+              Text(
+                'Your Order is Empty',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
               ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+              const SizedBox(height: 8),
+              Text(
+                'Please select products from the catalog before reviewing.',
+                textAlign: TextAlign.center,
+                style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
               ),
-            ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _step = 1),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: const Text('Back to Product Catalog'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        field('Recipient Name', _nameController),
-        const SizedBox(height: 12),
-        field(
-          'Phone Number',
-          _phoneController,
-          keyboardType: TextInputType.phone,
-        ),
-        const SizedBox(height: 12),
-        field('Village / Area', _villageController, required: false),
-        const SizedBox(height: 12),
-        isMobile
-            ? Column(
-                children: [
-                  field('City / Tehsil', _cityController),
-                  const SizedBox(height: 12),
-                  field('State', _stateController),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(child: field('City / Tehsil', _cityController)),
-                  const SizedBox(width: 12),
-                  Expanded(child: field('State', _stateController)),
-                ],
-              ),
-        const SizedBox(height: 12),
-        field(
-          'Pincode',
-          _pincodeController,
-          keyboardType: TextInputType.number,
-        ),
-      ],
+    return Form(
+      key: _formKey,
+      child: isMobile ? _buildMobileReviewLayout() : _buildDesktopReviewLayout(),
     );
   }
 
-  Widget _buildPaymentSection() {
-    final inputDecoration = InputDecoration(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      filled: true,
-      fillColor: AppTheme.backgroundColor,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.borderColor),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.borderColor),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1.2),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
-      ),
-    );
+  // ---------------------------------------------------------------------------
+  // Desktop 2-Column Layout
+  // ---------------------------------------------------------------------------
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
+  Widget _buildDesktopReviewLayout() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Payment Type Options ──
-          _PaymentOption(
-            label: 'Full Payment',
-            subtitle: 'Complete amount paid upfront',
-            icon: Icons.check_circle_outline_rounded,
-            isSelected: _paymentMethod == 'FullPayment',
-            onTap: () => setState(() {
-              _paymentMethod = 'FullPayment';
-              _advanceAmount = 0;
-            }),
-          ),
-          const Divider(height: 1, color: AppTheme.lightBorderColor),
-          _PaymentOption(
-            label: 'Partial Payment',
-            subtitle: 'Advance now, balance later',
-            icon: Icons.account_balance_wallet_outlined,
-            isSelected: _paymentMethod == 'Partial',
-            onTap: () => setState(() => _paymentMethod = 'Partial'),
-          ),
-
-          const Divider(height: 1, color: AppTheme.lightBorderColor),
-
-          // ── Shared fields panel ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+          // Left Column (~60%)
+          Expanded(
+            flex: 6,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Payment ID — always required
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.receipt_long_outlined,
-                      size: 14,
-                      color: AppTheme.primaryColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Payment ID',
-                      style: AppTheme.labelMD.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '(Required)',
-                      style: AppTheme.bodySM.copyWith(
-                        fontSize: 10.5,
-                        color: AppTheme.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _paymentIdController,
-                  style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.w600),
-                  decoration: inputDecoration.copyWith(
-                    hintText: 'Enter transaction / reference ID',
-                    prefixIcon: const Icon(
-                      Icons.tag_rounded,
-                      size: 18,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Payment ID is required to place the order';
-                    }
-                    return null;
-                  },
-                ),
-
-                // Advance Amount — only for Partial
-                if (_paymentMethod == 'Partial') ...[
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.currency_rupee_rounded,
-                        size: 14,
-                        color: AppTheme.primaryColor,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Advance Amount',
-                        style: AppTheme.labelMD.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    initialValue: _advanceAmount > 0
-                        ? _advanceAmount.toStringAsFixed(0)
-                        : '',
-                    keyboardType: TextInputType.number,
-                    style: AppTheme.bodyMD.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    onChanged: (v) => setState(
-                      () => _advanceAmount = double.tryParse(v) ?? 0,
-                    ),
-                    validator: (v) {
-                      if (_paymentMethod != 'Partial') return null;
-                      final val = double.tryParse(v ?? '') ?? 0;
-                      if (val <= 0) return 'Enter a valid advance amount';
-                      if (val >= _cartTotal) return 'Must be less than total';
-                      return null;
-                    },
-                    decoration: inputDecoration.copyWith(
-                      hintText: 'e.g. 5000',
-                      prefixIcon: const Icon(
-                        Icons.currency_rupee_rounded,
-                        size: 18,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
+                _buildReviewExecutiveBanner(),
+                const SizedBox(height: 18),
+                _buildOrderSummaryCard(),
+                const SizedBox(height: 18),
+                _buildAddressForm(false),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Right Column (~40%)
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildPaymentSection(),
+                const SizedBox(height: 18),
+                _buildCouponAndDiscountCard(),
+                const SizedBox(height: 18),
+                _buildPriceBreakdown(),
+                const SizedBox(height: 18),
+                _buildDesktopOrderActionPanel(),
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -2076,107 +1805,1454 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     );
   }
 
-  Widget _buildManualDiscountSection() {
+  // ---------------------------------------------------------------------------
+  // Mobile 1-Column Layout
+  // ---------------------------------------------------------------------------
+
+  Widget _buildMobileReviewLayout() {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildReviewExecutiveBanner(),
+                const SizedBox(height: 14),
+                _buildOrderSummaryCard(),
+                const SizedBox(height: 16),
+                _buildAddressForm(true),
+                const SizedBox(height: 16),
+                _buildPaymentSection(),
+                const SizedBox(height: 16),
+                _buildCouponAndDiscountCard(),
+                const SizedBox(height: 16),
+                _buildPriceBreakdown(),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+        _buildReviewBottomBar(),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Review Executive Dealer Banner
+  // ---------------------------------------------------------------------------
+
+  Widget _buildReviewExecutiveBanner() {
+    final dealer = widget.dealer;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.borderColor),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _buildManualTypeTab('None', 'None'),
-              const SizedBox(width: 8),
-              _buildManualTypeTab('Fixed', 'Fixed ₹'),
-              const SizedBox(width: 8),
-              _buildManualTypeTab('Percentage', 'Percentage %'),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF298E4D), Color(0xFF1E6B3A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF298E4D).withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    dealer.name.isNotEmpty ? dealer.name[0].toUpperCase() : 'D',
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            dealer.name,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: const Color(0xFF298E4D).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.verified_rounded,
+                                size: 12,
+                                color: Color(0xFF298E4D),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Dealer',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF298E4D),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '📞 ${dealer.phone}  •  📍 ${dealer.city.isNotEmpty ? dealer.city : 'Location N/A'}, ${dealer.state}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _step = 1),
+                icon: const Icon(Icons.add_shopping_cart_rounded, size: 14),
+                label: const Text('Add Items'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ],
           ),
-          if (_manualDiscountType != 'None') ...[
-            const SizedBox(height: 12),
-            Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderColor),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.lightBorderColor),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.local_shipping_outlined,
+                  size: 15,
+                  color: AppTheme.primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Order Metrics:',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _getOrderLogisticsSummary(),
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+  // ---------------------------------------------------------------------------
+  // Interactive Cart Items Review Card
+  // ---------------------------------------------------------------------------
+
+  Widget _buildOrderSummaryCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 18,
+                      color: AppTheme.primaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Order Items',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_cart.fold(0, (s, c) => s + c.quantity)} units',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  '${_cart.length} SKUs',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppTheme.lightBorderColor),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _cart.length,
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, color: AppTheme.lightBorderColor),
+            itemBuilder: (context, idx) {
+              final item = _cart[idx];
+              final images = item.product['images'] as List?;
+              final String? imageUrl =
+                  images != null && images.isNotEmpty ? images[0] : null;
+              final size =
+                  item.variant['size'] ?? item.variant['packSize'] ?? '';
+              final technicalName = item.product['technicalName'] ?? '';
+
+              return Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Product Thumbnail
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.lightBorderColor),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: imageUrl != null && imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 22,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            )
+                          : const Center(
+                              child: Icon(
+                                Icons.inventory_2_outlined,
+                                size: 22,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Title + Technical + Pack Badges
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.product['title'] ?? item.product['name'] ?? '',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (technicalName.toString().isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              technicalName.toString(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (size.toString().isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: const Color(0xFFE5E7EB)),
+                                  ),
+                                  child: Text(
+                                    size.toString(),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              InkWell(
+                                onTap: () => _openCustomBasePackingDialog(
+                                  productId: item.product['_id'] ?? '',
+                                  variant: item.variant,
+                                  cartItem: item,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: item.isCustomBasePack
+                                        ? const Color(0xFFFEF3C7)
+                                        : const Color(0xFFF9FAFB),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: item.isCustomBasePack
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.inventory_2_outlined,
+                                        size: 10,
+                                        color: item.isCustomBasePack
+                                            ? const Color(0xFFD97706)
+                                            : AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Pack: ${item.effectivePackVolume % 1 == 0 ? item.effectivePackVolume.toInt() : item.effectivePackVolume} ${item.effectiveBaseUnit}${item.isCustomBasePack ? '*' : ''}',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 10.5,
+                                          fontWeight: item.isCustomBasePack
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          color: item.isCustomBasePack
+                                              ? const Color(0xFFD97706)
+                                              : AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 10,
+                                        color: item.isCustomBasePack
+                                            ? const Color(0xFFD97706)
+                                            : AppTheme.textSecondary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Inline Quantity Stepper
+                    _buildInlineQtyStepper(idx, item.quantity),
+                    const SizedBox(width: 14),
+
+                    // Line Total & Unit Rate
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '₹${_formatAmt(item.lineTotal)}',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '₹${_formatAmt(item.price)} / unit',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Remove Button
+                    IconButton(
+                      onPressed: () => _removeFromCart(idx),
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: AppTheme.error,
+                      ),
+                      tooltip: 'Remove item',
+                      splashRadius: 18,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inline Quantity Stepper
+  // ---------------------------------------------------------------------------
+
+  Widget _buildInlineQtyStepper(int index, int qty) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFD1D5DB)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => _updateQty(index, -1),
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(7)),
+            child: Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              child: Icon(
+                qty <= 1 ? Icons.delete_outline_rounded : Icons.remove_rounded,
+                size: 14,
+                color: qty <= 1 ? AppTheme.error : AppTheme.textPrimary,
+              ),
+            ),
+          ),
+          Container(
+            width: 32,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              border: Border.symmetric(
+                vertical: BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+            ),
+            child: Text(
+              '$qty',
+              style: GoogleFonts.outfit(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () => _updateQty(index, 1),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(7)),
+            child: Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.add_rounded,
+                size: 14,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shipping Address Form Card
+  // ---------------------------------------------------------------------------
+
+  Widget _buildAddressForm(bool isMobile) {
+    Widget field(
+      String label,
+      TextEditingController ctrl, {
+      String? hint,
+      bool required = true,
+      TextInputType? keyboardType,
+      IconData? prefixIcon,
+    }) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              if (required) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '*',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: ctrl,
+            keyboardType: keyboardType,
+            style: GoogleFonts.outfit(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
+            ),
+            validator: required
+                ? (v) => v == null || v.trim().isEmpty ? 'Required' : null
+                : null,
+            decoration: InputDecoration(
+              hintText: hint ?? label,
+              hintStyle: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+              ),
+              prefixIcon: prefixIcon != null
+                  ? Icon(prefixIcon, size: 17, color: AppTheme.textSecondary)
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 11,
+              ),
+              filled: true,
+              fillColor: AppTheme.backgroundColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: AppTheme.borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: AppTheme.borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(
+                  color: AppTheme.primaryColor,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: AppTheme.error),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.local_shipping_outlined,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Shipping & Dispatch Details',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ],
               ),
-              child: Row(
+              TextButton.icon(
+                onPressed: _resetShippingAddressToDealer,
+                icon: const Icon(Icons.refresh_rounded, size: 14),
+                label: const Text('Reset to Profile'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  visualDensity: VisualDensity.compact,
+                  textStyle: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          isMobile
+              ? Column(
+                  children: [
+                    field('Recipient Name', _nameController,
+                        prefixIcon: Icons.person_outline_rounded),
+                    const SizedBox(height: 12),
+                    field(
+                      'Phone Number',
+                      _phoneController,
+                      keyboardType: TextInputType.phone,
+                      prefixIcon: Icons.phone_outlined,
+                    ),
+                    const SizedBox(height: 12),
+                    field('Village / Area', _villageController,
+                        required: false,
+                        prefixIcon: Icons.location_on_outlined),
+                    const SizedBox(height: 12),
+                    field('City / Tehsil', _cityController,
+                        prefixIcon: Icons.location_city_outlined),
+                    const SizedBox(height: 12),
+                    field('State', _stateController,
+                        prefixIcon: Icons.map_outlined),
+                    const SizedBox(height: 12),
+                    field(
+                      'Pincode',
+                      _pincodeController,
+                      keyboardType: TextInputType.number,
+                      prefixIcon: Icons.pin_drop_outlined,
+                    ),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: field('Recipient Name', _nameController,
+                              prefixIcon: Icons.person_outline_rounded),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: field(
+                            'Phone Number',
+                            _phoneController,
+                            keyboardType: TextInputType.phone,
+                            prefixIcon: Icons.phone_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: field(
+                            'Village / Area',
+                            _villageController,
+                            required: false,
+                            prefixIcon: Icons.location_on_outlined,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: field('City / Tehsil', _cityController,
+                              prefixIcon: Icons.location_city_outlined),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: field('State', _stateController,
+                              prefixIcon: Icons.map_outlined),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: field(
+                            'Pincode',
+                            _pincodeController,
+                            keyboardType: TextInputType.number,
+                            prefixIcon: Icons.pin_drop_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Payment Section
+  // ---------------------------------------------------------------------------
+
+  Widget _buildPaymentSection() {
+    final finalTotal = _finalOrderTotal;
+    final balanceRemaining = (finalTotal - _advanceAmount).clamp(0.0, finalTotal);
+
+    final inputDecoration = InputDecoration(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      filled: true,
+      fillColor: AppTheme.backgroundColor,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: AppTheme.borderColor),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: AppTheme.borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  Icon(
-                    _manualDiscountType == 'Percentage'
-                        ? Icons.percent_rounded
-                        : Icons.currency_rupee_rounded,
+                  const Icon(
+                    Icons.payments_outlined,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Payment Configuration',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              if (_paymentMethod == null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFCD34D)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          size: 12, color: Color(0xFFD97706)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Select Type',
+                        style: GoogleFonts.outfit(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Payment Type Option Tiles
+          Row(
+            children: [
+              Expanded(
+                child: _buildPaymentTypeCard(
+                  title: 'Full Payment',
+                  subtitle: '100% Upfront',
+                  icon: Icons.check_circle_outline_rounded,
+                  isSelected: _paymentMethod == 'FullPayment',
+                  onTap: () => setState(() {
+                    _paymentMethod = 'FullPayment';
+                    _advanceAmount = 0;
+                    _advanceAmountCtrl.clear();
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildPaymentTypeCard(
+                  title: 'Partial Payment',
+                  subtitle: 'Advance + Balance',
+                  icon: Icons.account_balance_wallet_outlined,
+                  isSelected: _paymentMethod == 'Partial',
+                  onTap: () => setState(() {
+                    _paymentMethod = 'Partial';
+                    if (_advanceAmount == 0 && finalTotal > 0) {
+                      _setAdvancePercentage(10);
+                    }
+                  }),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Payment Channel / Mode Selector Chips
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Payment Mode / Channel',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildModeChip('UPI', Icons.qr_code_rounded),
+                    const SizedBox(width: 8),
+                    _buildModeChip(
+                        'Bank Transfer', Icons.account_balance_rounded),
+                    const SizedBox(width: 8),
+                    _buildModeChip('Cheque', Icons.receipt_rounded),
+                    const SizedBox(width: 8),
+                    _buildModeChip('Cash', Icons.payments_rounded),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Payment ID (UTR / Reference)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '$_paymentMode Reference / Transaction ID',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '*',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              TextFormField(
+                controller: _paymentIdController,
+                style: GoogleFonts.outfit(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: inputDecoration.copyWith(
+                  hintText: _paymentIdHint,
+                  hintStyle: GoogleFonts.outfit(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                  ),
+                  prefixIcon: Icon(
+                    _paymentMode == 'UPI'
+                        ? Icons.qr_code_rounded
+                        : _paymentMode == 'Bank Transfer'
+                            ? Icons.account_balance_rounded
+                            : _paymentMode == 'Cheque'
+                                ? Icons.receipt_rounded
+                                : Icons.tag_rounded,
                     size: 18,
                     color: AppTheme.textSecondary,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _manualDiscountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return '$_paymentMode reference ID is required';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+
+          // Advance Amount configuration if Partial Payment
+          if (_paymentMethod == 'Partial') ...[
+            const SizedBox(height: 14),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Advance Collected (₹)',
                       style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        color: AppTheme.textPrimary,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
                       ),
-                      decoration: InputDecoration(
-                        hintText: _manualDiscountType == 'Percentage'
-                            ? 'Enter discount % (max 100)'
-                            : 'Enter discount amount',
-                        hintStyle: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
-                          fontWeight: FontWeight.w500,
+                    ),
+                    Row(
+                      children: [
+                        _buildPresetChip('10%', () => _setAdvancePercentage(10)),
+                        const SizedBox(width: 4),
+                        _buildPresetChip('20%', () => _setAdvancePercentage(20)),
+                        const SizedBox(width: 4),
+                        _buildPresetChip('50%', () => _setAdvancePercentage(50)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _advanceAmountCtrl,
+                  keyboardType: TextInputType.number,
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF298E4D),
+                  ),
+                  onChanged: (v) {
+                    setState(() {
+                      _advanceAmount = double.tryParse(v) ?? 0;
+                    });
+                  },
+                  validator: (v) {
+                    if (_paymentMethod != 'Partial') return null;
+                    final val = double.tryParse(v ?? '') ?? 0;
+                    if (val <= 0) return 'Enter a valid advance amount';
+                    if (val >= finalTotal) return 'Must be less than order total';
+                    return null;
+                  },
+                  decoration: inputDecoration.copyWith(
+                    hintText: 'Enter advance amount',
+                    prefixIcon: const Icon(
+                      Icons.currency_rupee_rounded,
+                      size: 17,
+                      color: Color(0xFF298E4D),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Payment Split Visualizer Bar
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.lightBorderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF298E4D),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Advance: ₹${_formatAmt(_advanceAmount)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF298E4D),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFD97706),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Due: ₹${_formatAmt(balanceRemaining)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFD97706),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          height: 6,
+                          child: LinearProgressIndicator(
+                            value: finalTotal > 0
+                                ? (_advanceAmount / finalTotal).clamp(0.0, 1.0)
+                                : 0.0,
+                            backgroundColor: const Color(0xFFFDE68A),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFF298E4D),
+                            ),
+                          ),
                         ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) {
-                        final val = double.tryParse(v);
-                        if (_manualDiscountType == 'Percentage') {
-                          if (val != null && val > 100) {
-                            _manualDiscountCtrl.text = '100';
-                            _manualDiscountCtrl.selection =
-                                TextSelection.fromPosition(
-                                  TextPosition(offset: 3),
-                                );
-                          }
-                        } else if (_manualDiscountType == 'Fixed') {
-                          final subtotal = _cartTotal;
-                          if (val != null && val > subtotal) {
-                            _manualDiscountCtrl.text = subtotal.toStringAsFixed(0);
-                            _manualDiscountCtrl.selection =
-                                TextSelection.fromPosition(
-                                  TextPosition(offset: _manualDiscountCtrl.text.length),
-                                );
-                          }
-                        }
-                        setState(() {});
-                      },
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentTypeCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primaryColor.withValues(alpha: 0.08)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : AppTheme.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.outfit(
+                      fontSize: 10.5,
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _paymentIdHint {
+    switch (_paymentMode) {
+      case 'UPI':
+        return 'e.g. 12-digit UPI Ref / UTR (e.g. 423987123456)';
+      case 'Bank Transfer':
+        return 'e.g. NEFT / RTGS / IMPS Reference Number';
+      case 'Cheque':
+        return 'e.g. Cheque No. & Bank Name';
+      case 'Cash':
+        return 'e.g. Cash Receipt / Voucher Reference';
+      default:
+        return 'e.g. UTR / NEFT / Cheque / Cash Ref';
+    }
+  }
+
+  Widget _buildModeChip(String mode, IconData icon) {
+    final isSelected = _paymentMode == mode;
+    return InkWell(
+      onTap: () => setState(() => _paymentMode = mode),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primaryColor.withValues(alpha: 0.1)
+              : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : const Color(0xFFE5E7EB),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              mode,
+              style: GoogleFonts.outfit(
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? AppTheme.primaryColor : AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Coupons & Manual Discounts Card
+  // ---------------------------------------------------------------------------
+
+  Widget _buildCouponAndDiscountCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.local_offer_outlined,
+                size: 18,
+                color: AppTheme.primaryColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Coupons & Discounts',
+                style: GoogleFonts.outfit(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildCouponRow(),
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: AppTheme.lightBorderColor),
+          const SizedBox(height: 12),
+          Text(
+            'Manual Order Discount',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildManualDiscountSection(),
         ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Manual Discount Controls
+  // ---------------------------------------------------------------------------
+
+  Widget _buildManualDiscountSection() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            _buildManualTypeTab('None', 'None'),
+            const SizedBox(width: 8),
+            _buildManualTypeTab('Fixed', 'Fixed ₹'),
+            const SizedBox(width: 8),
+            _buildManualTypeTab('Percentage', 'Percent %'),
+          ],
+        ),
+        if (_manualDiscountType != 'None') ...[
+          const SizedBox(height: 10),
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundColor,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _manualDiscountType == 'Percentage'
+                      ? Icons.percent_rounded
+                      : Icons.currency_rupee_rounded,
+                  size: 16,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _manualDiscountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: GoogleFonts.outfit(
+                      fontSize: 13.5,
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _manualDiscountType == 'Percentage'
+                          ? 'Discount % (max 100)'
+                          : 'Discount amount in ₹',
+                      hintStyle: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (v) {
+                      final val = double.tryParse(v);
+                      if (_manualDiscountType == 'Percentage') {
+                        if (val != null && val > 100) {
+                          _manualDiscountCtrl.text = '100';
+                          _manualDiscountCtrl.selection =
+                              TextSelection.fromPosition(
+                            const TextPosition(offset: 3),
+                          );
+                        }
+                      } else if (_manualDiscountType == 'Fixed') {
+                        final subtotal = _cartTotal;
+                        if (val != null && val > subtotal) {
+                          _manualDiscountCtrl.text =
+                              subtotal.toStringAsFixed(0);
+                          _manualDiscountCtrl.selection =
+                              TextSelection.fromPosition(
+                            TextPosition(
+                                offset: _manualDiscountCtrl.text.length),
+                          );
+                        }
+                      }
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -2189,16 +3265,22 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           if (type == 'None') _manualDiscountCtrl.clear();
         }),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
-            color: isSel ? AppTheme.primaryColor.withValues(alpha: 0.1) : Colors.white,
+            color: isSel
+                ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                : const Color(0xFFF9FAFB),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: isSel ? AppTheme.primaryColor : AppTheme.borderColor, width: 1.5),
+            border: Border.all(
+              color: isSel ? AppTheme.primaryColor : const Color(0xFFE5E7EB),
+              width: isSel ? 1.5 : 1,
+            ),
           ),
           child: Center(
             child: Text(
               label,
-              style: AppTheme.labelSM.copyWith(
+              style: GoogleFonts.outfit(
+                fontSize: 11.5,
                 color: isSel ? AppTheme.primaryColor : AppTheme.textSecondary,
                 fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
               ),
@@ -2209,9 +3291,13 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Executive Price Breakdown / Invoice Card
+  // ---------------------------------------------------------------------------
+
   Widget _buildPriceBreakdown() {
     final subtotal = _cartTotal;
-    
+
     // Calculate Sales Cart Discount
     double salesCartDiscount = 0;
     if (_appliedSalesCoupon != null) {
@@ -2233,20 +3319,63 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       manualDiscountValue = (subtotal * manualVal) / 100;
     }
 
-    final finalTotal = (subtotal - _discountAmount - salesCartDiscount - manualDiscountValue).clamp(0.0, double.infinity);
-    final remaining = finalTotal - _advanceAmount;
-    
+    final finalTotal = _finalOrderTotal;
+    final totalSavings = _totalDiscountSavings;
+    final remaining = (finalTotal - _advanceAmount).clamp(0.0, finalTotal);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.borderColor),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PriceRow('Subtotal', '₹${_formatAmt(subtotal)}'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Billing Summary',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              if (totalSavings > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Save ₹${_formatAmt(totalSavings)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF298E4D),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _PriceRow('Gross Subtotal', '₹${_formatAmt(subtotal)}'),
           if (_discountAmount > 0) ...[
             const SizedBox(height: 6),
             _PriceRow(
@@ -2272,75 +3401,199 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
             ),
           ],
           if (_freeProductName != null) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.card_giftcard_rounded,
-                    size: 13, color: AppTheme.success),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Free: $_freeProductName',
-                    style: AppTheme.bodySM.copyWith(
-                      color: AppTheme.success,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11.5,
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                    color: const Color(0xFF298E4D).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.card_giftcard_rounded,
+                      size: 14, color: Color(0xFF298E4D)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Free Promotional Item: $_freeProductName',
+                      style: GoogleFonts.outfit(
+                        color: const Color(0xFF298E4D),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
-          if (_paymentMethod == 'Partial' && _advanceAmount > 0) ...[
-            const SizedBox(height: 6),
-            _PriceRow(
-              'Advance Collected',
-              '- ₹${_formatAmt(_advanceAmount)}',
-              color: AppTheme.success,
-            ),
-            const SizedBox(height: 6),
-            _PriceRow(
-              'Remaining (Balance)',
-              '₹${_formatAmt(remaining)}',
-              color: AppTheme.warning,
+                ],
+              ),
             ),
           ],
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+            padding: EdgeInsets.symmetric(vertical: 10),
             child: Divider(color: AppTheme.lightBorderColor),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                'Total Amount',
-                style: AppTheme.headingSM.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14.5,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Net Payable Amount',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Inclusive of applicable discounts',
+                    style: GoogleFonts.outfit(
+                      fontSize: 10.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (_discountAmount > 0)
+                  if (totalSavings > 0)
                     Text(
                       '₹${_formatAmt(subtotal)}',
-                      style: AppTheme.bodySM.copyWith(
+                      style: GoogleFonts.outfit(
                         color: AppTheme.textSecondary,
-                        fontSize: 11,
+                        fontSize: 11.5,
                         decoration: TextDecoration.lineThrough,
                       ),
                     ),
                   Text(
                     '₹${_formatAmt(finalTotal)}',
-                    style: AppTheme.headingLG.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
                       color: AppTheme.primaryColor,
                     ),
                   ),
                 ],
               ),
             ],
+          ),
+          if (_paymentMethod == 'Partial' && _advanceAmount > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Advance: ₹${_formatAmt(_advanceAmount)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF298E4D),
+                    ),
+                  ),
+                  Text(
+                    'Balance Due: ₹${_formatAmt(remaining)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFD97706),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Desktop Action Panel (Right Column Footer)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDesktopOrderActionPanel() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : _submitOrder,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                disabledBackgroundColor:
+                    AppTheme.primaryColor.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline_rounded,
+                            size: 18, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Place Order  •  ₹${_formatAmt(_finalOrderTotal)}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => _step = 1),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Back to Products'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.textSecondary,
+                side: const BorderSide(color: AppTheme.borderColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -3153,7 +4406,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               child: SizedBox(
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: (_isSubmitting || _paymentMethod == null) ? null : _submitOrder,
+                  onPressed: _isSubmitting ? null : _submitOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                     shape: RoundedRectangleBorder(
@@ -3171,8 +4424,12 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                           ),
                         )
                       : Text(
-                          'Place Order  •  ₹${_formatAmt(_cartTotal)}',
-                          style: AppTheme.button.copyWith(fontSize: 14),
+                          'Place Order  •  ₹${_formatAmt(_finalOrderTotal)}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                 ),
               ),
@@ -4034,98 +5291,7 @@ class _StepDot extends StatelessWidget {
   }
 }
 
-class _PaymentOption extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
 
-  const _PaymentOption({
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppTheme.primaryColor.withValues(alpha: 0.1)
-                    : const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: isSelected
-                    ? AppTheme.primaryColor
-                    : AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppTheme.headingSM.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: AppTheme.bodySM.copyWith(
-                      fontSize: 11.5,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : const Color(0xFFD1D5DB),
-                  width: 2,
-                ),
-                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
-              ),
-              child: isSelected
-                  ? const Center(
-                      child: Icon(
-                        Icons.check_rounded,
-                        size: 12,
-                        color: Colors.white,
-                      ),
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _PriceRow extends StatelessWidget {
   final String label;

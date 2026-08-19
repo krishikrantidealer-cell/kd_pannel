@@ -16,6 +16,24 @@ class ProductDetailsDialog extends StatefulWidget {
   State<ProductDetailsDialog> createState() => _ProductDetailsDialogState();
 }
 
+class _StructuredProductInfo {
+  final String overview;
+  final Map<String, String> composition;
+  final List<String> benefits;
+  final List<String> suitableCrops;
+  final String modeOfAction;
+  final List<Map<String, String>> faqs;
+
+  const _StructuredProductInfo({
+    this.overview = '',
+    this.composition = const {},
+    this.benefits = const [],
+    this.suitableCrops = const [],
+    this.modeOfAction = '',
+    this.faqs = const [],
+  });
+}
+
 class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
   int _selectedImageIndex = 0;
 
@@ -53,22 +71,159 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     );
   }
 
-  String _cleanHtml(String htmlString) {
-    if (htmlString.isEmpty) return '';
-    // Strip common html tags
-    final exp = RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false);
-    String clean = htmlString.replaceAll(exp, ' ').replaceAll('&nbsp;', ' ').trim();
-    // Replace multiple whitespaces with single space
-    clean = clean.replaceAll(RegExp(r'\s+'), ' ');
-    return clean;
+  _StructuredProductInfo _parseDescription(String rawHtml) {
+    if (rawHtml.isEmpty) return const _StructuredProductInfo();
+
+    // Clean raw html
+    String text = rawHtml
+        .replaceAll(RegExp(r'&#47;'), '/')
+        .replaceAll(RegExp(r'&amp;'), '&')
+        .replaceAll(RegExp(r'&nbsp;'), ' ')
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'<p>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .trim();
+
+    final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+
+    String currentSection = 'overview';
+    final List<String> overviewLines = [];
+    final Map<String, String> composition = {};
+    final List<String> benefits = [];
+    final List<String> crops = [];
+    final List<String> modeOfActionLines = [];
+    final List<Map<String, String>> faqs = [];
+    String currentFaqQuestion = '';
+    final List<String> currentFaqAnswer = [];
+
+    void flushFaq() {
+      if (currentFaqQuestion.isNotEmpty) {
+        faqs.add({
+          'q': currentFaqQuestion,
+          'a': currentFaqAnswer.join(' ').trim(),
+        });
+        currentFaqQuestion = '';
+        currentFaqAnswer.clear();
+      }
+    }
+
+    for (var line in lines) {
+      final lower = line.toLowerCase();
+
+      // Check for section headers
+      if (lower == 'product description') {
+        flushFaq();
+        currentSection = 'overview';
+        continue;
+      } else if (lower.contains('composition') || lower.contains('nutrient') || lower.contains('technical composition')) {
+        flushFaq();
+        currentSection = 'composition';
+        continue;
+      } else if (lower.contains('key benefits') || lower == 'benefits') {
+        flushFaq();
+        currentSection = 'benefits';
+        continue;
+      } else if (lower.contains('suitable crops') || lower.contains('target crops') || lower == 'crops') {
+        flushFaq();
+        currentSection = 'crops';
+        continue;
+      } else if (lower.contains('mode of action')) {
+        flushFaq();
+        currentSection = 'mode_of_action';
+        continue;
+      } else if (lower.contains('frequently asked questions') || lower == 'faqs' || lower == 'faq') {
+        flushFaq();
+        currentSection = 'faqs';
+        continue;
+      }
+
+      // Process line based on current section
+      switch (currentSection) {
+        case 'overview':
+          overviewLines.add(line);
+          break;
+        case 'composition':
+          if (line.contains(':')) {
+            final idx = line.indexOf(':');
+            final k = line.substring(0, idx).trim();
+            final v = line.substring(idx + 1).trim();
+            if (k.isNotEmpty && v.isNotEmpty) {
+              composition[k] = v;
+            }
+          } else {
+            overviewLines.add(line);
+          }
+          break;
+        case 'benefits':
+          benefits.add(line.replaceAll(RegExp(r'^[•\-\*]\s*'), ''));
+          break;
+        case 'crops':
+          if (!lower.startsWith('suitable for multiple') && !lower.startsWith('suitable crops')) {
+            final cleanedLine = line.replaceAll(RegExp(r'^[•\-\*]\s*'), '');
+            final splitItems = cleanedLine.split(RegExp(r'[,;•]'));
+            for (var item in splitItems) {
+              final trimmed = item.trim();
+              if (trimmed.isNotEmpty) {
+                if (trimmed.length < 50) {
+                  crops.add(trimmed);
+                } else {
+                  overviewLines.add(trimmed);
+                }
+              }
+            }
+          }
+          break;
+        case 'mode_of_action':
+          modeOfActionLines.add(line);
+          break;
+        case 'faqs':
+          final isQuestion = RegExp(r'^\d+[\.\)]\s*').hasMatch(line) || lower.startsWith('q:') || lower.startsWith('question:');
+          if (isQuestion) {
+            flushFaq();
+            currentFaqQuestion = line.replaceFirst(RegExp(r'^\d+[\.\)]\s*'), '').replaceFirst(RegExp(r'^[Qq](uestion)?:\s*'), '').trim();
+          } else if (currentFaqQuestion.isNotEmpty) {
+            currentFaqAnswer.add(line.replaceFirst(RegExp(r'^[Aa](nswer)?:\s*'), '').trim());
+          } else {
+            overviewLines.add(line);
+          }
+          break;
+      }
+    }
+    flushFaq();
+
+    return _StructuredProductInfo(
+      overview: overviewLines.join('\n\n'),
+      composition: composition,
+      benefits: benefits,
+      suitableCrops: crops,
+      modeOfAction: modeOfActionLines.join('\n\n'),
+      faqs: faqs,
+    );
+  }
+
+  double? _parseRateValue(dynamic rawRate) {
+    if (rawRate == null) return null;
+    final str = rawRate.toString().trim();
+    if (str.isEmpty) return null;
+    final clean = str.split('/').first.replaceAll(RegExp(r'[^0-9.]'), '');
+    return double.tryParse(clean);
+  }
+
+  String _extractRateUnit(dynamic rawRate, String fallbackUnit) {
+    if (rawRate != null && rawRate.toString().contains('/')) {
+      final unitPart = rawRate.toString().split('/').last.trim();
+      if (unitPart.isNotEmpty) return unitPart;
+    }
+    return fallbackUnit.isNotEmpty ? fallbackUnit : '';
   }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final String name = (p['name'] ?? 'Product Details').toString();
+    final String name = (p['name'] ?? p['title'] ?? 'Product Details').toString();
     final String sku = (p['sku'] ?? 'N/A').toString();
-    final String vendor = (p['vendor'] ?? '').toString();
+    final String vendor = (p['vendor'] ?? p['brandName'] ?? '').toString();
     final String category = (p['category'] ?? '').toString();
     final String subCategory = (p['subCategory'] ?? '').toString();
     final bool inStock = p['inStock'] ?? (p['availabilityStatus'] != 'Out of Stock');
@@ -83,7 +238,7 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
     final String perAcre = dosage['perAcre']?.toString() ?? '';
     final String dosageMethod = dosage['method']?.toString() ?? '';
     final String rawDescription = p['description']?.toString() ?? '';
-    final String cleanDescription = _cleanHtml(rawDescription);
+    final _StructuredProductInfo structuredInfo = _parseDescription(rawDescription);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -455,9 +610,9 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                 children: [
                                   Expanded(flex: 3, child: _tableHeader('PACK SIZE / VARIANT')),
                                   Expanded(flex: 2, child: _tableHeader('MRP (₹)')),
-                                  Expanded(flex: 2, child: _tableHeader('DEALER PRICE (₹)')),
+                                  Expanded(flex: 3, child: _tableHeader('TIER PRICING (ALL TIERS)')),
                                   Expanded(flex: 2, child: _tableHeader('FARMER PRICE (₹)')),
-                                  Expanded(flex: 3, child: _tableHeader('EST. MARGIN')),
+                                  Expanded(flex: 2, child: _tableHeader('EST. MARGIN')),
                                 ],
                               ),
                             ),
@@ -468,12 +623,44 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                               final v = entry.value as Map;
                               final isLast = entry.key == variants.length - 1;
                               final String packSize = (v['size'] ?? v['packSize'] ?? 'Default').toString();
-                              final double dealerPrice = double.tryParse(v['price']?.toString() ?? '0') ?? 0.0;
+                              final double defaultPrice = double.tryParse(v['price']?.toString() ?? v['dealerPrice']?.toString() ?? '0') ?? 0.0;
                               final double mrp = double.tryParse(v['compareAtPrice']?.toString() ?? '0') ?? 0.0;
                               final dynamic fpRaw = v['farmerPrice'] ?? v['farmer_price'];
                               final double farmerPrice = fpRaw != null ? (double.tryParse(fpRaw.toString()) ?? 0.0) : 0.0;
-                              final double marginAmt = (farmerPrice > 0 && dealerPrice > 0) ? (farmerPrice - dealerPrice) : 0.0;
-                              final double marginPct = (farmerPrice > 0 && marginAmt > 0) ? (marginAmt / farmerPrice) * 100 : 0.0;
+
+                              // Parse Price Tiers
+                              final priceTiers = (v['priceTiers'] as List?) ?? (p['priceTiers'] as List?);
+                              final rates = v['rates'] as Map?;
+                              final double packVolume = (v['packVolume'] as num?)?.toDouble() ?? 1.0;
+                              final String baseUnit = (v['basePackingUnit'] ?? '').toString();
+
+                              final List<Map<String, dynamic>> parsedTiers = [];
+                              if (priceTiers != null && rates != null && rates.isNotEmpty) {
+                                for (var t in priceTiers) {
+                                  if (t is! Map) continue;
+                                  final tId = t['id']?.toString() ?? '';
+                                  final tName = t['name']?.toString() ?? '';
+                                  final dynamic rawRate = rates[tId] ?? rates[int.tryParse(tId)];
+                                  final rVal = _parseRateValue(rawRate);
+                                  if (rVal != null) {
+                                    final unit = _extractRateUnit(rawRate, baseUnit);
+                                    parsedTiers.add({
+                                      'id': tId,
+                                      'name': tName,
+                                      'rate': rVal,
+                                      'unit': unit,
+                                      'packPrice': rVal * packVolume,
+                                    });
+                                  }
+                                }
+                              }
+
+                              double lowestTierPrice = defaultPrice;
+                              if (parsedTiers.isNotEmpty) {
+                                final prices = parsedTiers.map((t) => (t['rate'] as double)).toList();
+                                prices.sort();
+                                lowestTierPrice = prices.first;
+                              }
 
                               return Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -483,8 +670,9 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                   borderRadius: isLast ? const BorderRadius.vertical(bottom: Radius.circular(11)) : null,
                                 ),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // Pack Size
+                                    // Pack Size & Base Info
                                     Expanded(
                                       flex: 3,
                                       child: Column(
@@ -506,6 +694,14 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                                 color: AppTheme.textSecondary,
                                               ),
                                             ),
+                                          if (packVolume > 0 && baseUnit.isNotEmpty)
+                                            Text(
+                                              'Vol: ${packVolume % 1 == 0 ? packVolume.toInt() : packVolume} $baseUnit',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10.5,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -518,21 +714,66 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w500,
                                           color: AppTheme.textSecondary,
-                                          decoration: mrp > dealerPrice ? TextDecoration.lineThrough : null,
+                                          decoration: (mrp > lowestTierPrice && lowestTierPrice > 0) ? TextDecoration.lineThrough : null,
                                         ),
                                       ),
                                     ),
-                                    // Dealer Price
+                                    // ALL TIER PRICES
                                     Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        '₹${dealerPrice % 1 == 0 ? dealerPrice.toInt() : dealerPrice.toStringAsFixed(2)}',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                      ),
+                                      flex: 3,
+                                      child: parsedTiers.isNotEmpty
+                                          ? Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: parsedTiers.map((t) {
+                                                final tName = t['name'] ?? '';
+                                                final rVal = t['rate'] as double;
+                                                final unit = (t['unit'] ?? '').toString();
+                                                final unitSuffix = unit.isNotEmpty ? ' / $unit' : '';
+                                                return Padding(
+                                                  padding: const EdgeInsets.symmetric(vertical: 2.5),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                                          borderRadius: BorderRadius.circular(4),
+                                                          border: Border.all(
+                                                            color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          tName,
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: AppTheme.primaryColor,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        '₹${rVal % 1 == 0 ? rVal.toInt() : rVal.toStringAsFixed(1)}$unitSuffix',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 12.5,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: AppTheme.textPrimary,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            )
+                                          : Text(
+                                              '₹${defaultPrice % 1 == 0 ? defaultPrice.toInt() : defaultPrice.toStringAsFixed(2)}',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.primaryColor,
+                                              ),
+                                            ),
                                     ),
                                     // Farmer Price
                                     Expanded(
@@ -546,32 +787,47 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                         ),
                                       ),
                                     ),
-                                    // Margin
+                                    // Est. Margin (All Tiers)
                                     Expanded(
-                                      flex: 3,
-                                      child: marginAmt > 0
-                                          ? Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFECFDF5),
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: const Color(0xFFA7F3D0)),
-                                              ),
-                                              child: Text(
-                                                '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: const Color(0xFF059669),
-                                                ),
-                                              ),
+                                      flex: 2,
+                                      child: parsedTiers.isNotEmpty && farmerPrice > 0
+                                          ? Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: parsedTiers.map((t) {
+                                                final rVal = t['rate'] as double;
+                                                final marginAmt = farmerPrice - rVal;
+                                                final marginPct = (marginAmt / farmerPrice) * 100;
+                                                return Padding(
+                                                  padding: const EdgeInsets.symmetric(vertical: 2.5),
+                                                  child: Text(
+                                                    marginAmt > 0
+                                                        ? '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)'
+                                                        : '—',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: marginAmt > 0 ? const Color(0xFF059669) : AppTheme.textSecondary,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
                                             )
-                                          : Text(
-                                              '—',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 12.5,
-                                                color: AppTheme.textSecondary,
-                                              ),
+                                          : Builder(
+                                              builder: (_) {
+                                                final marginAmt = (farmerPrice > 0 && defaultPrice > 0) ? (farmerPrice - defaultPrice) : 0.0;
+                                                final marginPct = (farmerPrice > 0 && marginAmt > 0) ? (marginAmt / farmerPrice) * 100 : 0.0;
+                                                if (marginAmt <= 0) {
+                                                  return Text('—', style: GoogleFonts.outfit(fontSize: 12.5, color: AppTheme.textSecondary));
+                                                }
+                                                return Text(
+                                                  '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(0xFF059669),
+                                                  ),
+                                                );
+                                              },
                                             ),
                                     ),
                                   ],
@@ -582,36 +838,8 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                         ),
                       ),
 
-                    // Section 3: Description (if any)
-                    if (cleanDescription.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      Text(
-                        'Product Overview',
-                        style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF9FAFB),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.borderColor),
-                        ),
-                        child: Text(
-                          cleanDescription,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            color: AppTheme.textBody,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
+                    // Section 3: Structured Professional Product Overview & Technical Specs
+                    _buildStructuredProductDescription(structuredInfo, p),
                   ],
                 ),
               ),
@@ -639,9 +867,31 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                         summary.writeln('Pricing & Variants:');
                         for (var v in variants) {
                           final pack = v['size'] ?? v['packSize'] ?? 'Standard';
-                          final dp = v['price'] ?? 0;
                           final fp = v['farmerPrice'] ?? v['farmer_price'] ?? '—';
-                          summary.writeln('• $pack: Dealer ₹$dp | Farmer ₹$fp');
+                          final priceTiers = (v['priceTiers'] as List?) ?? (p['priceTiers'] as List?);
+                          final rates = v['rates'] as Map?;
+                          final String baseUnit = (v['basePackingUnit'] ?? '').toString();
+                          final double defaultPrice = double.tryParse(v['price']?.toString() ?? v['dealerPrice']?.toString() ?? '0') ?? 0.0;
+                          final List<String> tiersList = [];
+                          if (priceTiers != null && rates != null && rates.isNotEmpty) {
+                            for (var t in priceTiers) {
+                              if (t is Map) {
+                                final tId = t['id']?.toString() ?? '';
+                                final tName = t['name']?.toString() ?? '';
+                                final dynamic rawRate = rates[tId] ?? rates[int.tryParse(tId)];
+                                final r = _parseRateValue(rawRate);
+                                if (r != null) {
+                                  final unit = _extractRateUnit(rawRate, baseUnit);
+                                  final uSuffix = unit.isNotEmpty ? ' / $unit' : '';
+                                  tiersList.add('$tName: ₹${r % 1 == 0 ? r.toInt() : r.toStringAsFixed(1)}$uSuffix');
+                                }
+                              }
+                            }
+                          }
+                          final tierStr = tiersList.isNotEmpty
+                              ? tiersList.join(' | ')
+                              : '₹$defaultPrice';
+                          summary.writeln('• $pack: [$tierStr] | Farmer ₹$fp');
                         }
                       }
                       _copyToClipboard(summary.toString(), 'Product summary copied to clipboard');
@@ -801,6 +1051,505 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
         color: AppTheme.textSecondary,
         letterSpacing: 0.5,
       ),
+    );
+  }
+
+  Widget _buildStructuredProductDescription(_StructuredProductInfo info, Map<String, dynamic> p) {
+    final technicalName = (p['technicalName'] ?? '').toString();
+    final assignedCollections = (p['assignedCollections'] as List?)?.map((c) => c.toString()).toList() ?? [];
+
+    final hasOverview = info.overview.trim().isNotEmpty;
+    final hasComposition = info.composition.isNotEmpty || technicalName.isNotEmpty;
+    final hasBenefits = info.benefits.isNotEmpty;
+    final hasCrops = info.suitableCrops.isNotEmpty || assignedCollections.isNotEmpty;
+    final hasModeOfAction = info.modeOfAction.trim().isNotEmpty;
+    final hasFaqs = info.faqs.isNotEmpty;
+
+    if (!hasOverview && !hasComposition && !hasBenefits && !hasCrops && !hasModeOfAction && !hasFaqs) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                size: 16,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Product Overview & Technical Details',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // 1. Overview Paragraph Card
+        if (hasOverview)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Text(
+              info.overview,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppTheme.textBody,
+                height: 1.6,
+              ),
+            ),
+          ),
+
+        // 2. Technical / Chemical Composition Card
+        if (hasComposition)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.science_outlined, size: 18, color: Color(0xFF0284C7)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Technical Composition & Chemistry',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                if (technicalName.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBAE6FD)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.biotech_rounded, size: 16, color: Color(0xFF0284C7)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            technicalName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF0369A1),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (info.composition.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: info.composition.entries.map((e) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9FAFB),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.lightBorderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              e.key.toUpperCase(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              e.value,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+        // 3. Key Benefits Card
+        if (hasBenefits)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF059669)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Key Benefits & Efficacy',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Column(
+                  children: info.benefits.map((benefit) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              size: 13,
+                              color: Color(0xFF059669),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              benefit,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                color: AppTheme.textBody,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+
+        // 4. Suitable Crops & Assigned Collections Card
+        if (hasCrops)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.grass_rounded, size: 18, color: Color(0xFFD97706)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Suitable Crops & Target Pests',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (info.suitableCrops.isNotEmpty) ...[
+                  Text(
+                    'Recommended Crops',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: info.suitableCrops.map((c) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.eco_outlined, size: 13, color: Color(0xFFB45309)),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                c,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF92400E),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+                if (assignedCollections.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Target Pest & Crop Collections',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: assignedCollections.map((col) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Text(
+                          col,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF475569),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+        // 5. Mode of Action Card
+        if (hasModeOfAction)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F3FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFDDD6FE)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF7C3AED)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Mode of Action',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF5B21B6),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  info.modeOfAction,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    color: const Color(0xFF4C1D95),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // 6. Frequently Asked Questions (FAQ)
+        if (hasFaqs)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.help_outline_rounded, size: 18, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Frequently Asked Questions',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Column(
+                  children: info.faqs.map((faq) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.lightBorderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Q',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  faq['q'] ?? '',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (faq['a'] != null && faq['a']!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 24),
+                              child: Text(
+                                faq['a']!,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textBody,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
