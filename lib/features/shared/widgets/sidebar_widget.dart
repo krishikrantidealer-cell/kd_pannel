@@ -257,7 +257,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
-                      vertical: 12,
+                      vertical: 10,
                     ),
                     child: Column(
                       children: [
@@ -274,7 +274,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
+                        _SidebarUserProfile(isExpanded: isExpanded),
+                        const SizedBox(height: 8),
                         _SidebarItem(
                           icon: Icons.logout_rounded,
                           title: 'Logout',
@@ -291,6 +293,96 @@ class _SidebarWidgetState extends State<SidebarWidget> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarUserProfile extends StatelessWidget {
+  final bool isExpanded;
+
+  const _SidebarUserProfile({required this.isExpanded});
+
+  @override
+  Widget build(BuildContext context) {
+    final isSales = AuthService().isSales;
+    final rawName = AuthService().currentUserName ?? '';
+    final name = rawName.isNotEmpty ? rawName : (isSales ? 'Sales Agent' : 'Administrator');
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : (isSales ? 'S' : 'A');
+    final email = AuthService().currentUserEmail ?? (isSales ? 'sales@krishikranti.com' : 'admin@krishikranti.com');
+
+    return Tooltip(
+      message: !isExpanded ? '$name\n$email' : '',
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isSales
+                      ? [const Color(0xFF34D399), const Color(0xFF059669)]
+                      : [const Color(0xFFFA9527), const Color(0xFFFA6400)],
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initials,
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            if (isExpanded) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      isSales ? 'Sales Agent' : 'Administrator',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

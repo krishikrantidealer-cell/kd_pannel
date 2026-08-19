@@ -279,6 +279,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               notesHistory: freshUser['notesHistory'] != null
                   ? List<Map<String, dynamic>>.from(freshUser['notesHistory'])
                   : [],
+              isPanelCreated: freshUser['isPanelCreated'] == true ||
+                  (freshUser['source']?.toString().toLowerCase().contains('panel') ?? false) ||
+                  (freshUser['createdVia']?.toString().toLowerCase() == 'panel') ||
+                  (_dealer?.isPanelCreated ?? false),
+              createdVia: freshUser['createdVia'] ?? _dealer?.createdVia,
+              createdByAdminName: freshUser['createdByAdminName'] ?? _dealer?.createdByAdminName,
+              createdByRole: freshUser['createdByRole'] ?? _dealer?.createdByRole,
             );
 
             if (mounted) {
@@ -425,6 +432,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               status: _dealer!.status,
               notes: _dealer!.notes,
               notesHistory: _dealer!.notesHistory,
+              isPanelCreated: _dealer!.isPanelCreated,
+              createdVia: _dealer!.createdVia,
+              createdByAdminName: _dealer!.createdByAdminName,
+              createdByRole: _dealer!.createdByRole,
             );
             _saveDealerToCache(updatedDealer);
           }
@@ -519,6 +530,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       status: _dealer!.status,
                       notes: _dealer!.notes,
                       notesHistory: _dealer!.notesHistory,
+                      isPanelCreated: _dealer!.isPanelCreated,
+                      createdVia: _dealer!.createdVia,
+                      createdByAdminName: _dealer!.createdByAdminName,
+                      createdByRole: _dealer!.createdByRole,
                     );
                   });
                 }
@@ -1142,6 +1157,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                 status: _dealer!.status,
                 notes: _dealer!.notes,
                 notesHistory: _dealer!.notesHistory,
+                isPanelCreated: _dealer!.isPanelCreated,
+                createdVia: _dealer!.createdVia,
+                createdByAdminName: _dealer!.createdByAdminName,
+                createdByRole: _dealer!.createdByRole,
               )
             : Dealer(
                 name: 'Dealer',
@@ -2709,24 +2728,39 @@ class _DealerInformationCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                  ? const Color(0xFFF3E8FF)
+                                  : AppTheme.primaryColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(6),
+                              border: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                  ? Border.all(color: const Color(0xFFD8B4FE), width: 0.8)
+                                  : null,
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.campaign_outlined,
+                                Icon(
+                                  (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                      ? Icons.laptop_mac_rounded
+                                      : Icons.campaign_outlined,
                                   size: 12,
-                                  color: AppTheme.primaryColor,
+                                  color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                      ? const Color(0xFF7E22CE)
+                                      : AppTheme.primaryColor,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  dealerSource.toUpperCase(),
+                                  (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                      ? (dealer.createdByAdminName != null && dealer.createdByAdminName!.isNotEmpty
+                                          ? 'PANEL (${dealer.createdByAdminName!.toUpperCase()})'
+                                          : 'KD PANEL')
+                                      : dealerSource.toUpperCase(),
                                   style: GoogleFonts.outfit(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: AppTheme.primaryColor,
+                                    color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                        ? const Color(0xFF7E22CE)
+                                        : AppTheme.primaryColor,
                                     letterSpacing: 0.5,
                                   ),
                                 ),

@@ -18,7 +18,6 @@ import 'package:kd_pannel/features/admin/presentation/pages/call_logs_page.dart'
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_customer_events_page.dart';
 import 'sidebar_widget.dart';
-import 'package:kd_pannel/features/shared/widgets/topbar_widget.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
@@ -291,21 +290,55 @@ class _MainLayoutState extends State<MainLayout> {
         ? _currentIdx
         : 0;
 
-    final Widget content = Column(
-      children: [
-        // Topbar (fixed height)
-        TopbarWidget(
-          onMenuPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
-          },
-        ),
+    final Widget screenContent = widget.child ?? pages[safeIdx];
 
-        // Screen Content
-        Expanded(
-          child: widget.child ?? pages[safeIdx],
-        ),
-      ],
-    );
+    final Widget content = isDesktop
+        ? screenContent
+        : Column(
+            children: [
+              // Mobile-only compact app bar to access drawer
+              Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.menu_rounded,
+                        size: 22,
+                        color: Color(0xFF334155),
+                      ),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                    const SizedBox(width: 4),
+                    Image.asset(
+                      'assets/images/logo_copy.png',
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'KRISHI DEALER',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: const Color(0xFF1E293B),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: screenContent),
+            ],
+          );
 
     return Scaffold(
       key: _scaffoldKey,

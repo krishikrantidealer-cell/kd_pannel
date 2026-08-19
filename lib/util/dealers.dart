@@ -32,6 +32,10 @@ class Dealer {
   final String? createdAt;
   final String? updatedAt;
   final List<Map<String, dynamic>> notesHistory;
+  final bool isPanelCreated;
+  final String? createdVia;
+  final String? createdByAdminName;
+  final String? createdByRole;
 
   Dealer({
     required this.name,
@@ -67,6 +71,10 @@ class Dealer {
     this.createdAt,
     this.updatedAt,
     this.notesHistory = const [],
+    this.isPanelCreated = false,
+    this.createdVia,
+    this.createdByAdminName,
+    this.createdByRole,
   });
 
   Map<String, dynamic> toMap() {
@@ -104,6 +112,10 @@ class Dealer {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'notesHistory': notesHistory,
+      'isPanelCreated': isPanelCreated,
+      'createdVia': createdVia,
+      'createdByAdminName': createdByAdminName,
+      'createdByRole': createdByRole,
     };
   }
 
@@ -133,6 +145,10 @@ class Dealer {
     if (resolvedAgentId == 'null' || resolvedAgentId == '-') resolvedAgentId = null;
     if (agentName.isEmpty || agentName == 'null') agentName = '-';
 
+    final bool isFromPanel = map['isPanelCreated'] == true ||
+        (map['source']?.toString().toLowerCase().contains('panel') ?? false) ||
+        (map['createdVia']?.toString().toLowerCase() == 'panel');
+
     return Dealer(
       name: personName.isNotEmpty ? personName : (map['phoneNumber'] ?? 'Unnamed Dealer'),
       phone: map['phoneNumber'] ?? map['phone'] ?? '',
@@ -144,7 +160,7 @@ class Dealer {
       purchaseValue: map['purchaseValue'] ?? '₹0',
       isHighValue: map['isHighValue'] ?? false,
       isInactive: map['isInactive'] ?? false,
-      source: map['source'] ?? 'App',
+      source: map['source'] ?? (isFromPanel ? 'KD Panel' : 'App'),
       deepLinkUrl: map['deepLinkUrl'],
       utmSource: map['utmSource'] ?? map['utm_source'],
       utmMedium: map['utmMedium'] ?? map['utm_medium'],
@@ -167,6 +183,10 @@ class Dealer {
       createdAt: map['createdAt'],
       updatedAt: map['updatedAt'],
       notesHistory: map['notesHistory'] != null ? List<Map<String, dynamic>>.from(map['notesHistory']) : [],
+      isPanelCreated: isFromPanel,
+      createdVia: map['createdVia'],
+      createdByAdminName: map['createdByAdminName'],
+      createdByRole: map['createdByRole'],
     );
   }
 }

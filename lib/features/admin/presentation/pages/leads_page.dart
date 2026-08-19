@@ -3260,63 +3260,44 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
   bool isEditHovered = false;
   bool isDeleteHovered = false;
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+  Widget _buildIconButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required String tooltip,
+    required bool isHovered,
+    required ValueChanged<bool> onHoverChanged,
+    required Color color,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: MouseRegion(
+        onEnter: (_) => onHoverChanged(true),
+        onExit: (_) => onHoverChanged(false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: isHovered ? color : color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isHovered ? color : color.withValues(alpha: 0.25),
+                width: 1,
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+            child: Center(
+              child: Icon(
+                icon,
+                size: 15,
+                color: isHovered ? Colors.white : color,
               ),
             ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -3327,84 +3308,22 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 70,
-          height: 32,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isEditHovered = true),
-            onExit: (_) => setState(() => isEditHovered = false),
-            child: GestureDetector(
-              onTap: widget.onEdit,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  color: isEditHovered ? AppTheme.info : Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isEditHovered
-                        ? AppTheme.info
-                        : AppTheme.borderColor.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.edit_outlined,
-                        size: 14,
-                        color: isEditHovered ? Colors.white : AppTheme.info,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Edit',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isEditHovered
-                              ? Colors.white
-                              : AppTheme.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+        _buildIconButton(
+          onTap: widget.onEdit,
+          icon: Icons.edit_outlined,
+          tooltip: 'Edit Lead',
+          isHovered: isEditHovered,
+          onHoverChanged: (val) => setState(() => isEditHovered = val),
+          color: AppTheme.info,
         ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isDeleteHovered = true),
-            onExit: (_) => setState(() => isDeleteHovered = false),
-            child: GestureDetector(
-              onTap: widget.onDelete,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  color: isDeleteHovered ? AppTheme.error : Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isDeleteHovered
-                        ? AppTheme.error
-                        : AppTheme.error.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    size: 16,
-                    color: isDeleteHovered ? Colors.white : AppTheme.error,
-                  ),
-                ),
-              ),
-            ),
-          ),
+        const SizedBox(width: 6),
+        _buildIconButton(
+          onTap: widget.onDelete,
+          icon: Icons.delete_outline_rounded,
+          tooltip: 'Delete Lead',
+          isHovered: isDeleteHovered,
+          onHoverChanged: (val) => setState(() => isDeleteHovered = val),
+          color: AppTheme.error,
         ),
       ],
     );

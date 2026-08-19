@@ -642,6 +642,30 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     }
   }
 
+  Map<String, String> _getRouteInfo(String? routeName, bool isSales) {
+    if (routeName == null) {
+      return {'title': isSales ? 'Sales Dashboard' : 'Admin Dashboard', 'subtitle': 'Overview & Real-time Metrics'};
+    }
+    if (routeName.startsWith('/products')) return {'title': 'Products Catalog', 'subtitle': 'Inventory & Pricing'};
+    if (routeName.startsWith('/orders')) return {'title': 'Orders Management', 'subtitle': 'Live & Completed Shipments'};
+    if (routeName.startsWith('/leads/profile')) return {'title': 'Lead Profile', 'subtitle': 'Prospect Details & Activity'};
+    if (routeName.startsWith('/leads')) return {'title': 'Leads CRM', 'subtitle': 'Prospects & Follow-ups'};
+    if (routeName.startsWith('/dealers/profile')) return {'title': 'Dealer Profile', 'subtitle': 'Partner Details & Performance'};
+    if (routeName.startsWith('/dealers')) return {'title': 'Dealers Management', 'subtitle': 'Verified Partners Network'};
+    if (routeName.startsWith('/sales/coupons')) return {'title': 'Coupons & Offers', 'subtitle': 'Promotions Management'};
+    if (routeName.startsWith('/team')) return {'title': 'Team Management', 'subtitle': 'Staff & Roles'};
+    if (routeName.startsWith('/marketing') || routeName.startsWith('/events') || routeName.startsWith('/customer')) {
+      return {'title': 'Live Customer Pulse', 'subtitle': 'Real-Time User Events'};
+    }
+    if (routeName.startsWith('/logs') || routeName.startsWith('/admin/logs')) return {'title': 'Audit Logs', 'subtitle': 'System Activity & Security'};
+    if (routeName.startsWith('/trash')) return {'title': 'Trash & Archive', 'subtitle': 'Deleted Records'};
+    if (routeName.startsWith('/alerts')) return {'title': 'Alerts & Notices', 'subtitle': 'Broadcast Messages'};
+    if (routeName.startsWith('/sales/estimates')) return {'title': 'Estimate Generator', 'subtitle': 'Quotes & Invoices'};
+    if (routeName.startsWith('/support')) return {'title': 'WhatsApp Support', 'subtitle': 'Customer Conversations'};
+    if (routeName.startsWith('/calls')) return {'title': 'Call Logs', 'subtitle': 'OBD & Telephony Records'};
+    return {'title': isSales ? 'Sales Dashboard' : 'Admin Dashboard', 'subtitle': 'Overview & Real-time Metrics'};
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -652,10 +676,11 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     final name = rawName.isNotEmpty ? rawName : (isSales ? 'Sales Agent' : 'Administrator');
     final initials = name.isNotEmpty ? name[0].toUpperCase() : (isSales ? 'S' : 'A');
 
-    final double height = isMobile ? 60 : 72;
+    final double height = isMobile ? 50 : 54;
     final String? currentRoute = ModalRoute.of(context)?.settings.name;
     final bool isProfileRoute =
         currentRoute == '/leads/profile' || currentRoute == '/dealers/profile';
+    final routeInfo = _getRouteInfo(currentRoute, isSales);
 
     return ClipRect(
       child: BackdropFilter(
@@ -673,82 +698,162 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                       const Color(0xFFE8F5E9).withValues(alpha: 0.95),
                     ]
                   : [
-                      Colors.white.withValues(alpha: 0.88),
-                      AppTheme.cardColor.withValues(alpha: 0.9),
+                      Colors.white.withValues(alpha: 0.92),
+                      AppTheme.cardColor.withValues(alpha: 0.95),
                     ],
             ),
             border: Border(
               bottom: BorderSide(
                 color: isProfileRoute
                     ? const Color(0xFFC8E6C9)
-                    : const Color(0xFFE5E7EB),
+                    : const Color(0xFFE2E8F0),
                 width: 1,
               ),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24),
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20),
           child: Row(
             children: [
               if (!isDesktop) ...[
                 _TopbarIconButton(
                   tooltip: 'Menu',
-                  size: isMobile ? 36 : 40,
+                  size: 34,
                   onTap: widget.onMenuPressed,
                   icon: const Icon(
                     Icons.menu_rounded,
                     color: Color(0xFF334155),
-                    size: 20,
+                    size: 18,
                   ),
                 ),
                 const SizedBox(width: 10),
               ],
 
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: SizedBox(
-                    height: isMobile ? 36 : 42,
-                    child: CupertinoSearchTextField(
-                      placeholder: isMobile
-                          ? 'Search'
-                          : 'Search orders, users, products...',
-                      placeholderStyle: TextStyle(
-                        color: const Color(0xFF94A3B8),
-                        fontSize: isMobile ? 12 : 13,
-                      ),
-                      prefixInsets: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 10 : 14,
-                      ),
-                      itemColor: const Color(0xFF94A3B8),
-                      style: TextStyle(
-                        fontSize: isMobile ? 13 : 14,
-                        color: const Color(0xFF0F172A),
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: const Color(0xFFE5E7EB),
-                          width: 1,
+              // Current Page Title on the left
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        routeInfo['title'] ?? 'Dashboard',
+                        style: GoogleFonts.outfit(
+                          fontSize: isMobile ? 14 : 16,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                          letterSpacing: -0.2,
                         ),
                       ),
-                    ),
+                      if (!isMobile && routeInfo['subtitle'] != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '•  ${routeInfo['subtitle']}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
+                ],
               ),
 
-              const SizedBox(width: 10),
+              const Spacer(),
 
+              // Live Sync Pill
+              if (!isMobile) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFA7F3D0), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Live Sync',
+                        style: GoogleFonts.outfit(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+
+              // Notifications + Profile Actions on Right
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  CompositedTransformTarget(
+                    link: _layerLink,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _TopbarIconButton(
+                          tooltip: 'Notifications',
+                          size: 34,
+                          onTap: _toggleDropdown,
+                          icon: const Icon(
+                            Icons.notifications_none_rounded,
+                            color: Color(0xFF334155),
+                            size: 18,
+                          ),
+                        ),
+                        if (_unreadCount > 0)
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.error,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 15,
+                                minHeight: 15,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  _unreadCount > 9 ? '9+' : '$_unreadCount',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   CompositedTransformTarget(
                     link: _profileLayerLink,
                     child: GestureDetector(
@@ -756,19 +861,19 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: Container(
-                          width: isMobile ? 36 : 40,
-                          height: isMobile ? 36 : 40,
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: isSales ? const Color(0xFFA7F3D0) : const Color(0xFFE5E7EB),
-                              width: 2,
+                              color: isSales ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                              width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 10,
-                                offset: const Offset(0, 6),
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
                               ),
                             ],
                           ),
@@ -788,7 +893,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                         style: GoogleFonts.outfit(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w800,
-                                          fontSize: isMobile ? 14 : 16,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ),
@@ -807,7 +912,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                         style: GoogleFonts.outfit(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w800,
-                                          fontSize: isMobile ? 14 : 16,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ),

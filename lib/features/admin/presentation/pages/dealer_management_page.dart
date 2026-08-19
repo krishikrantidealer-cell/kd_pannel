@@ -360,6 +360,12 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             notesHistory: u['notesHistory'] != null
                 ? List<Map<String, dynamic>>.from(u['notesHistory'])
                 : [],
+            isPanelCreated: u['isPanelCreated'] == true ||
+                (u['source']?.toString().toLowerCase().contains('panel') ?? false) ||
+                (u['createdVia']?.toString().toLowerCase() == 'panel'),
+            createdVia: u['createdVia'],
+            createdByAdminName: u['createdByAdminName'],
+            createdByRole: u['createdByRole'],
           );
         })
         .toList();
@@ -2946,14 +2952,56 @@ class _DealerRowState extends State<_DealerRow> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.dealer.shopName != null &&
-                                  widget.dealer.shopName!.isNotEmpty
-                              ? widget.dealer.shopName!
-                              : 'Unnamed Shop',
-                          style: _shopNameStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                widget.dealer.shopName != null &&
+                                        widget.dealer.shopName!.isNotEmpty
+                                    ? widget.dealer.shopName!
+                                    : 'Unnamed Shop',
+                                style: _shopNameStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.dealer.isPanelCreated) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3E8FF),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: const Color(0xFFC084FC),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.laptop_mac_rounded,
+                                      size: 10,
+                                      color: Color(0xFF7E22CE),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Panel',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF7E22CE),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
                           widget.dealer.name,
@@ -3071,51 +3119,10 @@ class _DealerRowState extends State<_DealerRow> {
                     child: Center(
                       child: GestureDetector(
                         onTap: () {}, // Stop propagation for buttons
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.onCreateOrder != null) ...[
-                              GestureDetector(
-                                onTap: widget.onCreateOrder,
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.add_shopping_cart_rounded,
-                                          size: 13,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Order',
-                                          style: _statusTextStyle.copyWith(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            _ConnectedActionButtons(
-                              onEdit: widget.onEdit,
-                              onDelete: widget.onDelete,
-                            ),
-                          ],
+                        child: _ConnectedActionButtons(
+                          onCreateOrder: widget.onCreateOrder,
+                          onEdit: widget.onEdit,
+                          onDelete: widget.onDelete,
                         ),
                       ),
                     ),
@@ -3376,10 +3383,15 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
+  final VoidCallback? onCreateOrder;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({required this.onEdit, required this.onDelete});
+  const _ConnectedActionButtons({
+    this.onCreateOrder,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -3387,66 +3399,48 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
+  bool isOrderHovered = false;
   bool isEditHovered = false;
   bool isDeleteHovered = false;
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 250,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+  Widget _buildIconButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required String tooltip,
+    required bool isHovered,
+    required ValueChanged<bool> onHoverChanged,
+    required Color color,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: MouseRegion(
+        onEnter: (_) => onHoverChanged(true),
+        onExit: (_) => onHoverChanged(false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: isHovered ? color : color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isHovered ? color : color.withValues(alpha: 0.25),
+                width: 1,
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+            child: Center(
+              child: Icon(
+                icon,
+                size: 15,
+                color: isHovered ? Colors.white : color,
               ),
             ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -3457,84 +3451,33 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 65,
-          height: 32,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isEditHovered = true),
-            onExit: (_) => setState(() => isEditHovered = false),
-            child: GestureDetector(
-              onTap: widget.onEdit,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  color: isEditHovered ? AppTheme.info : Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isEditHovered
-                        ? AppTheme.info
-                        : AppTheme.borderColor.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.edit_outlined,
-                        size: 14,
-                        color: isEditHovered ? Colors.white : AppTheme.info,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Edit',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isEditHovered
-                              ? Colors.white
-                              : AppTheme.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        if (widget.onCreateOrder != null) ...[
+          _buildIconButton(
+            onTap: widget.onCreateOrder!,
+            icon: Icons.add_shopping_cart_rounded,
+            tooltip: 'Create Order',
+            isHovered: isOrderHovered,
+            onHoverChanged: (val) => setState(() => isOrderHovered = val),
+            color: AppTheme.primaryColor,
           ),
+          const SizedBox(width: 6),
+        ],
+        _buildIconButton(
+          onTap: widget.onEdit,
+          icon: Icons.edit_outlined,
+          tooltip: 'Edit Dealer',
+          isHovered: isEditHovered,
+          onHoverChanged: (val) => setState(() => isEditHovered = val),
+          color: AppTheme.info,
         ),
         const SizedBox(width: 6),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isDeleteHovered = true),
-            onExit: (_) => setState(() => isDeleteHovered = false),
-            child: GestureDetector(
-              onTap: widget.onDelete,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  color: isDeleteHovered ? AppTheme.error : Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isDeleteHovered
-                        ? AppTheme.error
-                        : AppTheme.error.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    size: 16,
-                    color: isDeleteHovered ? Colors.white : AppTheme.error,
-                  ),
-                ),
-              ),
-            ),
-          ),
+        _buildIconButton(
+          onTap: widget.onDelete,
+          icon: Icons.delete_outline_rounded,
+          tooltip: 'Delete Dealer',
+          isHovered: isDeleteHovered,
+          onHoverChanged: (val) => setState(() => isDeleteHovered = val),
+          color: AppTheme.error,
         ),
       ],
     );
@@ -3563,7 +3506,11 @@ class _SourceBadge extends StatelessWidget {
     final String displaySource = utmSource ?? source;
     final String sourceLower = displaySource.toLowerCase();
 
-    if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
+    if (sourceLower.contains('panel') || sourceLower.contains('admin') || sourceLower.contains('custom')) {
+      badgeColor = const Color(0xFFF3E8FF);
+      textColor = const Color(0xFF7E22CE);
+      icon = Icons.laptop_mac_rounded;
+    } else if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
       badgeColor = const Color(0xFFE8F8EF);
       textColor = const Color(0xFF107C41);
       icon = Icons.chat_bubble_outline_rounded;
