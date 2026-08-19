@@ -143,8 +143,8 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
           final List rawOrders = data['orders'] ?? [];
-          final filtered = rawOrders
-              .map((o) => Map<String, dynamic>.from(o))
+          final mappedOrders = rawOrders.map((o) => Map<String, dynamic>.from(o)).toList();
+          final filtered = mappedOrders
               .where(
                 (o) =>
                     (o['user'] is Map &&
@@ -156,7 +156,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
 
           emit(state.copyWith(
             isLoadingOrders: false,
-            currentDealerOrders: filtered,
+            currentDealerOrders: filtered.isNotEmpty ? filtered : mappedOrders,
           ));
         } else {
           throw Exception(data['message'] ?? 'Failed to load orders');

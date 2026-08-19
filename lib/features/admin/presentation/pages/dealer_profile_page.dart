@@ -325,6 +325,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     setState(() => _isLoadingOrders = true);
     try {
       final String dealerId = _dealer!.id!;
+      final String dealerPhone = _dealer?.phone ?? '';
+      final String dealerEmail = _dealer?.email ?? '';
       // Passing both userId and user for maximum compatibility with backend changes
       final res = await ApiClient().get(
         '/orders/admin/all?userId=$dealerId&user=$dealerId',
@@ -336,18 +338,32 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           final List rawOrders = data['orders'] ?? [];
 
           if (mounted) {
+            final mapped = rawOrders.map((o) => Map<String, dynamic>.from(o)).toList();
+            final filtered = mapped.where((o) {
+              final matchId = (o['user'] is Map &&
+                      (o['user']['_id']?.toString() == dealerId ||
+                          o['user']['id']?.toString() == dealerId)) ||
+                  o['user']?.toString() == dealerId;
+              final matchPhone = dealerPhone.isNotEmpty &&
+                  ((o['user'] is Map && o['user']['phoneNumber']?.toString() == dealerPhone) ||
+                      o['customerPhone']?.toString() == dealerPhone ||
+                      o['shippingAddress']?['phoneNumber']?.toString() == dealerPhone);
+              final matchEmail = dealerEmail.isNotEmpty &&
+                  ((o['user'] is Map && o['user']['email']?.toString() == dealerEmail) ||
+                      o['customerEmail']?.toString() == dealerEmail);
+              return matchId || matchPhone || matchEmail;
+            }).toList();
+
+            final effectiveOrders = filtered.isNotEmpty ? filtered : mapped;
+
             setState(() {
-              // Local filtering as a second layer of safety
-              _orders = rawOrders
-                  .map((o) => Map<String, dynamic>.from(o))
-                  .where(
-                    (o) =>
-                        (o['user'] is Map &&
-                            (o['user']['_id']?.toString() == dealerId ||
-                                o['user']['id']?.toString() == dealerId)) ||
-                        o['user']?.toString() == dealerId,
-                  )
-                  .toList();
+              _orders = effectiveOrders;
+              if (_dealer != null) {
+                _dealer = _dealer!.copyWith(
+                  totalOrders: effectiveOrders.length,
+                  isInactive: effectiveOrders.isEmpty,
+                );
+              }
             });
             debugPrint(
               'Loaded ${_orders.length} filtered orders for dealer $dealerId (Total returned: ${rawOrders.length})',
@@ -1122,45 +1138,30 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         ? _salesAgents
         : dealersState.salesAgents;
 
+    final orders = dealersState.currentDealerOrders.isNotEmpty
+        ? dealersState.currentDealerOrders
+        : _orders;
+
+    final effectiveOrdersCount = orders.isNotEmpty ? orders.length : (_dealer?.totalOrders ?? 0);
+
     // Dynamic dealer updated by agent selection
     final bool isDetailsMatching = dealersState.currentDealerDetails != null &&
         _dealer?.id != null &&
         dealersState.currentDealerDetails!['_id']?.toString() == _dealer!.id;
 
     final currentDealer = isDetailsMatching
-        ? Dealer.fromMap(dealersState.currentDealerDetails!)
+        ? Dealer.fromMap(dealersState.currentDealerDetails!).copyWith(
+            totalOrders: effectiveOrdersCount,
+            isInactive: effectiveOrdersCount == 0,
+            agent: _agentName ?? _dealer?.agent,
+            agentId: _agentId ?? _dealer?.agentId,
+          )
         : (_dealer != null
-            ? Dealer(
-                name: _dealer!.name,
-                phone: _dealer!.phone,
-                city: _dealer!.city,
-                state: _dealer!.state,
+            ? _dealer!.copyWith(
                 agent: _agentName ?? _dealer!.agent,
-                gstStatus: _dealer!.gstStatus,
-                totalOrders: _orders.length,
-                purchaseValue: _dealer!.purchaseValue,
-                isHighValue: _dealer!.isHighValue,
-                isInactive: _orders.isEmpty,
-                source: _dealer?.source ?? 'App',
-                deepLinkUrl: _dealer?.deepLinkUrl,
-                id: _dealer!.id,
+                totalOrders: effectiveOrdersCount,
+                isInactive: effectiveOrdersCount == 0,
                 agentId: _agentId ?? _dealer!.agentId,
-                licenceImage: _dealer!.licenceImage,
-                shopImage: _dealer!.shopImage,
-                gstNumber: _dealer!.gstNumber,
-                email: _dealer!.email,
-                userType: _dealer!.userType,
-                kycStatus: _dealer!.kycStatus,
-                shopName: _dealer!.shopName,
-                address: _dealer!.address,
-                isBlocked: _dealer!.isBlocked,
-                status: _dealer!.status,
-                notes: _dealer!.notes,
-                notesHistory: _dealer!.notesHistory,
-                isPanelCreated: _dealer!.isPanelCreated,
-                createdVia: _dealer!.createdVia,
-                createdByAdminName: _dealer!.createdByAdminName,
-                createdByRole: _dealer!.createdByRole,
               )
             : Dealer(
                 name: 'Dealer',
@@ -1169,15 +1170,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                 state: '',
                 agent: '-',
                 gstStatus: 'Pending',
-                totalOrders: 0,
+                totalOrders: effectiveOrdersCount,
                 purchaseValue: '₹0',
                 isHighValue: false,
-                isInactive: true,
+                isInactive: effectiveOrdersCount == 0,
               ));
-
-    final orders = dealersState.currentDealerOrders.isNotEmpty
-        ? dealersState.currentDealerOrders
-        : _orders;
 
     final events = dealersState.currentDealerEvents.isNotEmpty
         ? dealersState.currentDealerEvents
@@ -2314,19 +2311,41 @@ class _StatsCardsSection extends StatelessWidget {
       }
     }
 
+    final totalOrdersCount = orders.isNotEmpty ? orders.length : dealer.totalOrders;
+
+    double totalSpent = 0;
+    for (var o in orders) {
+      final amt = (o['totalAmount'] as num?)?.toDouble() ??
+          double.tryParse(o['totalAmount']?.toString() ?? '') ??
+          0.0;
+      totalSpent += amt;
+    }
+
+    String formattedPurchaseValue;
+    if (orders.isNotEmpty) {
+      formattedPurchaseValue =
+          '₹${totalSpent.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d+?)(?=(\d\d)+(\d)(?!\d))(\.\d+)?'), (Match m) => '${m[1]},')}';
+    } else if (dealer.purchaseValue.isNotEmpty &&
+        dealer.purchaseValue != '0' &&
+        dealer.purchaseValue != '₹0') {
+      formattedPurchaseValue = dealer.purchaseValue;
+    } else {
+      formattedPurchaseValue = '₹0';
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final spacing = isDesktop ? 24.0 : 16.0;
         final items = [
           {
             'title': 'Total Orders',
-            'value': dealer.totalOrders.toString(),
+            'value': totalOrdersCount.toString(),
             'icon': Icons.shopping_bag_outlined,
             'color': Colors.blue,
           },
           {
             'title': 'Total Purchase Value',
-            'value': dealer.purchaseValue,
+            'value': formattedPurchaseValue,
             'icon': Icons.currency_rupee_outlined,
             'color': Colors.green,
           },
