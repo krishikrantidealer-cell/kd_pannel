@@ -367,7 +367,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       'items': _editingItems.map((it) {
         final price = ((it['price'] ?? 0.0) as num).toDouble();
         final qty = ((it['quantity'] ?? 0.0) as num).toDouble();
-        final gst = _isGstEnabled ? (((it['gst'] ?? 18.0) as num).toDouble()) : 0.0;
+        final gst = _isGstEnabled
+            ? (((it['gst'] ?? 18.0) as num).toDouble())
+            : 0.0;
         return {
           'name': it['name'] ?? '',
           'quantity': qty,
@@ -787,8 +789,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                             );
                                             final double g = _isGstEnabled
                                                 ? (((item['gst'] ?? 18.0)
-                                                        as num)
-                                                    .toDouble())
+                                                          as num)
+                                                      .toDouble())
                                                 : 0.0;
                                             item['amount'] =
                                                 price *
@@ -988,7 +990,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       final name = (est['clientName'] ?? '').toString().toLowerCase();
       final no = (est['estimateNo'] ?? '').toString().toLowerCase();
       final phone = (est['clientPhone'] ?? '').toString().toLowerCase();
-      return name.contains(query) || no.contains(query) || phone.contains(query);
+      return name.contains(query) ||
+          no.contains(query) ||
+          phone.contains(query);
     }).toList();
 
     return Column(
@@ -1114,7 +1118,6 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                       margin: const EdgeInsets.only(bottom: 12),
                       child: Material(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -1779,7 +1782,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   onChanged: (val) {
                     final double q = double.tryParse(val) ?? 0.0;
                     final double p = ((item['price'] ?? 0.0) as num).toDouble();
-                    final double g = _isGstEnabled ? (((item['gst'] ?? 18.0) as num).toDouble()) : 0.0;
+                    final double g = _isGstEnabled
+                        ? (((item['gst'] ?? 18.0) as num).toDouble())
+                        : 0.0;
                     item['quantity'] = q;
                     item['amount'] = q * p * (1 + g / 100);
                     setState(() {});
@@ -1860,7 +1865,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     final double p = double.tryParse(val) ?? 0.0;
                     final double q = ((item['quantity'] ?? 0.0) as num)
                         .toDouble();
-                    final double g = _isGstEnabled ? (((item['gst'] ?? 18.0) as num).toDouble()) : 0.0;
+                    final double g = _isGstEnabled
+                        ? (((item['gst'] ?? 18.0) as num).toDouble())
+                        : 0.0;
                     item['price'] = p;
                     item['amount'] = q * p * (1 + g / 100);
                     setState(() {});
@@ -1894,10 +1901,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     ),
                     onChanged: (val) {
                       final double g = double.tryParse(val) ?? 0.0;
-                      final double p =
-                          ((item['price'] ?? 0.0) as num).toDouble();
-                      final double q =
-                          ((item['quantity'] ?? 0.0) as num).toDouble();
+                      final double p = ((item['price'] ?? 0.0) as num)
+                          .toDouble();
+                      final double q = ((item['quantity'] ?? 0.0) as num)
+                          .toDouble();
                       item['gst'] = g;
                       item['amount'] = q * p * (1 + g / 100);
                       setState(() {});
@@ -1921,10 +1928,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   const SizedBox(height: 4),
                   Builder(
                     builder: (context) {
-                      final double p =
-                          ((item['price'] ?? 0.0) as num).toDouble();
-                      final double q =
-                          ((item['quantity'] ?? 0.0) as num).toDouble();
+                      final double p = ((item['price'] ?? 0.0) as num)
+                          .toDouble();
+                      final double q = ((item['quantity'] ?? 0.0) as num)
+                          .toDouble();
                       final double g = _isGstEnabled
                           ? (((item['gst'] ?? 18.0) as num).toDouble())
                           : 0.0;

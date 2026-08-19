@@ -89,7 +89,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Dealer) {
-      if (_dealer == null || _dealer?.id != args.id || _dealer?.phone != args.phone) {
+      if (_dealer == null ||
+          _dealer?.id != args.id ||
+          _dealer?.phone != args.phone) {
         _dealer = args;
         _agentId = args.agentId;
         _agentName = args.agent;
@@ -126,7 +128,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         WebSocketService().connect();
         _dealersWsSubscription?.cancel();
         _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
-          if (mounted && _dealer?.id != null && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
+          if (mounted &&
+              _dealer?.id != null &&
+              RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
             final bloc = context.read<DealersBloc>();
             bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
             bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
@@ -142,7 +146,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       WebSocketService().connect();
       _dealersWsSubscription?.cancel();
       _dealersWsSubscription = WebSocketService().dealersUpdates.listen((_) {
-        if (mounted && _dealer?.id != null && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
+        if (mounted &&
+            _dealer?.id != null &&
+            RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(_dealer!.id!)) {
           final bloc = context.read<DealersBloc>();
           bloc.add(FetchDealerDetailsEvent(_dealer!.id!));
           bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
@@ -279,13 +285,21 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               notesHistory: freshUser['notesHistory'] != null
                   ? List<Map<String, dynamic>>.from(freshUser['notesHistory'])
                   : [],
-              isPanelCreated: freshUser['isPanelCreated'] == true ||
-                  (freshUser['source']?.toString().toLowerCase().contains('panel') ?? false) ||
-                  (freshUser['createdVia']?.toString().toLowerCase() == 'panel') ||
+              isPanelCreated:
+                  freshUser['isPanelCreated'] == true ||
+                  (freshUser['source']?.toString().toLowerCase().contains(
+                        'panel',
+                      ) ??
+                      false) ||
+                  (freshUser['createdVia']?.toString().toLowerCase() ==
+                      'panel') ||
                   (_dealer?.isPanelCreated ?? false),
               createdVia: freshUser['createdVia'] ?? _dealer?.createdVia,
-              createdByAdminName: freshUser['createdByAdminName'] ?? _dealer?.createdByAdminName,
-              createdByRole: freshUser['createdByRole'] ?? _dealer?.createdByRole,
+              createdByAdminName:
+                  freshUser['createdByAdminName'] ??
+                  _dealer?.createdByAdminName,
+              createdByRole:
+                  freshUser['createdByRole'] ?? _dealer?.createdByRole,
             );
 
             if (mounted) {
@@ -338,18 +352,27 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           final List rawOrders = data['orders'] ?? [];
 
           if (mounted) {
-            final mapped = rawOrders.map((o) => Map<String, dynamic>.from(o)).toList();
+            final mapped = rawOrders
+                .map((o) => Map<String, dynamic>.from(o))
+                .toList();
             final filtered = mapped.where((o) {
-              final matchId = (o['user'] is Map &&
+              final matchId =
+                  (o['user'] is Map &&
                       (o['user']['_id']?.toString() == dealerId ||
                           o['user']['id']?.toString() == dealerId)) ||
                   o['user']?.toString() == dealerId;
-              final matchPhone = dealerPhone.isNotEmpty &&
-                  ((o['user'] is Map && o['user']['phoneNumber']?.toString() == dealerPhone) ||
+              final matchPhone =
+                  dealerPhone.isNotEmpty &&
+                  ((o['user'] is Map &&
+                          o['user']['phoneNumber']?.toString() ==
+                              dealerPhone) ||
                       o['customerPhone']?.toString() == dealerPhone ||
-                      o['shippingAddress']?['phoneNumber']?.toString() == dealerPhone);
-              final matchEmail = dealerEmail.isNotEmpty &&
-                  ((o['user'] is Map && o['user']['email']?.toString() == dealerEmail) ||
+                      o['shippingAddress']?['phoneNumber']?.toString() ==
+                          dealerPhone);
+              final matchEmail =
+                  dealerEmail.isNotEmpty &&
+                  ((o['user'] is Map &&
+                          o['user']['email']?.toString() == dealerEmail) ||
                       o['customerEmail']?.toString() == dealerEmail);
               return matchId || matchPhone || matchEmail;
             }).toList();
@@ -1142,10 +1165,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         ? dealersState.currentDealerOrders
         : _orders;
 
-    final effectiveOrdersCount = orders.isNotEmpty ? orders.length : (_dealer?.totalOrders ?? 0);
+    final effectiveOrdersCount = orders.isNotEmpty
+        ? orders.length
+        : (_dealer?.totalOrders ?? 0);
 
     // Dynamic dealer updated by agent selection
-    final bool isDetailsMatching = dealersState.currentDealerDetails != null &&
+    final bool isDetailsMatching =
+        dealersState.currentDealerDetails != null &&
         _dealer?.id != null &&
         dealersState.currentDealerDetails!['_id']?.toString() == _dealer!.id;
 
@@ -1157,24 +1183,24 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             agentId: _agentId ?? _dealer?.agentId,
           )
         : (_dealer != null
-            ? _dealer!.copyWith(
-                agent: _agentName ?? _dealer!.agent,
-                totalOrders: effectiveOrdersCount,
-                isInactive: effectiveOrdersCount == 0,
-                agentId: _agentId ?? _dealer!.agentId,
-              )
-            : Dealer(
-                name: 'Dealer',
-                phone: '',
-                city: '',
-                state: '',
-                agent: '-',
-                gstStatus: 'Pending',
-                totalOrders: effectiveOrdersCount,
-                purchaseValue: '₹0',
-                isHighValue: false,
-                isInactive: effectiveOrdersCount == 0,
-              ));
+              ? _dealer!.copyWith(
+                  agent: _agentName ?? _dealer!.agent,
+                  totalOrders: effectiveOrdersCount,
+                  isInactive: effectiveOrdersCount == 0,
+                  agentId: _agentId ?? _dealer!.agentId,
+                )
+              : Dealer(
+                  name: 'Dealer',
+                  phone: '',
+                  city: '',
+                  state: '',
+                  agent: '-',
+                  gstStatus: 'Pending',
+                  totalOrders: effectiveOrdersCount,
+                  purchaseValue: '₹0',
+                  isHighValue: false,
+                  isInactive: effectiveOrdersCount == 0,
+                ));
 
     final events = dealersState.currentDealerEvents.isNotEmpty
         ? dealersState.currentDealerEvents
@@ -1284,7 +1310,10 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       Builder(
                         builder: (context) {
                           final tabs = _getProfileTabs();
-                          final safeIdx = (_activeTab >= 0 && _activeTab < tabs.length) ? _activeTab : 0;
+                          final safeIdx =
+                              (_activeTab >= 0 && _activeTab < tabs.length)
+                              ? _activeTab
+                              : 0;
                           final currentTabKey = tabs[safeIdx]['key'];
 
                           return SelectionContainer.disabled(
@@ -1293,7 +1322,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                               child: currentTabKey == 'overview'
                                   ? Column(
                                       key: const ValueKey('overview'),
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         _StatsCardsSection(
                                           dealer: currentDealer,
@@ -1320,7 +1350,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                   child: _DealerKycDocumentsCard(
                                                     dealer: currentDealer,
                                                     onViewDocument: _launchUrl,
-                                                    onUpload: _showUploadKycDialog,
+                                                    onUpload:
+                                                        _showUploadKycDialog,
                                                   ),
                                                 ),
                                               ],
@@ -1372,9 +1403,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                           .email!
                                                           .isNotEmpty)
                                                   ? currentDealer.email!
-                                                  : (currentDealer.phone.isNotEmpty
+                                                  : (currentDealer
+                                                            .phone
+                                                            .isNotEmpty
                                                         ? currentDealer.phone
-                                                        : (currentDealer.id ?? '')),
+                                                        : (currentDealer.id ??
+                                                              '')),
                                               forceRefresh: true,
                                             ),
                                           ),
@@ -1386,9 +1420,12 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                           .email!
                                                           .isNotEmpty)
                                                   ? currentDealer.email!
-                                                  : (currentDealer.phone.isNotEmpty
+                                                  : (currentDealer
+                                                            .phone
+                                                            .isNotEmpty
                                                         ? currentDealer.phone
-                                                        : (currentDealer.id ?? '')),
+                                                        : (currentDealer.id ??
+                                                              '')),
                                             ),
                                           ),
                                     )
@@ -1419,18 +1456,25 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                     noteType,
                                                     notePriority,
                                                   ) {
-                                                    context.read<DealersBloc>().add(
-                                                      UpdateDealerDetailsEvent(
-                                                        userId: currentDealer.id!,
-                                                        updateData: {
-                                                          'leadStatus': status,
-                                                          'leadNotes': notes,
-                                                          'noteType': noteType,
-                                                          'notePriority':
-                                                              notePriority,
-                                                        },
-                                                      ),
-                                                    );
+                                                    context
+                                                        .read<DealersBloc>()
+                                                        .add(
+                                                          UpdateDealerDetailsEvent(
+                                                            userId:
+                                                                currentDealer
+                                                                    .id!,
+                                                            updateData: {
+                                                              'leadStatus':
+                                                                  status,
+                                                              'leadNotes':
+                                                                  notes,
+                                                              'noteType':
+                                                                  noteType,
+                                                              'notePriority':
+                                                                  notePriority,
+                                                            },
+                                                          ),
+                                                        );
                                                   },
                                             ),
                                           ),
@@ -1451,10 +1495,18 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   List<Map<String, dynamic>> _getProfileTabs() {
     final bool isSales = AuthService().isSales;
     return [
-      {'icon': Icons.dashboard_outlined, 'label': 'Overview', 'key': 'overview'},
+      {
+        'icon': Icons.dashboard_outlined,
+        'label': 'Overview',
+        'key': 'overview',
+      },
       {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
       if (!isSales)
-        {'icon': Icons.analytics_outlined, 'label': 'Activities', 'key': 'activities'},
+        {
+          'icon': Icons.analytics_outlined,
+          'label': 'Activities',
+          'key': 'activities',
+        },
       {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
     ];
   }
@@ -2311,11 +2363,14 @@ class _StatsCardsSection extends StatelessWidget {
       }
     }
 
-    final totalOrdersCount = orders.isNotEmpty ? orders.length : dealer.totalOrders;
+    final totalOrdersCount = orders.isNotEmpty
+        ? orders.length
+        : dealer.totalOrders;
 
     double totalSpent = 0;
     for (var o in orders) {
-      final amt = (o['totalAmount'] as num?)?.toDouble() ??
+      final amt =
+          (o['totalAmount'] as num?)?.toDouble() ??
           double.tryParse(o['totalAmount']?.toString() ?? '') ??
           0.0;
       totalSpent += amt;
@@ -2747,37 +2802,65 @@ class _DealerInformationCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                              color:
+                                  (dealer.isPanelCreated ||
+                                      dealerSource.toLowerCase().contains(
+                                        'panel',
+                                      ))
                                   ? const Color(0xFFF3E8FF)
                                   : AppTheme.primaryColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(6),
-                              border: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
-                                  ? Border.all(color: const Color(0xFFD8B4FE), width: 0.8)
+                              border:
+                                  (dealer.isPanelCreated ||
+                                      dealerSource.toLowerCase().contains(
+                                        'panel',
+                                      ))
+                                  ? Border.all(
+                                      color: const Color(0xFFD8B4FE),
+                                      width: 0.8,
+                                    )
                                   : null,
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                  (dealer.isPanelCreated ||
+                                          dealerSource.toLowerCase().contains(
+                                            'panel',
+                                          ))
                                       ? Icons.laptop_mac_rounded
                                       : Icons.campaign_outlined,
                                   size: 12,
-                                  color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                  color:
+                                      (dealer.isPanelCreated ||
+                                          dealerSource.toLowerCase().contains(
+                                            'panel',
+                                          ))
                                       ? const Color(0xFF7E22CE)
                                       : AppTheme.primaryColor,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
-                                      ? (dealer.createdByAdminName != null && dealer.createdByAdminName!.isNotEmpty
-                                          ? 'PANEL (${dealer.createdByAdminName!.toUpperCase()})'
-                                          : 'KD PANEL')
+                                  (dealer.isPanelCreated ||
+                                          dealerSource.toLowerCase().contains(
+                                            'panel',
+                                          ))
+                                      ? (dealer.createdByAdminName != null &&
+                                                dealer
+                                                    .createdByAdminName!
+                                                    .isNotEmpty
+                                            ? 'PANEL (${dealer.createdByAdminName!.toUpperCase()})'
+                                            : 'KD PANEL')
                                       : dealerSource.toUpperCase(),
                                   style: GoogleFonts.outfit(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: (dealer.isPanelCreated || dealerSource.toLowerCase().contains('panel'))
+                                    color:
+                                        (dealer.isPanelCreated ||
+                                            dealerSource.toLowerCase().contains(
+                                              'panel',
+                                            ))
                                         ? const Color(0xFF7E22CE)
                                         : AppTheme.primaryColor,
                                     letterSpacing: 0.5,
