@@ -12,6 +12,8 @@ class OrderItem {
   final double? packVolume;
   final String? basePackingUnit;
   final bool isCustomBasePack;
+  final bool isCustomPrice;
+  final double? originalPrice;
 
   OrderItem({
     required this.productId,
@@ -27,6 +29,8 @@ class OrderItem {
     this.packVolume,
     this.basePackingUnit,
     this.isCustomBasePack = false,
+    this.isCustomPrice = false,
+    this.originalPrice,
   });
 
   factory OrderItem.fromJson(dynamic jsonRaw) {
@@ -49,6 +53,8 @@ class OrderItem {
     double? packVol = (json['packVolume'] as num?)?.toDouble();
     String? baseUnit = json['basePackingUnit']?.toString();
     bool customPack = json['isCustomBasePack'] == true;
+    bool customPrice = json['isCustomPrice'] == true;
+    double? origPrice = (json['originalPrice'] as num?)?.toDouble();
 
     if (productMap != null && productMap['variants'] is List) {
       final variantsList = productMap['variants'] as List;
@@ -103,6 +109,8 @@ class OrderItem {
       packVolume: packVol,
       basePackingUnit: baseUnit,
       isCustomBasePack: customPack,
+      isCustomPrice: customPrice,
+      originalPrice: origPrice,
     );
   }
 
@@ -121,6 +129,8 @@ class OrderItem {
       'packVolume': packVolume,
       'basePackingUnit': basePackingUnit,
       'isCustomBasePack': isCustomBasePack,
+      'isCustomPrice': isCustomPrice,
+      'originalPrice': originalPrice,
     };
   }
 }

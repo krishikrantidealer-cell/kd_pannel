@@ -112,33 +112,42 @@ class _OrdersPageState extends State<OrdersPage> {
     List<OrderModel> orders,
     OrdersState state,
   ) {
-    final role = AuthService().currentUserRole ?? UserRole.admin;
-    final String? currentAgentId = AuthService().currentUserId;
-    final String? currentAgentName = AuthService().currentUserName?.toLowerCase().trim();
-
     // 1. Role-based base filtering (Now handled by Backend, UI filtering removed for robustness)
     Iterable<OrderModel> baseOrders = orders;
 
     // 2. Then apply UI filters (Search, Status, etc)
     return baseOrders.where((order) {
       final query = state.searchQuery.toLowerCase().trim();
-      final matchesSearch =
+      final matchesSearch = query.isEmpty ||
           order.orderId.toLowerCase().contains(query) ||
           order.customerName.toLowerCase().contains(query) ||
+          (order.shopName != null &&
+              order.shopName!.toLowerCase().contains(query)) ||
           order.customerPhone.contains(query) ||
-          (order.awbNumber ?? '').toLowerCase().contains(query);
+          (order.awbNumber ?? '').toLowerCase().contains(query) ||
+          order.shippingAddress.cityTehsil.toLowerCase().contains(query) ||
+          (order.shippingAddress.state?.toLowerCase().contains(query) ?? false) ||
+          order.shippingAddress.villageArea.toLowerCase().contains(query) ||
+          order.shippingAddress.pincode.contains(query) ||
+          (order.assignedAgent?.toLowerCase().contains(query) ?? false) ||
+          order.items.any((item) =>
+              item.title.toLowerCase().contains(query) ||
+              (item.technicalName?.toLowerCase().contains(query) ?? false));
 
       final matchesOrderStatus =
           state.selectedOrderStatus == 'All Statuses' ||
-          order.orderStatus.toLowerCase().trim() == state.selectedOrderStatus.toLowerCase().trim();
+          order.orderStatus.toLowerCase().trim() ==
+              state.selectedOrderStatus.toLowerCase().trim();
 
       final matchesPaymentStatus =
           state.selectedPaymentStatus == 'All Payments' ||
-          order.paymentStatus.toLowerCase().trim() == state.selectedPaymentStatus.toLowerCase().trim();
+          order.paymentStatus.toLowerCase().trim() ==
+              state.selectedPaymentStatus.toLowerCase().trim();
 
       final matchesPaymentMethod =
           state.selectedPaymentMethod == 'All Methods' ||
-          order.paymentMethod.toLowerCase().trim() == state.selectedPaymentMethod.toLowerCase().trim();
+          order.paymentMethod.toLowerCase().trim() ==
+              state.selectedPaymentMethod.toLowerCase().trim();
 
       return matchesSearch &&
           matchesOrderStatus &&
@@ -606,23 +615,31 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildFilterControls(bool isMobile, OrdersState state) {
-    final Widget searchField = Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+  Widget _buildSearchField(double? width) {
+    return Container(
+      width: width,
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           const Icon(
             Icons.search_rounded,
+            size: 20,
             color: AppTheme.textSecondary,
-            size: 18,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -631,13 +648,17 @@ class _OrdersPageState extends State<OrdersPage> {
                   UpdateOrdersFilterEvent(searchQuery: val, currentPage: 1),
                 );
               },
-              textAlignVertical: TextAlignVertical.center,
-              style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textPrimary),
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
               decoration: InputDecoration(
-                hintText: 'Search order ID, client name, phone...',
+                hintText: 'Search orders...',
                 hintStyle: GoogleFonts.outfit(
-                  color: AppTheme.textSecondary,
-                  fontSize: 13,
+                  fontSize: 14,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
                 ),
                 border: InputBorder.none,
                 isDense: true,
@@ -648,7 +669,9 @@ class _OrdersPageState extends State<OrdersPage> {
         ],
       ),
     );
+  }
 
+  Widget _buildFilterControls(bool isMobile, OrdersState state) {
     final List<String> orderStatusOptions = [
       'All Statuses',
       'Pending',
@@ -682,10 +705,10 @@ class _OrdersPageState extends State<OrdersPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          searchField,
-          const SizedBox(height: 10),
+          _buildSearchField(double.infinity),
+          const SizedBox(height: 12),
           _buildTimeframeRow(isMobile, state, timeframeOptions),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -719,7 +742,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
             val,
           ) {
@@ -738,7 +761,7 @@ class _OrdersPageState extends State<OrdersPage> {
       children: [
         Row(
           children: [
-            Expanded(child: searchField),
+            Expanded(child: _buildSearchField(null)),
             const SizedBox(width: 12),
             _buildTimeframeRow(isMobile, state, timeframeOptions),
           ],
@@ -776,13 +799,20 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildTimeframeRow(bool isMobile, OrdersState state, List<String> options) {
     return Container(
-      height: 38,
+      height: 42,
       width: isMobile ? null : 180,
-      padding: const EdgeInsets.only(left: 10, right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
@@ -793,7 +823,7 @@ class _OrdersPageState extends State<OrdersPage> {
               cursor: SystemMouseCursors.click,
               child: Icon(
                 Icons.calendar_month_outlined,
-                size: 16,
+                size: 18,
                 color: AppTheme.textSecondary,
               ),
             ),
@@ -801,7 +831,7 @@ class _OrdersPageState extends State<OrdersPage> {
           const SizedBox(width: 8),
           Container(
             width: 1,
-            height: 16,
+            height: 18,
             color: AppTheme.borderColor,
           ),
           const SizedBox(width: 8),
@@ -815,14 +845,14 @@ class _OrdersPageState extends State<OrdersPage> {
                 hint: Text(
                   _getRangeDisplay(state.selectedRange, state.selectedTimeframe),
                   style: GoogleFonts.outfit(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 icon: const Icon(
                   Icons.keyboard_arrow_down,
-                  size: 16,
+                  size: 18,
                   color: AppTheme.textSecondary,
                 ),
                 onChanged: (String? newValue) {
@@ -843,7 +873,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         child: Text(
                           value,
                           style: GoogleFonts.outfit(
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -914,13 +944,20 @@ class _OrdersPageState extends State<OrdersPage> {
     double? width,
   }) {
     return Container(
-      height: 38,
+      height: 42,
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -930,7 +967,7 @@ class _OrdersPageState extends State<OrdersPage> {
           onChanged: onChanged,
           icon: const Icon(
             Icons.keyboard_arrow_down,
-            size: 16,
+            size: 18,
             color: AppTheme.textSecondary,
           ),
           items: options
@@ -941,9 +978,10 @@ class _OrdersPageState extends State<OrdersPage> {
                     val,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: GoogleFonts.outfit(
                       fontSize: 13,
                       color: AppTheme.textBody,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -1396,7 +1434,9 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
-              value: state.pageSize,
+              value: [10, 50, 100, 150, 200].contains(state.pageSize)
+                  ? state.pageSize
+                  : 10,
               icon: const Icon(
                 Icons.arrow_drop_down,
                 size: 18,
@@ -1408,7 +1448,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 fontWeight: FontWeight.w700,
               ),
               dropdownColor: Colors.white,
-              items: [10, 20, 30, 40, 50]
+              items: [10, 50, 100, 150, 200]
                   .map<DropdownMenuItem<int>>(
                     (int val) =>
                         DropdownMenuItem<int>(value: val, child: Text('$val')),

@@ -174,15 +174,13 @@ class _CartItem {
   }
 
   bool get isCustomBasePack => customPackVolume != null;
+  bool get isCustomPrice => priceOverride != null;
 
   double get lineTotal => price * quantity;
 
   double get price {
     if (priceOverride != null) {
-      final double packVolume = effectivePackVolume;
-      return variant['dealerPrice'] != null
-          ? priceOverride!
-          : priceOverride! * packVolume;
+      return priceOverride!;
     }
     return _getVariantPrice(variant, quantity, customPackVolume: customPackVolume);
   }
@@ -213,6 +211,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   final Map<String, int> _selectedVariantIndex = {};
   final Map<String, double> _customPackVolumes = {};
   final Map<String, String> _customBaseUnits = {};
+  final Map<String, double> _customPrices = {};
 
   // Shipping fields
   final _formKey = GlobalKey<FormState>();
@@ -394,6 +393,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               'basePackingUnit': c.effectiveBaseUnit,
               'basePacking': '${c.effectivePackVolume % 1 == 0 ? c.effectivePackVolume.toInt() : c.effectivePackVolume} ${c.effectiveBaseUnit}'.trim(),
               'isCustomBasePack': c.isCustomBasePack,
+              'isCustomPrice': c.isCustomPrice,
+              'originalPrice': _getVariantPrice(c.variant, c.quantity, customPackVolume: c.customPackVolume),
             },
           )
           .toList();
@@ -784,17 +785,263 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     );
   }
 
+  void _openCustomPriceDialog({
+    required String productId,
+    required Map<String, dynamic> variant,
+    _CartItem? cartItem,
+  }) {
+    final variantId = variant['_id'] ?? '';
+    final defaultPrice = _getVariantPrice(
+      variant,
+      cartItem?.quantity ?? 1,
+      customPackVolume: cartItem?.customPackVolume ?? _customPackVolumes[variantId],
+    );
+    final currentCustomPrice = cartItem != null
+        ? cartItem.priceOverride
+        : (_customPrices[variantId] ?? _getSalesOverride(variantId));
+
+    final priceCtrl = TextEditingController(
+      text: currentCustomPrice != null
+          ? (currentCustomPrice % 1 == 0
+              ? currentCustomPrice.toInt().toString()
+              : currentCustomPrice.toString())
+          : (defaultPrice % 1 == 0
+              ? defaultPrice.toInt().toString()
+              : defaultPrice.toString()),
+    );
+
+    final vSize = variant['size'] ?? variant['packSize'] ?? 'Standard';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: Colors.white,
+              child: Container(
+                width: 440,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.currency_rupee_rounded,
+                            color: Color(0xFFD97706),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Custom Variant Price',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Specific to this order • Database unmodified',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close_rounded, size: 20, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(height: 1, color: AppTheme.lightBorderColor),
+                    const SizedBox(height: 16),
+
+                    // Info summary container
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Variant: $vSize',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Standard Catalog Price',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '₹${defaultPrice % 1 == 0 ? defaultPrice.toInt() : defaultPrice.toStringAsFixed(2)}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Text(
+                      'Custom Unit / Pack Price (₹)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    TextField(
+                      controller: priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      autofocus: true,
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.currency_rupee, size: 18, color: Color(0xFFD97706)),
+                        hintText: 'Enter custom price',
+                        hintStyle: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 14),
+                        filled: true,
+                        fillColor: const Color(0xFFFFFBEB),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFF59E0B)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFF59E0B)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Action buttons
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              if (cartItem != null) {
+                                cartItem.priceOverride = null;
+                              } else {
+                                _customPrices.remove(variantId);
+                              }
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: Text(
+                            'Reset to Default',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        ElevatedButton(
+                          onPressed: () {
+                            final parsed = double.tryParse(priceCtrl.text.trim());
+                            if (parsed != null && parsed >= 0) {
+                              setState(() {
+                                if (cartItem != null) {
+                                  cartItem.priceOverride = parsed;
+                                } else {
+                                  _customPrices[variantId] = parsed;
+                                  for (var item in _cart) {
+                                    if (item.variant['_id'] == variantId) {
+                                      item.priceOverride = parsed;
+                                    }
+                                  }
+                                }
+                              });
+                              Navigator.pop(ctx);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD97706),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            'Apply for Order',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _addToCart(Map<String, dynamic> product, Map<String, dynamic> variant) {
     final variantId = variant['_id'] ?? '';
     final customVol = _customPackVolumes[variantId];
     final customUnit = _customBaseUnits[variantId];
+    final customPrice = _customPrices[variantId] ?? _getSalesOverride(variantId);
 
     final idx = _cart.indexWhere(
       (c) =>
           c.product['_id'] == product['_id'] &&
           c.variant['_id'] == variantId &&
           c.customPackVolume == customVol &&
-          c.customBasePackingUnit == customUnit,
+          c.customBasePackingUnit == customUnit &&
+          c.priceOverride == customPrice,
     );
     setState(() {
       if (idx >= 0) {
@@ -803,7 +1050,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         _cart.add(_CartItem(
           product: product,
           variant: variant,
-          priceOverride: _getSalesOverride(variantId),
+          priceOverride: customPrice,
           customPackVolume: customVol,
           customBasePackingUnit: customUnit,
         ));
@@ -811,7 +1058,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     });
 
     // Track add to cart event
-    final double itemPrice = _getSalesOverride(variantId) ?? (variant['price'] as num?)?.toDouble() ?? 0.0;
+    final double itemPrice = customPrice ?? (variant['price'] as num?)?.toDouble() ?? 0.0;
     AnalyticsService().logEvent('add_to_cart', properties: {
       'productId': product['_id'] ?? '',
       'productName': product['title'] ?? product['name'] ?? '',
@@ -819,6 +1066,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       'dealerId': widget.dealer.id,
       'dealerName': widget.dealer.name,
       'price': itemPrice,
+      'isCustomPrice': customPrice != null,
       'details': 'Added ${product['title'] ?? product['name'] ?? ''} to cart for dealer ${widget.dealer.name}',
     });
   }
@@ -1273,12 +1521,15 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     final variantId = variant['_id'] ?? '';
     final inCart = _qtyInCart(productId, variantId);
     final customVol = _customPackVolumes[variantId];
-    final double currentPrice = _getVariantPrice(
+    final customPrice = _customPrices[variantId] ?? _getSalesOverride(variantId);
+    final bool isCustomPrice = customPrice != null;
+    final double defaultPrice = _getVariantPrice(
       variant,
       inCart > 0 ? inCart : 1,
       customPackVolume: customVol,
     );
-    final priceStr = '₹${_formatAmt(currentPrice)}';
+    final double effectivePrice = customPrice ?? defaultPrice;
+    final priceStr = '₹${_formatAmt(effectivePrice)}';
 
     return Container(
       decoration: BoxDecoration(
@@ -1575,21 +1826,83 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Dealer Price',
-                              style: AppTheme.bodySM.copyWith(
-                                color: AppTheme.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10.2,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  isCustomPrice ? 'Custom Price' : 'Dealer Price',
+                                  style: AppTheme.bodySM.copyWith(
+                                    color: isCustomPrice ? const Color(0xFFD97706) : AppTheme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  onTap: () => _openCustomPriceDialog(
+                                    productId: productId,
+                                    variant: variant,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: isCustomPrice
+                                          ? const Color(0xFFFEF3C7)
+                                          : AppTheme.primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: isCustomPrice
+                                            ? const Color(0xFFF59E0B)
+                                            : AppTheme.primaryColor.withValues(alpha: 0.2),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isCustomPrice ? Icons.edit_rounded : Icons.add_rounded,
+                                          size: 9,
+                                          color: isCustomPrice ? const Color(0xFFB45309) : AppTheme.primaryColor,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          isCustomPrice ? 'Custom' : 'Edit',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: isCustomPrice ? const Color(0xFFB45309) : AppTheme.primaryColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              priceStr,
-                              style: AppTheme.headingSM.copyWith(
-                                color: AppTheme.primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  priceStr,
+                                  style: AppTheme.headingSM.copyWith(
+                                    color: isCustomPrice ? const Color(0xFFD97706) : AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                if (isCustomPrice) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '₹${_formatAmt(defaultPrice)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10.5,
+                                      color: AppTheme.textSecondary,
+                                      decoration: TextDecoration.lineThrough,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ],
                         ),
@@ -2245,6 +2558,64 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                                   ),
                                 ),
                               ),
+                              InkWell(
+                                onTap: () => _openCustomPriceDialog(
+                                  productId: item.product['_id'] ?? '',
+                                  variant: item.variant,
+                                  cartItem: item,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: item.priceOverride != null
+                                        ? const Color(0xFFFEF3C7)
+                                        : const Color(0xFFF9FAFB),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: item.priceOverride != null
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.currency_rupee,
+                                        size: 10,
+                                        color: item.priceOverride != null
+                                            ? const Color(0xFFD97706)
+                                            : AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        item.priceOverride != null
+                                            ? 'Rate: ₹${_formatAmt(item.price)}*'
+                                            : 'Custom Rate',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 10.5,
+                                          fontWeight: item.priceOverride != null
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          color: item.priceOverride != null
+                                              ? const Color(0xFFD97706)
+                                              : AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 10,
+                                        color: item.priceOverride != null
+                                            ? const Color(0xFFD97706)
+                                            : AppTheme.textSecondary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -2265,15 +2636,19 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                           style: GoogleFonts.outfit(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: AppTheme.textPrimary,
+                            color: item.priceOverride != null
+                                ? const Color(0xFFD97706)
+                                : AppTheme.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '₹${_formatAmt(item.price)} / unit',
+                          '₹${_formatAmt(item.price)} / unit${item.priceOverride != null ? ' (Custom)' : ''}',
                           style: GoogleFonts.outfit(
                             fontSize: 11,
-                            color: AppTheme.textSecondary,
+                            color: item.priceOverride != null
+                                ? const Color(0xFFD97706)
+                                : AppTheme.textSecondary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),

@@ -1008,6 +1008,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                 volume: volume,
                                 amount: item.price * item.quantity,
                                 isCustomBasePack: item.isCustomBasePack,
+                                isCustomPrice: item.isCustomPrice,
                               );
                             },
                           ),
@@ -1717,6 +1718,7 @@ class _ItemTableRow extends StatefulWidget {
   final String volume;
   final double amount;
   final bool isCustomBasePack;
+  final bool isCustomPrice;
 
   const _ItemTableRow({
     required this.productName,
@@ -1727,6 +1729,7 @@ class _ItemTableRow extends StatefulWidget {
     required this.volume,
     required this.amount,
     this.isCustomBasePack = false,
+    this.isCustomPrice = false,
   });
 
   @override
@@ -1870,14 +1873,39 @@ class _ItemTableRowState extends State<_ItemTableRow> {
             // Amount
             Expanded(
               flex: 2,
-              child: Text(
-                '₹${widget.amount.toStringAsFixed(2)}',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-                textAlign: TextAlign.right,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₹${widget.amount.toStringAsFixed(2)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: widget.isCustomPrice ? const Color(0xFFD97706) : AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                  if (widget.isCustomPrice) ...[
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                      ),
+                      child: Text(
+                        'Custom Rate',
+                        style: GoogleFonts.outfit(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],

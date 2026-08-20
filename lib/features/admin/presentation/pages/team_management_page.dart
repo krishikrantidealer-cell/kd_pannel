@@ -1966,41 +1966,69 @@ class _TeamManagementPageState extends State<TeamManagementPage>
               ),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    _buildStatPill(
-                      'Converted Dealers',
-                      '${convertedDealers.length}',
-                      Icons.check_circle_rounded,
-                      const Color(0xFF10B981),
-                    ),
-                    _buildStatPill(
-                      'Active Leads',
-                      '$activeLeadsCount',
-                      Icons.campaign_rounded,
-                      const Color(0xFF0284C7),
-                    ),
-                    _buildStatPill(
-                      'Dealers Who Ordered',
-                      '$dealersWithOrdersCount of ${convertedDealers.length}',
-                      Icons.shopping_cart_checkout_rounded,
-                      const Color(0xFF8B5CF6),
-                    ),
-                    _buildStatPill(
-                      'Total Orders',
-                      '$totalDealerOrders Orders',
-                      Icons.shopping_bag_rounded,
-                      const Color(0xFF7E22CE),
-                    ),
-                    _buildStatPill(
-                      'Deleted Leads',
-                      '${deletedLeads.length}',
-                      Icons.delete_outline_rounded,
-                      const Color(0xFFF43F5E),
-                    ),
-                  ],
+                child: Builder(
+                  builder: (context) {
+                    final int directOnboardedCount = convertedDealers.where((d) {
+                      final via = (d['createdVia'] ?? '').toString().toLowerCase();
+                      final src = (d['source'] ?? '').toString().toLowerCase();
+                      return via == 'panel' || (src == 'kd panel' && via != 'lead_conversion');
+                    }).length;
+                    final int leadUpgradeCount = convertedDealers.where((d) {
+                      final via = (d['createdVia'] ?? '').toString().toLowerCase();
+                      return via == 'lead_conversion';
+                    }).length;
+
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        _buildStatPill(
+                          'Converted Dealers',
+                          '${convertedDealers.length}',
+                          Icons.check_circle_rounded,
+                          const Color(0xFF10B981),
+                        ),
+                        if (directOnboardedCount > 0)
+                          _buildStatPill(
+                            'Direct Onboarded',
+                            '$directOnboardedCount',
+                            Icons.person_add_alt_1_rounded,
+                            const Color(0xFF0284C7),
+                          ),
+                        if (leadUpgradeCount > 0)
+                          _buildStatPill(
+                            'Lead Upgrades',
+                            '$leadUpgradeCount',
+                            Icons.published_with_changes_rounded,
+                            const Color(0xFF059669),
+                          ),
+                        _buildStatPill(
+                          'Active Leads',
+                          '$activeLeadsCount',
+                          Icons.campaign_rounded,
+                          const Color(0xFF0284C7),
+                        ),
+                        _buildStatPill(
+                          'Dealers Who Ordered',
+                          '$dealersWithOrdersCount of ${convertedDealers.length}',
+                          Icons.shopping_cart_checkout_rounded,
+                          const Color(0xFF8B5CF6),
+                        ),
+                        _buildStatPill(
+                          'Total Orders',
+                          '$totalDealerOrders Orders',
+                          Icons.shopping_bag_rounded,
+                          const Color(0xFF7E22CE),
+                        ),
+                        _buildStatPill(
+                          'Deleted Leads',
+                          '${deletedLeads.length}',
+                          Icons.delete_outline_rounded,
+                          const Color(0xFFF43F5E),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
               children: [
@@ -2075,6 +2103,16 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                                       ? dPhone
                                       : 'Verified Dealer'));
 
+                      final String createdVia =
+                          (dealer['createdVia'] ?? '').toString().toLowerCase();
+                      final String source =
+                          (dealer['source'] ?? '').toString();
+                      final bool isDirectOnboard = createdVia == 'panel' ||
+                          (source == 'KD Panel' &&
+                              createdVia != 'lead_conversion');
+                      final bool isLeadUpgrade =
+                          createdVia == 'lead_conversion';
+
                       final dealerOrdersCount = allOrders.where((o) {
                         if (o['orderStatus'] == 'Cancelled') return false;
                         final u = o['user'];
@@ -2118,13 +2156,64 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    dTitle,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.textPrimary,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          dTitle,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppTheme.textPrimary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isDirectOnboard
+                                              ? const Color(0xFFE0F2FE)
+                                              : (isLeadUpgrade
+                                                  ? const Color(0xFFDCFCE7)
+                                                  : const Color(0xFFF1F5F9)),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: isDirectOnboard
+                                                ? const Color(0xFFBAE6FD)
+                                                : (isLeadUpgrade
+                                                    ? const Color(0xFFBBF7D0)
+                                                    : const Color(
+                                                        0xFFE2E8F0,
+                                                      )),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isDirectOnboard
+                                              ? 'Direct Onboard'
+                                              : (isLeadUpgrade
+                                                  ? 'Lead Upgraded'
+                                                  : 'App Verified'),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDirectOnboard
+                                                ? const Color(0xFF0369A1)
+                                                : (isLeadUpgrade
+                                                    ? const Color(0xFF15803D)
+                                                    : const Color(
+                                                        0xFF475569,
+                                                      )),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   if (dShop.isNotEmpty && dShop != dTitle)
                                     Text(

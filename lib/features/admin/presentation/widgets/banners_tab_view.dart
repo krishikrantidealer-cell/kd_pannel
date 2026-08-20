@@ -1066,6 +1066,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
   int _selectedTab = 0; // 0 = Form Setup, 1 = Live Mobile Preview
   String _selectedType = 'home';
   String _selectedRedirectType = 'none';
+  String? _selectedPreset;
   bool _isActive = true;
   fp.PlatformFile? _pickedImageFile;
   bool _isSaving = false;
@@ -1088,8 +1089,74 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
     _productSearchController = SearchController();
     _selectedType = b?['type'] ?? 'home';
     _selectedRedirectType = b?['redirectType'] ?? 'none';
+    _selectedPreset = b?['placementPreset']?.toString().trim();
+    if (_selectedPreset != null && _selectedPreset!.isEmpty) _selectedPreset = null;
     _isActive = b?['isActive'] ?? true;
     _fetchBackendTargets();
+  }
+
+  void _inferOrRestorePreset() {
+    final b = widget.existingBanner;
+    
+    // 1. Direct saved placementPreset
+    if (_selectedPreset != null && _selectedPreset!.isNotEmpty) {
+      return;
+    }
+
+    if (b == null) {
+      if (_selectedType == 'home') _selectedPreset = 'home_hero_main';
+      return;
+    }
+
+    final target = (b['redirectTarget'] ?? '').toString().trim();
+    final title = (b['title'] ?? '').toString().trim().toLowerCase();
+    final type = (b['type'] ?? _selectedType).toString();
+
+    if (type == 'strip') {
+      if (target == 'dealer_first_choice' || title.contains('dealer first choice')) {
+        _selectedPreset = 'dealer_first_choice';
+      } else if (target == 'categories' || title.contains('categories section')) {
+        _selectedPreset = 'categories';
+      } else if (target == 'featured' || title.contains('featured products')) {
+        _selectedPreset = 'featured';
+      } else if (target == 'shop_by_crop' || title.contains('shop by crop')) {
+        _selectedPreset = 'shop_by_crop';
+      }
+    } else if (type == 'best_offers') {
+      if (target == 'best_offers' || target == 'best_offers_main' || title.contains('best offers')) {
+        _selectedPreset = 'best_offers_main';
+      }
+    } else if (type == 'home') {
+      if (title.contains('home hero') || target.isEmpty) {
+        _selectedPreset = 'home_hero_main';
+      }
+    }
+
+    // Check category match
+    if (_selectedPreset == null && (_selectedRedirectType == 'category' || type == 'category' || type == 'category_card')) {
+      for (final cat in _backendCategories) {
+        final id = (cat['_id'] ?? cat['id'] ?? '').toString();
+        final name = (cat['name'] ?? '').toString().toLowerCase();
+        final slug = (cat['slug'] ?? '').toString().toLowerCase();
+        if (target == id || target.toLowerCase() == name || target.toLowerCase() == slug || title == name) {
+          _selectedPreset = 'cat_$id';
+          break;
+        }
+      }
+    }
+
+    // Check collection match
+    if (_selectedPreset == null && (_selectedRedirectType == 'collection' || target.isNotEmpty)) {
+      for (final col in _backendCollections) {
+        final id = (col['_id'] ?? col['id'] ?? '').toString();
+        final name = (col['name'] ?? '').toString().toLowerCase();
+        final slug = (col['slug'] ?? '').toString().toLowerCase();
+        if (target == id || target.toLowerCase() == name || target.toLowerCase() == slug || title == name) {
+          _selectedPreset = 'col_$id';
+          break;
+        }
+      }
+    }
   }
 
   Future<void> _fetchBackendTargets() async {
@@ -1140,6 +1207,8 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
           _backendCollections = List<Map<String, dynamic>>.from(raw);
         }
       }
+      
+      _inferOrRestorePreset();
     } catch (e) {
       debugPrint('Error loading backend target options: $e');
     } finally {
@@ -1277,6 +1346,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
         'type': _selectedType,
         'redirectType': _selectedRedirectType,
         'redirectTarget': _redirectTargetController.text.trim(),
+        'placementPreset': _selectedPreset ?? '',
         'isActive': _isActive.toString(),
       };
 
@@ -1965,7 +2035,13 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                                             DropdownMenuItem(value: 'category_trust', child: Text('Category Trust Badges Banner')),
                                           ],
                                           onChanged: (val) {
-                                            if (val != null) setState(() => _selectedType = val);
+                                            if (val != null) {
+                                              setState(() {
+                                                _selectedType = val;
+                                                _selectedPreset = null;
+                                                _inferOrRestorePreset();
+                                              });
+                                            }
                                           },
                                         ),
                                       ],
@@ -2007,125 +2083,131 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
                                 children: [
                                   Text('Placement Preset / Scope', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5, color: const Color(0xFF334155))),
                                   const SizedBox(height: 5),
-                                  DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    decoration: _buildInputDecoration(
-                                      hintText: '-- Select Target Placement Scope --',
-                                      prefixIcon: Icons.category_outlined,
-                                    ),
-                                    items: () {
-                                      final List<DropdownMenuItem<String>> items = [];
-                                      if (_selectedType == 'strip') {
-                                        items.add(const DropdownMenuItem(value: 'dealer_first_choice', child: Text('Dealer First Choice (Home Section Strip)')));
-                                        items.add(const DropdownMenuItem(value: 'categories', child: Text('Categories Section (Header Strip)')));
-                                        items.add(const DropdownMenuItem(value: 'featured', child: Text('Featured Products Section (Header Strip)')));
-                                        items.add(const DropdownMenuItem(value: 'shop_by_crop', child: Text('Shop By Crop Section (Header Strip)')));
-                                        for (final cat in _backendCategories) {
-                                          final name = (cat['name'] ?? cat['title'] ?? '').toString();
-                                          final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
-                                          final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
-                                          final id = (cat['_id'] ?? cat['id'] ?? name).toString();
-                                          if (name.isNotEmpty) {
-                                            items.add(DropdownMenuItem(value: 'cat_$id', child: Text('Category Strip: $displayLabel')));
-                                          }
-                                        }
-                                        for (final col in _backendCollections) {
-                                          final name = (col['name'] ?? col['title'] ?? '').toString();
-                                          final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
-                                          final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
-                                          final id = (col['_id'] ?? col['id'] ?? name).toString();
-                                          if (name.isNotEmpty) {
-                                            items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Strip: $displayLabel')));
-                                          }
-                                        }
-                                      } else if (_selectedType == 'category' || _selectedType == 'category_card') {
-                                        for (final cat in _backendCategories) {
-                                          final name = (cat['name'] ?? cat['title'] ?? '').toString();
-                                          final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
-                                          final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
-                                          final id = (cat['_id'] ?? cat['id'] ?? name).toString();
-                                          if (name.isNotEmpty) {
-                                            items.add(DropdownMenuItem(value: 'cat_$id', child: Text('Category: $displayLabel')));
-                                          }
-                                        }
-                                      } else if (_selectedType == 'best_offers') {
-                                        items.add(const DropdownMenuItem(value: 'best_offers_main', child: Text('Best Offers Showcase')));
-                                        for (final col in _backendCollections) {
-                                          final name = (col['name'] ?? col['title'] ?? '').toString();
-                                          final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
-                                          final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
-                                          final id = (col['_id'] ?? col['id'] ?? name).toString();
-                                          if (name.isNotEmpty) {
-                                            items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Offer: $displayLabel')));
-                                          }
-                                        }
-                                      } else {
-                                        items.add(const DropdownMenuItem(value: 'home_hero_main', child: Text('Home Hero Carousel Main Banner')));
-                                        for (final col in _backendCollections) {
-                                          final name = (col['name'] ?? col['title'] ?? '').toString();
-                                          final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
-                                          final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
-                                          final id = (col['_id'] ?? col['id'] ?? name).toString();
-                                          if (name.isNotEmpty) {
-                                            items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Banner: $displayLabel')));
-                                          }
+                                  () {
+                                    final List<DropdownMenuItem<String>> items = [];
+                                    if (_selectedType == 'strip') {
+                                      items.add(const DropdownMenuItem(value: 'dealer_first_choice', child: Text('Dealer First Choice (Home Section Strip)')));
+                                      items.add(const DropdownMenuItem(value: 'categories', child: Text('Categories Section (Header Strip)')));
+                                      items.add(const DropdownMenuItem(value: 'featured', child: Text('Featured Products Section (Header Strip)')));
+                                      items.add(const DropdownMenuItem(value: 'shop_by_crop', child: Text('Shop By Crop Section (Header Strip)')));
+                                      for (final cat in _backendCategories) {
+                                        final name = (cat['name'] ?? cat['title'] ?? '').toString();
+                                        final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
+                                        final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
+                                        final id = (cat['_id'] ?? cat['id'] ?? name).toString();
+                                        if (name.isNotEmpty) {
+                                          items.add(DropdownMenuItem(value: 'cat_$id', child: Text('Category Strip: $displayLabel')));
                                         }
                                       }
-                                      return items;
-                                    }(),
-                                    onChanged: (val) {
-                                      if (val == null) return;
-                                      setState(() {
-                                        if (val == 'dealer_first_choice') {
-                                          _titleController.text = 'Dealer First Choice';
-                                          _redirectTargetController.text = 'dealer_first_choice';
-                                          _selectedRedirectType = 'none';
-                                        } else if (val == 'categories') {
-                                          _titleController.text = 'Categories Section';
-                                          _redirectTargetController.text = 'categories';
-                                          _selectedRedirectType = 'none';
-                                        } else if (val == 'featured') {
-                                          _titleController.text = 'Featured Products Section';
-                                          _redirectTargetController.text = 'featured';
-                                          _selectedRedirectType = 'none';
-                                        } else if (val == 'shop_by_crop') {
-                                          _titleController.text = 'Shop By Crop Section';
-                                          _redirectTargetController.text = 'shop_by_crop';
-                                          _selectedRedirectType = 'none';
-                                        } else if (val.startsWith('cat_')) {
-                                          final id = val.replaceFirst('cat_', '');
-                                          final cat = _backendCategories.firstWhere(
-                                            (c) => (c['_id'] ?? c['id']).toString() == id || c['name'] == id,
-                                            orElse: () => {},
-                                          );
-                                          final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
-                                          final name = bannerTitle.isNotEmpty ? bannerTitle : (cat['name'] ?? cat['title'] ?? 'Category').toString();
-                                          _titleController.text = name;
-                                          _redirectTargetController.text = (cat['slug'] ?? (cat['name'] ?? '')).toString();
-                                          _selectedRedirectType = 'category';
-                                        } else if (val.startsWith('col_')) {
-                                          final id = val.replaceFirst('col_', '');
-                                          final col = _backendCollections.firstWhere(
-                                            (c) => (c['_id'] ?? c['id']).toString() == id || c['name'] == id,
-                                            orElse: () => {},
-                                          );
-                                          final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
-                                          final name = bannerTitle.isNotEmpty ? bannerTitle : (col['name'] ?? col['title'] ?? 'Collection').toString();
-                                          _titleController.text = name;
-                                          _redirectTargetController.text = (col['slug'] ?? (col['name'] ?? '')).toString();
-                                          _selectedRedirectType = 'collection';
-                                        } else if (val == 'best_offers_main') {
-                                          _titleController.text = 'Best Offers Showcase';
-                                          _redirectTargetController.text = 'best_offers';
-                                          _selectedRedirectType = 'none';
-                                        } else if (val == 'home_hero_main') {
-                                          _titleController.text = 'Home Hero Banner';
-                                          _redirectTargetController.text = '';
-                                          _selectedRedirectType = 'none';
+                                      for (final col in _backendCollections) {
+                                        final name = (col['name'] ?? col['title'] ?? '').toString();
+                                        final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
+                                        final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
+                                        final id = (col['_id'] ?? col['id'] ?? name).toString();
+                                        if (name.isNotEmpty) {
+                                          items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Strip: $displayLabel')));
                                         }
-                                      });
-                                    },
-                                  ),
+                                      }
+                                    } else if (_selectedType == 'category' || _selectedType == 'category_card') {
+                                      for (final cat in _backendCategories) {
+                                        final name = (cat['name'] ?? cat['title'] ?? '').toString();
+                                        final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
+                                        final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
+                                        final id = (cat['_id'] ?? cat['id'] ?? name).toString();
+                                        if (name.isNotEmpty) {
+                                          items.add(DropdownMenuItem(value: 'cat_$id', child: Text('Category: $displayLabel')));
+                                        }
+                                      }
+                                    } else if (_selectedType == 'best_offers') {
+                                      items.add(const DropdownMenuItem(value: 'best_offers_main', child: Text('Best Offers Showcase')));
+                                      for (final col in _backendCollections) {
+                                        final name = (col['name'] ?? col['title'] ?? '').toString();
+                                        final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
+                                        final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
+                                        final id = (col['_id'] ?? col['id'] ?? name).toString();
+                                        if (name.isNotEmpty) {
+                                          items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Offer: $displayLabel')));
+                                        }
+                                      }
+                                    } else {
+                                      items.add(const DropdownMenuItem(value: 'home_hero_main', child: Text('Home Hero Carousel Main Banner')));
+                                      for (final col in _backendCollections) {
+                                        final name = (col['name'] ?? col['title'] ?? '').toString();
+                                        final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
+                                        final displayLabel = bannerTitle.isNotEmpty ? bannerTitle : name;
+                                        final id = (col['_id'] ?? col['id'] ?? name).toString();
+                                        if (name.isNotEmpty) {
+                                          items.add(DropdownMenuItem(value: 'col_$id', child: Text('Collection Banner: $displayLabel')));
+                                        }
+                                      }
+                                    }
+
+                                    final selectedValue = items.any((it) => it.value == _selectedPreset) ? _selectedPreset : null;
+
+                                    return DropdownButtonFormField<String>(
+                                      key: ValueKey('preset_${_selectedType}_$selectedValue'),
+                                      isExpanded: true,
+                                      initialValue: selectedValue,
+                                      decoration: _buildInputDecoration(
+                                        hintText: '-- Select Target Placement Scope --',
+                                        prefixIcon: Icons.category_outlined,
+                                      ),
+                                      items: items,
+                                      onChanged: (val) {
+                                        if (val == null) return;
+                                        setState(() {
+                                          _selectedPreset = val;
+                                          if (val == 'dealer_first_choice') {
+                                            _titleController.text = 'Dealer First Choice';
+                                            _redirectTargetController.text = 'dealer_first_choice';
+                                            _selectedRedirectType = 'none';
+                                          } else if (val == 'categories') {
+                                            _titleController.text = 'Categories Section';
+                                            _redirectTargetController.text = 'categories';
+                                            _selectedRedirectType = 'none';
+                                          } else if (val == 'featured') {
+                                            _titleController.text = 'Featured Products Section';
+                                            _redirectTargetController.text = 'featured';
+                                            _selectedRedirectType = 'none';
+                                          } else if (val == 'shop_by_crop') {
+                                            _titleController.text = 'Shop By Crop Section';
+                                            _redirectTargetController.text = 'shop_by_crop';
+                                            _selectedRedirectType = 'none';
+                                          } else if (val.startsWith('cat_')) {
+                                            final id = val.replaceFirst('cat_', '');
+                                            final cat = _backendCategories.firstWhere(
+                                              (c) => (c['_id'] ?? c['id']).toString() == id || c['name'] == id,
+                                              orElse: () => {},
+                                            );
+                                            final bannerTitle = (cat['bannerTitle'] ?? '').toString().trim();
+                                            final name = bannerTitle.isNotEmpty ? bannerTitle : (cat['name'] ?? cat['title'] ?? 'Category').toString();
+                                            _titleController.text = name;
+                                            _redirectTargetController.text = (cat['_id'] ?? cat['id'] ?? cat['name'] ?? '').toString();
+                                            _selectedRedirectType = 'category';
+                                          } else if (val.startsWith('col_')) {
+                                            final id = val.replaceFirst('col_', '');
+                                            final col = _backendCollections.firstWhere(
+                                              (c) => (c['_id'] ?? c['id']).toString() == id || c['name'] == id,
+                                              orElse: () => {},
+                                            );
+                                            final bannerTitle = (col['bannerTitle'] ?? '').toString().trim();
+                                            final name = bannerTitle.isNotEmpty ? bannerTitle : (col['name'] ?? col['title'] ?? 'Collection').toString();
+                                            _titleController.text = name;
+                                            _redirectTargetController.text = (col['_id'] ?? col['id'] ?? col['name'] ?? '').toString();
+                                            _selectedRedirectType = 'collection';
+                                          } else if (val == 'best_offers_main') {
+                                            _titleController.text = 'Best Offers Showcase';
+                                            _redirectTargetController.text = 'best_offers';
+                                            _selectedRedirectType = 'none';
+                                          } else if (val == 'home_hero_main') {
+                                            _titleController.text = 'Home Hero Banner';
+                                            _redirectTargetController.text = '';
+                                            _selectedRedirectType = 'none';
+                                          }
+                                        });
+                                      },
+                                    );
+                                  }(),
                                 ],
                               ),
 

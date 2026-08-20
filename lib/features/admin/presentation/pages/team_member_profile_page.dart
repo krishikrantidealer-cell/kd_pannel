@@ -2153,6 +2153,12 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           final clientStatus =
                               u['status'] ?? u['leadStatus'] ?? 'prospect';
 
+                          final via = (u['createdVia'] ?? '').toString().toLowerCase();
+                          final src = (u['source'] ?? '').toString();
+                          final bool isDirectOnboard = via == 'panel' ||
+                              (src == 'KD Panel' && via != 'lead_conversion');
+                          final bool isLeadUpgrade = via == 'lead_conversion';
+
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             elevation: 0,
@@ -2196,6 +2202,46 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (isVerified) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDirectOnboard
+                                            ? const Color(0xFFE0F2FE)
+                                            : (isLeadUpgrade
+                                                ? const Color(0xFFDCFCE7)
+                                                : const Color(0xFFF1F5F9)),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isDirectOnboard
+                                              ? const Color(0xFFBAE6FD)
+                                              : (isLeadUpgrade
+                                                  ? const Color(0xFFBBF7D0)
+                                                  : const Color(0xFFE2E8F0)),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        isDirectOnboard
+                                            ? 'Direct Onboard'
+                                            : (isLeadUpgrade
+                                                ? 'Lead Upgraded'
+                                                : 'App Verified'),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDirectOnboard
+                                              ? const Color(0xFF0369A1)
+                                              : (isLeadUpgrade
+                                                  ? const Color(0xFF15803D)
+                                                  : const Color(0xFF475569)),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
                                   _buildBadge(
                                     isVerified
                                         ? 'DEALER'
@@ -2298,6 +2344,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           final dateStr = _formatTimeAgo(
                             o.placedAt.toIso8601String(),
                           );
+                          final bool isCustomOrder = o.items.any((i) => i.isCustomBasePack) ||
+                              o.paymentMethod == 'Partial';
 
                           Color statusColor = Colors.orange;
                           if (status.toLowerCase() == 'completed' ||
@@ -2319,22 +2367,54 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                             ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.indigo.withOpacity(
-                                  0.08,
-                                ),
+                                backgroundColor: isCustomOrder
+                                    ? const Color(0xFFF3E8FF)
+                                    : Colors.indigo.withOpacity(0.08),
                                 radius: 18,
-                                child: const Icon(
-                                  Icons.shopping_bag_outlined,
+                                child: Icon(
+                                  isCustomOrder
+                                      ? Icons.tune_rounded
+                                      : Icons.shopping_bag_outlined,
                                   size: 18,
-                                  color: Colors.indigo,
+                                  color: isCustomOrder
+                                      ? const Color(0xFF7E22CE)
+                                      : Colors.indigo,
                                 ),
                               ),
-                              title: Text(
-                                'Order #$orderNo',
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    'Order #$orderNo',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (isCustomOrder) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3E8FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: const Color(0xFFD8B4FE),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Custom Order',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF7E22CE),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               subtitle: Text(
                                 'Client: $clientName • $dateStr',
