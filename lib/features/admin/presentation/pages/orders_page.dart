@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,12 +12,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
-import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'dart:async';
-
-import '../../../../core/network/api_client.dart';
-import '../../../../core/services/analytics_service.dart';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
 
@@ -39,7 +34,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String? _hoveredOrderId;
   StreamSubscription? _ordersWsSubscription;
-  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -69,42 +63,6 @@ class _OrdersPageState extends State<OrdersPage> {
     _tableHorizontalController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _syncToSheets() async {
-    if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-
-    try {
-      final res = await ApiClient().post('/orders/admin/sheets/sync', {});
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        AnalyticsService().logEvent('sync_sheets', properties: {
-          'count': data['count'],
-          'details': 'Synchronized ${data['count']} orders to Google Sheets',
-        });
-        _showSnack(
-          'Successfully synced ${data['count']} orders to Google Sheets!',
-        );
-      } else {
-        _showSnack('Sync failed: ${res.statusCode}', isError: true);
-      }
-    } catch (e) {
-      _showSnack('Error: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
-  }
-
-  void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: GoogleFonts.outfit(color: Colors.white)),
-        backgroundColor: isError ? Colors.red.shade600 : AppTheme.primaryColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
   }
 
   // --- QUERY FILTERING MECHANICS ---
@@ -337,32 +295,6 @@ class _OrdersPageState extends State<OrdersPage> {
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    actions: [
-                      if (AuthService().isAdmin)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: TextButton.icon(
-                            onPressed: _isSyncing ? null : _syncToSheets,
-                            icon: _isSyncing
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                  )
-                                : const Icon(Icons.sync_rounded, size: 16),
-                            label: Text(
-                              _isSyncing ? 'Syncing...' : 'Sync',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
                     backgroundColor: Colors.white,
                     foregroundColor: AppTheme.textPrimary,
                     elevation: 0,
@@ -384,56 +316,25 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildHeader() {
-    final bool isAdmin = AuthService().isAdmin;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Order Management',
-              style: GoogleFonts.outfit(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ],
-        ),
-        if (isAdmin)
-          FilledButton.icon(
-            onPressed: _isSyncing ? null : _syncToSheets,
-            icon: _isSyncing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.sync_rounded, size: 18),
-            label: Text(
-              _isSyncing ? 'Syncing...' : 'Sync to Sheets',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
+        Text(
+          'Order Management',
+          style: GoogleFonts.outfit(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
           ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+          ),
+        ),
       ],
     );
   }
