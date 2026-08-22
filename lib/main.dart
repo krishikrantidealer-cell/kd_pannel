@@ -28,6 +28,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -70,7 +72,8 @@ void main() async {
     MultiBlocProvider(
       providers: [
         BlocProvider<DealersBloc>(
-          create: (context) => DealersBloc()..add(const FetchDealersDataEvent()),
+          create: (context) =>
+              DealersBloc()..add(const FetchDealersDataEvent()),
         ),
         BlocProvider<OrdersBloc>(
           create: (context) => OrdersBloc()..add(const FetchOrdersEvent()),
@@ -82,7 +85,12 @@ void main() async {
           create: (context) => ProductsBloc()..add(const LoadProductsEvent()),
         ),
         BlocProvider<AuditLogsBloc>(
-          create: (context) => AuditLogsBloc()..add(const FetchAuditLogsInitial()),
+          create: (context) =>
+              AuditLogsBloc()..add(const FetchAuditLogsInitial()),
+        ),
+        BlocProvider<PushCampaignsBloc>(
+          create: (context) =>
+              PushCampaignsBloc()..add(const FetchPushCampaignsEvent()),
         ),
       ],
       child: const MyAppWrapper(),
@@ -118,7 +126,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
       final token = prefs.getString('kd_access_token');
       final role = prefs.getString('kd_user_role');
       final userId = prefs.getString('kd_user_id');
-      
+
       if (token != null && role != null && userId != null) {
         _initialRoute = '/dashboard';
         WebSocketService().connect();
@@ -196,6 +204,8 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
             const MainLayout(child: OrderDetailsPage()),
         '/products': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(),
+        '/push-campaigns': (context) => const MainLayout(),
+        '/campaigns': (context) => const MainLayout(),
         '/support': (context) => const MainLayout(child: WhatsAppCrmPage()),
         '/calls': (context) => const MainLayout(child: CallLogsPage()),
         '/team': (context) => const MainLayout(),
@@ -212,13 +222,13 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         ),
         // Sales Routes
         '/sales/dashboard': (context) => const MainLayout(),
-        '/sales/coupons': (context) => const MainLayout(child: SalesCouponPage()),
-        '/sales/estimates': (context) => const MainLayout(child: EstimateGeneratorPage()),
+        '/sales/coupons': (context) =>
+            const MainLayout(child: SalesCouponPage()),
+        '/sales/estimates': (context) =>
+            const MainLayout(child: EstimateGeneratorPage()),
         '/sales/customer': (context) => const MainLayout(),
         '/customer': (context) => const MainLayout(),
       },
     );
   }
 }
-
-

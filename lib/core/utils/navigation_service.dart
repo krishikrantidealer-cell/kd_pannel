@@ -9,6 +9,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 
 class NavigationService {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -38,6 +40,9 @@ class NavigationService {
       } catch (_) {}
       try {
         BlocProvider.of<ProductsBloc>(context, listen: false).add(ResetProductsEvent());
+      } catch (_) {}
+      try {
+        BlocProvider.of<PushCampaignsBloc>(context, listen: false).add(const ResetPushCampaignsEvent());
       } catch (_) {}
     }
 
