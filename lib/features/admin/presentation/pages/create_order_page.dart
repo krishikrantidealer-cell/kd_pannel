@@ -7,184 +7,17 @@ import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
-
-// ---------------------------------------------------------------------------
-// Data Helpers
-// ---------------------------------------------------------------------------
-
-class _ParsedTier {
-  final String id;
-  final String name;
-  final double? min;
-  final double? max;
-  final double rate;
-
-  _ParsedTier({
-    required this.id,
-    required this.name,
-    this.min,
-    this.max,
-    required this.rate,
-  });
-}
-
-Map<String, double?> _parseTierRange(String name) {
-  final regexParentheses = RegExp(r'\(([^)]+)\)');
-  final match = regexParentheses.firstMatch(name);
-  String content = '';
-  if (match != null) {
-    content = match.group(1)!;
-  } else {
-    content = name;
-  }
-
-  final clean = content.replaceAll(RegExp(r'[^0-9.\-+]'), '');
-
-  if (clean.endsWith('+')) {
-    final minStr = clean.substring(0, clean.length - 1);
-    final min = double.tryParse(minStr);
-    return {'min': min, 'max': null};
-  } else if (clean.contains('-')) {
-    final parts = clean.split('-');
-    if (parts.length == 2) {
-      final min = double.tryParse(parts[0]);
-      final max = double.tryParse(parts[1]);
-      return {'min': min, 'max': max};
-    }
-  }
-
-  final numbers = RegExp(
-    r'\d+(?:\.\d+)?',
-  ).allMatches(clean).map((m) => double.tryParse(m.group(0) ?? '')).toList();
-  if (numbers.isNotEmpty) {
-    if (clean.contains('+') || numbers.length == 1) {
-      return {'min': numbers.first, 'max': null};
-    } else if (numbers.length >= 2) {
-      return {'min': numbers[0], 'max': numbers[1]};
-    }
-  }
-
-  return {'min': null, 'max': null};
-}
-
-double? _parseRateValue(String? rateStr) {
-  if (rateStr == null || rateStr.isEmpty) return null;
-  final clean = rateStr.split('/').first.replaceAll(RegExp(r'[^0-9.]'), '');
-  return double.tryParse(clean);
-}
-
-double _getVariantPrice(
-  Map<String, dynamic> variant,
-  int quantity, {
-  double? customPackVolume,
-}) {
-  final double packVolume =
-      customPackVolume ?? ((variant['packVolume'] ?? 1) as num).toDouble();
-  final double defaultPriceVal =
-      ((variant['dealerPrice'] ?? variant['price'] ?? 0) as num).toDouble();
-  final double fallbackPrice = variant['dealerPrice'] != null
-      ? defaultPriceVal
-      : defaultPriceVal * packVolume;
-
-  final priceTiers = variant['priceTiers'] as List?;
-  final rates = variant['rates'] as Map?;
-
-  if (priceTiers == null ||
-      priceTiers.isEmpty ||
-      rates == null ||
-      rates.isEmpty) {
-    return fallbackPrice;
-  }
-
-  final double totalVolume = packVolume * quantity;
-
-  final List<_ParsedTier> parsedTiers = [];
-  for (var tier in priceTiers) {
-    final tierMap = Map<String, dynamic>.from(tier as Map);
-    final tierId = tierMap['id']?.toString() ?? '';
-    final tierName = tierMap['name']?.toString() ?? '';
-
-    final range = _parseTierRange(tierName);
-
-    final parsedInt = int.tryParse(tierId);
-    final dynamic rawRate =
-        rates[tierId] ?? (parsedInt != null ? rates[parsedInt] : null);
-    final rateStr = rawRate?.toString();
-    final rateVal = _parseRateValue(rateStr);
-
-    if (rateVal != null) {
-      parsedTiers.add(
-        _ParsedTier(
-          id: tierId,
-          name: tierName,
-          min: range['min'],
-          max: range['max'],
-          rate: rateVal,
-        ),
-      );
-    }
-  }
-
-  if (parsedTiers.isEmpty) {
-    return fallbackPrice;
-  }
-
-  // Sort by min descending (highest volume requirement first) to match backend logic
-  parsedTiers.sort((a, b) {
-    final aMin = a.min ?? 0.0;
-    final bMin = b.min ?? 0.0;
-    return bMin.compareTo(aMin);
-  });
-
-  for (var tier in parsedTiers) {
-    final min = tier.min;
-    if (min != null && totalVolume >= min) {
-      return tier.rate * packVolume;
-    }
-  }
-
-  return fallbackPrice;
-}
-
-class _CartItem {
-  final Map<String, dynamic> product;
-  final Map<String, dynamic> variant;
-  int quantity;
-  double? priceOverride;
-  double? customPackVolume;
-  String? customBasePackingUnit;
-
-  _CartItem({
-    required this.product,
-    required this.variant,
-    this.quantity = 1,
-    this.priceOverride,
-    this.customPackVolume,
-    this.customBasePackingUnit,
-  });
-
-  double get effectivePackVolume =>
-      customPackVolume ?? ((variant['packVolume'] ?? 1) as num).toDouble();
-
-  String get effectiveBaseUnit {
-    if (customBasePackingUnit != null && customBasePackingUnit!.isNotEmpty) {
-      return customBasePackingUnit!;
-    }
-    return (variant['basePackingUnit'] ?? '').toString().trim();
-  }
-
-  bool get isCustomBasePack => customPackVolume != null;
-  bool get isCustomPrice => priceOverride != null;
-
-  double get lineTotal => price * quantity;
-
-  double get price {
-    if (priceOverride != null) {
-      return priceOverride!;
-    }
-    return _getVariantPrice(variant, quantity, customPackVolume: customPackVolume);
-  }
-}
+import 'package:kd_pannel/features/admin/presentation/widgets/order/order_models.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/order/order_controls.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/order/tier_milestone_card.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/order/unlock_tier_sheet.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/core/repositories/product_repository.dart';
+import 'package:kd_pannel/core/repositories/order_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Page Widget
@@ -207,7 +40,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   bool _isSubmitting = false;
   String _productSearch = '';
 
-  final List<_CartItem> _cart = [];
+  final List<CartItem> _cart = [];
   final Map<String, int> _selectedVariantIndex = {};
   final Map<String, double> _customPackVolumes = {};
   final Map<String, String> _customBaseUnits = {};
@@ -286,22 +119,15 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   Future<void> _fetchProducts() async {
     setState(() => _isLoadingProducts = true);
     try {
-      final res = await ApiClient().get('/products?limit=1000');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final List raw = data['products'] ?? [];
-          final products = raw
-              .map((p) => Map<String, dynamic>.from(p as Map))
-              .where((p) => (p['variants'] as List?)?.isNotEmpty == true)
-              .toList();
-          if (mounted) {
-            setState(() {
-              _allProducts = products;
-              _filteredProducts = products;
-            });
-          }
-        }
+      final raw = await ProductRepository().getProducts();
+      final products = raw
+          .where((p) => (p['variants'] as List?)?.isNotEmpty == true)
+          .toList();
+      if (mounted) {
+        setState(() {
+          _allProducts = products;
+          _filteredProducts = products;
+        });
       }
     } catch (e) {
       debugPrint('Error fetching products: $e');
@@ -394,7 +220,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               'basePacking': '${c.effectivePackVolume % 1 == 0 ? c.effectivePackVolume.toInt() : c.effectivePackVolume} ${c.effectiveBaseUnit}'.trim(),
               'isCustomBasePack': c.isCustomBasePack,
               'isCustomPrice': c.isCustomPrice,
-              'originalPrice': _getVariantPrice(c.variant, c.quantity, customPackVolume: c.customPackVolume),
+              'originalPrice': getVariantPrice(c.variant, c.quantity, customPackVolume: c.customPackVolume),
             },
           )
           .toList();
@@ -439,7 +265,13 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           });
 
           _showSnack('Order created successfully!');
-          if (mounted) Navigator.of(context).pop(true);
+          if (mounted) {
+            try {
+              context.read<OrdersBloc>().add(const FetchOrdersEvent(forceRefresh: true));
+              context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+            } catch (_) {}
+            Navigator.of(context).pop(true);
+          }
           return;
         }
         final msg = data['message'] ?? 'Order creation failed.';
@@ -519,7 +351,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   void _openCustomBasePackingDialog({
     required String productId,
     required Map<String, dynamic> variant,
-    _CartItem? cartItem,
+    CartItem? cartItem,
   }) {
     final variantId = variant['_id'] ?? '';
     final defaultPackVol = ((variant['packVolume'] ?? 1) as num).toDouble();
@@ -788,10 +620,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   void _openCustomPriceDialog({
     required String productId,
     required Map<String, dynamic> variant,
-    _CartItem? cartItem,
+    CartItem? cartItem,
   }) {
     final variantId = variant['_id'] ?? '';
-    final defaultPrice = _getVariantPrice(
+    final defaultPrice = getVariantPrice(
       variant,
       cartItem?.quantity ?? 1,
       customPackVolume: cartItem?.customPackVolume ?? _customPackVolumes[variantId],
@@ -1047,7 +879,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       if (idx >= 0) {
         _cart[idx].quantity += 1;
       } else {
-        _cart.add(_CartItem(
+        _cart.add(CartItem(
           product: product,
           variant: variant,
           priceOverride: customPrice,
@@ -1247,14 +1079,14 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _StepDot(
+        StepDot(
           number: 1,
           label: 'Products',
           isActive: _step == 1,
           isDone: _step > 1,
         ),
         Container(width: 24, height: 2, color: const Color(0xFFE5E7EB)),
-        _StepDot(
+        StepDot(
           number: 2,
           label: 'Review',
           isActive: _step == 2,
@@ -1523,7 +1355,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     final customVol = _customPackVolumes[variantId];
     final customPrice = _customPrices[variantId] ?? _getSalesOverride(variantId);
     final bool isCustomPrice = customPrice != null;
-    final double defaultPrice = _getVariantPrice(
+    final double defaultPrice = getVariantPrice(
       variant,
       inCart > 0 ? inCart : 1,
       customPackVolume: customVol,
@@ -1908,9 +1740,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                         ),
                       ),
                       if (inCart == 0)
-                        _AddButton(onTap: () => _addToCart(product, variant))
+                        AddButton(onTap: () => _addToCart(product, variant))
                       else
-                        _QtyControl(
+                        QtyControl(
                           qty: inCart,
                           onDecrement: () {
                             final idx = _cart.indexWhere(
@@ -3750,10 +3582,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
             ],
           ),
           const SizedBox(height: 12),
-          _PriceRow('Gross Subtotal', '₹${_formatAmt(subtotal)}'),
+          PriceRow('Gross Subtotal', '₹${_formatAmt(subtotal)}'),
           if (_discountAmount > 0) ...[
             const SizedBox(height: 6),
-            _PriceRow(
+            PriceRow(
               'Coupon (${_appliedCoupon!['code']})',
               '- ₹${_formatAmt(_discountAmount)}',
               color: AppTheme.success,
@@ -3761,7 +3593,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           ],
           if (salesCartDiscount > 0) ...[
             const SizedBox(height: 6),
-            _PriceRow(
+            PriceRow(
               'Sales Cart Discount',
               '- ₹${_formatAmt(salesCartDiscount)}',
               color: Colors.blue,
@@ -3769,7 +3601,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
           ],
           if (manualDiscountValue > 0) ...[
             const SizedBox(height: 6),
-            _PriceRow(
+            PriceRow(
               'Manual Discount',
               '- ₹${_formatAmt(manualDiscountValue)}',
               color: Colors.orange,
@@ -4166,24 +3998,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
 
               // Fetch on first build
               if (isLoadingStandard) {
-                ApiClient().get('/coupons/active').then((res) {
-                  if (res.statusCode == 200) {
-                    final data = jsonDecode(res.body);
-                    if (data['success'] == true) {
-                      final list = data['coupons'] as List? ?? [];
-                      setSheetState(() {
-                        standardCoupons = list
-                            .map((c) => Map<String, dynamic>.from(c as Map))
-                            .where((c) => c['isActive'] == true)
-                            .toList();
-                        isLoadingStandard = false;
-                      });
-                      return;
-                    }
-                  }
+                OrderRepository().getActiveCoupons().then((list) {
                   setSheetState(() {
+                    standardCoupons = list;
                     isLoadingStandard = false;
-                    standardError = 'Could not load coupons';
                   });
                 }).catchError((_) {
                   setSheetState(() {
@@ -4262,18 +4080,19 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   salesApplyError = '';
                 });
                 try {
-                  final res = await ApiClient()
-                      .post('/sales-coupons/validate', {'code': code});
-                  final data = jsonDecode(res.body);
-                  if (res.statusCode == 200 && data['success'] == true) {
+                  final result = await OrderRepository().validateSalesCoupon(
+                    code: code,
+                    subtotal: subtotal,
+                  );
+                  if (result['success'] == true) {
                     setSheetState(() {
                       validatedSalesCoupon =
-                          Map<String, dynamic>.from(data['coupon']);
+                          Map<String, dynamic>.from(result['coupon']);
                     });
                     return;
                   }
                   setSheetState(
-                      () => salesApplyError = data['message'] ?? 'Invalid coupon');
+                      () => salesApplyError = result['message'] ?? 'Invalid coupon');
                 } catch (e) {
                   setSheetState(() => salesApplyError = 'Error: $e');
                 } finally {
@@ -4838,8 +4657,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       final tierMap = Map<String, dynamic>.from(tier as Map);
       final tierId = tierMap['id']?.toString() ?? '';
       final tierName = tierMap['name']?.toString() ?? '';
-      final range = _parseTierRange(tierName);
-      final rateVal = _parseRateValue(
+      final range = parseTierRange(tierName);
+      final rateVal = parseRateValue(
         rates[tierId]?.toString() ?? rates[int.tryParse(tierId)]?.toString(),
       );
       if (rateVal != null) {
@@ -4940,7 +4759,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
             return Expanded(
               child: Padding(
                 padding: EdgeInsets.only(left: idx == 0 ? 0.0 : 6.0),
-                child: _TierMilestoneCard(
+                child: TierMilestoneCard(
                   key: ValueKey('${variantId}_${t['key']}'),
                   label: t['label'] as String,
                   threshold: t['threshold'] as double,
@@ -5066,8 +4885,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       threshold,
       customPackVolume: packVolume,
     );
-    final int diffQty = (requiredQty - currentQty).clamp(0, 9999);
-    final double currentUnitPrice = _getVariantPrice(
+    final double currentUnitPrice = getVariantPrice(
       variant,
       currentQty > 0 ? currentQty : 1,
       customPackVolume: packVolume,
@@ -5077,383 +4895,46 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         (requiredQty * targetUnitPrice) - (requiredQty * currentUnitPrice) > 0
         ? 0
         : (requiredQty * currentUnitPrice) - (requiredQty * targetUnitPrice);
-    final double currentVol = packVolume * currentQty;
-    final double targetVol = packVolume * requiredQty;
-    final String unitLabel = baseUnit.toLowerCase() == 'pcs'
-        ? 'pcs'
-        : baseUnit.toLowerCase() == 'kg'
-        ? 'kg'
-        : 'lit.';
 
-    showModalBottomSheet(
+    UnlockTierBottomSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            16,
-            24,
-            24 + MediaQuery.of(ctx).padding.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF298E4D).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.lock_open_rounded,
-                      color: Color(0xFF298E4D),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Unlock $tierLabel Pricing!',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Get wholesale rates on bulk volume',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Price comparison card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFE8F5E9), Colors.white],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: const Color(0xFF298E4D).withValues(alpha: 0.15),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Current Price',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${(currentUnitPrice / packVolume).toStringAsFixed(0)} / $unitLabel',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey.shade700,
-                                decoration: TextDecoration.lineThrough,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Color(0xFF298E4D),
-                          size: 20,
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF298E4D),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'WHOLESALE RATE',
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${tierPrice.toStringAsFixed(0)} / $unitLabel',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                color: Color(0xFF298E4D),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    if (savings > 0) ...[
-                      const Divider(height: 24, thickness: 1),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.stars_rounded,
-                            color: Colors.orange.shade700,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Total Bulk Savings: ₹${savings.toStringAsFixed(0)}!',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.orange.shade700,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Required Volume Progression',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 10),
-              // Progress bar
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LayoutBuilder(
-                  builder: (_, constraints) {
-                    final double fillPercent = targetVol > 0
-                        ? (currentVol / targetVol).clamp(0.0, 1.0)
-                        : 0.0;
-                    return Stack(
-                      children: [
-                        Container(
-                          height: 8,
-                          width: constraints.maxWidth,
-                          color: Colors.grey.shade100,
-                        ),
-                        Container(
-                          height: 8,
-                          width: constraints.maxWidth * fillPercent,
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF81C784), Color(0xFF298E4D)],
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Current: ${currentVol % 1 == 0 ? currentVol.toInt() : currentVol.toStringAsFixed(1)} $unitLabel ($currentQty packs)',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    'Target: ${threshold % 1 == 0 ? threshold.toInt() : threshold.toStringAsFixed(1)} $unitLabel ($requiredQty packs)',
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: Color(0xFF298E4D),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Info box
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200, width: 0.5),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: Colors.orange.shade800,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        diffQty > 0
-                            ? 'Adding $diffQty more pack${diffQty == 1 ? '' : 's'} unlocks ₹${(tierPrice - currentUnitPrice / packVolume).abs().toStringAsFixed(0)} discount per $unitLabel on ALL units!'
-                            : 'You already have enough packs to unlock this tier!',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.orange.shade900,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(
-                          color: Colors.grey.shade300,
-                          width: 1.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        'KEEP CURRENT',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (diffQty > 0) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          // Set quantity to required qty
-                          final cartIdx = _cart.indexWhere(
-                            (c) =>
-                                c.product['_id'] == productId &&
-                                c.variant['_id'] == variantId,
-                          );
-                          setState(() {
-                            if (cartIdx >= 0) {
-                              _cart[cartIdx].quantity = requiredQty;
-                            } else {
-                              // Not in cart yet — add with the required qty
-                              final product = _allProducts.firstWhere(
-                                (p) => p['_id'] == productId,
-                                orElse: () => {},
-                              );
-                              if (product.isNotEmpty) {
-                                final customVol = _customPackVolumes[variantId];
-                                final customUnit = _customBaseUnits[variantId];
-                                _cart.add(
-                                  _CartItem(
-                                    product: product,
-                                    variant: variant,
-                                    quantity: requiredQty,
-                                    customPackVolume: customVol,
-                                    customBasePackingUnit: customUnit,
-                                  ),
-                                );
-                              }
-                            }
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF298E4D),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          elevation: 3,
-                          shadowColor: const Color(
-                            0xFF298E4D,
-                          ).withValues(alpha: 0.3),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          'ADD $diffQty & SAVE',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
+      tierLabel: tierLabel,
+      currentUnitPrice: currentUnitPrice,
+      tierPrice: tierPrice,
+      packVolume: packVolume,
+      baseUnit: baseUnit,
+      currentQty: currentQty,
+      requiredQty: requiredQty,
+      savings: savings,
+      onUpgrade: () {
+        final cartIdx = _cart.indexWhere(
+          (c) =>
+              c.product['_id'] == productId &&
+              c.variant['_id'] == variantId,
         );
+        setState(() {
+          if (cartIdx >= 0) {
+            _cart[cartIdx].quantity = requiredQty;
+          } else {
+            final product = _allProducts.firstWhere(
+              (p) => p['_id'] == productId,
+              orElse: () => {},
+            );
+            if (product.isNotEmpty) {
+              final customVol = _customPackVolumes[variantId];
+              final customUnit = _customBaseUnits[variantId];
+              _cart.add(
+                CartItem(
+                  product: product,
+                  variant: variant,
+                  quantity: requiredQty,
+                  customPackVolume: customVol,
+                  customBasePackingUnit: customUnit,
+                ),
+              );
+            }
+          }
+        });
       },
     );
   }
@@ -5476,529 +4957,5 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       );
     }
     return '$other,$lastThree';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Sub-Widgets
-// ---------------------------------------------------------------------------
-
-class _AddButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryColor,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.primaryColor.withValues(alpha: 0.2),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          'Add',
-          style: AppTheme.button.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QtyControl extends StatelessWidget {
-  final int qty;
-  final VoidCallback onDecrement;
-  final VoidCallback onIncrement;
-
-  const _QtyControl({
-    required this.qty,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppTheme.primaryColor),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: onDecrement,
-            child: Container(
-              width: 30,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(7)),
-              ),
-              child: Icon(
-                qty <= 1 ? Icons.delete_outline_rounded : Icons.remove_rounded,
-                size: 16,
-                color: qty <= 1 ? AppTheme.error : AppTheme.primaryColor,
-              ),
-            ),
-          ),
-          Container(
-            width: 32,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              border: Border.symmetric(
-                vertical: BorderSide(color: AppTheme.primaryColor, width: 0.5),
-              ),
-            ),
-            child: Text(
-              '$qty',
-              style: AppTheme.headingSM.copyWith(
-                fontSize: 12.5,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onIncrement,
-            child: Container(
-              width: 30,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.horizontal(
-                  right: Radius.circular(7),
-                ),
-              ),
-              child: const Icon(
-                Icons.add_rounded,
-                size: 16,
-                color: AppTheme.primaryColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepDot extends StatelessWidget {
-  final int number;
-  final String label;
-  final bool isActive;
-  final bool isDone;
-
-  const _StepDot({
-    required this.number,
-    required this.label,
-    required this.isActive,
-    required this.isDone,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: isActive || isDone
-                ? AppTheme.primaryColor
-                : const Color(0xFFE5E7EB),
-            shape: BoxShape.circle,
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Center(
-            child: isDone
-                ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
-                : Text(
-                    '$number',
-                    style: AppTheme.labelSM.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isActive ? Colors.white : AppTheme.textSecondary,
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: AppTheme.labelSM.copyWith(
-            fontSize: 10.5,
-            color: isActive ? AppTheme.primaryColor : AppTheme.textSecondary,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-
-
-class _PriceRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? color;
-
-  const _PriceRow(this.label, this.value, {this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
-        ),
-        Text(
-          value,
-          style: AppTheme.headingSM.copyWith(
-            color: color ?? AppTheme.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-
-// ---------------------------------------------------------------------------
-// _TierMilestoneCard — Animated, matches mobile app design exactly
-// ---------------------------------------------------------------------------
-
-class _TierMilestoneCard extends StatefulWidget {
-  final String label;
-  final double threshold;
-  final double price;
-  final bool isUnlocked;
-  final bool isActive;
-  final String baseUnit;
-  final VoidCallback? onTap;
-
-  const _TierMilestoneCard({
-    super.key,
-    required this.label,
-    required this.threshold,
-    required this.price,
-    required this.isUnlocked,
-    this.isActive = false,
-    required this.baseUnit,
-    this.onTap,
-  });
-
-  @override
-  State<_TierMilestoneCard> createState() => _TierMilestoneCardState();
-}
-
-class _TierMilestoneCardState extends State<_TierMilestoneCard>
-    with TickerProviderStateMixin {
-  late AnimationController _unlockController;
-  late AnimationController _bounceController;
-  late Animation<double> _scaleAnimation;
-  late AnimationController _shakeController;
-  late Animation<double> _shakeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _unlockController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-
-    _bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 550),
-    );
-
-    _scaleAnimation =
-        TweenSequence<double>([
-          TweenSequenceItem<double>(
-            tween: Tween<double>(
-              begin: 1.0,
-              end: 1.12,
-            ).chain(CurveTween(curve: Curves.easeOut)),
-            weight: 40.0,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(
-              begin: 1.12,
-              end: 0.96,
-            ).chain(CurveTween(curve: Curves.easeInOut)),
-            weight: 30.0,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(
-              begin: 0.96,
-              end: 1.0,
-            ).chain(CurveTween(curve: Curves.easeOut)),
-            weight: 30.0,
-          ),
-        ]).animate(
-          CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
-        );
-
-    _shakeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-
-    _shakeAnimation =
-        TweenSequence<double>([
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: 0.0, end: 5.0),
-            weight: 15,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: 5.0, end: -5.0),
-            weight: 20,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: -5.0, end: 3.0),
-            weight: 15,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: 3.0, end: -3.0),
-            weight: 15,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: -3.0, end: 1.0),
-            weight: 15,
-          ),
-          TweenSequenceItem<double>(
-            tween: Tween<double>(begin: 1.0, end: 0.0),
-            weight: 20,
-          ),
-        ]).animate(
-          CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut),
-        );
-
-    if (widget.isUnlocked) {
-      _unlockController.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _TierMilestoneCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isUnlocked && !oldWidget.isUnlocked) {
-      _unlockController.forward(from: 0.0);
-      _bounceController.forward(from: 0.0);
-    } else if (!widget.isUnlocked && oldWidget.isUnlocked) {
-      _unlockController.reverse(from: 1.0);
-    } else {
-      if (!_unlockController.isAnimating) {
-        _unlockController.value = widget.isUnlocked ? 1.0 : 0.0;
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _unlockController.dispose();
-    _bounceController.dispose();
-    _shakeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const Color primaryGreen = Color(0xFF298E4D);
-    const Color secondaryGreen = Color(0xFFE8F5E9);
-
-    final String unitLabel = widget.baseUnit == 'pcs'
-        ? 'pcs'
-        : widget.baseUnit == 'kg'
-        ? 'kg'
-        : 'lit.';
-    final formattedPrice = widget.price % 1 == 0
-        ? widget.price.toStringAsFixed(0)
-        : widget.price.toStringAsFixed(2);
-    final String perUnitStr = '₹$formattedPrice/$unitLabel';
-
-    return GestureDetector(
-      onTap: () {
-        if (!widget.isUnlocked) {
-          _shakeController.forward(from: 0.0);
-        }
-        widget.onTap?.call();
-      },
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          _unlockController,
-          _bounceController,
-          _shakeAnimation,
-        ]),
-        builder: (context, child) {
-          final double animValue = _unlockController.value;
-
-          final Color backgroundColor = Color.lerp(
-            Colors.grey.shade100,
-            secondaryGreen,
-            animValue,
-          )!;
-
-          final Color borderColor = Color.lerp(
-            Colors.grey.shade300,
-            primaryGreen,
-            animValue,
-          )!;
-
-          final Color textColor = Color.lerp(
-            Colors.grey.shade700,
-            primaryGreen,
-            animValue,
-          )!;
-
-          final Color subtextColor = Color.lerp(
-            Colors.grey.shade500,
-            primaryGreen.withValues(alpha: 0.85),
-            animValue,
-          )!;
-
-          final double shadowOpacity = animValue * 0.15;
-
-          final double cardOpacity = !widget.isUnlocked
-              ? 1.0
-              : widget.isActive
-              ? 1.0
-              : 0.55;
-
-          return Transform.translate(
-            offset: Offset(_shakeAnimation.value, 0),
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: Opacity(
-                opacity: cardOpacity,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: backgroundColor,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: borderColor,
-                      width: animValue > 0.5 ? 1.5 : 1.0,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: primaryGreen.withValues(alpha: shadowOpacity),
-                        blurRadius: 6 * animValue,
-                        spreadRadius: 1 * animValue,
-                        offset: Offset(0, 2 * animValue),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      // Animated lock → verified icon
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Opacity(
-                            opacity: (1.0 - animValue).clamp(0.0, 1.0),
-                            child: Icon(
-                              Icons.lock_outline_rounded,
-                              color: Colors.grey.shade500,
-                              size: 12,
-                            ),
-                          ),
-                          Opacity(
-                            opacity: animValue.clamp(0.0, 1.0),
-                            child: const Icon(
-                              Icons.verified_rounded,
-                              color: primaryGreen,
-                              size: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                widget.label,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w900,
-                                  color: textColor,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                perUnitStr,
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: subtextColor,
-                                  decoration:
-                                      (widget.isUnlocked && !widget.isActive)
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }

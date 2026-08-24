@@ -1,17 +1,15 @@
-// ignore_for_file: unused_element, unused_field
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'dart:ui' as ui;
-import 'dart:convert';
-import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/core/network/websocket_service.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/util/web_notification_helper.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
+import 'package:kd_pannel/features/shared/bloc/notifications_state.dart';
 
 class TopbarWidget extends StatefulWidget {
   final VoidCallback? onMenuPressed;
@@ -22,10 +20,6 @@ class TopbarWidget extends StatefulWidget {
 }
 
 class _TopbarWidgetState extends State<TopbarWidget> {
-  List<Map<String, dynamic>> _notifications = [];
-  int _unreadCount = 0;
-  StreamSubscription? _notificationSub;
-  
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   bool _isDropdownOpen = false;
@@ -38,7 +32,6 @@ class _TopbarWidgetState extends State<TopbarWidget> {
   void initState() {
     super.initState();
     requestNotificationPermission();
-    _fetchNotifications(isInitial: true);
     
     // Refresh profile if data is incomplete
     if (AuthService().currentUserName == null || AuthService().currentUserName!.isEmpty) {
@@ -46,15 +39,10 @@ class _TopbarWidgetState extends State<TopbarWidget> {
         if (mounted) setState(() {});
       });
     }
-
-    _notificationSub = WebSocketService().notificationUpdates.listen((_) {
-      _fetchNotifications(isInitial: false);
-    });
   }
 
   @override
   void dispose() {
-    _notificationSub?.cancel();
     _overlayEntry?.remove();
     _overlayEntry = null;
     _profileOverlayEntry?.remove();
@@ -62,54 +50,11 @@ class _TopbarWidgetState extends State<TopbarWidget> {
     super.dispose();
   }
 
-  Future<void> _fetchNotifications({bool isInitial = false}) async {
-    try {
-      final res = await ApiClient().get('/users/notifications');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final list = List<Map<String, dynamic>>.from(data['notifications'] ?? []);
-          
-          if (!isInitial && list.isNotEmpty) {
-            final newUnreadNotifications = list.where((newNotif) {
-              final isUnread = newNotif['isRead'] == false || newNotif['isRead'] == null;
-              if (!isUnread) return false;
-              final existsBefore = _notifications.any((oldNotif) => oldNotif['_id'] == newNotif['_id']);
-              return !existsBefore;
-            }).toList();
-
-            for (final notif in newUnreadNotifications) {
-              final title = notif['title'] ?? 'New Notification';
-              final body = notif['body'] ?? '';
-              showWebNotification(title, body);
-            }
-          }
-
-          if (mounted) {
-            setState(() {
-              _notifications = list;
-              _unreadCount = list.where((n) => n['isRead'] == false || n['isRead'] == null).length;
-            });
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[TopbarWidget] Error fetching notifications: $e');
-    }
-  }
-
-  Future<void> _markAllAsRead() async {
-    try {
-      final res = await ApiClient().put('/users/notifications/read', {});
-      if (res.statusCode == 200) {
-        await _fetchNotifications(isInitial: true);
-        if (_isDropdownOpen) {
-          _closeDropdown();
-          _openDropdown(); // Rebuild dropdown overlay with updated state
-        }
-      }
-    } catch (e) {
-      debugPrint('[TopbarWidget] Error marking read: $e');
+  void _markAllAsRead() {
+    context.read<NotificationsCubit>().markAllAsRead();
+    if (_isDropdownOpen) {
+      _closeDropdown();
+      _openDropdown(); // Rebuild dropdown overlay with updated state
     }
   }
 
@@ -133,247 +78,259 @@ class _TopbarWidgetState extends State<TopbarWidget> {
 
   void _openDropdown() {
     final overlay = Overlay.of(context);
+    final notifCubit = context.read<NotificationsCubit>();
 
     _overlayEntry = OverlayEntry(
-      builder: (context) {
-        return Stack(
-          children: [
-            GestureDetector(
-              onTap: _closeDropdown,
-              behavior: HitTestBehavior.translucent,
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.transparent,
-              ),
-            ),
-            Positioned(
-              width: 360,
-              child: CompositedTransformFollower(
-                link: _layerLink,
-                showWhenUnlinked: false,
-                offset: const Offset(-310, 48),
-                child: Material(
-                  elevation: 16,
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
+      builder: (overlayCtx) {
+        return BlocBuilder<NotificationsCubit, NotificationsState>(
+          bloc: notifCubit,
+          builder: (ctx, notifState) {
+            final unreadCount = notifState.unreadCount;
+            final notifications = notifState.notifications;
+
+            return Stack(
+              children: [
+                GestureDetector(
+                  onTap: _closeDropdown,
+                  behavior: HitTestBehavior.translucent,
                   child: Container(
-                    decoration: BoxDecoration(
+                    width: double.infinity,
+                    height: double.infinity,
+                    color: Colors.transparent,
+                  ),
+                ),
+                Positioned(
+                  width: 360,
+                  child: CompositedTransformFollower(
+                    link: _layerLink,
+                    showWhenUnlinked: false,
+                    offset: const Offset(-310, 48),
+                    child: Material(
+                      elevation: 16,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Dropdown Header
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF8FAFC),
-                              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Notifications',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF1E293B),
-                                      ),
-                                    ),
-                                    if (_unreadCount > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.error.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: Text(
-                                          '$_unreadCount new',
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppTheme.error,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
+                      color: Colors.white,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Dropdown Header
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF8FAFC),
+                                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                                 ),
-                                if (_unreadCount > 0)
-                                  TextButton(
-                                    onPressed: _markAllAsRead,
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    child: Text(
-                                      'Mark all as read',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.primaryColor,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          // Dropdown Content
-                          Flexible(
-                            child: _notifications.isEmpty
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 32),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
                                       children: [
-                                        const Icon(
-                                          Icons.notifications_off_outlined,
-                                          size: 36,
-                                          color: Color(0xFF94A3B8),
-                                        ),
-                                        const SizedBox(height: 10),
                                         Text(
-                                          'No new notifications',
+                                          'Notifications',
                                           style: GoogleFonts.outfit(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: const Color(0xFF64748B),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF1E293B),
                                           ),
                                         ),
+                                        if (unreadCount > 0) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.error.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              '$unreadCount new',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppTheme.error,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
-                                  )
-                                : ConstrainedBox(
-                                    constraints: const BoxConstraints(maxHeight: 280),
-                                    child: ListView.separated(
-                                      shrinkWrap: true,
-                                      padding: EdgeInsets.zero,
-                                      itemCount: _notifications.length,
-                                      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                                      itemBuilder: (context, index) {
-                                        final item = _notifications[index];
-                                        final isUnread = item['isRead'] == false || item['isRead'] == null;
-                                        final title = item['title'] ?? 'Notification';
-                                        final body = item['body'] ?? '';
-                                        final route = item['actionRoute'];
-                                        final timeStr = item['createdAt'] != null
-                                            ? _formatTimeAgo(item['createdAt'])
-                                            : '';
+                                    if (unreadCount > 0)
+                                      TextButton(
+                                        onPressed: _markAllAsRead,
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: Text(
+                                          'Mark all as read',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              // Dropdown Content
+                              Flexible(
+                                child: notifications.isEmpty
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 32),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.notifications_off_outlined,
+                                              size: 36,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Text(
+                                              'No new notifications',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : ConstrainedBox(
+                                        constraints: const BoxConstraints(maxHeight: 280),
+                                        child: ListView.separated(
+                                          shrinkWrap: true,
+                                          padding: EdgeInsets.zero,
+                                          itemCount: notifications.length,
+                                          separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                          itemBuilder: (context, index) {
+                                            final item = notifications[index];
+                                            final isUnread = item['isRead'] == false || item['isRead'] == null;
+                                            final title = item['title'] ?? 'Notification';
+                                            final body = item['body'] ?? '';
+                                            final route = item['actionRoute'];
+                                            final timeStr = item['createdAt'] != null
+                                                ? _formatTimeAgo(item['createdAt'])
+                                                : '';
 
-                                        IconData iconData = Icons.notifications_outlined;
-                                        Color iconColor = const Color(0xFF475569);
-                                        Color iconBg = const Color(0xFFF1F5F9);
+                                            IconData iconData = Icons.notifications_outlined;
+                                            Color iconColor = const Color(0xFF475569);
+                                            Color iconBg = const Color(0xFFF1F5F9);
 
-                                        if (title.contains('Assigned') || title.contains('Agent')) {
-                                          iconData = Icons.person_add_outlined;
-                                          iconColor = Colors.indigo;
-                                          iconBg = Colors.indigo.withOpacity(0.12);
-                                        } else if (title.contains('Blocked')) {
-                                          iconData = Icons.block_outlined;
-                                          iconColor = Colors.red;
-                                          iconBg = Colors.red.withOpacity(0.12);
-                                        } else if (title.contains('KYC')) {
-                                          iconData = Icons.verified_user_outlined;
-                                          iconColor = Colors.green;
-                                          iconBg = Colors.green.withOpacity(0.12);
-                                        }
-
-                                        return InkWell(
-                                          onTap: () {
-                                            _closeDropdown();
-                                            if (route != null && route.isNotEmpty) {
-                                              // Profile routes (/leads/profile, /dealers/profile) require
-                                              // route arguments (lead/dealer data) which are not stored in
-                                              // the notification. Redirect to the list page instead.
-                                              String navRoute = route;
-                                              if (route == '/leads/profile') navRoute = '/leads';
-                                              if (route == '/dealers/profile') navRoute = '/dealers';
-                                              Navigator.pushNamed(context, navRoute);
+                                            if (title.contains('Assigned') || title.contains('Agent')) {
+                                              iconData = Icons.person_add_outlined;
+                                              iconColor = Colors.indigo;
+                                              iconBg = Colors.indigo.withValues(alpha: 0.12);
+                                            } else if (title.contains('Blocked')) {
+                                              iconData = Icons.block_outlined;
+                                              iconColor = Colors.red;
+                                              iconBg = Colors.red.withValues(alpha: 0.12);
+                                            } else if (title.contains('KYC')) {
+                                              iconData = Icons.verified_user_outlined;
+                                              iconColor = Colors.green;
+                                              iconBg = Colors.green.withValues(alpha: 0.12);
                                             }
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(12),
-                                            color: isUnread ? const Color(0xFFF8FAFC) : Colors.transparent,
-                                            child: Row(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.all(6),
-                                                  decoration: BoxDecoration(
-                                                    color: iconBg,
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                  child: Icon(iconData, color: iconColor, size: 14),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        title,
-                                                        style: GoogleFonts.outfit(
-                                                          fontSize: 12,
-                                                          fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                                          color: const Color(0xFF1E293B),
-                                                        ),
+
+                                            return InkWell(
+                                              onTap: () {
+                                                _closeDropdown();
+                                                if (isUnread && item['_id'] != null) {
+                                                  notifCubit.markAsRead(item['_id']);
+                                                }
+                                                if (route != null && route.isNotEmpty) {
+                                                  String navRoute = route;
+                                                  if (route == '/leads/profile') navRoute = '/leads';
+                                                  if (route == '/dealers/profile') navRoute = '/dealers';
+                                                  Navigator.pushNamed(context, navRoute);
+                                                }
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.all(12),
+                                                color: isUnread ? const Color(0xFFF8FAFC) : Colors.transparent,
+                                                child: Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.all(6),
+                                                      decoration: BoxDecoration(
+                                                        color: iconBg,
+                                                        shape: BoxShape.circle,
                                                       ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        body,
-                                                        style: GoogleFonts.outfit(
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.w400,
-                                                          color: const Color(0xFF64748B),
-                                                        ),
+                                                      child: Icon(iconData, color: iconColor, size: 14),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            title,
+                                                            style: GoogleFonts.outfit(
+                                                              fontSize: 12,
+                                                              fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
+                                                              color: const Color(0xFF1E293B),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(height: 2),
+                                                          Text(
+                                                            body,
+                                                            style: GoogleFonts.outfit(
+                                                              fontSize: 11,
+                                                              color: const Color(0xFF64748B),
+                                                            ),
+                                                            maxLines: 2,
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                          if (timeStr.isNotEmpty) ...[
+                                                            const SizedBox(height: 4),
+                                                            Text(
+                                                              timeStr,
+                                                              style: GoogleFonts.outfit(
+                                                                fontSize: 10,
+                                                                color: const Color(0xFF94A3B8),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ],
                                                       ),
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        timeStr,
-                                                        style: GoogleFonts.outfit(
-                                                          fontSize: 9,
-                                                          fontWeight: FontWeight.w500,
-                                                          color: const Color(0xFF94A3B8),
+                                                    ),
+                                                    if (isUnread) ...[
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        width: 6,
+                                                        height: 6,
+                                                        decoration: BoxDecoration(
+                                                          color: AppTheme.primaryColor,
+                                                          shape: BoxShape.circle,
                                                         ),
                                                       ),
                                                     ],
-                                                  ),
+                                                  ],
                                                 ),
-                                                if (isUnread)
-                                                  Container(
-                                                    margin: const EdgeInsets.only(top: 4, left: 4),
-                                                    width: 6,
-                                                    height: 6,
-                                                    decoration: const BoxDecoration(
-                                                      color: AppTheme.primaryColor,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -668,6 +625,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final unreadCount = context.watch<NotificationsCubit>().state.unreadCount;
     final bool isDesktop = Responsive.isDesktop(context);
     final bool isMobile = Responsive.isMobile(context);
 
@@ -824,7 +782,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                             size: 18,
                           ),
                         ),
-                        if (_unreadCount > 0)
+                        if (unreadCount > 0)
                           Positioned(
                             top: -2,
                             right: -2,
@@ -840,7 +798,7 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                               ),
                               child: Center(
                                 child: Text(
-                                  _unreadCount > 9 ? '9+' : '$_unreadCount',
+                                  unreadCount > 9 ? '9+' : '$unreadCount',
                                   style: GoogleFonts.outfit(
                                     color: Colors.white,
                                     fontSize: 8.5,

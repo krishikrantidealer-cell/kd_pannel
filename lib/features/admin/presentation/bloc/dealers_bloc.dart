@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
 import 'package:http/http.dart' as http;
 
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
+  StreamSubscription? _wsSubscription;
+
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
     on<CreateDealerEvent>(_onCreateDealer);
@@ -24,6 +28,16 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<FetchDealerOrdersEvent>(_onFetchDealerOrders);
     on<FetchDealerEventsEvent>(_onFetchDealerEvents);
     on<FetchDealerEventsMoreEvent>(_onFetchDealerEventsMore);
+
+    _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
+      add(const FetchDealersDataEvent(forceRefresh: true));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _wsSubscription?.cancel();
+    return super.close();
   }
 
   Future<void> _onCreateDealer(

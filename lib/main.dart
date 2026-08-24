@@ -31,6 +31,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/audit_logs_event.dart
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 
+import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
+
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -91,6 +93,10 @@ void main() async {
         BlocProvider<PushCampaignsBloc>(
           create: (context) =>
               PushCampaignsBloc()..add(const FetchPushCampaignsEvent()),
+        ),
+        BlocProvider<NotificationsCubit>(
+          create: (context) =>
+              NotificationsCubit()..fetchNotifications(isInitial: true),
         ),
       ],
       child: const MyAppWrapper(),

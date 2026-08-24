@@ -1,16 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import '../../data/models/order_model.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 
 class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
+  StreamSubscription? _wsSubscription;
+
   OrdersBloc() : super(const OrdersState()) {
     on<FetchOrdersEvent>(_onFetchOrders);
     on<UpdateOrdersFilterEvent>(_onUpdateOrdersFilter);
     on<ClearOrdersMessageEvent>(_onClearOrdersMessage);
     on<ResetOrdersEvent>(_onResetOrders);
+
+    _wsSubscription = WebSocketService().ordersUpdates.listen((_) {
+      add(const FetchOrdersEvent(forceRefresh: true));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _wsSubscription?.cancel();
+    return super.close();
   }
 
   void _onResetOrders(ResetOrdersEvent event, Emitter<OrdersState> emit) {

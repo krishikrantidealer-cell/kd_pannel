@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -12,8 +9,8 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
-import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
-import 'package:kd_pannel/util/dealers.dart';
+import 'package:kd_pannel/features/shared/widgets/events/user_card.dart';
+import 'package:kd_pannel/features/shared/widgets/events/events_helper.dart';
 
 class SalesCustomerEventsPage extends StatefulWidget {
   const SalesCustomerEventsPage({super.key});
@@ -59,6 +56,42 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   Map<String, String> _cachedPriorityReason = {};
   Map<String, String> _cachedUserTypes = {};
   Set<String>? _cachedAssignedUserKeys;
+
+  String? _selectedUser;
+  String? _selectedEventType;
+
+  static const List<Map<String, dynamic>> _eventTypes = [
+    {
+      'id': 'product_view',
+      'label': 'Product Views',
+      'icon': Icons.visibility_outlined,
+      'color': Color(0xFF0284C7),
+    },
+    {
+      'id': 'cart_add',
+      'label': 'Cart Adds',
+      'icon': Icons.shopping_cart_outlined,
+      'color': Color(0xFFF59E0B),
+    },
+    {
+      'id': 'checkout_started',
+      'label': 'Checkout',
+      'icon': Icons.shopping_bag_outlined,
+      'color': Color(0xFFFB923C),
+    },
+    {
+      'id': 'payment_success',
+      'label': 'Payments',
+      'icon': Icons.check_circle_outline,
+      'color': Color(0xFF10B981),
+    },
+    {
+      'id': 'payment_failed',
+      'label': 'Failed Payments',
+      'icon': Icons.error_outline,
+      'color': Color(0xFFEF4444),
+    },
+  ];
 
   String _normalizeId(dynamic id) {
     if (id == null) return '';
@@ -599,7 +632,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           cleanRaw.toLowerCase() == uEmail)
         return true;
 
-      if (cleanName.isNotEmpty && !_isGenericProfileName(cleanName)) {
+      if (cleanName.isNotEmpty && !isGenericProfileName(cleanName)) {
         final fName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim()
             .toLowerCase();
@@ -708,7 +741,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
     // Fallback if not found in CRM
     String name = cleanName;
-    if (name.isEmpty || _isGenericProfileName(name)) {
+    if (name.isEmpty || isGenericProfileName(name)) {
       if (userDetails != null) {
         final fName =
             '${userDetails['firstName'] ?? ''} ${userDetails['lastName'] ?? ''}'
@@ -720,12 +753,12 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           name = sName;
       }
     }
-    if (name.isEmpty || _isGenericProfileName(name)) {
+    if (name.isEmpty || isGenericProfileName(name)) {
       if (cleanPhone.isNotEmpty)
         name = cleanPhone;
       else if (phoneDigits.length >= 10)
         name = phoneDigits;
-      else if (cleanRaw.isNotEmpty && !_isGenericProfileName(cleanRaw))
+      else if (cleanRaw.isNotEmpty && !isGenericProfileName(cleanRaw))
         name = cleanRaw;
       else
         name = 'Customer';
@@ -1076,7 +1109,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     }
 
     if (rawId.isNotEmpty) candidates.add(rawId);
-    if (userName.isNotEmpty && !_isGenericProfileName(userName))
+    if (userName.isNotEmpty && !isGenericProfileName(userName))
       candidates.add(userName);
 
     return candidates.toList();
@@ -1158,335 +1191,6 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     } catch (_) {
       return 'Just now';
     }
-  }
-
-  bool _isGenericProfileName(String name) {
-    final low = name.toLowerCase().trim();
-    return low.isEmpty ||
-        low == 'new customer' ||
-        low == 'guest' ||
-        low == 'unknown' ||
-        low == 'unknown user' ||
-        low == 'dealer' ||
-        low == 'lead' ||
-        low == 'customer' ||
-        low == 'admin' ||
-        low == 'sales' ||
-        low == 'staff' ||
-        RegExp(r'^\d+$').hasMatch(low);
-  }
-
-  void _navigateToProfile(
-    BuildContext context,
-    String user, {
-    String? phone,
-    String? name,
-    Map<String, dynamic>? userDetails,
-  }) {
-    if (user.isEmpty &&
-        (phone == null || phone.isEmpty) &&
-        (name == null || name.isEmpty))
-      return;
-
-    final String cleanUser = user.trim();
-    final String? cleanPhone = (phone != null && phone.trim().isNotEmpty)
-        ? phone.trim()
-        : (RegExp(r'^\+?\d{10,13}$').hasMatch(cleanUser) ? cleanUser : null);
-    final String? cleanName =
-        (name != null && name.trim().isNotEmpty && !_isGenericProfileName(name))
-        ? name.trim()
-        : (!cleanUser.contains('@') &&
-                  !RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(cleanUser) &&
-                  !RegExp(r'^\+?\d+$').hasMatch(cleanUser) &&
-                  !_isGenericProfileName(cleanUser)
-              ? cleanUser
-              : null);
-    final String? cleanEmail = cleanUser.contains('@')
-        ? cleanUser.toLowerCase()
-        : userDetails?['email']?.toString().toLowerCase();
-    final String? cleanId =
-        (RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(cleanUser) ||
-            (cleanUser.length > 15 && !cleanUser.contains(' ')))
-        ? cleanUser
-        : (userDetails?['_id'] ?? userDetails?['id'])?.toString();
-
-    final String phoneDigits = (cleanPhone ?? cleanUser).replaceAll(
-      RegExp(r'\D'),
-      '',
-    );
-    final String phoneLast10 = phoneDigits.length >= 10
-        ? phoneDigits.substring(phoneDigits.length - 10)
-        : '';
-
-    bool isUserMatch(Map<String, dynamic> u) {
-      final String uid = (u['_id'] ?? u['id'] ?? '').toString();
-      if (cleanId != null && cleanId.isNotEmpty && uid == cleanId) return true;
-
-      final String uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
-      final String uCleanP = uPhone.replaceAll(RegExp(r'\D'), '');
-      final String uP10 = uCleanP.length >= 10
-          ? uCleanP.substring(uCleanP.length - 10)
-          : '';
-
-      if (phoneLast10.isNotEmpty && uP10.isNotEmpty && phoneLast10 == uP10)
-        return true;
-
-      final String uEmail = (u['email'] ?? '').toString().toLowerCase().trim();
-      if (cleanEmail != null &&
-          cleanEmail.isNotEmpty &&
-          uEmail.isNotEmpty &&
-          uEmail == cleanEmail)
-        return true;
-
-      if (cleanName != null && cleanName.isNotEmpty) {
-        final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-            .trim()
-            .toLowerCase();
-        final String shopName = (u['shopName'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        final String targetName = cleanName.toLowerCase();
-
-        if (fullName.isNotEmpty && fullName == targetName) return true;
-        if (shopName.isNotEmpty && shopName == targetName) return true;
-      }
-
-      return false;
-    }
-
-    // 1. Try to find in Dealers first (Real database records)
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final Map<String, dynamic>? dealerData = dealersState.allRawUsers
-          .firstWhere(isUserMatch, orElse: () => <String, dynamic>{});
-
-      if (dealerData != null && dealerData.isNotEmpty) {
-        final kycStatus =
-            dealerData['kycStatus']?.toString().toLowerCase() ?? 'pending';
-        final isDealer = kycStatus == 'verified';
-
-        if (isDealer) {
-          final agentName = dealerData['assignedAgent'] != null
-              ? '${dealerData['assignedAgent']['firstName'] ?? ''} ${dealerData['assignedAgent']['lastName'] ?? ''}'
-                    .trim()
-              : '-';
-
-          final String personName =
-              (dealerData['firstName'] != null ||
-                  dealerData['lastName'] != null)
-              ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
-                    .trim()
-              : '';
-
-          final dealer = Dealer(
-            name: personName.isNotEmpty
-                ? personName
-                : (dealerData['phoneNumber'] ?? user),
-            phone: dealerData['phoneNumber'] ?? '',
-            city: dealerData['address']?['cityTehsil'] ?? '',
-            state: dealerData['address']?['state'] ?? '',
-            agent: agentName,
-            gstStatus: 'Verified',
-            totalOrders: 0,
-            purchaseValue: '₹0',
-            isHighValue: false,
-            isInactive: false,
-            id: dealerData['_id'],
-            agentId: dealerData['assignedAgent']?['_id'],
-            kycStatus: dealerData['kycStatus'],
-            shopName: dealerData['shopName'],
-            address: dealerData['address'],
-            status:
-                dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
-            notes: dealerData['notes'] ?? dealerData['leadNotes'] ?? '',
-            notesHistory: dealerData['notesHistory'] != null
-                ? List<Map<String, dynamic>>.from(dealerData['notesHistory'])
-                : [],
-          );
-
-          Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
-          return;
-        } else {
-          final String personName =
-              (dealerData['firstName'] != null ||
-                  dealerData['lastName'] != null)
-              ? '${dealerData['firstName'] ?? ''} ${dealerData['lastName'] ?? ''}'
-                    .trim()
-              : '';
-
-          final leadMap = {
-            'id': dealerData['_id'],
-            '_id': dealerData['_id'],
-            'name': personName.isNotEmpty
-                ? personName
-                : (dealerData['phoneNumber'] ?? user),
-            'phone': dealerData['phoneNumber'] ?? '',
-            'shopName': dealerData['shopName'] ?? '',
-            'villageArea': dealerData['address']?['villageArea'] ?? '',
-            'city': dealerData['address']?['cityTehsil'] ?? '',
-            'state': dealerData['address']?['state'] ?? '',
-            'pincode': dealerData['address']?['pincode'] ?? '',
-            'source': dealerData['source'] ?? 'App',
-            'kycStatus': dealerData['kycStatus'] ?? 'pending',
-            'status':
-                dealerData['status'] ?? dealerData['leadStatus'] ?? 'prospect',
-            'notes': dealerData['notes'] ?? dealerData['leadNotes'] ?? '',
-            'notesHistory': dealerData['notesHistory'] ?? [],
-          };
-          Navigator.pushNamed(context, '/leads/profile', arguments: leadMap);
-          return;
-        }
-      }
-    } catch (_) {}
-
-    // 2. Try to find in Leads
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
-      final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere(
-        isUserMatch,
-        orElse: () => <String, dynamic>{},
-      );
-
-      if (leadData != null && leadData.isNotEmpty) {
-        final kycStatus =
-            leadData['kycStatus']?.toString().toLowerCase() ?? 'pending';
-        final isDealer = kycStatus == 'verified';
-
-        if (isDealer) {
-          final agentName = leadData['assignedAgent'] != null
-              ? '${leadData['assignedAgent']['firstName'] ?? ''} ${leadData['assignedAgent']['lastName'] ?? ''}'
-                    .trim()
-              : '-';
-
-          final String personName =
-              (leadData['firstName'] != null || leadData['lastName'] != null)
-              ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
-                    .trim()
-              : '';
-
-          final dealer = Dealer(
-            name: personName.isNotEmpty
-                ? personName
-                : (leadData['phoneNumber'] ?? user),
-            phone: leadData['phoneNumber'] ?? '',
-            city: (leadData['address'] as Map?)?['cityTehsil'] ?? '',
-            state: (leadData['address'] as Map?)?['state'] ?? '',
-            agent: agentName,
-            gstStatus: 'Verified',
-            totalOrders: 0,
-            purchaseValue: '₹0',
-            isHighValue: false,
-            isInactive: false,
-            id: leadData['_id'],
-            agentId: leadData['assignedAgent']?['_id'],
-            kycStatus: 'verified',
-            shopName: leadData['shopName'],
-            address: leadData['address'],
-            status: leadData['status'] ?? leadData['leadStatus'] ?? 'prospect',
-            notes: leadData['notes'] ?? leadData['leadNotes'] ?? '',
-            notesHistory: leadData['notesHistory'] != null
-                ? List<Map<String, dynamic>>.from(leadData['notesHistory'])
-                : [],
-          );
-
-          Navigator.pushNamed(context, '/dealers/profile', arguments: dealer);
-          return;
-        } else {
-          final String personName =
-              (leadData['firstName'] != null || leadData['lastName'] != null)
-              ? '${leadData['firstName'] ?? ''} ${leadData['lastName'] ?? ''}'
-                    .trim()
-              : '';
-
-          final leadMap = {
-            'id': leadData['_id'],
-            '_id': leadData['_id'],
-            'name': personName.isNotEmpty
-                ? personName
-                : (leadData['phoneNumber'] ?? user),
-            'phone': leadData['phoneNumber'] ?? '',
-            'shopName': leadData['shopName'] ?? '',
-            'villageArea': leadData['address']?['villageArea'] ?? '',
-            'city': leadData['address']?['cityTehsil'] ?? '',
-            'state': leadData['address']?['state'] ?? '',
-            'pincode': leadData['address']?['pincode'] ?? '',
-            'source': leadData['source'] ?? 'App',
-            'kycStatus': leadData['kycStatus'] ?? 'pending',
-            'status':
-                leadData['status'] ?? leadData['leadStatus'] ?? 'prospect',
-            'notes': leadData['notes'] ?? leadData['leadNotes'] ?? '',
-            'notesHistory': leadData['notesHistory'] ?? [],
-          };
-          Navigator.pushNamed(context, '/leads/profile', arguments: leadMap);
-          return;
-        }
-      }
-    } catch (_) {}
-
-    // 3. Try to find in fallback static dealers list (allDealers)
-    Dealer? matchedDealer;
-    for (final d in allDealers) {
-      final dPhoneDigits = d.phone.replaceAll(RegExp(r'\D'), '');
-      final dP10 = dPhoneDigits.length >= 10
-          ? dPhoneDigits.substring(dPhoneDigits.length - 10)
-          : '';
-      if ((phoneLast10.isNotEmpty && dP10.isNotEmpty && phoneLast10 == dP10) ||
-          (cleanName != null &&
-              cleanName.isNotEmpty &&
-              d.name.toLowerCase() == cleanName.toLowerCase()) ||
-          (cleanId != null && d.id != null && d.id == cleanId)) {
-        matchedDealer = d;
-        break;
-      }
-    }
-
-    if (matchedDealer != null) {
-      Navigator.pushNamed(
-        context,
-        '/dealers/profile',
-        arguments: matchedDealer,
-      );
-      return;
-    }
-
-    // 4. Fallback: Navigate to leads profile with full leadMap
-    final String personName = (cleanName != null && cleanName.isNotEmpty)
-        ? cleanName
-        : (userDetails?['firstName'] != null
-              ? '${userDetails!['firstName'] ?? ''} ${userDetails['lastName'] ?? ''}'
-                    .trim()
-              : (cleanPhone ??
-                    (cleanUser.isNotEmpty && !_isGenericProfileName(cleanUser)
-                        ? cleanUser
-                        : 'Customer')));
-
-    final leadMap = {
-      'id': cleanId ?? cleanUser,
-      '_id': cleanId,
-      'name': personName.isNotEmpty ? personName : 'Customer',
-      'phone': cleanPhone ?? (phoneDigits.length >= 10 ? phoneDigits : ''),
-      'shopName': userDetails?['shopName'] ?? '',
-      'villageArea': userDetails?['address']?['villageArea'] ?? '',
-      'city': (userDetails?['address'] is Map)
-          ? (userDetails!['address']['cityTehsil'] ??
-                userDetails['address']['city'] ??
-                'Unknown')
-          : (userDetails?['city'] ?? 'Unknown'),
-      'state': (userDetails?['address'] is Map)
-          ? (userDetails!['address']['state'] ?? 'Unknown')
-          : (userDetails?['state'] ?? 'Unknown'),
-      'pincode': (userDetails?['address'] is Map)
-          ? (userDetails!['address']['pincode'] ?? '')
-          : (userDetails?['pincode'] ?? ''),
-      'source': userDetails?['source'] ?? 'App',
-      'kycStatus': userDetails?['kycStatus'] ?? 'pending',
-      'status':
-          userDetails?['status'] ?? userDetails?['leadStatus'] ?? 'prospect',
-      'notes': userDetails?['notes'] ?? '',
-      'notesHistory': userDetails?['notesHistory'] ?? [],
-    };
-    Navigator.pushNamed(context, '/leads/profile', arguments: leadMap);
   }
 
   @override
@@ -1606,24 +1310,33 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
                         final priorityReason =
                             _cachedPriorityReason[userName] ?? '';
 
-                        return _SalesUserCard(
+                        return UserCard(
                           name: userName,
                           userType: _cachedUserTypes[userName] ?? 'Lead',
                           groupedEvents: userEvents,
+                          isSelected: _selectedUser == userName,
+                          selectedEventType: _selectedEventType,
+                          eventTypes: _eventTypes,
                           isOnline: isOnline,
                           isHighPriority: isHighPriority,
                           priorityReason: priorityReason,
-                          isLoadingEvents: _loadingUserEvents.contains(
-                            userName,
-                          ),
-                          onViewProfile: (name, {id, phone, details}) =>
-                              _navigateToProfile(
-                                context,
-                                id ?? phone ?? name,
-                                phone: phone,
-                                name: name,
-                                userDetails: details,
-                              ),
+                          isLoadingEvents: _loadingUserEvents.contains(userName),
+                          onTap: () {
+                            setState(() {
+                              if (_selectedUser == userName) {
+                                _selectedUser = null;
+                              } else {
+                                _selectedUser = userName;
+                                _selectedEventType = userEvents.keys.isNotEmpty
+                                    ? userEvents.keys.first
+                                    : null;
+                              }
+                            });
+                          },
+                          onCategorySelected: (cat) {
+                            setState(() => _selectedEventType = cat);
+                          },
+                          onViewProfile: (name) => navigateToProfile(context, name),
                         );
                       },
                     ),
@@ -1952,857 +1665,6 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SalesUserCard extends StatefulWidget {
-  final String name;
-  final String userType;
-  final Map<String, List<Map<String, dynamic>>> groupedEvents;
-  final bool isOnline;
-  final bool isHighPriority;
-  final String priorityReason;
-  final bool isLoadingEvents;
-  final void Function(
-    String name, {
-    String? id,
-    String? phone,
-    Map<String, dynamic>? details,
-  })
-  onViewProfile;
-
-  const _SalesUserCard({
-    required this.name,
-    required this.userType,
-    required this.groupedEvents,
-    required this.isOnline,
-    required this.isHighPriority,
-    required this.priorityReason,
-    required this.isLoadingEvents,
-    required this.onViewProfile,
-  });
-
-  @override
-  State<_SalesUserCard> createState() => _SalesUserCardState();
-}
-
-class _SalesUserCardState extends State<_SalesUserCard> {
-  bool _isExpanded = false;
-
-  Future<void> _makePhoneCall(String phoneNumber) async {
-    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    if (cleanPhone.isEmpty) return;
-    final uri = Uri.parse('tel:$cleanPhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-  }
-
-  void _openWhatsApp(BuildContext context, String phoneNumber, String name) {
-    showDialog(
-      context: context,
-      builder: (context) => WhatsAppChatDialog(phone: phoneNumber, name: name),
-    );
-  }
-
-  String _getCategoryName(Map<String, dynamic> log) {
-    final explicitCat =
-        log['category']?.toString() ?? log['categoryName']?.toString();
-    if (explicitCat != null &&
-        explicitCat.isNotEmpty &&
-        explicitCat.toLowerCase() != 'general' &&
-        explicitCat.toLowerCase() != 'unknown') {
-      return _formatTitleCase(explicitCat);
-    }
-
-    final rawType = (log['eventType'] ?? log['event'] ?? '').toString();
-    if (rawType.isEmpty) return 'General Activity';
-
-    final lower = rawType.toLowerCase();
-
-    if (lower.contains('coupon') ||
-        lower.contains('discount') ||
-        lower.contains('promo') ||
-        lower.contains('offer')) {
-      return 'Coupons & Offers';
-    } else if (lower.contains('payment') ||
-        lower.contains('checkout') ||
-        lower.contains('cart') ||
-        lower.contains('order') ||
-        lower.contains('buy')) {
-      return 'Cart & Payments';
-    } else if (lower.contains('product') ||
-        lower.contains('item') ||
-        lower.contains('catalog') ||
-        lower.contains('view')) {
-      return 'Product Browsing';
-    } else if (lower.contains('search') || lower.contains('filter')) {
-      return 'Search & Catalog';
-    } else if (lower.contains('page') ||
-        lower.contains('screen') ||
-        lower.contains('nav') ||
-        lower.contains('open') ||
-        lower.contains('app')) {
-      return 'App Navigation';
-    } else if (lower.contains('auth') ||
-        lower.contains('login') ||
-        lower.contains('profile') ||
-        lower.contains('account')) {
-      return 'Account & Profile';
-    } else if (lower.contains('lead') ||
-        lower.contains('contact') ||
-        lower.contains('call') ||
-        lower.contains('whatsapp')) {
-      return 'Lead & Inquiry';
-    }
-
-    return _formatTitleCase(rawType);
-  }
-
-  String _formatTitleCase(String text) {
-    final cleaned = text.replaceAll('_', ' ').replaceAll('-', ' ').trim();
-    if (cleaned.isEmpty) return 'General Activity';
-    return cleaned
-        .split(' ')
-        .map((word) {
-          if (word.isEmpty) return '';
-          return word[0].toUpperCase() + word.substring(1).toLowerCase();
-        })
-        .join(' ');
-  }
-
-  Widget _buildUserTypeBadge(String type) {
-    final isDealer = type.toLowerCase() == 'dealer';
-    final label = isDealer ? 'Dealer' : 'Lead';
-    final bgColor = isDealer
-        ? const Color(0xFF10B981).withValues(alpha: 0.12)
-        : const Color(0xFFF59E0B).withValues(alpha: 0.12);
-    final textColor = isDealer
-        ? const Color(0xFF059669)
-        : const Color(0xFFD97706);
-    final icon = isDealer ? Icons.verified_rounded : Icons.person_pin_rounded;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: textColor.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: textColor),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildJourneyMilestonePipeline({
-    required bool hasSearch,
-    required bool hasCart,
-    required bool hasCheckout,
-    required bool hasPaid,
-    required bool hasFailed,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildMilestoneDot('Search', hasSearch, const Color(0xFF0284C7)),
-          _buildMilestoneConnector(hasCart),
-          _buildMilestoneDot('Cart', hasCart, const Color(0xFFF59E0B)),
-          _buildMilestoneConnector(hasCheckout),
-          _buildMilestoneDot('Checkout', hasCheckout, const Color(0xFFFB923C)),
-          _buildMilestoneConnector(hasPaid || hasFailed),
-          _buildMilestoneDot(
-            hasFailed ? 'Failed ❌' : 'Paid',
-            hasPaid || hasFailed,
-            hasFailed ? Colors.redAccent : const Color(0xFF10B981),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMilestoneDot(String label, bool completed, Color activeColor) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: completed ? activeColor : AppTheme.borderColor,
-            boxShadow: completed
-                ? [
-                    BoxShadow(
-                      color: activeColor.withValues(alpha: 0.3),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-        ),
-        const SizedBox(width: 3.5),
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 9,
-            fontWeight: completed ? FontWeight.bold : FontWeight.w500,
-            color: completed
-                ? activeColor
-                : AppTheme.textSecondary.withValues(alpha: 0.7),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMilestoneConnector(bool active) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Container(
-        width: 12,
-        height: 1.5,
-        color: active
-            ? AppTheme.primaryColor.withValues(alpha: 0.6)
-            : AppTheme.borderColor.withValues(alpha: 0.6),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> allEvents = [];
-    final Set<String> seenKeys = {};
-    String? userPhone;
-    String? intentLabel;
-
-    widget.groupedEvents.forEach((_, logs) {
-      for (final log in logs) {
-        if ((userPhone == null || userPhone!.isEmpty) &&
-            log['userPhone'] != null) {
-          final p = (log['userPhone'] as String?)?.trim();
-          if (p != null && p.isNotEmpty) userPhone = p;
-        }
-        if (intentLabel == null && log['intentLabel'] != null) {
-          intentLabel = log['intentLabel'] as String?;
-        }
-        final key =
-            log['eventId']?.toString() ??
-            '${log['rawTimestamp']}_${log['details']}';
-        if (!seenKeys.contains(key)) {
-          seenKeys.add(key);
-          allEvents.add(log);
-        }
-      }
-    });
-
-    // Check if widget.name itself is a phone number
-    final cleanNameDigits = widget.name.replaceAll(RegExp(r'\D'), '');
-    final bool nameIsPhone =
-        cleanNameDigits.length >= 10 &&
-        (widget.name.startsWith('+') ||
-            RegExp(r'^\d+$').hasMatch(widget.name.trim()));
-
-    if (userPhone == null || userPhone!.isEmpty) {
-      if (nameIsPhone) {
-        userPhone = widget.name.trim();
-      }
-    }
-
-    // Try finding phone in Dealers or Leads
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final matchedDealer = dealersState.allRawUsers.firstWhere(
-        (u) =>
-            '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim() ==
-                widget.name ||
-            (u['shopName'] ?? '').toString().trim() == widget.name ||
-            (u['_id'] ?? '').toString() == widget.name,
-        orElse: () => <String, dynamic>{},
-      );
-      if (matchedDealer.isNotEmpty) {
-        final p =
-            (matchedDealer['phoneNumber'] ?? matchedDealer['phone'] ?? '')
-                .toString()
-                .trim();
-        if (p.isNotEmpty) userPhone = p;
-      }
-    } catch (_) {}
-
-    if (userPhone == null || userPhone!.isEmpty) {
-      try {
-        final leadsState = context.read<LeadsBloc>().state;
-        final matchedLead = leadsState.allRawUsers.firstWhere(
-          (u) =>
-              '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'.trim() ==
-                  widget.name ||
-              (u['shopName'] ?? '').toString().trim() == widget.name ||
-              (u['_id'] ?? '').toString() == widget.name,
-          orElse: () => <String, dynamic>{},
-        );
-        if (matchedLead.isNotEmpty) {
-          final p = (matchedLead['phoneNumber'] ?? matchedLead['phone'] ?? '')
-              .toString()
-              .trim();
-          if (p.isNotEmpty) userPhone = p;
-        }
-      } catch (_) {}
-    }
-
-    final String? copyablePhone = (userPhone != null && userPhone!.isNotEmpty)
-        ? userPhone
-        : (nameIsPhone ? widget.name : null);
-
-    allEvents.sort((a, b) {
-      final aTs = a['rawTimestamp']?.toString() ?? '';
-      final bTs = b['rawTimestamp']?.toString() ?? '';
-      return bTs.compareTo(aTs);
-    });
-
-    final recentEvents = allEvents.take(10).toList();
-
-    final bool hasSearch =
-        widget.groupedEvents.containsKey('product_search') ||
-        widget.groupedEvents.containsKey('product_view') ||
-        widget.groupedEvents.containsKey('category_view') ||
-        widget.groupedEvents.containsKey('login_success');
-    final bool hasCart =
-        widget.groupedEvents.containsKey('add_to_cart') ||
-        widget.groupedEvents.containsKey('cart_add') ||
-        widget.groupedEvents.containsKey('cart_view');
-    final bool hasCheckout =
-        widget.groupedEvents.containsKey('checkout_started') ||
-        widget.groupedEvents.containsKey('checkout_init') ||
-        widget.groupedEvents.containsKey('payment_initiated') ||
-        widget.groupedEvents.containsKey('apply_coupon');
-    final bool hasPaid =
-        widget.groupedEvents.containsKey('payment_success') ||
-        widget.groupedEvents.containsKey('order_placed') ||
-        widget.groupedEvents.containsKey('order_completed') ||
-        widget.groupedEvents.containsKey('order_created');
-    final bool hasFailedPayment = widget.groupedEvents.containsKey(
-      'payment_failed',
-    );
-
-    int totalEvents = 0;
-    widget.groupedEvents.forEach((_, logs) {
-      totalEvents += logs.length;
-    });
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        border: Border.all(
-          color: widget.isOnline
-              ? const Color(0xFF10B981).withValues(alpha: 0.5)
-              : AppTheme.borderColor.withValues(alpha: 0.7),
-          width: widget.isOnline ? 1.5 : 1.0,
-        ),
-        boxShadow: widget.isOnline
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : null,
-      ),
-      child: InkWell(
-        onTap: () => setState(() => _isExpanded = !_isExpanded),
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: widget.isOnline
-                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                        : AppTheme.primaryColor.withValues(alpha: 0.1),
-                    child: Text(
-                      widget.name.isNotEmpty
-                          ? widget.name[0].toUpperCase()
-                          : 'C',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        color: widget.isOnline
-                            ? const Color(0xFF10B981)
-                            : AppTheme.primaryColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              widget.name,
-                              style: GoogleFonts.outfit(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                            if (nameIsPhone && copyablePhone != null) ...[
-                              Tooltip(
-                                message: 'Copy Phone Number',
-                                child: InkWell(
-                                  onTap: () {
-                                    Clipboard.setData(
-                                      ClipboardData(text: copyablePhone),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.check_circle_rounded,
-                                              color: Colors.white,
-                                              size: 15,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Phone number ($copyablePhone) copied to clipboard!',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        backgroundColor: const Color(
-                                          0xFF0F172A,
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        width: 360,
-                                      ),
-                                    );
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3.0),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Icon(
-                                      Icons.copy_rounded,
-                                      size: 12,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            _buildUserTypeBadge(widget.userType),
-                            if (widget.isOnline) ...[
-                              const _LivePulsingDot(),
-                              Text(
-                                'LIVE',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: const Color(0xFF10B981),
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                            if (intentLabel != null) ...[
-                              Builder(
-                                builder: (context) {
-                                  final String currentIntent = intentLabel!;
-                                  final Color badgeColor =
-                                      currentIntent.contains('Hot')
-                                      ? Colors.redAccent
-                                      : currentIntent.contains('Warm')
-                                      ? Colors.orange
-                                      : Colors.blue;
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 1.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: badgeColor.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: badgeColor.withValues(
-                                          alpha: 0.25,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      currentIntent,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        color: badgeColor,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (copyablePhone != null && !nameIsPhone) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                copyablePhone,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.textSecondary.withValues(
-                                    alpha: 0.85,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Tooltip(
-                                message: 'Copy Phone Number',
-                                child: InkWell(
-                                  onTap: () {
-                                    Clipboard.setData(
-                                      ClipboardData(text: copyablePhone),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.check_circle_rounded,
-                                              color: Colors.white,
-                                              size: 15,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Phone number ($copyablePhone) copied to clipboard!',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        backgroundColor: const Color(
-                                          0xFF0F172A,
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        width: 360,
-                                      ),
-                                    );
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3.0),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Icon(
-                                      Icons.copy_rounded,
-                                      size: 12,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        _buildJourneyMilestonePipeline(
-                          hasSearch: hasSearch,
-                          hasCart: hasCart,
-                          hasCheckout: hasCheckout,
-                          hasPaid: hasPaid,
-                          hasFailed: hasFailedPayment,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _isExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: AppTheme.textSecondary,
-                  ),
-                ],
-              ),
-              if (_isExpanded) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: AppTheme.lightBorderColor),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Recent Activity (Latest ${recentEvents.length})',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            String? cardPhone;
-                            String? cardRawUser;
-                            Map<String, dynamic>? cardUserDetails;
-                            for (final logs in widget.groupedEvents.values) {
-                              for (final log in logs) {
-                                if (cardPhone == null &&
-                                    log['userPhone'] != null &&
-                                    (log['userPhone'] as String).isNotEmpty) {
-                                  cardPhone = log['userPhone'] as String?;
-                                }
-                                if (cardRawUser == null &&
-                                    log['rawUser'] != null &&
-                                    (log['rawUser'] as String).isNotEmpty) {
-                                  cardRawUser = log['rawUser'] as String?;
-                                }
-                                if (cardUserDetails == null &&
-                                    log['userDetails']
-                                        is Map<String, dynamic>) {
-                                  cardUserDetails =
-                                      log['userDetails']
-                                          as Map<String, dynamic>;
-                                }
-                              }
-                            }
-                            widget.onViewProfile(
-                              widget.name,
-                              id: cardRawUser,
-                              phone: cardPhone,
-                              details: cardUserDetails,
-                            );
-                          },
-                          icon: const Icon(Icons.launch_rounded, size: 13),
-                          label: Text(
-                            'View Profile',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppTheme.primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (recentEvents.isNotEmpty)
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: recentEvents.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final log = recentEvents[index];
-
-                      return Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppTheme.backgroundColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppTheme.borderColor.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _getCategoryName(log),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  log['time']?.toString() ?? '',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if ((log['details']?.toString() ?? '')
-                                .isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                log['details'].toString(),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                else if (widget.isLoadingEvents)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  )
-                else
-                  Text(
-                    'No recent events recorded.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LivePulsingDot extends StatefulWidget {
-  const _LivePulsingDot();
-
-  @override
-  State<_LivePulsingDot> createState() => _LivePulsingDotState();
-}
-
-class _LivePulsingDotState extends State<_LivePulsingDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.8,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.8,
-      end: 0.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Transform.scale(
-              scale: _scaleAnimation.value,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(
-                    0xFF10B981,
-                  ).withOpacity(_fadeAnimation.value),
-                ),
-              ),
-            ),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF10B981),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

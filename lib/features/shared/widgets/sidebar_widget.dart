@@ -1,11 +1,9 @@
-import 'dart:convert';
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
-import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
 
 class SidebarWidget extends StatefulWidget {
   final int currentIdx;
@@ -32,43 +30,6 @@ class SidebarWidget extends StatefulWidget {
 class _SidebarWidgetState extends State<SidebarWidget> {
   bool _isHovered = false;
   bool _tempDisableHover = false;
-  int _unreadCount = 0;
-  StreamSubscription? _notificationSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchUnreadCount();
-    _notificationSub = WebSocketService().notificationUpdates.listen((_) {
-      _fetchUnreadCount();
-    });
-  }
-
-  @override
-  void dispose() {
-    _notificationSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _fetchUnreadCount() async {
-    try {
-      final res = await ApiClient().get('/users/notifications');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final list = List<Map<String, dynamic>>.from(data['notifications'] ?? []);
-          final count = list.where((n) => n['isRead'] == false || n['isRead'] == null).length;
-          if (mounted) {
-            setState(() {
-              _unreadCount = count;
-            });
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[SidebarWidget] Error fetching notifications: $e');
-    }
-  }
 
   static const List<Map<String, dynamic>> _adminMenuItems = [
     {'icon': Icons.dashboard_rounded, 'title': 'Dashboard', 'index': 0},
@@ -112,6 +73,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final unreadCount = context.watch<NotificationsCubit>().state.unreadCount;
     final role = AuthService().currentUserRole ?? UserRole.admin;
     final menuItems = role == UserRole.admin
         ? _adminMenuItems
@@ -247,7 +209,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             isActive: isActive,
                             isExpanded: isExpanded,
                             onTap: () => widget.onTabSelected(targetIdx),
-                            badgeCount: item['title'] == 'Alerts' ? _unreadCount : 0,
+                            badgeCount: item['title'] == 'Alerts' ? unreadCount : 0,
                           ),
                         );
                       },

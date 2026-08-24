@@ -1,14 +1,18 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
+  StreamSubscription? _wsSubscription;
+
   LeadsBloc() : super(const LeadsState()) {
     on<FetchLeadsDataEvent>(_onFetchLeadsData);
     on<AssignAgentToLeadEvent>(_onAssignAgentToLead);
@@ -28,6 +32,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<ImportLeadsEvent>(_onImportLeads);
     on<FetchDailyLeadStatsEvent>(_onFetchDailyLeadStats);
     on<ToggleAnalyticsViewModeEvent>(_onToggleAnalyticsViewMode);
+
+    _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
+      add(const FetchLeadsDataEvent(forceRefresh: true));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _wsSubscription?.cancel();
+    return super.close();
   }
 
   void _onToggleAnalyticsViewMode(
