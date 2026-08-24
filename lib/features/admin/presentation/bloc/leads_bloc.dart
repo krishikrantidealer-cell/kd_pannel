@@ -1,17 +1,17 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/repositories/notification_repository.dart';
+import 'package:kd_pannel/core/repositories/user_repository.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 
 class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   StreamSubscription? _wsSubscription;
+  final UserRepository _userRepo = UserRepository();
+  final NotificationRepository _notifRepo = NotificationRepository();
 
   LeadsBloc() : super(const LeadsState()) {
     on<FetchLeadsDataEvent>(_onFetchLeadsData);
@@ -57,41 +57,17 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     emit(state.copyWith(status: LeadsStatus.submitting));
     try {
-      final res = await ApiClient().post('/users/bulk', {'users': event.leads});
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage:
-                  data['message'] ?? 'Leads imported successfully',
-            ),
-          );
-          add(const FetchLeadsDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to import leads');
-        }
-      } else {
-        // Handle non-JSON responses (like HTML 404/500 pages)
-        if (res.body.contains('<!DOCTYPE html>') ||
-            res.body.contains('<html>')) {
-          throw Exception(
-            'Server returned an HTML error (${res.statusCode}). Please ensure the backend is running and the route is deployed.',
-          );
-        }
-        final data = jsonDecode(res.body);
-        throw Exception(
-          data['message'] ?? 'Failed to import leads: ${res.statusCode}',
-        );
-      }
+      final data = await _userRepo.importLeads(event.leads);
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage:
+              data['message'] ?? 'Leads imported successfully',
+        ),
+      );
+      add(const FetchLeadsDataEvent(forceRefresh: true));
     } catch (e) {
       String userMessage = e.toString().replaceAll('Exception: ', '');
-      if (e is FormatException) {
-        userMessage =
-            'Invalid server response format. The backend might be returning an HTML error page instead of JSON.';
-      }
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.failure,
@@ -107,22 +83,13 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     emit(state.copyWith(isLoadingProfile: true));
     try {
-      final res = await ApiClient().get('/users/${event.userId}');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true && data['user'] != null) {
-          emit(
-            state.copyWith(
-              isLoadingProfile: false,
-              currentLeadDetails: Map<String, dynamic>.from(data['user']),
-            ),
-          );
-        } else {
-          throw Exception(data['message'] ?? 'Failed to load lead details');
-        }
-      } else {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      final user = await _userRepo.getUserById(event.userId);
+      emit(
+        state.copyWith(
+          isLoadingProfile: false,
+          currentLeadDetails: user,
+        ),
+      );
     } catch (e) {
       emit(
         state.copyWith(
@@ -164,45 +131,15 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     emit(state.copyWith(status: LeadsStatus.loading));
     try {
-      final client = ApiClient();
-      final results = await Future.wait([
-        client.get('/users'),
-        client.get('/users?role=sales'),
-      ]);
-
-      final usersRes = results[0];
-      final salesRes = results[1];
-
-      List<Map<String, dynamic>> users = [];
-      List<Map<String, dynamic>> salesAgents = [];
-
-      if (usersRes.statusCode == 200) {
-        final data = jsonDecode(usersRes.body);
-        if (data['success'] == true) {
-          users = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to parse users');
-        }
-      } else {
-        throw Exception('Failed to load users: ${usersRes.statusCode}');
-      }
-
-      if (salesRes.statusCode == 200) {
-        final data = jsonDecode(salesRes.body);
-        if (data['success'] == true) {
-          salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to parse sales agents');
-        }
-      } else {
-        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
-      }
+      final results = await _userRepo.fetchDealersData(
+        forceRefresh: event.forceRefresh,
+      );
 
       emit(
         state.copyWith(
           status: LeadsStatus.success,
-          allRawUsers: users,
-          salesAgents: salesAgents,
+          allRawUsers: results['users'] ?? [],
+          salesAgents: results['salesAgents'] ?? [],
         ),
       );
       add(
@@ -240,31 +177,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final dateStr =
-          "${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}";
-      String url = '/users/daily-lead-stats?date=$dateStr';
-      if (targetAgentId != null && targetAgentId.isNotEmpty) {
-        url += '&agentId=$targetAgentId';
-      }
-
-      final res = await ApiClient().get(url);
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          emit(
-            state.copyWith(
-              isLoadingDailyStats: false,
-              dailyLeadStats: Map<String, dynamic>.from(data),
-            ),
-          );
-        } else {
-          throw Exception(
-            data['message'] ?? 'Failed to fetch daily lead stats',
-          );
-        }
-      } else {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      final stats = await _userRepo.fetchDailyLeadStats(
+        targetDate,
+        agentId: targetAgentId,
+      );
+      emit(
+        state.copyWith(
+          isLoadingDailyStats: false,
+          dailyLeadStats: stats,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoadingDailyStats: false));
     }
@@ -304,53 +226,42 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}/assign-agent', {
-        'agentId': event.agentId,
-      });
+      await _userRepo.assignAgent(event.userId, event.agentId);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'assign_agent',
-            properties: {
-              'targetUserId': event.userId,
-              'assignedAgentId': event.agentId,
-              'details': event.agentId != null
-                  ? 'Assigned agent to user'
-                  : 'Unassigned agent from user',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'assign_agent',
+        properties: {
+          'targetUserId': event.userId,
+          'assignedAgentId': event.agentId,
+          'details': event.agentId != null
+              ? 'Assigned agent to user'
+              : 'Unassigned agent from user',
+        },
+      );
+      await AnalyticsService().flush();
 
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: event.agentId != null
-                  ? 'Agent assigned successfully'
-                  : 'Agent unassigned',
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-          // Refresh daily stats so banner count updates immediately
-          add(
-            FetchDailyLeadStatsEvent(
-              selectedDate: state.selectedDailyDate,
-              selectedAgentId: state.selectedDailyAgentId,
-            ),
-          );
-        } else {
-          throw Exception(data['message'] ?? 'Failed to assign agent');
-        }
-      } else {
-        throw Exception('Failed to assign agent: ${res.statusCode}');
-      }
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: event.agentId != null
+              ? 'Agent assigned successfully'
+              : 'Agent unassigned',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
+      // Refresh daily stats so banner count updates immediately
+      add(
+        FetchDailyLeadStatsEvent(
+          selectedDate: state.selectedDailyDate,
+          selectedAgentId: state.selectedDailyAgentId,
+        ),
+      );
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
       add(const FetchLeadsDataEvent(forceRefresh: true));
@@ -390,23 +301,15 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final client = ApiClient();
-      final futures = event.userIds.map((userId) {
-        return client.put('/users/$userId/assign-agent', {
-          'agentId': event.agentId,
-        });
+      int successCount = 0;
+      final futures = event.userIds.map((userId) async {
+        try {
+          await _userRepo.assignAgent(userId, event.agentId);
+          successCount++;
+        } catch (_) {}
       }).toList();
 
-      final responses = await Future.wait(futures);
-      int successCount = 0;
-      for (final res in responses) {
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          if (data['success'] == true) {
-            successCount++;
-          }
-        }
-      }
+      await Future.wait(futures);
 
       // Log Activity
       AnalyticsService().logEvent(
@@ -451,50 +354,36 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     emit(state.copyWith(status: LeadsStatus.submitting));
 
     try {
-      final res = await ApiClient().post('/users/sales', {
-        'firstName': event.firstName.trim(),
-        'lastName': event.lastName.trim(),
-        'email': event.email.trim(),
-        'phoneNumber': event.phoneNumber.trim(),
-        'password': event.password,
-        'monthlyTarget': event.monthlyTarget ?? 500000.0,
-      });
+      await _userRepo.createSalesAgent(
+        firstName: event.firstName,
+        lastName: event.lastName,
+        email: event.email,
+        phoneNumber: event.phoneNumber,
+        password: event.password,
+      );
 
-      if (res.statusCode == 201) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'create_sales_agent',
-            properties: {
-              'email': event.email.trim(),
-              'details': 'Created new sales agent: ${event.firstName}',
-            },
-          );
-          await AnalyticsService().flush();
-
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'Sales agent created successfully',
-            ),
-          );
-          add(const FetchLeadsDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to create sales agent');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Failed to create sales agent');
-      }
-    } catch (e) {
-      // Revert optimistic update by triggering a fresh data fetch from server
-      add(const FetchLeadsDataEvent(forceRefresh: true));
+      // Log Activity
+      AnalyticsService().logEvent(
+        'create_sales_agent',
+        properties: {
+          'email': event.email.trim(),
+          'details': 'Created new sales agent: ${event.firstName}',
+        },
+      );
+      await AnalyticsService().flush();
 
       emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'Sales agent created successfully',
+        ),
+      );
+      add(const FetchLeadsDataEvent(forceRefresh: true));
+    } catch (e) {
+      emit(
         state.copyWithKeepMessages(
-          status: LeadsStatus.failure,
-          errorMessage: 'Verification failed: ${e.toString()}',
+          status: LeadsStatus.success,
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -519,54 +408,38 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}/kyc', {
-        'status': 'verified',
-      });
+      await _userRepo.updateKycStatus(event.userId, 'verified');
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'kyc_verified',
-            properties: {
-              'targetUserId': event.userId,
-              'details': 'Verified KYC for user',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'kyc_verified',
+        properties: {
+          'targetUserId': event.userId,
+          'details': 'Verified KYC for user',
+        },
+      );
+      await AnalyticsService().flush();
 
-          try {
-            await ApiClient().post('/users/notifications/send', {
-              'recipient': event.userId,
-              'userId': event.userId,
-              'title': 'KYC Verification Approved',
-              'body':
-                  'Congratulations! Your KYC verification has been approved. You are now a dealer.',
-              'type': 'kyc_approval',
-            });
-          } catch (e) {
-            // Log notification failure but don't fail the verification flow
-          }
+      try {
+        await _notifRepo.sendNotification(
+          userId: event.userId,
+          title: 'KYC Verification Approved',
+          body: 'Congratulations! Your KYC verification has been approved. You are now a dealer.',
+        );
+      } catch (_) {}
 
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'KYC Approved! User is now a Dealer.',
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to verify KYC');
-        }
-      } else {
-        throw Exception('Server returned status code: ${res.statusCode}');
-      }
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'KYC Approved! User is now a Dealer.',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -591,55 +464,39 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}/kyc', {
-        'status': 'rejected',
-        'reason': event.reason,
-      });
+      await _userRepo.updateKycStatus(event.userId, 'rejected', reason: event.reason);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'kyc_rejected',
-            properties: {
-              'targetUserId': event.userId,
-              'reason': event.reason,
-              'details': 'Rejected KYC for user: ${event.reason}',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'kyc_rejected',
+        properties: {
+          'targetUserId': event.userId,
+          'reason': event.reason,
+          'details': 'Rejected KYC for user: ${event.reason}',
+        },
+      );
+      await AnalyticsService().flush();
 
-          try {
-            await ApiClient().post('/users/notifications/send', {
-              'recipient': event.userId,
-              'userId': event.userId,
-              'title': 'KYC Verification Rejected',
-              'body': 'Your KYC has been rejected: ${event.reason}',
-              'type': 'kyc_rejection',
-            });
-          } catch (e) {
-            // Log notification failure but don't fail the rejection flow
-          }
+      try {
+        await _notifRepo.sendNotification(
+          userId: event.userId,
+          title: 'KYC Verification Rejected',
+          body: 'Your KYC has been rejected: ${event.reason}',
+        );
+      } catch (_) {}
 
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'KYC Rejected successfully.',
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to reject KYC');
-        }
-      } else {
-        throw Exception('Server returned status code: ${res.statusCode}');
-      }
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'KYC Rejected successfully.',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -702,51 +559,41 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}/block', {});
+      await _userRepo.toggleBlockUser(event.userId);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'toggle_block',
-            properties: {
-              'targetUserId': event.userId,
-              'details': 'Toggled block status for user',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'toggle_block',
+        properties: {
+          'targetUserId': event.userId,
+          'details': 'Toggled block status for user',
+        },
+      );
+      await AnalyticsService().flush();
 
-          final String msg = data['message'] ?? 'Lead block status updated';
-          final updatedRawUsers = state.allRawUsers.map((user) {
-            if (user['_id'] == event.userId) {
-              final updatedUser = Map<String, dynamic>.from(user);
-              final bool currentBlocked = updatedUser['isBlocked'] ?? false;
-              updatedUser['isBlocked'] = !currentBlocked;
-              return updatedUser;
-            }
-            return user;
-          }).toList();
-
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              allRawUsers: updatedRawUsers,
-              actionSuccessMessage: msg,
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to update block status');
+      final updatedRawUsers = state.allRawUsers.map((user) {
+        if (user['_id'] == event.userId) {
+          final updatedUser = Map<String, dynamic>.from(user);
+          final bool currentBlocked = updatedUser['isBlocked'] ?? false;
+          updatedUser['isBlocked'] = !currentBlocked;
+          return updatedUser;
         }
-      } else {
-        throw Exception('Server returned status code: ${res.statusCode}');
-      }
+        return user;
+      }).toList();
+
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          allRawUsers: updatedRawUsers,
+          actionSuccessMessage: 'Lead block status updated',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -776,40 +623,30 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
                 .trim()
           : (targetUser['shopName'] ?? targetUser['phoneNumber'] ?? 'Lead');
 
-      final res = await ApiClient().delete('/users/${event.userId}');
+      await _userRepo.deleteUser(event.userId);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'delete_lead',
-            properties: {
-              'targetUserId': event.userId,
-              'details': 'Permanently deleted lead account: $leadName',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'delete_lead',
+        properties: {
+          'targetUserId': event.userId,
+          'details': 'Permanently deleted lead account: $leadName',
+        },
+      );
+      await AnalyticsService().flush();
 
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'Lead deleted successfully',
-            ),
-          );
-          add(const FetchLeadsDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to delete lead');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Server error');
-      }
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'Lead deleted successfully',
+        ),
+      );
+      add(const FetchLeadsDataEvent(forceRefresh: true));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
       add(const FetchLeadsDataEvent(forceRefresh: true));
@@ -872,72 +709,58 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      final res = await ApiClient().put(
-        '/users/${event.userId}',
-        event.updateData,
-      );
+      await _userRepo.updateUserDetails(event.userId, event.updateData);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity: Discern between general edit vs status/note updates
-          String eventName = 'edit_lead';
-          String logDetails = 'Updated details for lead';
+      // Log Activity: Discern between general edit vs status/note updates
+      String eventName = 'edit_lead';
+      String logDetails = 'Updated details for lead';
 
-          if (event.updateData.containsKey('leadStatus') ||
-              event.updateData.containsKey('status')) {
-            eventName = 'update_lead_status';
-            final status =
-                event.updateData['leadStatus'] ?? event.updateData['status'];
-            logDetails = 'Changed lead status to $status';
-          } else if (event.updateData.containsKey('leadNotes') ||
-              event.updateData.containsKey('notes')) {
-            eventName = 'add_lead_note';
-            logDetails = 'Added follow-up notes to lead';
-          }
-
-          final String firstName = event.updateData['firstName'] ?? '';
-          final String lastName = event.updateData['lastName'] ?? '';
-          final String fullName = '$firstName $lastName'.trim();
-
-          AnalyticsService().logEvent(
-            eventName,
-            properties: {
-              'targetUserId': event.userId,
-              'details':
-                  '$logDetails${fullName.isNotEmpty ? ': $fullName' : ''}',
-              'fields': event.updateData.keys.join(', '),
-              if (event.updateData.containsKey('leadStatus') ||
-                  event.updateData.containsKey('status'))
-                'newStatus':
-                    event.updateData['leadStatus'] ??
-                    event.updateData['status'],
-            },
-          );
-          await AnalyticsService().flush();
-
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'Lead updated successfully',
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to update lead');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Server error');
+      if (event.updateData.containsKey('leadStatus') ||
+          event.updateData.containsKey('status')) {
+        eventName = 'update_lead_status';
+        final status =
+            event.updateData['leadStatus'] ?? event.updateData['status'];
+        logDetails = 'Changed lead status to $status';
+      } else if (event.updateData.containsKey('leadNotes') ||
+          event.updateData.containsKey('notes')) {
+        eventName = 'add_lead_note';
+        logDetails = 'Added follow-up notes to lead';
       }
+
+      final String firstName = event.updateData['firstName'] ?? '';
+      final String lastName = event.updateData['lastName'] ?? '';
+      final String fullName = '$firstName $lastName'.trim();
+
+      AnalyticsService().logEvent(
+        eventName,
+        properties: {
+          'targetUserId': event.userId,
+          'details':
+              '$logDetails${fullName.isNotEmpty ? ': $fullName' : ''}',
+          'fields': event.updateData.keys.join(', '),
+          if (event.updateData.containsKey('leadStatus') ||
+              event.updateData.containsKey('status'))
+            'newStatus':
+                event.updateData['leadStatus'] ??
+                event.updateData['status'],
+        },
+      );
+      await AnalyticsService().flush();
+
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'Lead updated successfully',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
-      // Trigger a refresh to revert to server state on failure
       add(const FetchLeadsDataEvent(forceRefresh: true));
     }
   }
@@ -949,95 +772,41 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     emit(state.copyWith(status: LeadsStatus.submitting));
 
     try {
-      final client = ApiClient();
-      final res = await client.multipartRequest(
-        method: 'POST',
-        endpoint: '/users/${event.userId}/kyc',
-        fields: {
-          'userType': event.userType,
-          'shopName': event.shopName,
-          'gstNumber': event.gstNumber ?? '',
-        },
-        filesBuilder: () {
-          final files = <http.MultipartFile>[];
-          if (event.licenceImageBytes != null &&
-              event.licenceFileName != null) {
-            files.add(
-              http.MultipartFile.fromBytes(
-                'licenceImage',
-                event.licenceImageBytes!,
-                filename: event.licenceFileName!,
-                contentType: _getMediaType(event.licenceFileName!),
-              ),
-            );
-          }
-          if (event.shopImageBytes != null && event.shopFileName != null) {
-            files.add(
-              http.MultipartFile.fromBytes(
-                'shopImage',
-                event.shopImageBytes!,
-                filename: event.shopFileName!,
-                contentType: _getMediaType(event.shopFileName!),
-              ),
-            );
-          }
-          return files;
-        },
+      await _userRepo.submitAdminKyc(
+        userId: event.userId,
+        userType: event.userType,
+        shopName: event.shopName,
+        gstNumber: event.gstNumber,
+        licenceImageBytes: event.licenceImageBytes,
+        licenceFileName: event.licenceFileName,
+        shopImageBytes: event.shopImageBytes,
+        shopFileName: event.shopFileName,
       );
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent(
-            'admin_kyc_submit',
-            properties: {
-              'targetUserId': event.userId,
-              'details': 'Submitted KYC on behalf of user: ${event.shopName}',
-            },
-          );
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent(
+        'admin_kyc_submit',
+        properties: {
+          'targetUserId': event.userId,
+          'details': 'Submitted KYC on behalf of user: ${event.shopName}',
+        },
+      );
+      await AnalyticsService().flush();
 
-          emit(
-            state.copyWith(
-              status: LeadsStatus.success,
-              actionSuccessMessage: 'KYC documents uploaded successfully',
-            ),
-          );
-          add(FetchLeadDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to upload KYC');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Server error: ${res.statusCode}');
-      }
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: 'KYC documents uploaded successfully',
+        ),
+      );
+      add(FetchLeadDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
-    }
-  }
-
-  MediaType _getMediaType(String filename) {
-    final ext = filename.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'png':
-        return MediaType('image', 'png');
-      case 'jpg':
-      case 'jpeg':
-        return MediaType('image', 'jpeg');
-      case 'gif':
-        return MediaType('image', 'gif');
-      case 'webp':
-        return MediaType('image', 'webp');
-      case 'pdf':
-        return MediaType('application', 'pdf');
-      default:
-        return MediaType('application', 'octet-stream');
     }
   }
 }

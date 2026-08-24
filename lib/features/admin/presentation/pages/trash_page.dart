@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/repositories/user_repository.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:intl/intl.dart';
 
@@ -95,42 +94,38 @@ class _TrashPageState extends State<TrashPage> {
 
     try {
       final kycFilter = _selectedTab == 'Dealers' ? 'verified' : 'not_verified';
-      final searchFilter = _searchQuery.isNotEmpty ? '&search=${Uri.encodeComponent(_searchQuery)}' : '';
-      
-      String dateFilter = '';
+
+      String startDate = '';
+      String endDate = '';
       if (_selectedDateRange != null) {
-        final start = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
-        final end = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
-        dateFilter = '&startDate=$start&endDate=$end';
+        startDate = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
+        endDate = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
       }
-      
-      final url = '/users?trash=true&role=user&kycStatus=$kycFilter&page=$_page&limit=$_limit$searchFilter$dateFilter';
-      final res = await ApiClient().get(url);
-      
+
+      final data = await UserRepository().fetchTrashUsers(
+        kycStatus: kycFilter,
+        page: _page,
+        limit: _limit,
+        search: _searchQuery,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
       if (requestId != _currentRequestId || !mounted) return;
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final List<dynamic> usersList = data['users'] ?? [];
-          setState(() {
-            _totalCount = data['totalCount'] ?? 0;
-            if (isFirstLoad) {
-              _deletedUsers = List<Map<String, dynamic>>.from(usersList);
-            } else {
-              _deletedUsers.addAll(List<Map<String, dynamic>>.from(usersList));
-            }
-            _hasMore = data['hasMore'] ?? (usersList.length == _limit);
-            if (usersList.isNotEmpty) {
-              _page++;
-            }
-          });
+      final List<dynamic> usersList = data['users'] ?? [];
+      setState(() {
+        _totalCount = data['totalCount'] ?? 0;
+        if (isFirstLoad) {
+          _deletedUsers = List<Map<String, dynamic>>.from(usersList);
         } else {
-          throw Exception(data['message'] ?? 'Failed to load trash users');
+          _deletedUsers.addAll(List<Map<String, dynamic>>.from(usersList));
         }
-      } else {
-        throw Exception('Failed to connect to server: ${res.statusCode}');
-      }
+        _hasMore = data['hasMore'] ?? (usersList.length == _limit);
+        if (usersList.isNotEmpty) {
+          _page++;
+        }
+      });
     } catch (e) {
       if (requestId == _currentRequestId && mounted) {
         _showSnack(e.toString(), isError: true);
@@ -179,9 +174,8 @@ class _TrashPageState extends State<TrashPage> {
 
     if (confirmed == true) {
       try {
-        final res = await ApiClient().put('/users/$userId/restore', {});
-        final data = jsonDecode(res.body);
-        if (res.statusCode == 200 && data['success'] == true) {
+        final success = await UserRepository().restoreUser(userId);
+        if (success) {
           AnalyticsService().logEvent('restore_user', properties: {
             'targetUserId': userId,
             'userName': userName,
@@ -189,8 +183,6 @@ class _TrashPageState extends State<TrashPage> {
           });
           _showSnack('"$userName" has been restored successfully!');
           _fetchTrashData(isFirstLoad: true);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to restore user');
         }
       } catch (e) {
         _showSnack(e.toString(), isError: true);
@@ -232,9 +224,8 @@ class _TrashPageState extends State<TrashPage> {
 
     if (confirmed == true) {
       try {
-        final res = await ApiClient().delete('/users/$userId/permanent');
-        final data = jsonDecode(res.body);
-        if (res.statusCode == 200 && data['success'] == true) {
+        final success = await UserRepository().permanentlyDeleteUser(userId);
+        if (success) {
           AnalyticsService().logEvent('permanent_delete_user', properties: {
             'targetUserId': userId,
             'userName': userName,
@@ -242,8 +233,6 @@ class _TrashPageState extends State<TrashPage> {
           });
           _showSnack('"$userName" has been permanently deleted.');
           _fetchTrashData(isFirstLoad: true);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to permanently delete user');
         }
       } catch (e) {
         _showSnack(e.toString(), isError: true);

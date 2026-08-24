@@ -1,11 +1,11 @@
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/repositories/campaign_repository.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_state.dart';
 
 class PushCampaignsBloc
     extends Bloc<PushCampaignsEvent, PushCampaignsState> {
+  final CampaignRepository _campaignRepo = CampaignRepository();
   PushCampaignsBloc() : super(const PushCampaignsState()) {
     on<FetchPushCampaignsEvent>(_onFetchPushCampaigns);
     on<SelectCampaignEvent>(_onSelectCampaign);
@@ -138,39 +138,23 @@ class PushCampaignsBloc
     }
 
     try {
-      final results = await Future.wait([
-        ApiClient().get('/marketing/push-campaigns'),
-        ApiClient().get('/banners'),
-      ]);
-
-      final response = results[0];
-      final bannersResponse = results[1];
+      final payload = await _campaignRepo.fetchFullMarketingPayload();
+      final rawData = payload['campaignsData'] as Map<String, dynamic>? ?? {};
+      final bannersList = payload['banners'] as List? ?? [];
 
       final List<Map<String, String>> dynamicBanners = [];
-      if (bannersResponse.statusCode == 200) {
-        final bannerDecoded = jsonDecode(bannersResponse.body);
-        if (bannerDecoded['success'] == true &&
-            bannerDecoded['banners'] is List) {
-          for (final b in bannerDecoded['banners']) {
-            final url = (b['imageUrl'] ?? b['image'] ?? '').toString().trim();
-            final title = (b['title'] ?? b['name'] ?? 'App Banner').toString().trim();
-            final type = (b['type'] ?? 'Banner').toString().toUpperCase();
-            if (url.isNotEmpty && !dynamicBanners.any((item) => item['url'] == url)) {
-              dynamicBanners.add({'name': '🎨 [$type] $title', 'url': url});
-            }
-          }
+      for (final b in bannersList) {
+        final url = (b['imageUrl'] ?? b['image'] ?? '').toString().trim();
+        final title = (b['title'] ?? b['name'] ?? 'App Banner').toString().trim();
+        final type = (b['type'] ?? 'Banner').toString().toUpperCase();
+        if (url.isNotEmpty && !dynamicBanners.any((item) => item['url'] == url)) {
+          dynamicBanners.add({'name': '🎨 [$type] $title', 'url': url});
         }
       }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final rawData = (data['data'] is Map<String, dynamic>)
-              ? data['data'] as Map<String, dynamic>
-              : <String, dynamic>{};
-          final campaignsList = List<Map<String, dynamic>>.from(
-            rawData['campaigns'] ?? [],
-          );
+      final campaignsList = List<Map<String, dynamic>>.from(
+        rawData['campaigns'] ?? [],
+      );
 
           // 1. Target Rules
           final backendRules = rawData['targetRules'] ?? rawData['rules'];
@@ -250,14 +234,6 @@ class PushCampaignsBloc
             usersWithToken: rawData['usersWithToken'] ?? 0,
             errorMessage: () => null,
           ));
-          return;
-        }
-      }
-
-      emit(state.copyWith(
-        status: PushCampaignsStatus.failure,
-        errorMessage: () => 'Failed to load campaigns from server.',
-      ));
     } catch (e) {
       emit(state.copyWith(
         status: PushCampaignsStatus.failure,
@@ -296,16 +272,14 @@ class PushCampaignsBloc
     ));
 
     try {
-      final response = await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/config',
+      await _campaignRepo.updateCampaignConfig(
+        event.segmentKey,
         {'isEnabled': event.isEnabled},
       );
-      if (response.statusCode == 200) {
-        emit(state.copyWith(
-          successMessage: () =>
-              'Segment ${event.segmentKey} ${event.isEnabled ? "Enabled" : "Disabled"}',
-        ));
-      }
+      emit(state.copyWith(
+        successMessage: () =>
+            'Segment ${event.segmentKey} ${event.isEnabled ? "Enabled" : "Disabled"}',
+      ));
     } catch (e) {
       emit(state.copyWith(
         errorMessage: () => 'Failed to update toggle: $e',
@@ -335,16 +309,14 @@ class PushCampaignsBloc
     ));
 
     try {
-      final response = await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/config',
+      await _campaignRepo.updateCampaignConfig(
+        event.segmentKey,
         {'scheduledTime': event.scheduledTime},
       );
-      if (response.statusCode == 200) {
-        emit(state.copyWith(
-          successMessage: () =>
-              'Schedule updated to ${event.scheduledTime} IST for Segment ${event.segmentKey}',
-        ));
-      }
+      emit(state.copyWith(
+        successMessage: () =>
+            'Schedule updated to ${event.scheduledTime} IST for Segment ${event.segmentKey}',
+      ));
     } catch (e) {
       emit(state.copyWith(
         errorMessage: () => 'Failed to update schedule: $e',
@@ -358,22 +330,15 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/config',
+      await _campaignRepo.updateCampaignConfig(
+        event.segmentKey,
         event.updates,
       );
-      if (response.statusCode == 200) {
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => 'Segment ${event.segmentKey} updated successfully!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => 'Update failed: ${response.body}',
-        ));
-      }
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => 'Segment ${event.segmentKey} updated successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -388,24 +353,13 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().post(
-        '/marketing/push-campaigns',
-        event.segmentData,
-      );
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () =>
-              'Segment ${event.segmentData['segmentKey']} created successfully!',
-        ));
-      } else {
-        final data = jsonDecode(response.body);
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => data['message'] ?? 'Failed to create segment',
-        ));
-      }
+      await _campaignRepo.createSegment(event.segmentData);
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () =>
+            'Segment ${event.segmentData['segmentKey']} created successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -420,25 +374,15 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().delete(
-        '/marketing/push-campaigns/${event.segmentKey}',
-      );
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        if (state.selectedCampaign?['segmentKey'] == event.segmentKey) {
-          emit(state.copyWith(selectedCampaign: () => null));
-        }
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => 'Segment ${event.segmentKey} deleted successfully!',
-        ));
-      } else {
-        final data = jsonDecode(response.body);
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => data['message'] ?? 'Failed to delete segment',
-        ));
+      await _campaignRepo.deleteCampaignSegment(event.segmentKey);
+      if (state.selectedCampaign?['segmentKey'] == event.segmentKey) {
+        emit(state.copyWith(selectedCampaign: () => null));
       }
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => 'Segment ${event.segmentKey} deleted successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -453,22 +397,15 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().post(
-        '/marketing/push-campaigns/${event.segmentKey}/templates',
+      await _campaignRepo.addCampaignTemplate(
+        event.segmentKey,
         event.templateData,
       );
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => 'New notification copy added successfully!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => 'Failed to add copy.',
-        ));
-      }
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => 'New notification copy added successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -483,22 +420,16 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/templates/${event.templateId}',
+      await _campaignRepo.updateCampaignTemplate(
+        event.segmentKey,
+        event.templateId,
         event.templateData,
       );
-      if (response.statusCode == 200) {
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => 'Notification copy updated successfully!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => 'Failed to update copy.',
-        ));
-      }
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => 'Notification copy updated successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -513,21 +444,15 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().delete(
-        '/marketing/push-campaigns/${event.segmentKey}/templates/${event.templateId}',
+      await _campaignRepo.deleteCampaignTemplate(
+        event.segmentKey,
+        event.templateId,
       );
-      if (response.statusCode == 200) {
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => 'Notification copy deleted successfully!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => 'Failed to delete copy.',
-        ));
-      }
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => 'Notification copy deleted successfully!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -576,8 +501,8 @@ class PushCampaignsBloc
     ));
 
     try {
-      await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/config',
+      await _campaignRepo.updateCampaignConfig(
+        event.segmentKey,
         {'templates': templates},
       );
     } catch (e) {
@@ -621,20 +546,18 @@ class PushCampaignsBloc
     ));
 
     try {
-      final response = await ApiClient().put(
-        '/marketing/push-campaigns/${event.segmentKey}/config',
+      await _campaignRepo.updateCampaignConfig(
+        event.segmentKey,
         {
           'mode': newMode,
           'pinnedTemplateId': newPinnedId,
         },
       );
-      if (response.statusCode == 200) {
-        emit(state.copyWith(
-          successMessage: () => event.isCurrentlyPinned
-              ? 'Unpinned copy. Segment returned to daily rotation.'
-              : 'Pinned copy! Segment locked to this template.',
-        ));
-      }
+      emit(state.copyWith(
+        successMessage: () => event.isCurrentlyPinned
+            ? 'Unpinned copy. Segment returned to daily rotation.'
+            : 'Pinned copy! Segment locked to this template.',
+      ));
     } catch (e) {
       emit(state.copyWith(
         errorMessage: () => 'Failed to toggle pin: $e',
@@ -648,25 +571,17 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().post(
-        '/marketing/push-campaigns/${event.segmentKey}/trigger-now',
-        event.customTemplate != null ? {'customTemplate': event.customTemplate} : {},
+      final data = await _campaignRepo.triggerCampaignNow(
+        event.segmentKey,
+        customTemplate: event.customTemplate,
       );
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        final count = data['count'] ?? 0;
-        add(const FetchPushCampaignsEvent(forceRefresh: true));
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () =>
-              '🚀 Broadcast sent successfully to $count eligible users!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => data['message'] ?? 'Failed to trigger broadcast.',
-        ));
-      }
+      final count = data['count'] ?? 0;
+      add(const FetchPushCampaignsEvent(forceRefresh: true));
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () =>
+            '🚀 Broadcast sent successfully to $count eligible users!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
@@ -681,29 +596,19 @@ class PushCampaignsBloc
   ) async {
     emit(state.copyWith(isActionInProgress: true));
     try {
-      final response = await ApiClient().post(
-        '/marketing/push-campaigns/${event.segmentKey}/send-test',
-        {
-          'phoneNumber': event.phone,
-          'template': event.templateData,
-        },
+      await _campaignRepo.sendSegmentTestPush(
+        event.segmentKey,
+        event.phone,
+        event.templateData,
       );
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          successMessage: () => '📲 Test notification sent to ${event.phone}!',
-        ));
-      } else {
-        emit(state.copyWith(
-          isActionInProgress: false,
-          errorMessage: () => data['message'] ?? 'Failed to send test push.',
-        ));
-      }
+      emit(state.copyWith(
+        isActionInProgress: false,
+        successMessage: () => '📲 Test notification sent to ${event.phone}!',
+      ));
     } catch (e) {
       emit(state.copyWith(
         isActionInProgress: false,
-        errorMessage: () => 'Test push error: $e',
+        errorMessage: () => 'Failed to send test push: $e',
       ));
     }
   }

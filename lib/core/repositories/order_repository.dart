@@ -114,6 +114,71 @@ class OrderRepository {
     }
   }
 
+  /// Fetch admin orders with query params.
+  Future<List<dynamic>> fetchAdminOrders(String queryParams) async {
+    final response = await _apiClient.get('/orders/admin/all$queryParams');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return (data['orders'] as List? ?? []);
+      }
+      throw Exception(data['message'] ?? 'Failed to load orders');
+    }
+    throw Exception('Failed to load orders. Status code: ${response.statusCode}');
+  }
+
+  /// Fetch all estimates
+  Future<List<Map<String, dynamic>>> fetchEstimates() async {
+    final response = await _apiClient.get('/admin/estimates');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return List<Map<String, dynamic>>.from(data['estimates'] ?? []);
+      }
+      throw Exception(data['message'] ?? 'Failed to load estimates');
+    }
+    throw Exception('Failed to load estimates (${response.statusCode})');
+  }
+
+  /// Create estimate
+  Future<Map<String, dynamic>> createEstimate(Map<String, dynamic> estimateData) async {
+    final response = await _apiClient.post('/admin/estimates', estimateData);
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (data['success'] == true) {
+        return data;
+      }
+      throw Exception(data['message'] ?? 'Failed to create estimate');
+    }
+    throw Exception(data['message'] ?? 'Server error (${response.statusCode})');
+  }
+
+  /// Update estimate
+  Future<Map<String, dynamic>> updateEstimate(String dbId, Map<String, dynamic> estimateData) async {
+    final response = await _apiClient.put('/admin/estimates/$dbId', estimateData);
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      if (data['success'] == true) {
+        return data;
+      }
+      throw Exception(data['message'] ?? 'Failed to update estimate');
+    }
+    throw Exception(data['message'] ?? 'Server error (${response.statusCode})');
+  }
+
+  /// Delete estimate
+  Future<bool> deleteEstimate(String dbId) async {
+    final response = await _apiClient.delete('/admin/estimates/$dbId');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return true;
+      }
+      throw Exception(data['message'] ?? 'Failed to delete estimate');
+    }
+    throw Exception('Server error (${response.statusCode})');
+  }
+
   /// Invalidate coupon cache.
   void invalidateCouponCache() {
     _cachedActiveCoupons = null;

@@ -203,4 +203,24 @@ class AuthService {
       debugPrint('[AuthService] Failed to refresh profile: $e');
     }
   }
+
+  /// Reset current user's password.
+  Future<Map<String, dynamic>> resetPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await ApiClient().post('/auth/reset-password', {
+      'currentPassword': currentPassword.trim(),
+      'newPassword': newPassword.trim(),
+    });
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'message': data['message'] ?? 'Password reset successfully'};
+    }
+    return {
+      'success': false,
+      'message': data['message'] ?? 'Incorrect current password or server error (${response.statusCode})',
+    };
+  }
 }

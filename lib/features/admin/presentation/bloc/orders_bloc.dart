@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/repositories/order_repository.dart';
 import '../../data/models/order_model.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 
 class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   StreamSubscription? _wsSubscription;
+  final OrderRepository _orderRepo = OrderRepository();
 
   OrdersBloc() : super(const OrdersState()) {
     on<FetchOrdersEvent>(_onFetchOrders);
@@ -58,34 +58,23 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         }
       }
 
-      final response = await ApiClient().get('/orders/admin/all$queryParams');
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final List rawOrders = data['orders'] ?? [];
-          final List<OrderModel> parsedOrders = [];
-          for (final o in rawOrders) {
-            try {
-              parsedOrders.add(OrderModel.fromJson(o));
-            } catch (err) {
-              // Ignore single malformed order and keep loading the rest
-            }
-          }
-          emit(state.copyWith(
-            status: OrdersStatus.success,
-            orders: parsedOrders,
-          ));
-          return;
+      final rawOrders = await _orderRepo.fetchAdminOrders(queryParams);
+      final List<OrderModel> parsedOrders = [];
+      for (final o in rawOrders) {
+        try {
+          parsedOrders.add(OrderModel.fromJson(o));
+        } catch (err) {
+          // Ignore single malformed order and keep loading the rest
         }
       }
       emit(state.copyWith(
-        status: OrdersStatus.failure,
-        errorMessage: 'Failed to load orders. Status code: ${response.statusCode}',
+        status: OrdersStatus.success,
+        orders: parsedOrders,
       ));
     } catch (e) {
       emit(state.copyWith(
         status: OrdersStatus.failure,
-        errorMessage: 'Connection error: $e',
+        errorMessage: 'Connection error: ${e.toString().replaceAll('Exception: ', '')}',
       ));
     }
   }

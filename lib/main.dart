@@ -235,6 +235,65 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/sales/customer': (context) => const MainLayout(),
         '/customer': (context) => const MainLayout(),
       },
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri != null) {
+          final path = uri.path;
+          switch (path) {
+            case '/orders/details':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: OrderDetailsPage()),
+              );
+            case '/dealers/profile':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: DealerProfilePage()),
+              );
+            case '/leads/profile':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: LeadProfilePage()),
+              );
+            case '/team/profile':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: TeamMemberProfilePage()),
+              );
+            case '/trash':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: TrashPage()),
+              );
+            case '/sales/estimates':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: EstimateGeneratorPage()),
+              );
+            case '/support':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: WhatsAppCrmPage()),
+              );
+            case '/calls':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: CallLogsPage()),
+              );
+            case '/sales/coupons':
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(child: SalesCouponPage()),
+              );
+            default:
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const MainLayout(),
+              );
+          }
+        }
+        return null;
+      },
     );
   }
 }

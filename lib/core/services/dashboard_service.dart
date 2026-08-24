@@ -55,8 +55,6 @@ class DashboardService {
 
     _fetchFuture = call;
     return call;
-
-    return _fetchFuture!;
   }
 
   // --- Admin Dashboard Stats ---

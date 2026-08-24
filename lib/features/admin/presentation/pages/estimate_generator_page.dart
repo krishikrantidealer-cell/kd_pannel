@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/repositories/order_repository.dart';
+import 'package:kd_pannel/core/repositories/product_repository.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,6 +26,8 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   List<Map<String, dynamic>> _savedEstimates = [];
   String _searchQuery = '';
   bool _isLoadingHistory = true;
+  int _historyCurrentPage = 1;
+  int _historyPageSize = 10;
 
   // Active editing state (null if in list view)
   Map<String, dynamic>? _activeEstimate;
@@ -105,24 +108,16 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     setState(() => _isLoadingHistory = true);
     bool loadedFromBackend = false;
     try {
-      final res = await ApiClient().get('/admin/estimates');
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body);
-        if (decoded['success'] == true) {
-          final List raw = decoded['estimates'] ?? [];
-          setState(() {
-            _savedEstimates = raw
-                .map((e) => Map<String, dynamic>.from(e as Map))
-                .toList();
-          });
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            'saved_estimates_history',
-            jsonEncode(_savedEstimates),
-          );
-          loadedFromBackend = true;
-        }
-      }
+      final estimates = await OrderRepository().fetchEstimates();
+      setState(() {
+        _savedEstimates = estimates;
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'saved_estimates_history',
+        jsonEncode(_savedEstimates),
+      );
+      loadedFromBackend = true;
     } catch (e) {
       debugPrint('Failed to load history from backend: $e');
     }
@@ -158,21 +153,17 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
   Future<void> _fetchProducts() async {
     setState(() => _isLoadingProducts = true);
     try {
-      final res = await ApiClient().get('/products?limit=1000');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final List raw = data['products'] ?? [];
-          setState(() {
-            _availableProducts = raw
-                .map((p) => Map<String, dynamic>.from(p as Map))
-                .toList();
-          });
-        }
-      }
-    } catch (_) {
+      final catalog = await ProductRepository().fetchCatalogData(forceRefresh: false);
+      final raw = catalog['products'] ?? [];
+      setState(() {
+        _availableProducts = raw;
+      });
+    } catch (e) {
+      debugPrint('Failed to fetch products: $e');
     } finally {
-      setState(() => _isLoadingProducts = false);
+      if (mounted) {
+        setState(() => _isLoadingProducts = false);
+      }
     }
   }
 
@@ -294,7 +285,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
       final String? dbId = est['_id'] ?? est['id'];
       if (dbId != null && dbId.length == 24) {
         try {
-          await ApiClient().delete('/admin/estimates/$dbId');
+          await OrderRepository().deleteEstimate(dbId);
         } catch (e) {
           debugPrint('Failed to delete estimate from backend: $e');
         }
@@ -420,26 +411,20 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
 
     try {
       if (dbId != null && dbId.length == 24) {
-        final res = await ApiClient().put('/admin/estimates/$dbId', estData);
-        if (res.statusCode == 200) {
-          final decoded = jsonDecode(res.body);
-          if (decoded['success'] == true) {
-            savedBackendData = Map<String, dynamic>.from(
-              decoded['estimate'] as Map,
-            );
-            backendSuccess = true;
-          }
+        final decoded = await OrderRepository().updateEstimate(dbId, estData);
+        if (decoded['success'] == true) {
+          savedBackendData = Map<String, dynamic>.from(
+            decoded['estimate'] as Map,
+          );
+          backendSuccess = true;
         }
       } else {
-        final res = await ApiClient().post('/admin/estimates', estData);
-        if (res.statusCode == 201 || res.statusCode == 200) {
-          final decoded = jsonDecode(res.body);
-          if (decoded['success'] == true) {
-            savedBackendData = Map<String, dynamic>.from(
-              decoded['estimate'] as Map,
-            );
-            backendSuccess = true;
-          }
+        final decoded = await OrderRepository().createEstimate(estData);
+        if (decoded['success'] == true) {
+          savedBackendData = Map<String, dynamic>.from(
+            decoded['estimate'] as Map,
+          );
+          backendSuccess = true;
         }
       }
     } catch (e) {
@@ -995,6 +980,18 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
           phone.contains(query);
     }).toList();
 
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final total = filtered.length;
+    final totalPages = (total / _historyPageSize).ceil().clamp(1, 9999);
+    final currentPage = _historyCurrentPage.clamp(1, totalPages);
+    final startIndex = total == 0 ? 0 : (currentPage - 1) * _historyPageSize;
+    final endIndex = (startIndex + _historyPageSize) > total
+        ? total
+        : (startIndex + _historyPageSize);
+    final paginatedEstimates = total == 0
+        ? <Map<String, dynamic>>[]
+        : filtered.sublist(startIndex, endIndex);
+
     return Column(
       children: [
         // Search Bar
@@ -1026,7 +1023,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
-                    onChanged: (v) => setState(() => _searchQuery = v),
+                    onChanged: (v) => setState(() {
+                      _searchQuery = v;
+                      _historyCurrentPage = 1;
+                    }),
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: AppTheme.textPrimary,
@@ -1049,7 +1049,10 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   GestureDetector(
                     onTap: () {
                       _searchCtrl.clear();
-                      setState(() => _searchQuery = '');
+                      setState(() {
+                        _searchQuery = '';
+                        _historyCurrentPage = 1;
+                      });
                     },
                     child: const Icon(
                       Icons.close_rounded,
@@ -1105,9 +1108,9 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: filtered.length,
+                  itemCount: paginatedEstimates.length,
                   itemBuilder: (_, i) {
-                    final est = filtered[i];
+                    final est = paginatedEstimates[i];
                     final clientName = est['clientName'] ?? 'Unnamed Customer';
                     final estNo = est['estimateNo'] ?? 'No Number';
                     final estDate = est['estimateDate'] ?? '';
@@ -1131,7 +1134,7 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                             width: 44,
                             height: 44,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFC21820).withOpacity(0.08),
+                              color: const Color(0xFFC21820).withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Center(
@@ -1189,6 +1192,190 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     );
                   },
                 ),
+        ),
+        if (filtered.isNotEmpty)
+          _buildHistoryFooter(total, isMobile, currentPage, totalPages),
+      ],
+    );
+  }
+
+  Widget _buildHistoryFooter(
+    int total,
+    bool isMobile,
+    int currentPage,
+    int totalPages,
+  ) {
+    final start = total == 0 ? 0 : (currentPage - 1) * _historyPageSize + 1;
+    final end = (currentPage * _historyPageSize) > total
+        ? total
+        : (currentPage * _historyPageSize);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF9FAFB),
+        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total estimates',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    _buildHistoryPageSizeSelector(),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildHistoryPaginationControls(totalPages, currentPage),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total estimates',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _buildHistoryPageSizeSelector(),
+                  ],
+                ),
+                _buildHistoryPaginationControls(totalPages, currentPage),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildHistoryPageSizeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Rows per page:',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: [10, 25, 50, 100].contains(_historyPageSize)
+                  ? _historyPageSize
+                  : 10,
+              icon: const Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+              dropdownColor: Colors.white,
+              items: [10, 25, 50, 100]
+                  .map<DropdownMenuItem<int>>(
+                    (int val) =>
+                        DropdownMenuItem<int>(value: val, child: Text('$val')),
+                  )
+                  .toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _historyPageSize = newValue;
+                    _historyCurrentPage = 1;
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoryPaginationControls(int totalPages, int currentPage) {
+    final bool canPrev = currentPage > 1;
+    final bool canNext = currentPage < totalPages;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.first_page_rounded, size: 18),
+          onPressed: canPrev
+              ? () => setState(() => _historyCurrentPage = 1)
+              : null,
+          color: canPrev ? AppTheme.textPrimary : AppTheme.borderColor,
+          tooltip: 'First Page',
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_left_rounded, size: 18),
+          onPressed: canPrev
+              ? () => setState(() => _historyCurrentPage--)
+              : null,
+          color: canPrev ? AppTheme.textPrimary : AppTheme.borderColor,
+          tooltip: 'Previous Page',
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            '$currentPage / $totalPages',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right_rounded, size: 18),
+          onPressed: canNext
+              ? () => setState(() => _historyCurrentPage++)
+              : null,
+          color: canNext ? AppTheme.textPrimary : AppTheme.borderColor,
+          tooltip: 'Next Page',
+        ),
+        IconButton(
+          icon: const Icon(Icons.last_page_rounded, size: 18),
+          onPressed: canNext
+              ? () => setState(() => _historyCurrentPage = totalPages)
+              : null,
+          color: canNext ? AppTheme.textPrimary : AppTheme.borderColor,
+          tooltip: 'Last Page',
         ),
       ],
     );

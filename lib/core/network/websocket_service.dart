@@ -36,6 +36,7 @@ class WebSocketService {
   Stream<Map<String, dynamic>> get presenceUpdates => _presenceUpdateController.stream;
   Stream<Map<String, dynamic>> get auditLogUpdates => _auditLogUpdateController.stream;
   Stream<Map<String, dynamic>> get chatUpdates => _chatUpdateController.stream;
+  DateTime? get lastPing => _lastPing;
   Stream<bool> get connectionStatus => _connectionStateController.stream;
   bool get connectionStatusNow => _isConnected;
 

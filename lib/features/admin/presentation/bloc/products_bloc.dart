@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_state.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/repositories/product_repository.dart';
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 
 String _extractId(dynamic item) {
@@ -366,8 +367,8 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
     Emitter<ProductsState> emit,
   ) async {
     try {
-      final response = await ApiClient().delete('/products/${event.productId}');
-      if (response.statusCode == 200) {
+      final success = await ProductRepository().deleteProduct(event.productId);
+      if (success) {
         final updatedProducts = state.allProducts
             .where(
               (p) => (p['id'] ?? p['_id'] ?? '').toString() != event.productId,
@@ -375,7 +376,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
             .toList();
 
         // Update caches
-        ApiClient().cachedProducts = updatedProducts;
+        ProductRepository().invalidateCache();
         LocalCacheHelper.saveCachedProducts(updatedProducts);
 
         emit(
@@ -391,8 +392,7 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
       } else {
         emit(
           state.copyWith(
-            errorMessage:
-                'Failed to delete product (Status ${response.statusCode})',
+            errorMessage: 'Failed to delete product',
           ),
         );
       }
@@ -425,16 +425,16 @@ class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
     );
 
     try {
-      // Use PUT to update just the status
-      final response = await ApiClient().put('/products/${event.productId}', {
-        'availabilityStatus': event.newInStock ? 'In Stock' : 'Out of Stock',
-      });
+      final success = await ProductRepository().toggleProductAvailability(
+        event.productId,
+        event.newInStock,
+      );
 
-      if (response.statusCode != 200 && response.statusCode != 201) {
+      if (!success) {
         throw Exception('Failed to update status');
       } else {
         // Update caches on success
-        ApiClient().cachedProducts = updatedProducts;
+        ProductRepository().invalidateCache();
         LocalCacheHelper.saveCachedProducts(updatedProducts);
       }
     } catch (e) {

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/repositories/notification_repository.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:intl/intl.dart';
@@ -48,23 +48,12 @@ class _AlertsPageState extends State<AlertsPage> {
     }
 
     try {
-      final res = await ApiClient().get('/users/notifications');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          if (mounted) {
-            setState(() {
-              _notifications = List<Map<String, dynamic>>.from(data['notifications'] ?? []);
-              _isLoading = false;
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      final notifications = await NotificationRepository().fetchNotifications();
+      if (mounted) {
+        setState(() {
+          _notifications = notifications;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       debugPrint('[AlertsPage] Error fetching notifications: $e');
@@ -78,8 +67,8 @@ class _AlertsPageState extends State<AlertsPage> {
 
   Future<void> _markAllAsRead() async {
     try {
-      final res = await ApiClient().put('/users/notifications/read', {});
-      if (res.statusCode == 200) {
+      final success = await NotificationRepository().markAllAsRead();
+      if (success) {
         await _fetchNotifications(isInitial: false);
         WebSocketService().triggerNotificationUpdate(); // Update sidebar/topbar badges
         if (mounted) {
@@ -108,10 +97,8 @@ class _AlertsPageState extends State<AlertsPage> {
 
   Future<void> _markAsRead(String id) async {
     try {
-      final res = await ApiClient().put('/users/notifications/read', {
-        'notificationId': id,
-      });
-      if (res.statusCode == 200) {
+      final success = await NotificationRepository().markAsRead(id);
+      if (success) {
         await _fetchNotifications(isInitial: false);
         WebSocketService().triggerNotificationUpdate();
       }
@@ -126,8 +113,8 @@ class _AlertsPageState extends State<AlertsPage> {
       setState(() {
         _notifications.removeWhere((n) => (n['_id'] ?? n['id']) == id);
       });
-      final res = await ApiClient().delete('/users/notifications/$id');
-      if (res.statusCode != 200) {
+      final success = await NotificationRepository().deleteNotification(id);
+      if (!success) {
         // Revert on failure
         await _fetchNotifications(isInitial: false);
       } else {
@@ -169,8 +156,8 @@ class _AlertsPageState extends State<AlertsPage> {
 
     try {
       setState(() => _notifications.clear());
-      final res = await ApiClient().delete('/users/notifications/all');
-      if (res.statusCode != 200) {
+      final success = await NotificationRepository().deleteAllNotifications();
+      if (!success) {
         await _fetchNotifications(isInitial: false);
       } else {
         WebSocketService().triggerNotificationUpdate();

@@ -404,7 +404,7 @@ class ApiClient {
     int sentBytes = 0;
     final countingStream = bodyStream.map((chunk) {
       sentBytes += chunk.length;
-      if (totalBytes != null && totalBytes > 0) {
+      if (totalBytes > 0) {
         onProgress((sentBytes / totalBytes).clamp(0.0, 1.0));
       }
       return chunk;
@@ -413,7 +413,7 @@ class ApiClient {
     // Build a StreamedRequest and pipe our counting stream into it
     final streamedReq = http.StreamedRequest(method, uri);
     streamedReq.headers.addAll(mpRequest.headers);
-    if (totalBytes != null) streamedReq.contentLength = totalBytes;
+    streamedReq.contentLength = totalBytes;
 
     // Pipe counting stream → StreamedRequest sink (non-blocking)
     countingStream.listen(
@@ -544,5 +544,26 @@ class ApiClient {
         }
       }
     }
+  }
+
+  /// Extract clean, user-friendly error message from response or exception.
+  static String normalizeError(dynamic error, {String fallback = 'An unexpected error occurred'}) {
+    if (error == null) return fallback;
+    if (error is http.Response) {
+      try {
+        if (error.body.contains('<!DOCTYPE html>') || error.body.contains('<html>')) {
+          return 'Server error (${error.statusCode}). Please verify the backend service is running.';
+        }
+        final data = jsonDecode(error.body);
+        if (data is Map && data['message'] != null) {
+          return data['message'].toString();
+        }
+      } catch (_) {}
+      return 'Server returned error (${error.statusCode})';
+    }
+    String message = error.toString().replaceAll('Exception: ', '').trim();
+    if (message.startsWith('Network error:')) return 'Network connection issue. Please check your internet.';
+    if (message.isEmpty) return fallback;
+    return message;
   }
 }

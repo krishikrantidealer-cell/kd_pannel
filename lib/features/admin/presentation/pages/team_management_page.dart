@@ -9,6 +9,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/core/utils/currency_utils.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:http/http.dart' as http;
 
 class TeamManagementPage extends StatefulWidget {
@@ -518,14 +520,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
         final Widget bodyContent = SelectionArea(
           child:
               (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(80.0),
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                )
+              ? _buildShimmerLoading(isDesktop, isMobile)
               : ScrollConfiguration(
                   behavior: ScrollConfiguration.of(
                     context,
@@ -1343,10 +1338,13 @@ class _TeamManagementPageState extends State<TeamManagementPage>
     final Map<String, List<Map<String, dynamic>>> deletedLeadsMap = {};
     final Map<String, Set<String>> dealersWithOrdersMap = {};
     final Map<String, int> agentOrdersCountMap = {};
+    final Map<String, double> agentSalesAmountMap = {};
+    final Map<String, double> dealerSalesAmountMap = {};
 
     int totalTeamConversions = 0;
     int totalTeamDeletedLeads = 0;
     int totalTeamOrders = 0;
+    double totalTeamSalesAmount = 0.0;
 
     final List<Map<String, dynamic>> combinedUsers = [
       ...state.allRawUsers,
@@ -1395,7 +1393,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
       }
     }
 
-    // Process orders to calculate dealer-to-order ratio
+    // Process orders to calculate dealer-to-order ratio & sales revenue
     for (final order in allOrders) {
       if (order['orderStatus'] == 'Cancelled') continue;
       final orderDate = order['createdAt'] ?? order['orderDate'];
@@ -1414,6 +1412,10 @@ class _TeamManagementPageState extends State<TeamManagementPage>
 
       if (userId == null || userId.isEmpty) continue;
 
+      final double orderAmount = CurrencyUtils.parse(
+        order['totalAmount'] ?? order['grandTotal'] ?? 0,
+      );
+
       // Find sales agent of this dealer
       for (final entry in convertedDealersMap.entries) {
         final agentId = entry.key;
@@ -1427,7 +1429,12 @@ class _TeamManagementPageState extends State<TeamManagementPage>
           dealersWithOrdersMap.putIfAbsent(agentId, () => {}).add(userId);
           agentOrdersCountMap[agentId] =
               (agentOrdersCountMap[agentId] ?? 0) + 1;
+          agentSalesAmountMap[agentId] =
+              (agentSalesAmountMap[agentId] ?? 0.0) + orderAmount;
+          dealerSalesAmountMap[userId] =
+              (dealerSalesAmountMap[userId] ?? 0.0) + orderAmount;
           totalTeamOrders++;
+          totalTeamSalesAmount += orderAmount;
           break;
         }
       }
@@ -1440,45 +1447,107 @@ class _TeamManagementPageState extends State<TeamManagementPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                'Converted Dealers',
-                totalTeamConversions.toString(),
-                Icons.verified_rounded,
-                const Color(0xFF10B981),
+        if (isDesktop)
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryCard(
+                  'Converted Dealers',
+                  totalTeamConversions.toString(),
+                  Icons.verified_rounded,
+                  const Color(0xFF10B981),
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildSummaryCard(
-                'Dealers Who Ordered',
-                '$totalDealersWithOrdersCount of $totalTeamConversions',
-                Icons.shopping_cart_checkout_rounded,
-                const Color(0xFF8B5CF6),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard(
+                  'Dealers Ordered',
+                  '$totalDealersWithOrdersCount of $totalTeamConversions',
+                  Icons.shopping_cart_checkout_rounded,
+                  const Color(0xFF8B5CF6),
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildSummaryCard(
-                'Total Dealer Orders',
-                '$totalTeamOrders Orders',
-                Icons.shopping_bag_rounded,
-                const Color(0xFF0284C7),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard(
+                  'Total Orders',
+                  '$totalTeamOrders Orders',
+                  Icons.shopping_bag_rounded,
+                  const Color(0xFF0284C7),
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildSummaryCard(
-                'Deleted Leads',
-                totalTeamDeletedLeads.toString(),
-                Icons.delete_sweep_rounded,
-                const Color(0xFFF43F5E),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard(
+                  'Total Sales Revenue',
+                  CurrencyUtils.formatInr(totalTeamSalesAmount),
+                  Icons.currency_rupee_rounded,
+                  const Color(0xFF059669),
+                ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard(
+                  'Deleted Leads',
+                  totalTeamDeletedLeads.toString(),
+                  Icons.delete_sweep_rounded,
+                  const Color(0xFFF43F5E),
+                ),
+              ),
+            ],
+          )
+        else
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 2,
+                child: _buildSummaryCard(
+                  'Converted Dealers',
+                  totalTeamConversions.toString(),
+                  Icons.verified_rounded,
+                  const Color(0xFF10B981),
+                ),
+              ),
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 2,
+                child: _buildSummaryCard(
+                  'Dealers Ordered',
+                  '$totalDealersWithOrdersCount of $totalTeamConversions',
+                  Icons.shopping_cart_checkout_rounded,
+                  const Color(0xFF8B5CF6),
+                ),
+              ),
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 2,
+                child: _buildSummaryCard(
+                  'Total Orders',
+                  '$totalTeamOrders Orders',
+                  Icons.shopping_bag_rounded,
+                  const Color(0xFF0284C7),
+                ),
+              ),
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 2,
+                child: _buildSummaryCard(
+                  'Total Sales Revenue',
+                  CurrencyUtils.formatInr(totalTeamSalesAmount),
+                  Icons.currency_rupee_rounded,
+                  const Color(0xFF059669),
+                ),
+              ),
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 2,
+                child: _buildSummaryCard(
+                  'Deleted Leads',
+                  totalTeamDeletedLeads.toString(),
+                  Icons.delete_sweep_rounded,
+                  const Color(0xFFF43F5E),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 20),
         _buildDateFilterRow(),
         const SizedBox(height: 20),
@@ -1619,6 +1688,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                   ? agentName
                   : (agent['shopName'] ?? agent['email'] ?? 'Sales Agent');
 
+              final double agentSalesAmount = agentSalesAmountMap[agentId] ?? 0.0;
+
               return _buildAgentConversionCard(
                 context,
                 agent: agent,
@@ -1630,6 +1701,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                 conversionRate: conversionRate,
                 dealersWithOrdersCount: dealersWithOrdersSet.length,
                 totalDealerOrders: agentOrdersCount,
+                totalSalesAmount: agentSalesAmount,
+                dealerSalesAmountMap: dealerSalesAmountMap,
                 ordersPerDealer: ordersPerDealer,
                 dealerOrderActivationRate: dealerOrderActivationRate,
                 allOrders: allOrders,
@@ -1810,6 +1883,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
     required double conversionRate,
     required int dealersWithOrdersCount,
     required int totalDealerOrders,
+    required double totalSalesAmount,
+    required Map<String, double> dealerSalesAmountMap,
     required double ordersPerDealer,
     required double dealerOrderActivationRate,
     required List<Map<String, dynamic>> allOrders,
@@ -1897,37 +1972,75 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: rateBgColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: rateBadgeColor.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.trending_up_rounded,
-                              size: 14,
-                              color: rateBadgeColor,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${convertedDealers.length} Converted Dealers',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: rateBadgeColor,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFA7F3D0),
                               ),
                             ),
-                          ],
-                        ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.payments_outlined,
+                                  size: 14,
+                                  color: Color(0xFF059669),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${CurrencyUtils.formatInr(totalSalesAmount)} Total Sales',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: rateBgColor,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: rateBadgeColor.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.trending_up_rounded,
+                                  size: 14,
+                                  color: rateBadgeColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${convertedDealers.length} Converted Dealers',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: rateBadgeColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Container(
@@ -1983,6 +2096,12 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                       runSpacing: 8,
                       children: [
                         _buildStatPill(
+                          'Total Sales',
+                          CurrencyUtils.formatInr(totalSalesAmount),
+                          Icons.currency_rupee_rounded,
+                          const Color(0xFF059669),
+                        ),
+                        _buildStatPill(
                           'Converted Dealers',
                           '${convertedDealers.length}',
                           Icons.check_circle_rounded,
@@ -2020,6 +2139,13 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                           Icons.shopping_bag_rounded,
                           const Color(0xFF7E22CE),
                         ),
+                        if (totalDealerOrders > 0)
+                          _buildStatPill(
+                            'Avg Order Value',
+                            CurrencyUtils.formatInr(totalSalesAmount / totalDealerOrders),
+                            Icons.auto_graph_rounded,
+                            const Color(0xFFD97706),
+                          ),
                         _buildStatPill(
                           'Deleted Leads',
                           '${deletedLeads.length}',
@@ -2046,7 +2172,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                       ),
                     ),
                     Text(
-                      '$dealersWithOrdersCount of ${convertedDealers.length} Dealers Placed Orders ($totalDealerOrders Orders Total)',
+                      '$dealersWithOrdersCount of ${convertedDealers.length} Dealers Placed Orders ($totalDealerOrders Orders Total · ${CurrencyUtils.formatInr(totalSalesAmount)})',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: const Color(0xFF7E22CE),
@@ -2122,6 +2248,10 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                                 ?.toString();
                         return uId == dId;
                       }).length;
+
+                      final double dealerSales = (dId != null)
+                          ? (dealerSalesAmountMap[dId] ?? 0.0)
+                          : 0.0;
 
                       final address =
                           dealer['address'] as Map<String, dynamic>?;
@@ -2252,6 +2382,36 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                                   fontWeight: FontWeight.w700,
                                   color: dealerOrdersCount > 0
                                       ? const Color(0xFF7E22CE)
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: dealerSales > 0
+                                    ? const Color(0xFFECFDF5)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: dealerSales > 0
+                                      ? const Color(0xFFA7F3D0)
+                                      : const Color(0xFFCBD5E1),
+                                ),
+                              ),
+                              child: Text(
+                                dealerSales > 0
+                                    ? CurrencyUtils.formatInr(dealerSales)
+                                    : '₹0 Sales',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: dealerSales > 0
+                                      ? const Color(0xFF059669)
                                       : AppTheme.textSecondary,
                                 ),
                               ),
@@ -2710,6 +2870,129 @@ class _TeamManagementPageState extends State<TeamManagementPage>
           isDisabled: currentPage >= displayPages,
         ),
       ],
+    );
+  }
+
+  Widget _buildShimmerLoading(bool isDesktop, bool isMobile) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 16,
+        vertical: isDesktop ? 20 : 12,
+      ),
+      child: Shimmer.fromColors(
+        baseColor: const Color(0xFFE5E7EB),
+        highlightColor: const Color(0xFFF9FAFB),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            // Header Row Shimmer
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 28,
+                      width: 220,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 16,
+                      width: 320,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  height: 42,
+                  width: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Tabs Bar Shimmer
+            Container(
+              height: 46,
+              width: isDesktop ? 400 : double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // KPI Summary Cards Shimmer
+            if (isDesktop)
+              Row(
+                children: List.generate(
+                  4,
+                  (index) => Expanded(
+                    child: Container(
+                      height: 84,
+                      margin: EdgeInsets.only(right: index < 3 ? 12 : 0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: List.generate(
+                  4,
+                  (index) => Container(
+                    width: (MediaQuery.of(context).size.width - 48) / 2,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+            // Search / Filter Bar Shimmer
+            Container(
+              height: 52,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Team Member Cards list Shimmer
+            ...List.generate(
+              4,
+              (index) => Container(
+                height: 140,
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -345,38 +345,40 @@ class _MainLayoutState extends State<MainLayout> {
             ],
           );
 
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: !isDesktop
-          ? Drawer(
-              width: 260,
-              child: SidebarWidget(
-                currentIdx: safeIdx,
-                onTabSelected: _handleTabSelected,
-                onLogout: _handleLogout,
-                forceExpanded: true,
-                isPinned: true,
-              ),
-            )
-          : null,
-      body: isDesktop
-          ? Row(
-              children: [
-                SidebarWidget(
+    return SelectionArea(
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: !isDesktop
+            ? Drawer(
+                width: 260,
+                child: SidebarWidget(
                   currentIdx: safeIdx,
                   onTabSelected: _handleTabSelected,
                   onLogout: _handleLogout,
-                  isPinned: _isSidebarPinned,
-                  onPinToggle: () {
-                    setState(() {
-                      _isSidebarPinned = !_isSidebarPinned;
-                    });
-                  },
+                  forceExpanded: true,
+                  isPinned: true,
                 ),
-                Expanded(child: content),
-              ],
-            )
-          : content,
+              )
+            : null,
+        body: isDesktop
+            ? Row(
+                children: [
+                  SidebarWidget(
+                    currentIdx: safeIdx,
+                    onTabSelected: _handleTabSelected,
+                    onLogout: _handleLogout,
+                    isPinned: _isSidebarPinned,
+                    onPinToggle: () {
+                      setState(() {
+                        _isSidebarPinned = !_isSidebarPinned;
+                      });
+                    },
+                  ),
+                  Expanded(child: content),
+                ],
+              )
+            : content,
+      ),
     );
   }
 }

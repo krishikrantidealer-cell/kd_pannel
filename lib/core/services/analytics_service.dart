@@ -187,7 +187,6 @@ class AnalyticsService extends WidgetsBindingObserver {
     _isProcessing = true;
 
     final batchToSend = List<Map<String, dynamic>>.from(_localQueue);
-    final startTime = DateTime.now();
 
     try {
       final response = await _apiClient.post('/events/batch', {

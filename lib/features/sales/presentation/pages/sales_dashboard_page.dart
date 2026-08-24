@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/shared/widgets/advanced_stat_card_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
@@ -21,6 +18,7 @@ import 'package:kd_pannel/features/admin/data/models/order_model.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/features/sales/presentation/widgets/sales_stats_grid.dart';
 
 class SalesDashboardPage extends StatefulWidget {
   const SalesDashboardPage({super.key});
@@ -257,7 +255,7 @@ class _SalesDashboardPageState extends State<SalesDashboardPage> {
                         SizedBox(height: gap),
                 
                         // Sales Stats Grid - No Revenue
-                        _SalesStatsGrid(
+                        SalesStatsGrid(
                           leadsCount: leads.length,
                           dealersCount: dealers.length,
                           ordersCount: activeOrdersCount,
@@ -1260,25 +1258,22 @@ class _AgentProfileHeroState extends State<_AgentProfileHero> {
                   if (formKey.currentState!.validate()) {
                     setStateDialog(() => isSaving = true);
                     try {
-                      final res = await ApiClient().post('/auth/reset-password', {
-                        'currentPassword': currentPasswordController.text.trim(),
-                        'newPassword': passwordController.text.trim(),
-                      });
-                      if (res.statusCode == 200) {
-                        final data = jsonDecode(res.body);
-                        if (data['success'] == true) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Password reset successfully'), backgroundColor: AppTheme.success),
-                            );
-                          }
-                          Navigator.pop(dialogCtx);
-                        } else {
-                          throw Exception(data['message'] ?? 'Failed to reset password');
+                      final result = await AuthService().resetPassword(
+                        currentPassword: currentPasswordController.text,
+                        newPassword: passwordController.text,
+                      );
+                      if (result['success'] == true) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message'] ?? 'Password reset successfully'),
+                              backgroundColor: AppTheme.success,
+                            ),
+                          );
                         }
+                        Navigator.pop(dialogCtx);
                       } else {
-                        final data = jsonDecode(res.body);
-                        throw Exception(data['message'] ?? 'Incorrect current password or server error');
+                        throw Exception(result['message'] ?? 'Failed to reset password');
                       }
                     } catch (e) {
                       if (mounted) {
@@ -1672,254 +1667,4 @@ class _InteractiveRowState extends State<_InteractiveRow> {
       ),
     );
   }
-}
-
-class _QuickActionBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickActionBtn({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: GoogleFonts.outfit(
-                color: color,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SalesStatsGrid extends StatelessWidget {
-  final int leadsCount;
-  final int dealersCount;
-  final int ordersCount;
-
-  const _SalesStatsGrid({
-    required this.leadsCount,
-    required this.dealersCount,
-    required this.ordersCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double spacing = 12.0;
-        int columns = 1;
-        if (constraints.maxWidth >= 1100) {
-          columns = 3;
-        } else if (constraints.maxWidth >= 600) {
-          columns = 2;
-        }
-        final double width =
-            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            AdvancedStatCardWidget(
-              width: width,
-              title: 'Active Orders',
-              value: '$ordersCount',
-              color: AppTheme.accentColor,
-              trendLabel: 'Assigned to you',
-              trendIcon: Icons.shopping_bag_outlined,
-              visualWidget: SizedBox(
-                width: 24,
-                height: 24,
-                child: CustomPaint(
-                  painter: FulfillmentProgressPainter(0.75, AppTheme.accentColor),
-                ),
-              ),
-            ),
-            AdvancedStatCardWidget(
-              width: width,
-              title: 'Qualified Leads',
-              value: '$leadsCount',
-              color: AppTheme.info,
-              trendLabel: 'Prospect pipeline',
-              trendIcon: Icons.person_add_outlined,
-              visualWidget: SizedBox(
-                width: 50,
-                height: 24,
-                child: CustomPaint(
-                  painter: SparklinePainter([20, 18, 25, 22, 30, 28, 35], AppTheme.info),
-                ),
-              ),
-            ),
-            AdvancedStatCardWidget(
-              width: width,
-              title: 'Your Dealers',
-              value: '$dealersCount',
-              color: AppTheme.primaryColor,
-              trendLabel: 'Verified accounts',
-              trendIcon: Icons.verified_user_outlined,
-              visualWidget: _buildAvatarCluster(),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildAvatarCluster() {
-    return SizedBox(
-      width: 72,
-      height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          _buildAvatarCircle('AD', AppTheme.primaryColor, 0),
-          _buildAvatarCircle('PK', AppTheme.accentColor, 15),
-          _buildAvatarCircle('RK', AppTheme.info, 30),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatarCircle(String text, Color color, double left) {
-    return Positioned(
-      left: left,
-      child: Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 1.5),
-          color: color.withValues(alpha: 0.1),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          style: GoogleFonts.outfit(
-            fontSize: 8,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SparklinePainter extends CustomPainter {
-  final List<double> data;
-  final Color color;
-
-  SparklinePainter(this.data, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    final double stepX = size.width / (data.length - 1);
-    final double minVal = data.reduce((a, b) => a < b ? a : b);
-    final double maxVal = data.reduce((a, b) => a > b ? a : b);
-    final double range = maxVal - minVal == 0 ? 1.0 : maxVal - minVal;
-
-    final points = <Offset>[];
-    for (int i = 0; i < data.length; i++) {
-      final double x = i * stepX;
-      final double y = size.height - ((data[i] - minVal) / range) * size.height;
-      points.add(Offset(x, y));
-    }
-
-    if (points.isNotEmpty) {
-      path.moveTo(points[0].dx, points[0].dy);
-      for (int i = 0; i < points.length - 1; i++) {
-        final p0 = points[i];
-        final p1 = points[i + 1];
-        final controlX = p0.dx + (p1.dx - p0.dx) / 2;
-        path.cubicTo(controlX, p0.dy, controlX, p1.dy, p1.dx, p1.dy);
-      }
-    }
-
-    final fillPath = Path.from(path)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0.0)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(fillPath, fillPaint);
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant SparklinePainter oldDelegate) => false;
-}
-
-class FulfillmentProgressPainter extends CustomPainter {
-  final double percent;
-  final Color color;
-
-  FulfillmentProgressPainter(this.percent, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double strokeWidth = 3.5;
-    final double radius = (size.width - strokeWidth) / 2;
-    final center = Offset(size.width / 2, size.height / 2);
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    final trackPaint = Paint()
-      ..color = color.withValues(alpha: 0.12)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-    canvas.drawCircle(center, radius, trackPaint);
-
-    final arcPaint = Paint()
-      ..color = color.withValues(alpha: 0.12)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, -1.5708, 6.2831 * percent, false, arcPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant FulfillmentProgressPainter oldDelegate) => false;
 }

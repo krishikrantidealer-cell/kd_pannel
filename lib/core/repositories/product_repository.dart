@@ -183,6 +183,27 @@ class ProductRepository {
     return _cachedCollections ?? [];
   }
 
+  /// Update product data by ID.
+  Future<bool> updateProduct(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await _apiClient.put('/products/$id', data);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        invalidateCache();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[ProductRepository] updateProduct error: $e');
+    }
+    return false;
+  }
+
+  /// Toggle product stock availability.
+  Future<bool> toggleProductAvailability(String id, bool inStock) async {
+    return updateProduct(id, {
+      'availabilityStatus': inStock ? 'In Stock' : 'Out of Stock',
+    });
+  }
+
   /// Delete a product by ID.
   Future<bool> deleteProduct(String id) async {
     try {
@@ -195,5 +216,20 @@ class ProductRepository {
       debugPrint('[ProductRepository] deleteProduct error: $e');
     }
     return false;
+  }
+
+  /// Fetch full catalog (products, categories, collections) concurrently.
+  Future<Map<String, dynamic>> fetchCatalogData({bool forceRefresh = false}) async {
+    final results = await Future.wait([
+      getProducts(forceRefresh: forceRefresh),
+      getCollections(forceRefresh: forceRefresh),
+      getCategories(forceRefresh: forceRefresh),
+    ]);
+
+    return {
+      'products': results[0] as List<Map<String, dynamic>>,
+      'collections': results[1] as List<Map<String, dynamic>>,
+      'categories': results[2],
+    };
   }
 }

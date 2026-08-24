@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
-import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/repositories/user_repository.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
-
-import 'package:http/http.dart' as http;
 
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   StreamSubscription? _wsSubscription;
+  final UserRepository _userRepo = UserRepository();
 
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
@@ -46,66 +44,21 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(status: DealersStatus.submitting));
     try {
-      http.Response res;
+      final data = await _userRepo.createDealer(
+        dealerData: event.dealerData,
+        licenceBytes: event.licenceBytes,
+        licenceFileName: event.licenceFileName,
+        shopBytes: event.shopBytes,
+        shopFileName: event.shopFileName,
+      );
 
-      if (event.licenceBytes != null || event.shopBytes != null) {
-        final fields = <String, String>{};
-        event.dealerData.forEach((k, v) {
-          if (v is Map) {
-            fields[k] = jsonEncode(v);
-          } else if (v != null) {
-            fields[k] = v.toString();
-          }
-        });
-
-        res = await ApiClient().multipartRequest(
-          method: 'POST',
-          endpoint: '/users/dealer',
-          fields: fields,
-          filesBuilder: () {
-            final files = <http.MultipartFile>[];
-            if (event.licenceBytes != null && event.licenceFileName != null) {
-              files.add(
-                http.MultipartFile.fromBytes(
-                  'licenceImage',
-                  event.licenceBytes!,
-                  filename: event.licenceFileName!,
-                ),
-              );
-            }
-            if (event.shopBytes != null && event.shopFileName != null) {
-              files.add(
-                http.MultipartFile.fromBytes(
-                  'shopImage',
-                  event.shopBytes!,
-                  filename: event.shopFileName!,
-                ),
-              );
-            }
-            return files;
-          },
-        );
-      } else {
-        res = await ApiClient().post('/users/dealer', event.dealerData);
-      }
-
-      final data = jsonDecode(res.body);
-
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        if (data['success'] == true) {
-          emit(
-            state.copyWith(
-              status: DealersStatus.success,
-              actionSuccessMessage: data['message'] ?? 'Dealer created successfully',
-            ),
-          );
-          add(const FetchDealersDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to create dealer');
-        }
-      } else {
-        throw Exception(data['message'] ?? 'Failed to create dealer: ${res.statusCode}');
-      }
+      emit(
+        state.copyWith(
+          status: DealersStatus.success,
+          actionSuccessMessage: data['message'] ?? 'Dealer created successfully',
+        ),
+      );
+      add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
       emit(
         state.copyWith(
@@ -122,20 +75,11 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(isLoadingProfile: true));
     try {
-      final res = await ApiClient().get('/users/${event.userId}');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true && data['user'] != null) {
-          emit(state.copyWith(
-            isLoadingProfile: false,
-            currentDealerDetails: Map<String, dynamic>.from(data['user']),
-          ));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to load dealer details');
-        }
-      } else {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      final user = await _userRepo.getUserById(event.userId);
+      emit(state.copyWith(
+        isLoadingProfile: false,
+        currentDealerDetails: user,
+      ));
     } catch (e) {
       emit(state.copyWith(
         isLoadingProfile: false,
@@ -150,34 +94,11 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(isLoadingOrders: true));
     try {
-      final res = await ApiClient().get(
-        '/orders/admin/all?userId=${event.userId}&user=${event.userId}',
-      );
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          final List rawOrders = data['orders'] ?? [];
-          final mappedOrders = rawOrders.map((o) => Map<String, dynamic>.from(o)).toList();
-          final filtered = mappedOrders
-              .where(
-                (o) =>
-                    (o['user'] is Map &&
-                        (o['user']['_id']?.toString() == event.userId.toString() ||
-                            o['user']['id']?.toString() == event.userId.toString())) ||
-                    o['user']?.toString() == event.userId.toString(),
-              )
-              .toList();
-
-          emit(state.copyWith(
-            isLoadingOrders: false,
-            currentDealerOrders: filtered.isNotEmpty ? filtered : mappedOrders,
-          ));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to load orders');
-        }
-      } else {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      final orders = await _userRepo.getUserOrders(event.userId);
+      emit(state.copyWith(
+        isLoadingOrders: false,
+        currentDealerOrders: orders,
+      ));
     } catch (e) {
       emit(state.copyWith(
         isLoadingOrders: false,
@@ -265,60 +186,16 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(status: DealersStatus.loading));
     try {
-      final client = ApiClient();
-      final results = await Future.wait([
-        client.get('/users'),
-        client.get('/users?role=sales'),
-        client.get('/orders/admin/all'),
-      ]);
-
-      final usersRes = results[0];
-      final salesRes = results[1];
-      final ordersRes = results[2];
-
-      List<Map<String, dynamic>> users = [];
-      List<Map<String, dynamic>> salesAgents = [];
-      List<Map<String, dynamic>> orders = [];
-
-      if (usersRes.statusCode == 200) {
-        final data = jsonDecode(usersRes.body);
-        if (data['success'] == true) {
-          users = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to parse users');
-        }
-      } else {
-        throw Exception('Failed to load users: ${usersRes.statusCode}');
-      }
-
-      if (salesRes.statusCode == 200) {
-        final data = jsonDecode(salesRes.body);
-        if (data['success'] == true) {
-          salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to parse sales agents');
-        }
-      } else {
-        throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
-      }
-
-      if (ordersRes.statusCode == 200) {
-        final data = jsonDecode(ordersRes.body);
-        if (data['success'] == true) {
-          orders = List<Map<String, dynamic>>.from(data['orders'] ?? []);
-        } else {
-          throw Exception(data['message'] ?? 'Failed to parse orders');
-        }
-      } else {
-        throw Exception('Failed to load orders: ${ordersRes.statusCode}');
-      }
+      final results = await _userRepo.fetchDealersData(
+        forceRefresh: event.forceRefresh,
+      );
 
       emit(
         state.copyWith(
           status: DealersStatus.success,
-          allRawUsers: users,
-          salesAgents: salesAgents,
-          allRawOrders: orders,
+          allRawUsers: results['users'] ?? [],
+          salesAgents: results['salesAgents'] ?? [],
+          allRawOrders: results['orders'] ?? [],
         ),
       );
     } catch (e) {
@@ -355,43 +232,32 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     ));
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}/assign-agent', {
-        'agentId': event.agentId,
+      await _userRepo.assignAgent(event.userId, event.agentId);
+
+      // Log Activity
+      AnalyticsService().logEvent('assign_agent', properties: {
+        'targetUserId': event.userId,
+        'assignedAgentId': event.agentId,
+        'details': event.agentId != null 
+            ? 'Assigned agent to dealer' 
+            : 'Unassigned agent from dealer',
       });
+      await AnalyticsService().flush();
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent('assign_agent', properties: {
-            'targetUserId': event.userId,
-            'assignedAgentId': event.agentId,
-            'details': event.agentId != null 
-                ? 'Assigned agent to dealer' 
-                : 'Unassigned agent from dealer',
-          });
-          await AnalyticsService().flush();
-
-          emit(
-            state.copyWithMessages(
-              status: DealersStatus.success,
-              actionSuccessMessage: 'Agent assigned successfully',
-            ),
-          );
-          // Refresh only this dealer
-          add(FetchDealerDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to assign agent');
-        }
-      } else {
-        throw Exception('Failed to assign agent: ${res.statusCode}');
-      }
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage: 'Agent assigned successfully',
+        ),
+      );
+      // Refresh only this dealer
+      add(FetchDealerDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithMessages(
           status: DealersStatus
               .success, // Keep success status to show existing tables
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
       add(const FetchDealersDataEvent(forceRefresh: true));
@@ -405,22 +271,14 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     emit(state.copyWith(status: DealersStatus.submitting));
     int successCount = 0;
     try {
-      final client = ApiClient();
-      final futures = event.userIds.map((userId) {
-        return client.put('/users/$userId/assign-agent', {
-          'agentId': event.agentId,
-        });
+      final futures = event.userIds.map((userId) async {
+        try {
+          await _userRepo.assignAgent(userId, event.agentId);
+          successCount++;
+        } catch (_) {}
       }).toList();
 
-      final responses = await Future.wait(futures);
-      for (final res in responses) {
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          if (data['success'] == true) {
-            successCount++;
-          }
-        }
-      }
+      await Future.wait(futures);
 
       // Log Activity
       AnalyticsService().logEvent('bulk_assign_agent', properties: {
@@ -430,25 +288,21 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       });
       await AnalyticsService().flush();
 
-      emit(state.copyWithMessages(
-        status: DealersStatus.success,
-        actionSuccessMessage:
-            'Agent assigned to $successCount dealers successfully',
-      ));
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage:
+              'Agent assigned to $successCount dealers successfully',
+        ),
+      );
       add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
-      // Log Activity
-      AnalyticsService().logEvent('bulk_assign_agent', properties: {
-        'count': successCount,
-        'assignedAgentId': event.agentId,
-        'details': 'Bulk assigned agent to $successCount dealers',
-      });
-      await AnalyticsService().flush();
-
-      emit(state.copyWithMessages(
-        status: DealersStatus.success,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
+        ),
+      );
     }
   }
 
@@ -458,46 +312,35 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(status: DealersStatus.submitting));
     try {
-      final res = await ApiClient().post('/users/sales', {
-        'firstName': event.firstName.trim(),
-        'lastName': event.lastName.trim(),
-        'email': event.email.trim(),
-        'phoneNumber': event.phoneNumber.trim(),
-        'password': event.password,
+      await _userRepo.createSalesAgent(
+        firstName: event.firstName,
+        lastName: event.lastName,
+        email: event.email,
+        phoneNumber: event.phoneNumber,
+        password: event.password,
+      );
+
+      // Log Activity
+      AnalyticsService().logEvent('create_sales_agent', properties: {
+        'firstName': event.firstName,
+        'email': event.email,
+        'details': 'Created new sales agent: ${event.firstName} ${event.lastName}',
       });
+      await AnalyticsService().flush();
 
-      if (res.statusCode == 201) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent('create_sales_agent', properties: {
-            'firstName': event.firstName,
-            'email': event.email,
-            'details': 'Created new sales agent: ${event.firstName} ${event.lastName}',
-          });
-          await AnalyticsService().flush();
-
-          emit(
-            state.copyWithMessages(
-              status: DealersStatus.success,
-              actionSuccessMessage: 'Sales agent created successfully',
-            ),
-          );
-          // Refresh list
-          add(const FetchDealersDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to create sales agent');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Failed to create sales agent');
-      }
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage: 'Sales agent created successfully',
+        ),
+      );
+      // Refresh list
+      add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
       emit(
         state.copyWithMessages(
-          status: DealersStatus
-              .success, // Keep success status to show existing tables
-          errorMessage: e.toString(),
+          status: DealersStatus.success,
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -537,37 +380,27 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   ) async {
     emit(state.copyWith(status: DealersStatus.submitting));
     try {
-      final res = await ApiClient().put('/users/${event.userId}/block', {});
+      await _userRepo.toggleBlockUser(event.userId);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent('toggle_block', properties: {
-            'targetUserId': event.userId,
-            'details': 'Toggled block status for dealer',
-          });
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent('toggle_block', properties: {
+        'targetUserId': event.userId,
+        'details': 'Toggled block status for dealer',
+      });
+      await AnalyticsService().flush();
 
-          final String msg = data['message'] ?? 'Dealer block status updated';
-          emit(
-            state.copyWithMessages(
-              status: DealersStatus.success,
-              actionSuccessMessage: msg,
-            ),
-          );
-          add(FetchDealerDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to update block status');
-        }
-      } else {
-        throw Exception('Server returned status code: ${res.statusCode}');
-      }
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage: 'Dealer block status updated',
+        ),
+      );
+      add(FetchDealerDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithMessages(
           status: DealersStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
     }
@@ -599,37 +432,27 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               ? '${targetUser['firstName'] ?? ''} ${targetUser['lastName'] ?? ''}'.trim()
               : 'Dealer');
 
-      final res = await ApiClient().delete('/users/${event.userId}');
+      await _userRepo.deleteUser(event.userId);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity
-          AnalyticsService().logEvent('delete_dealer', properties: {
-            'targetUserId': event.userId,
-            'details': 'Permanently deleted dealer account: $dealerName',
-          });
-          await AnalyticsService().flush();
+      // Log Activity
+      AnalyticsService().logEvent('delete_dealer', properties: {
+        'targetUserId': event.userId,
+        'details': 'Permanently deleted dealer account: $dealerName',
+      });
+      await AnalyticsService().flush();
 
-          emit(
-            state.copyWithMessages(
-              status: DealersStatus.success,
-              actionSuccessMessage: 'Dealer deleted successfully',
-            ),
-          );
-          add(const FetchDealersDataEvent(forceRefresh: true));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to delete dealer');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Server error');
-      }
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage: 'Dealer deleted successfully',
+        ),
+      );
+      add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
       emit(
         state.copyWithMessages(
           status: DealersStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
       add(const FetchDealersDataEvent(forceRefresh: true));
@@ -685,55 +508,44 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     ));
 
     try {
-      final res = await ApiClient().put('/users/${event.userId}', event.updateData);
+      await _userRepo.updateUserDetails(event.userId, event.updateData);
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          // Log Activity: Discern between general edit vs status/note updates
-          String eventName = 'edit_dealer';
-          String logDetails = 'Updated details for dealer';
-          
-          if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status')) {
-            eventName = 'update_dealer_status';
-            final status = event.updateData['leadStatus'] ?? event.updateData['status'];
-            logDetails = 'Changed dealer status to $status';
-          } else if (event.updateData.containsKey('leadNotes') || event.updateData.containsKey('notes')) {
-            eventName = 'add_dealer_note';
-            logDetails = 'Added follow-up notes to dealer';
-          }
-
-          AnalyticsService().logEvent(eventName, properties: {
-            'targetUserId': event.userId,
-            'details': logDetails,
-            'fields': event.updateData.keys.join(', '),
-            if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status'))
-              'newStatus': event.updateData['leadStatus'] ?? event.updateData['status'],
-          });
-          await AnalyticsService().flush();
-
-          emit(
-            state.copyWithMessages(
-              status: DealersStatus.success,
-              actionSuccessMessage: 'Dealer updated successfully',
-            ),
-          );
-          add(FetchDealerDetailsEvent(event.userId));
-        } else {
-          throw Exception(data['message'] ?? 'Failed to update dealer');
-        }
-      } else {
-        final data = jsonDecode(res.body);
-        throw Exception(data['message'] ?? 'Server error');
+      // Log Activity: Discern between general edit vs status/note updates
+      String eventName = 'edit_dealer';
+      String logDetails = 'Updated details for dealer';
+      
+      if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status')) {
+        eventName = 'update_dealer_status';
+        final status = event.updateData['leadStatus'] ?? event.updateData['status'];
+        logDetails = 'Changed dealer status to $status';
+      } else if (event.updateData.containsKey('leadNotes') || event.updateData.containsKey('notes')) {
+        eventName = 'add_dealer_note';
+        logDetails = 'Added follow-up notes to dealer';
       }
+
+      AnalyticsService().logEvent(eventName, properties: {
+        'targetUserId': event.userId,
+        'details': logDetails,
+        'fields': event.updateData.keys.join(', '),
+        if (event.updateData.containsKey('leadStatus') || event.updateData.containsKey('status'))
+          'newStatus': event.updateData['leadStatus'] ?? event.updateData['status'],
+      });
+      await AnalyticsService().flush();
+
+      emit(
+        state.copyWithMessages(
+          status: DealersStatus.success,
+          actionSuccessMessage: 'Dealer updated successfully',
+        ),
+      );
+      add(FetchDealerDetailsEvent(event.userId));
     } catch (e) {
       emit(
         state.copyWithMessages(
           status: DealersStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
-      // Trigger a refresh to revert to server state on failure
       add(const FetchDealersDataEvent(forceRefresh: true));
     }
   }

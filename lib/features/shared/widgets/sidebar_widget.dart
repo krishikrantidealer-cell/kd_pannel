@@ -685,8 +685,8 @@ class _SidebarItemState extends State<_SidebarItem> {
                                         alpha: showActive || _isHovered ? 1.0 : 0.75,
                                       ),
                                       fontWeight: showActive
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
                                       fontSize: 13.5,
                                       letterSpacing: -0.2,
                                     ),
