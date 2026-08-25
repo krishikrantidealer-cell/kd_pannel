@@ -16,6 +16,9 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_attention_banner.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_lifecycle_funnel.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_inspector_drawer.dart';
 
 import '../../../../core/services/analytics_service.dart';
 
@@ -29,8 +32,10 @@ class LeadsPage extends StatefulWidget {
 
 class _LeadsPageState extends State<LeadsPage> {
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounceTimer;
   bool _isExporting = false;
   bool _isImporting = false;
+  Map<String, dynamic>? _inspectingLead;
   LeadsBloc? _leadsBloc;
 
   void _downloadSampleCSV() {
@@ -240,6 +245,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _wsSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -560,8 +566,7 @@ class _LeadsPageState extends State<LeadsPage> {
               resolvedAgentId = _normalizeId(assignedAgent);
             }
 
-            if (resolvedAgentId == null ||
-                resolvedAgentId.trim().isEmpty ||
+            if (resolvedAgentId.trim().isEmpty ||
                 resolvedAgentId == '-') {
               resolvedAgentId = null;
               agentName = '-';
@@ -626,13 +631,17 @@ class _LeadsPageState extends State<LeadsPage> {
             'kycStatus': u['kycStatus'] ?? 'pending',
             'gstNumber': u['gstNumber'] ?? '',
             'userType': u['userType'] ?? '',
-            'licenceImage': u['licenceImage'] ?? '',
-            'shopImage': u['shopImage'] ?? '',
+            'licenceImage': u['licenceImage'] ?? u['gstCertificate'] ?? u['document'] ?? '',
+            'shopImage': u['shopImage'] ?? u['storeImage'] ?? '',
+            'aadharFront': u['aadharFront'] ?? u['aadharImage'] ?? '',
+            'aadharBack': u['aadharBack'] ?? '',
+            'panCard': u['panCard'] ?? u['panImage'] ?? '',
             'status': u['status'] ?? u['leadStatus'] ?? 'prospect',
             'notes': u['notes'] ?? u['leadNotes'] ?? '',
             'createdAt': u['createdAt'],
             'updatedAt': u['updatedAt'],
             'notesHistory': u['notesHistory'] ?? [],
+            'rawUser': u,
           };
         })
         .toList();
@@ -698,7 +707,6 @@ class _LeadsPageState extends State<LeadsPage> {
     'Assigned',
     'Unassigned',
     'KYC Pending',
-    'KYC Confirm',
   ];
 
   final Map<String, String> statusMapping = {
@@ -743,8 +751,6 @@ class _LeadsPageState extends State<LeadsPage> {
                   l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
             )
             .toList();
-      } else if (state.selectedFilterChip == 'KYC Confirm') {
-        result = result.where((l) => l['kycStatus'] == 'verified').toList();
       } else if (state.selectedFilterChip == 'Deleted') {
         result = result.where((l) => l['isDeleted'] == true).toList();
       }
@@ -1224,8 +1230,61 @@ class _LeadsPageState extends State<LeadsPage> {
                                         isMobile: isMobile,
                                       ),
                                     ),
-                                    const SizedBox(height: 24),
-                                    SelectionContainer.disabled(child: _buildFilterChips(isMobile, state)),
+                                    const SizedBox(height: 16),
+                                    SelectionContainer.disabled(
+                                      child: LeadsAttentionBanner(
+                                        unassignedCount: dateFilteredLeads
+                                            .where((l) =>
+                                                l['agentId'] == null &&
+                                                l['kycStatus'] != 'verified')
+                                            .length,
+                                        isMobile: isMobile,
+                                        onAssignNow: () {
+                                          context.read<LeadsBloc>().add(
+                                                const UpdateLeadsFilterEvent(
+                                                  selectedFilterChip:
+                                                      'Unassigned',
+                                                  currentPage: 1,
+                                                ),
+                                              );
+                                        },
+                                      ),
+                                    ),
+                                    SelectionContainer.disabled(
+                                      child: LeadsLifecycleFunnel(
+                                        selectedFilterChip:
+                                            state.selectedFilterChip,
+                                        dateFilteredLeads: dateFilteredLeads,
+                                        isMobile: isMobile,
+                                        searchField: _buildSearchField(
+                                            isMobile ? double.infinity : 250),
+                                        stateDropdown: _buildFilterDropdown(
+                                          'All States',
+                                          isMobile ? double.infinity : 160,
+                                          stateOptions,
+                                          state.selectedState,
+                                          (val) {
+                                            context.read<LeadsBloc>().add(
+                                                  UpdateLeadsFilterEvent(
+                                                    selectedState: val!,
+                                                    currentPage: 1,
+                                                  ),
+                                                );
+                                          },
+                                          isMobile: isMobile,
+                                        ),
+                                        onChipSelected: (chip) {
+                                          context.read<LeadsBloc>().add(
+                                                UpdateLeadsFilterEvent(
+                                                  selectedFilterChip: chip,
+                                                  currentPage: 1,
+                                                  searchQuery: '',
+                                                ),
+                                              );
+                                          _searchController.clear();
+                                        },
+                                      ),
+                                    ),
                                     const SizedBox(height: 16),
                                   ],
                                 ),
@@ -1243,12 +1302,41 @@ class _LeadsPageState extends State<LeadsPage> {
                                   onBulkAssignAgent: _bulkAssignAgent,
                                   onEditLead: _editLead,
                                   onDeleteLead: _deleteLead,
+                                  onInspectLead: (lead) {
+                                    setState(() => _inspectingLead = lead);
+                                  },
                                 ),
                               ),
                             ),
                             const SliverToBoxAdapter(child: SizedBox(height: 40)),
                           ],
                         ),
+          );
+
+          final Widget fullView = Stack(
+            children: [
+              body,
+              LeadsInspectorDrawer(
+                lead: _inspectingLead,
+                salesAgents: state.salesAgents,
+                onAssignAgent: (userId, agentId) {
+                  _assignAgent(userId, agentId);
+                  setState(() {
+                    if (_inspectingLead != null &&
+                        (_inspectingLead!['id'] == userId ||
+                            _inspectingLead!['_id'] == userId)) {
+                      _inspectingLead!['agentId'] = agentId;
+                    }
+                  });
+                },
+                onClose: () => setState(() => _inspectingLead = null),
+                onLeadUpdated: () {
+                  context.read<LeadsBloc>().add(
+                        const FetchLeadsDataEvent(forceRefresh: true),
+                      );
+                },
+              ),
+            ],
           );
 
           if (widget.isStandalone) {
@@ -1270,11 +1358,11 @@ class _LeadsPageState extends State<LeadsPage> {
                   child: Divider(height: 1, color: AppTheme.lightBorderColor),
                 ),
               ),
-              body: body,
+              body: fullView,
             );
           }
 
-          return body;
+          return fullView;
         },
       ),
     );
@@ -1446,7 +1534,6 @@ class _LeadsPageState extends State<LeadsPage> {
         'All',
         'Assigned',
         'KYC Pending',
-        'KYC Confirm',
         'Deleted',
       ];
     }
@@ -1455,124 +1542,8 @@ class _LeadsPageState extends State<LeadsPage> {
       'Assigned',
       'Unassigned',
       'KYC Pending',
-      'KYC Confirm',
       'Deleted',
     ];
-  }
-
-  Widget _buildFilterChips(bool isMobile, LeadsState state) {
-    final chipsToDisplay = activeFilterChips;
-    if (!isMobile) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _buildSearchField(250), // Final refined width for perfect alignment
-          const SizedBox(width: 12),
-          _buildFilterDropdown(
-            'All States',
-            160,
-            stateOptions,
-            state.selectedState,
-            (val) {
-              context.read<LeadsBloc>().add(
-                UpdateLeadsFilterEvent(
-                  selectedState: val!,
-                  currentPage: 1,
-                ),
-              );
-            },
-            isMobile: false,
-          ),
-          const SizedBox(width: 16), // Refined gap for grid rhythm
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics:
-                  const NeverScrollableScrollPhysics(), // Forced single-line rhythm
-              child: Row(
-                children: chipsToDisplay
-                    .map(
-                      (chip) => Padding(
-                        padding: const EdgeInsets.only(
-                          right: 8,
-                        ), // Refined 8px spacing
-                        child: _FilterChipItem(
-                          label: chip,
-                          icon: _getChipIcon(chip),
-                          isSelected: state.selectedFilterChip == chip,
-                          onTap: () {
-                            context.read<LeadsBloc>().add(
-                              UpdateLeadsFilterEvent(
-                                selectedFilterChip: chip,
-                                currentPage: 1,
-                                searchQuery:
-                                    '', // Clear search on filter change
-                              ),
-                            );
-                            _searchController.clear();
-                          },
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSearchField(double.infinity),
-          const SizedBox(height: 12),
-          _buildFilterDropdown(
-            'States',
-            double.infinity,
-            stateOptions,
-            state.selectedState,
-            (val) {
-              context.read<LeadsBloc>().add(
-                UpdateLeadsFilterEvent(
-                  selectedState: val!,
-                  currentPage: 1,
-                ),
-              );
-            },
-            isMobile: true,
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: chipsToDisplay
-                  .map(
-                    (chip) => Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _FilterChipItem(
-                        label: chip,
-                        icon: _getChipIcon(chip),
-                        isSelected: state.selectedFilterChip == chip,
-                        onTap: () {
-                          context.read<LeadsBloc>().add(
-                            UpdateLeadsFilterEvent(
-                              selectedFilterChip: chip,
-                              currentPage: 1,
-                              searchQuery: '', // Clear search on filter change
-                            ),
-                          );
-                          _searchController.clear();
-                        },
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      );
-    }
   }
 
   Widget _buildFilterDropdown(
@@ -1640,23 +1611,6 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  IconData _getChipIcon(String chip) {
-    switch (chip) {
-      case 'All':
-        return Icons.grid_view_rounded;
-      case 'Assigned':
-        return Icons.person_pin_rounded;
-      case 'Unassigned':
-        return Icons.person_off_rounded;
-      case 'KYC Pending':
-        return Icons.pending_actions_rounded;
-      case 'KYC Confirm':
-        return Icons.verified_user_rounded;
-      default:
-        return Icons.filter_list_rounded;
-    }
-  }
-
   Widget _buildSearchField(double? width) {
     return Container(
       width: width,
@@ -1686,9 +1640,18 @@ class _LeadsPageState extends State<LeadsPage> {
             child: TextField(
               controller: _searchController,
               onChanged: (val) {
-                context.read<LeadsBloc>().add(
-                  UpdateLeadsFilterEvent(searchQuery: val, currentPage: 1),
-                );
+                _searchDebounceTimer?.cancel();
+                _searchDebounceTimer =
+                    Timer(const Duration(milliseconds: 200), () {
+                  if (mounted) {
+                    context.read<LeadsBloc>().add(
+                          UpdateLeadsFilterEvent(
+                            searchQuery: val,
+                            currentPage: 1,
+                          ),
+                        );
+                  }
+                });
               },
               style: GoogleFonts.outfit(
                 fontSize: 14,
@@ -1714,193 +1677,6 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 }
 
-class _FilterChipItem extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FilterChipItem({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  State<_FilterChipItem> createState() => _FilterChipItemState();
-}
-
-class _FilterChipItemState extends State<_FilterChipItem> {
-  bool isHovered = false;
-
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isMobile = Responsive.isMobile(context);
-    final Color iconColor = widget.isSelected
-        ? AppTheme.primaryColor
-        : (isHovered ? AppTheme.textPrimary : _getMutedIconColor(widget.label));
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => isHovered = true),
-      onExit: (_) => setState(() => isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile
-                ? 12
-                : 16, // Reduced from 18 to 16 for micro-alignment
-            vertical: isMobile ? 6 : 8,
-          ),
-          decoration: BoxDecoration(
-            gradient: widget.isSelected
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppTheme.primaryColor.withValues(alpha: 0.12),
-                      AppTheme.primaryColor.withValues(alpha: 0.08),
-                    ],
-                  )
-                : (isHovered
-                      ? LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            AppTheme.primaryColor.withValues(alpha: 0.06),
-                            AppTheme.primaryColor.withValues(alpha: 0.04),
-                          ],
-                        )
-                      : null),
-            color: (widget.isSelected || isHovered) ? null : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: widget.isSelected
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : (isHovered
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null),
-            border: Border.all(
-              color: widget.isSelected
-                  ? AppTheme.primaryColor
-                  : (isHovered
-                        ? AppTheme.primaryColor.withValues(alpha: 0.4)
-                        : AppTheme.borderColor),
-              width: 1.2,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(widget.icon, size: 16, color: iconColor),
-              const SizedBox(width: 8),
-              Text(
-                widget.label,
-                style: GoogleFonts.outfit(
-                  color: widget.isSelected
-                      ? AppTheme.primaryColor
-                      : AppTheme.textPrimary,
-                  fontWeight: FontWeight.w700, // Always bold by default
-                  fontSize: isMobile ? 12 : 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _getMutedIconColor(String chip) {
-    switch (chip) {
-      case 'All':
-        return AppTheme.textSecondary;
-      case 'Assigned':
-        return AppTheme.info.withValues(alpha: 0.7);
-      case 'Unassigned':
-        return const Color(0xFF8B5CF6).withValues(alpha: 0.7);
-      default:
-        return AppTheme.textSecondary;
-    }
-  }
-}
 
 class _LeadsTableCard extends StatefulWidget {
   final List<Map<String, dynamic>> leads;
@@ -1911,6 +1687,7 @@ class _LeadsTableCard extends StatefulWidget {
   final Function(List<String> userIds, String? agentId) onBulkAssignAgent;
   final Function(Map<String, dynamic> lead) onEditLead;
   final Function(String userId, String name) onDeleteLead;
+  final Function(Map<String, dynamic> lead)? onInspectLead;
 
   const _LeadsTableCard({
     required this.leads,
@@ -1921,6 +1698,7 @@ class _LeadsTableCard extends StatefulWidget {
     required this.onBulkAssignAgent,
     required this.onEditLead,
     required this.onDeleteLead,
+    this.onInspectLead,
   });
 
   @override
@@ -2112,68 +1890,6 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
     // Removed automatic jump to page 1 on length change as it causes UX issues during edits/refreshes.
   }
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -2291,6 +2007,7 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                       onAssignAgent: widget.onAssignAgent,
                       onEditLead: widget.onEditLead,
                       onDeleteLead: widget.onDeleteLead,
+                      onInspectLead: widget.onInspectLead,
                       selectedLeadIds: _selectedLeadIds,
                       isSubmitting:
                           context.read<LeadsBloc>().state.status ==
@@ -2669,6 +2386,7 @@ class _LeadsTable extends StatefulWidget {
   final Function(String userId, String? agentId) onAssignAgent;
   final Function(Map<String, dynamic> lead) onEditLead;
   final Function(String userId, String name) onDeleteLead;
+  final Function(Map<String, dynamic> lead)? onInspectLead;
   final Set<String> selectedLeadIds;
   final VoidCallback onSelectionChanged;
   final bool isSubmitting;
@@ -2680,6 +2398,7 @@ class _LeadsTable extends StatefulWidget {
     required this.onAssignAgent,
     required this.onEditLead,
     required this.onDeleteLead,
+    this.onInspectLead,
     required this.selectedLeadIds,
     required this.onSelectionChanged,
     this.isSubmitting = false,
@@ -2724,68 +2443,6 @@ class _LeadsTableState extends State<_LeadsTable> {
     widget.onSelectionChanged();
   }
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final columns = [
@@ -2795,7 +2452,7 @@ class _LeadsTableState extends State<_LeadsTable> {
       const _LeadColumnConfig('Last Activity', 12),
       if (AuthService().isAdmin) const _LeadColumnConfig('Assigned Agent', 14),
       const _LeadColumnConfig('Status', 14),
-      const _LeadColumnConfig('Actions', 12),
+      const _LeadColumnConfig('Actions', 14),
     ];
 
     Widget tableHeader = Container(
@@ -2872,11 +2529,17 @@ class _LeadsTableState extends State<_LeadsTable> {
               isSelected: widget.selectedLeadIds.contains(leadId),
               isAllSelected: isAllSelected,
               onToggleSelection: () => _toggleSelection(leadId),
-              onTap: () => Navigator.pushNamed(
-                context,
-                '/leads/profile',
-                arguments: lead,
-              ),
+              onTap: () {
+                if (widget.onInspectLead != null) {
+                  widget.onInspectLead!(lead);
+                } else {
+                  Navigator.pushNamed(
+                    context,
+                    '/leads/profile',
+                    arguments: lead,
+                  );
+                }
+              },
               salesAgents: widget.salesAgents,
               onAssignAgent: widget.onAssignAgent,
               onEdit: widget.onEditLead,
@@ -2966,13 +2629,7 @@ class _LeadRowState extends State<_LeadRow> {
         onExit: (_) => setState(() => isHovered = false),
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: () {
-             Navigator.pushNamed(
-                context,
-                '/leads/profile',
-                arguments: widget.lead,
-              );
-          },
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: Container(
             decoration: BoxDecoration(
@@ -3121,7 +2778,7 @@ class _LeadRowState extends State<_LeadRow> {
                   ),
                 _statusCell(widget.lead['status'] ?? 'prospect', flex: 1.4),
                 Expanded(
-                  flex: 12,
+                  flex: 14,
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
@@ -3134,8 +2791,23 @@ class _LeadRowState extends State<_LeadRow> {
                         child: GestureDetector(
                           onTap: () {}, // Stop propagation for buttons
                           child: _ConnectedActionButtons(
+                            onOpenProfile: () {
+                              final isVerified =
+                                  widget.lead['kycStatus'] == 'verified';
+                              final route = isVerified
+                                  ? '/dealers/profile'
+                                  : '/leads/profile';
+                              Navigator.pushNamed(
+                                context,
+                                route,
+                                arguments: widget.lead,
+                              );
+                            },
                             onEdit: () => widget.onEdit(widget.lead),
-                            onDelete: () => widget.onDelete(widget.lead['id'] ?? '', widget.lead['name'] ?? ''),
+                            onDelete: () => widget.onDelete(
+                              widget.lead['id'] ?? '',
+                              widget.lead['name'] ?? '',
+                            ),
                           ),
                         ),
                       ),
@@ -3246,10 +2918,15 @@ class _LeadRowState extends State<_LeadRow> {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
+  final VoidCallback onOpenProfile;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ConnectedActionButtons({required this.onEdit, required this.onDelete});
+  const _ConnectedActionButtons({
+    required this.onOpenProfile,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   State<_ConnectedActionButtons> createState() =>
@@ -3257,6 +2934,7 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
+  bool isProfileHovered = false;
   bool isEditHovered = false;
   bool isDeleteHovered = false;
 
@@ -3309,6 +2987,15 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildIconButton(
+          onTap: widget.onOpenProfile,
+          icon: Icons.open_in_new_rounded,
+          tooltip: 'Open Full Profile',
+          isHovered: isProfileHovered,
+          onHoverChanged: (val) => setState(() => isProfileHovered = val),
+          color: AppTheme.primaryColor,
+        ),
+        const SizedBox(width: 6),
+        _buildIconButton(
           onTap: widget.onEdit,
           icon: Icons.edit_outlined,
           tooltip: 'Edit Lead',
@@ -3334,68 +3021,6 @@ class _HeaderText extends StatelessWidget {
   final String text;
 
   const _HeaderText(this.text);
-
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3560,7 +3185,6 @@ class _MasterLeadsAnalyticsHeaderState
         : 0;
 
     final agentAssigned = agentStats['assignedInDay'] ?? 0;
-    final agentKycApproved = agentStats['kycApprovedInDay'] ?? 0;
     final selectedAgentName = agentStats['agentName'] ?? 'All Sales Team';
 
     final selectedDate = widget.state.selectedDailyDate ?? DateTime.now();
@@ -3918,13 +3542,7 @@ class _MasterLeadsAnalyticsHeaderState
                   color: AppTheme.success,
                   isCompact: true,
                   onTap: () {
-                    context.read<LeadsBloc>().add(
-                          const UpdateLeadsFilterEvent(
-                            selectedFilterChip: 'KYC Confirm',
-                            currentPage: 1,
-                            searchQuery: '',
-                          ),
-                        );
+                    Navigator.pushNamed(context, '/dealers');
                   },
                 ),
               );
@@ -3984,68 +3602,6 @@ class _PageNumberButton extends StatefulWidget {
 class _PageNumberButtonState extends State<_PageNumberButton> {
   bool isHovered = false;
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -4104,68 +3660,6 @@ class _PaginationButton extends StatefulWidget {
 class _PaginationButtonState extends State<_PaginationButton> {
   bool isHovered = false;
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -4213,68 +3707,6 @@ class _CustomCheckbox extends StatefulWidget {
 class _CustomCheckboxState extends State<_CustomCheckbox> {
   bool isHovered = false;
 
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -4321,134 +3753,4 @@ class _LeadColumnConfig {
   final bool isCenter;
 
   const _LeadColumnConfig(this.title, this.flex, {this.isCenter = false});
-}
-
-class _SourceBadge extends StatelessWidget {
-  final String source;
-
-  const _SourceBadge({required this.source});
-
-  Widget _buildSkeletonLoading(bool isDesktop, bool isMobile) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 28 : 16,
-        vertical: isDesktop ? 20 : 12,
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 40,
-              width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: List.generate(
-                isDesktop ? 4 : 2,
-                (index) => Expanded(
-                  child: Container(
-                    height: 100,
-                    margin: EdgeInsets.only(
-                      right: index == (isDesktop ? 3 : 1) ? 0 : 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              height: 40,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 500,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    Color badgeColor;
-    Color textColor;
-    IconData icon;
-
-    final String sourceLower = source.toLowerCase();
-
-    if (sourceLower.contains('whatsapp') || sourceLower.contains('ctwa')) {
-      badgeColor = const Color(0xFFE8F8EF);
-      textColor = const Color(0xFF107C41);
-      icon = Icons.chat_bubble_outline_rounded;
-    } else if (sourceLower.contains('meta') ||
-        sourceLower.contains('facebook') ||
-        sourceLower.contains('instagram')) {
-      badgeColor = const Color(0xFFE8F3FF);
-      textColor = const Color(0xFF1877F2);
-      icon = Icons.campaign_outlined;
-    } else if (sourceLower.contains('google')) {
-      badgeColor = const Color(0xFFFEF3F2);
-      textColor = const Color(0xFFD92D20);
-      icon = Icons.search_rounded;
-    } else if (sourceLower.contains('firebase') ||
-        sourceLower.contains('notification')) {
-      badgeColor = const Color(0xFFFFF7ED);
-      textColor = const Color(0xFFEA580C);
-      icon = Icons.notifications_active_outlined;
-    } else if (sourceLower.contains('website') || sourceLower.contains('web')) {
-      badgeColor = const Color(0xFFF0FDFA);
-      textColor = const Color(0xFF0D9488);
-      icon = Icons.language_rounded;
-    } else {
-      badgeColor = const Color(0xFFF3F4F6);
-      textColor = const Color(0xFF4B5563);
-      icon = Icons.phone_android_rounded;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: textColor.withValues(alpha: 0.15), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: textColor),
-          const SizedBox(width: 4),
-          Text(
-            source,
-            style: GoogleFonts.outfit(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

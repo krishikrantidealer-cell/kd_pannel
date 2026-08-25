@@ -1754,24 +1754,26 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return false;
     }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final m = dealersState.allRawUsers.firstWhere(
-        isMatch,
-        orElse: () => <String, dynamic>{},
-      );
-      if (m.isNotEmpty) foundUser = m;
-    } catch (_) {}
-
-    if (foundUser == null) {
+    if (mounted) {
       try {
-        final leadsState = context.read<LeadsBloc>().state;
-        final m = leadsState.allRawUsers.firstWhere(
+        final dealersState = context.read<DealersBloc>().state;
+        final m = dealersState.allRawUsers.firstWhere(
           isMatch,
           orElse: () => <String, dynamic>{},
         );
         if (m.isNotEmpty) foundUser = m;
       } catch (_) {}
+
+      if (foundUser == null && mounted) {
+        try {
+          final leadsState = context.read<LeadsBloc>().state;
+          final m = leadsState.allRawUsers.firstWhere(
+            isMatch,
+            orElse: () => <String, dynamic>{},
+          );
+          if (m.isNotEmpty) foundUser = m;
+        } catch (_) {}
+      }
     }
 
     if (foundUser != null) {
@@ -1806,7 +1808,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
     String userName, {
     bool silent = false,
   }) async {
-    if (_loadingUserEvents.contains(userName)) return;
+    if (!mounted || _loadingUserEvents.contains(userName)) return;
 
     if (!silent) {
       setState(() {
