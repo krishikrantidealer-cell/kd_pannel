@@ -3049,7 +3049,7 @@ class _DealerRowState extends State<_DealerRow> {
                               ),
                             ),
                             child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
+                              child: DropdownButton<String?>(
                                 value:
                                     widget.salesAgents.any(
                                       (agent) =>
@@ -3074,7 +3074,7 @@ class _DealerRowState extends State<_DealerRow> {
                                   }
                                 },
                                 items: [
-                                  DropdownMenuItem<String>(
+                                  DropdownMenuItem<String?>(
                                     value: null,
                                     child: Text('-', style: _dealerNameStyle),
                                   ),
@@ -3082,14 +3082,14 @@ class _DealerRowState extends State<_DealerRow> {
                                     final agentName =
                                         '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                             .trim();
-                                    return DropdownMenuItem<String>(
+                                    return DropdownMenuItem<String?>(
                                       value: agent['_id'],
                                       child: Text(
                                         agentName.isNotEmpty
                                             ? agentName
                                             : (agent['phoneNumber'] ?? ''),
-                                        style: _cellBoldTextStyle.copyWith(
-                                          fontSize: 12.5,
+                                        style: _dealerNameStyle.copyWith(
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     );

@@ -3423,7 +3423,7 @@ class _LeadInformationCard extends StatelessWidget {
                             border: Border.all(color: const Color(0xFFCBD5E1)),
                           ),
                           child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
+                            child: DropdownButton<String?>(
                               value:
                                   salesAgents.any(
                                     (agent) => agent['_id'] == lead['agentId'],
@@ -3448,7 +3448,7 @@ class _LeadInformationCard extends StatelessWidget {
                                 onAssignAgent(newAgentId);
                               },
                               items: [
-                                DropdownMenuItem<String>(
+                                DropdownMenuItem<String?>(
                                   value: null,
                                   child: Text(
                                     'Unassigned',
@@ -3463,7 +3463,7 @@ class _LeadInformationCard extends StatelessWidget {
                                   final agentName =
                                       '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                           .trim();
-                                  return DropdownMenuItem<String>(
+                                  return DropdownMenuItem<String?>(
                                     value: agent['_id'],
                                     child: Text(
                                       agentName.isNotEmpty

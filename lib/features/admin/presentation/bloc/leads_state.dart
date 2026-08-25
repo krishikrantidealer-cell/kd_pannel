@@ -78,6 +78,7 @@ class LeadsState extends Equatable {
     Map<String, dynamic>? dailyLeadStats,
     DateTime? selectedDailyDate,
     String? selectedDailyAgentId,
+    bool resetDailyAgent = false,
     bool? isLoadingDailyStats,
     String? analyticsViewMode,
   }) {
@@ -100,7 +101,9 @@ class LeadsState extends Equatable {
       isLoadingEvents: isLoadingEvents ?? this.isLoadingEvents,
       dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
       selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
-      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      selectedDailyAgentId: resetDailyAgent
+          ? null
+          : (selectedDailyAgentId ?? this.selectedDailyAgentId),
       isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
       analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );
@@ -122,6 +125,7 @@ class LeadsState extends Equatable {
     Map<String, dynamic>? dailyLeadStats,
     DateTime? selectedDailyDate,
     String? selectedDailyAgentId,
+    bool resetDailyAgent = false,
     bool? isLoadingDailyStats,
     String? analyticsViewMode,
   }) {
@@ -140,7 +144,9 @@ class LeadsState extends Equatable {
       actionSuccessMessage: actionSuccessMessage ?? this.actionSuccessMessage,
       dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
       selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
-      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      selectedDailyAgentId: resetDailyAgent
+          ? null
+          : (selectedDailyAgentId ?? this.selectedDailyAgentId),
       isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
       analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );
@@ -161,6 +167,7 @@ class LeadsState extends Equatable {
     Map<String, dynamic>? dailyLeadStats,
     DateTime? selectedDailyDate,
     String? selectedDailyAgentId,
+    bool resetDailyAgent = false,
     bool? isLoadingDailyStats,
     String? analyticsViewMode,
   }) {
@@ -179,7 +186,9 @@ class LeadsState extends Equatable {
       actionSuccessMessage: actionSuccessMessage,
       dailyLeadStats: dailyLeadStats ?? this.dailyLeadStats,
       selectedDailyDate: selectedDailyDate ?? this.selectedDailyDate,
-      selectedDailyAgentId: selectedDailyAgentId ?? this.selectedDailyAgentId,
+      selectedDailyAgentId: resetDailyAgent
+          ? null
+          : (selectedDailyAgentId ?? this.selectedDailyAgentId),
       isLoadingDailyStats: isLoadingDailyStats ?? this.isLoadingDailyStats,
       analyticsViewMode: analyticsViewMode ?? this.analyticsViewMode,
     );

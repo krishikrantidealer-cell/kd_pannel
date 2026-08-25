@@ -192,6 +192,7 @@ class UserRepository {
   /// Assign agent to user
   Future<void> assignAgent(String userId, String? agentId) async {
     final res = await _apiClient.put('/users/$userId/assign-agent', {
+      'agentId': agentId,
       'assignedAgentId': agentId,
     });
     if (res.statusCode != 200) {

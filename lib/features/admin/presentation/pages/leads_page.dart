@@ -3070,7 +3070,7 @@ class _LeadRowState extends State<_LeadRow> {
                               ),
                             ),
                             child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
+                              child: DropdownButton<String?>(
                                 value: selectedAgentValue,
                                 isExpanded: true,
                                 isDense: true,
@@ -3089,7 +3089,7 @@ class _LeadRowState extends State<_LeadRow> {
                                   }
                                 },
                                 items: [
-                                  DropdownMenuItem<String>(
+                                  DropdownMenuItem<String?>(
                                     value: null,
                                     child: Text('-', style: _subStyle),
                                   ),
@@ -3098,7 +3098,7 @@ class _LeadRowState extends State<_LeadRow> {
                                     final agentName =
                                         '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                             .trim();
-                                    return DropdownMenuItem<String>(
+                                    return DropdownMenuItem<String?>(
                                       value: agentId,
                                       child: Text(
                                         agentName.isNotEmpty

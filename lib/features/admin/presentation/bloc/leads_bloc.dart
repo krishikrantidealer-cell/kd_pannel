@@ -163,16 +163,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   ) async {
     final targetDate =
         event.selectedDate ?? state.selectedDailyDate ?? DateTime.now();
-    final targetAgentId =
-        event.selectedAgentId ??
-        state.selectedDailyAgentId ??
-        (AuthService().isSales ? AuthService().currentUserId : null);
+    final targetAgentId = AuthService().isSales
+        ? AuthService().currentUserId
+        : event.selectedAgentId;
 
     emit(
       state.copyWith(
         isLoadingDailyStats: true,
         selectedDailyDate: targetDate,
         selectedDailyAgentId: targetAgentId,
+        resetDailyAgent: targetAgentId == null,
       ),
     );
 
@@ -185,6 +185,8 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         state.copyWith(
           isLoadingDailyStats: false,
           dailyLeadStats: stats,
+          selectedDailyAgentId: targetAgentId,
+          resetDailyAgent: targetAgentId == null,
         ),
       );
     } catch (e) {
