@@ -21,6 +21,7 @@ import 'create_dealer_page.dart';
 import 'create_order_page.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DealerManagementPage extends StatefulWidget {
   final bool isStandalone;
@@ -36,6 +37,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
   bool _isExporting = false;
   DealersBloc? _dealersBloc;
   StreamSubscription? _wsSubscription;
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _wsSubscription?.cancel();
     _searchController.dispose();
     _tableHorizontalController.dispose();
@@ -1512,9 +1515,12 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
             child: TextField(
               controller: _searchController,
               onChanged: (val) {
-                _dealersBloc?.add(
-                  UpdateDealersFilterEvent(searchQuery: val, currentPage: 1),
-                );
+                _searchDebounceTimer?.cancel();
+                _searchDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+                  _dealersBloc?.add(
+                    UpdateDealersFilterEvent(searchQuery: val, currentPage: 1),
+                  );
+                });
               },
               style: GoogleFonts.outfit(
                 fontSize: 14,
@@ -2878,14 +2884,13 @@ class _DealerRow extends StatefulWidget {
 class _DealerRowState extends State<_DealerRow> {
   bool isHovered = false;
 
-  // Optimized static styles to avoid repeated GoogleFonts calls
   static final TextStyle _shopNameStyle = GoogleFonts.outfit(
-    fontSize: 13,
+    fontSize: 13.5,
     color: AppTheme.textPrimary,
     fontWeight: FontWeight.w700,
   );
   static final TextStyle _dealerNameStyle = GoogleFonts.outfit(
-    fontSize: 11,
+    fontSize: 11.5,
     color: AppTheme.textSecondary,
     fontWeight: FontWeight.w500,
   );
@@ -2898,19 +2903,68 @@ class _DealerRowState extends State<_DealerRow> {
     fontWeight: FontWeight.w700,
     color: AppTheme.textPrimary,
   );
-  static final TextStyle _statusTextStyle = GoogleFonts.outfit(
-    fontSize: 10.5,
-    fontWeight: FontWeight.bold,
-  );
+
+  Color _getAvatarColor(String name) {
+    const colors = [
+      Color(0xFF10B981), // Emerald
+      Color(0xFF6366F1), // Indigo
+      Color(0xFF8B5CF6), // Violet
+      Color(0xFF0284C7), // Sky Blue
+      Color(0xFFF59E0B), // Amber
+      Color(0xFFEC4899), // Pink
+      Color(0xFF0D9488), // Teal
+    ];
+    if (name.trim().isEmpty) return colors[0];
+    final hash = name.codeUnits.fold(0, (acc, c) => acc + c);
+    return colors[hash % colors.length];
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts[0].isEmpty) return 'D';
+    if (parts.length > 1 && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  }
+
+  void _launchWhatsApp(String phone) async {
+    final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final uri = Uri.parse('https://wa.me/$cleaned');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _launchCall(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Simplified background logic
     final Color rowBgColor = isHovered
-        ? const Color(0xFFF1F9F3)
+        ? const Color(0xFFF1F5F9)
         : (widget.isSelected
-              ? AppTheme.primaryColor.withValues(alpha: 0.04)
-              : (widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white));
+            ? AppTheme.primaryColor.withValues(alpha: 0.05)
+            : (widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white));
+
+    final String displayName = widget.dealer.shopName != null &&
+            widget.dealer.shopName!.trim().isNotEmpty &&
+            widget.dealer.shopName!.toLowerCase() != 'my store'
+        ? widget.dealer.shopName!
+        : (widget.dealer.name.isNotEmpty ? widget.dealer.name : 'Unnamed Dealer');
+    final avatarColor = _getAvatarColor(displayName);
+    final initials = _getInitials(displayName);
+    final phone = widget.dealer.phone;
+
+    final String? assignedAgentId = widget.salesAgents.any(
+      (agent) => agent['_id'] == widget.dealer.agentId,
+    )
+        ? widget.dealer.agentId
+        : null;
 
     return RepaintBoundary(
       child: MouseRegion(
@@ -2920,10 +2974,16 @@ class _DealerRowState extends State<_DealerRow> {
         child: GestureDetector(
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
             decoration: BoxDecoration(
-              border: const Border(
-                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+              border: Border(
+                bottom: const BorderSide(color: Color(0xFFF1F5F9), width: 1),
+                left: isHovered
+                    ? const BorderSide(color: AppTheme.primaryColor, width: 3.5)
+                    : (widget.isSelected
+                        ? const BorderSide(color: AppTheme.primaryColor, width: 3.5)
+                        : BorderSide.none),
               ),
               color: rowBgColor,
             ),
@@ -2933,206 +2993,326 @@ class _DealerRowState extends State<_DealerRow> {
                   SizedBox(
                     width: 40,
                     child: Center(
-                      child: (isHovered || widget.isSelected)
-                          ? _CustomCheckbox(
-                              isSelected: widget.isSelected,
-                              onTap: widget.onToggleSelection,
-                            )
-                          : const SizedBox.shrink(),
+                      child: Opacity(
+                        opacity: (isHovered || widget.isSelected) ? 1.0 : 0.0,
+                        child: IgnorePointer(
+                          ignoring: !(isHovered || widget.isSelected),
+                          child: _CustomCheckbox(
+                            isSelected: widget.isSelected,
+                            onTap: widget.onToggleSelection,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
+                // Shop Name & Avatar Cell
                 Expanded(
                   flex: 32,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: 8,
+                      vertical: 10,
                       horizontal: 12,
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                widget.dealer.shopName != null &&
-                                        widget.dealer.shopName!.isNotEmpty
-                                    ? widget.dealer.shopName!
-                                    : 'Unnamed Shop',
-                                style: _shopNameStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                        CircleAvatar(
+                          radius: 17,
+                          backgroundColor: avatarColor.withValues(alpha: 0.14),
+                          child: Text(
+                            initials,
+                            style: GoogleFonts.outfit(
+                              color: avatarColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
                             ),
-                            if (widget.dealer.isPanelCreated) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF3E8FF),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: const Color(0xFFC084FC),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.laptop_mac_rounded,
-                                      size: 10,
-                                      color: Color(0xFF7E22CE),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      widget.dealer.shopName != null &&
+                                              widget.dealer.shopName!.isNotEmpty
+                                          ? widget.dealer.shopName!
+                                          : 'Unnamed Shop',
+                                      style: _shopNameStyle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Panel',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF7E22CE),
+                                  ),
+                                  if (widget.dealer.isPanelCreated) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3E8FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: const Color(0xFFC084FC),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.laptop_mac_rounded,
+                                            size: 9,
+                                            color: Color(0xFF7E22CE),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            'Panel',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF7E22CE),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
-                                ),
+                                ],
+                              ),
+                              const SizedBox(height: 1),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.person_outline_rounded,
+                                    size: 11.5,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Expanded(
+                                    child: Text(
+                                      widget.dealer.name,
+                                      style: _dealerNameStyle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
-                          ],
-                        ),
-                        Text(
-                          widget.dealer.name,
-                          style: _dealerNameStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                  _cell(widget.dealer.phone, flex: 20, isSecondary: true),
-                  _cell(
-                    (widget.dealer.city.isNotEmpty &&
-                            widget.dealer.state.isNotEmpty)
-                        ? '${widget.dealer.city}, ${widget.dealer.state}'
-                        : (widget.dealer.city.isNotEmpty
-                              ? widget.dealer.city
-                              : widget.dealer.state),
-                    flex: 20,
-                    isSecondary: true,
-                  ),
-                  if (AuthService().isAdmin)
-                    Expanded(
-                      flex: 20,
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          left: 12,
-                          right: 36,
-                          top: 8,
-                          bottom: 8,
+                // Phone Number & Quick Hover Outreach
+                Expanded(
+                  flex: 20,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            phone,
+                            style: _cellTextStyle.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        child: GestureDetector(
-                          onTap: () {}, // Stop propagation for dropdown
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF9FAFB),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB),
-                              ),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String?>(
-                                value:
-                                    widget.salesAgents.any(
-                                      (agent) =>
-                                          agent['_id'] == widget.dealer.agentId,
-                                    )
-                                    ? widget.dealer.agentId
-                                    : null,
-                                isExpanded: true,
-                                isDense: true,
-                                icon: const Icon(
-                                  Icons.arrow_drop_down,
-                                  size: 16,
-                                  color: AppTheme.textSecondary,
+                        if (isHovered && phone.isNotEmpty) ...[
+                          GestureDetector(
+                            onTap: () => _launchWhatsApp(phone),
+                            child: Tooltip(
+                              message: 'WhatsApp',
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                hint: Text('-', style: _dealerNameStyle),
-                                onChanged: (String? newAgentId) {
-                                  if (widget.dealer.id != null) {
-                                    widget.onAssignAgent(
-                                      widget.dealer.id!,
-                                      newAgentId,
-                                    );
-                                  }
-                                },
-                                items: [
-                                  DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('-', style: _dealerNameStyle),
-                                  ),
-                                  ...widget.salesAgents.map((agent) {
-                                    final agentName =
-                                        '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                            .trim();
-                                    return DropdownMenuItem<String?>(
-                                      value: agent['_id'],
-                                      child: Text(
-                                        agentName.isNotEmpty
-                                            ? agentName
-                                            : (agent['phoneNumber'] ?? ''),
-                                        style: _dealerNameStyle.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ],
+                                child: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 13,
+                                  color: Color(0xFF10B981),
+                                ),
                               ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => _launchCall(phone),
+                            child: Tooltip(
+                              message: 'Call Phone',
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.call_outlined,
+                                  size: 13,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // Location Cell with Map Pin
+                _locationCell(
+                  (widget.dealer.city.isNotEmpty &&
+                          widget.dealer.state.isNotEmpty)
+                      ? '${widget.dealer.city}, ${widget.dealer.state}'
+                      : (widget.dealer.city.isNotEmpty
+                            ? widget.dealer.city
+                            : widget.dealer.state),
+                  flex: 20,
+                ),
+                // Assigned Agent Cell
+                if (AuthService().isAdmin)
+                  Expanded(
+                    flex: 20,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 12,
+                        right: 24,
+                        top: 8,
+                        bottom: 8,
+                      ),
+                      child: GestureDetector(
+                        onTap: () {}, // Stop propagation
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: assignedAgentId != null
+                                ? Colors.white
+                                : const Color(0xFFF5F3FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: assignedAgentId != null
+                                  ? const Color(0xFFE2E8F0)
+                                  : const Color(0xFFDDD6FE),
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              value: assignedAgentId,
+                              isExpanded: true,
+                              isDense: true,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 16,
+                                color: AppTheme.textSecondary,
+                              ),
+                              hint: Text(
+                                '👤 + Assign',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF7C3AED),
+                                ),
+                              ),
+                              onChanged: (String? newAgentId) {
+                                if (widget.dealer.id != null) {
+                                  widget.onAssignAgent(
+                                    widget.dealer.id!,
+                                    newAgentId,
+                                  );
+                                }
+                              },
+                              items: [
+                                DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text(
+                                    '👤 Unassigned',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                                ...widget.salesAgents.map((agent) {
+                                  final agentName =
+                                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                          .trim();
+                                  return DropdownMenuItem<String?>(
+                                    value: agent['_id'],
+                                    child: Text(
+                                      agentName.isNotEmpty
+                                          ? agentName
+                                          : (agent['phoneNumber'] ?? 'Agent'),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
-                  _statusCell(widget.dealer.status ?? 'prospect', flex: 16),
-                  _cell(
-                    widget.dealer.totalOrders.toString(),
-                    flex: 12,
-                    isBold: true,
-                    textAlign: TextAlign.center,
                   ),
-                  _cell(
-                    widget.dealer.purchaseValue,
-                    flex: 20,
-                    isBold: true,
-                    textAlign: TextAlign.center,
-                  ),
-                  Expanded(
-                    flex: 18,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: () {}, // Stop propagation for buttons
-                        child: _ConnectedActionButtons(
-                          onCreateOrder: widget.onCreateOrder,
-                          onEdit: widget.onEdit,
-                          onDelete: widget.onDelete,
-                        ),
+                // Status Cell
+                _statusCell(widget.dealer.status ?? 'prospect', flex: 16),
+                // Orders Cell
+                _cell(
+                  widget.dealer.totalOrders.toString(),
+                  flex: 12,
+                  isBold: true,
+                  textAlign: TextAlign.center,
+                ),
+                // Purchase Value Cell
+                _cell(
+                  widget.dealer.purchaseValue,
+                  flex: 20,
+                  isBold: true,
+                  textAlign: TextAlign.center,
+                ),
+                // Actions Cell
+                Expanded(
+                  flex: 18,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {}, // Stop propagation for buttons
+                      child: _ConnectedActionButtons(
+                        onOpenProfile: widget.onTap,
+                        onCreateOrder: widget.onCreateOrder,
+                        onEdit: widget.onEdit,
+                        onDelete: widget.onDelete,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _cell(
@@ -3163,6 +3343,36 @@ class _DealerRowState extends State<_DealerRow> {
     );
   }
 
+  Widget _locationCell(String text, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.location_on_outlined,
+              size: 13,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                text.isNotEmpty ? text : '-',
+                style: _cellTextStyle.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12.5,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatStatusName(String status) {
     switch (status.toLowerCase()) {
       case 'kyc pending':
@@ -3170,7 +3380,7 @@ class _DealerRowState extends State<_DealerRow> {
       case 'call not picked':
         return 'Call Not Picked';
       case 'connected but not intrested':
-        return 'Connected But Not Interested';
+        return 'Not Interested';
       case 'quotation sent':
         return 'Quotation Sent';
       case 'negotiation':
@@ -3182,11 +3392,13 @@ class _DealerRowState extends State<_DealerRow> {
       case 'intrested':
         return 'Interested';
       case 'customer busy':
-        return 'Customer Busy';
+        return 'Busy';
       case 'call switch off':
-        return 'Call Switch Off';
+        return 'Switched Off';
       case 'prospect':
         return 'Prospect';
+      case 'verified':
+        return 'Verified';
       default:
         return status;
     }
@@ -3196,40 +3408,40 @@ class _DealerRowState extends State<_DealerRow> {
     Color color = Colors.grey;
     switch (status.toLowerCase()) {
       case 'kyc pending':
-        color = Colors.amber;
+        color = const Color(0xFFF59E0B);
         break;
       case 'call not picked':
-        color = Colors.orange;
+        color = const Color(0xFFEA580C);
         break;
       case 'connected but not intrested':
-        color = Colors.blueGrey;
+        color = const Color(0xFF64748B);
         break;
       case 'quotation sent':
-        color = Colors.blue;
+        color = const Color(0xFF0284C7);
         break;
       case 'negotiation':
-        color = Colors.indigo;
+        color = const Color(0xFF6366F1);
         break;
       case 'follow-up':
-        color = Colors.deepPurple;
+        color = const Color(0xFF8B5CF6);
         break;
       case 'lost':
-        color = Colors.red;
+        color = const Color(0xFFEF4444);
         break;
       case 'intrested':
-        color = Colors.green;
+        color = const Color(0xFF10B981);
         break;
       case 'customer busy':
-        color = Colors.teal;
+        color = const Color(0xFF0D9488);
         break;
       case 'call switch off':
-        color = Colors.redAccent;
+        color = const Color(0xFFF43F5E);
         break;
       case 'prospect':
-        color = Colors.cyan;
+        color = const Color(0xFF06B6D4);
         break;
       case 'verified':
-        color = AppTheme.success;
+        color = const Color(0xFF10B981);
         break;
     }
 
@@ -3242,15 +3454,33 @@ class _DealerRowState extends State<_DealerRow> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
             ),
-            child: Text(
-              _formatStatusName(status).toUpperCase(),
-              style: _statusTextStyle.copyWith(color: color),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _formatStatusName(status),
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),
@@ -3383,11 +3613,13 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
+  final VoidCallback onOpenProfile;
   final VoidCallback? onCreateOrder;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ConnectedActionButtons({
+    required this.onOpenProfile,
     this.onCreateOrder,
     required this.onEdit,
     required this.onDelete,
@@ -3399,6 +3631,7 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
+  bool isProfileHovered = false;
   bool isOrderHovered = false;
   bool isEditHovered = false;
   bool isDeleteHovered = false;
@@ -3451,6 +3684,15 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _buildIconButton(
+          onTap: widget.onOpenProfile,
+          icon: Icons.open_in_new_rounded,
+          tooltip: 'Open Full Profile',
+          isHovered: isProfileHovered,
+          onHoverChanged: (val) => setState(() => isProfileHovered = val),
+          color: const Color(0xFF10B981),
+        ),
+        const SizedBox(width: 6),
         if (widget.onCreateOrder != null) ...[
           _buildIconButton(
             onTap: widget.onCreateOrder!,

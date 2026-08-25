@@ -19,6 +19,7 @@ import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_attention_banner.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_lifecycle_funnel.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_inspector_drawer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/services/analytics_service.dart';
 
@@ -2483,11 +2484,9 @@ class _LeadsTableState extends State<_LeadsTable> {
                 SizedBox(
                   width: 40,
                   child: Center(
-                    child: SelectionContainer.disabled(
-                      child: _CustomCheckbox(
-                        isSelected: isAllSelected,
-                        onTap: _toggleAll,
-                      ),
+                    child: _CustomCheckbox(
+                      isSelected: isAllSelected,
+                      onTap: _toggleAll,
                     ),
                   ),
                 ),
@@ -2587,12 +2586,12 @@ class _LeadRowState extends State<_LeadRow> {
   bool isHovered = false;
 
   static final TextStyle _nameStyle = GoogleFonts.outfit(
-    fontSize: 13,
+    fontSize: 13.5,
     color: AppTheme.textPrimary,
     fontWeight: FontWeight.w700,
   );
   static final TextStyle _subStyle = GoogleFonts.outfit(
-    fontSize: 11,
+    fontSize: 11.5,
     color: AppTheme.textSecondary,
     fontWeight: FontWeight.w500,
   );
@@ -2600,16 +2599,51 @@ class _LeadRowState extends State<_LeadRow> {
     fontSize: 13,
     fontWeight: FontWeight.w500,
   );
-  static final TextStyle _statusTextStyle = GoogleFonts.outfit(
-    fontSize: 10.5,
-    fontWeight: FontWeight.bold,
-  );
+
+  Color _getAvatarColor(String name) {
+    const colors = [
+      Color(0xFF10B981), // Emerald
+      Color(0xFF6366F1), // Indigo
+      Color(0xFF8B5CF6), // Violet
+      Color(0xFF0284C7), // Sky Blue
+      Color(0xFFF59E0B), // Amber
+      Color(0xFFEC4899), // Pink
+      Color(0xFF0D9488), // Teal
+    ];
+    if (name.trim().isEmpty) return colors[0];
+    final hash = name.codeUnits.fold(0, (acc, c) => acc + c);
+    return colors[hash % colors.length];
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts[0].isEmpty) return 'L';
+    if (parts.length > 1 && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  }
+
+  void _launchWhatsApp(String phone) async {
+    final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final uri = Uri.parse('https://wa.me/$cleaned');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _launchCall(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     Color rowBgColor = widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
-    if (widget.isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.04);
-    if (isHovered) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.03);
+    if (widget.isSelected) rowBgColor = AppTheme.primaryColor.withValues(alpha: 0.05);
+    if (isHovered) rowBgColor = const Color(0xFFF1F5F9);
 
     final String targetAgentId = (widget.lead['agentId'] ?? '').toString();
     final matchingAgent = widget.salesAgents.firstWhere(
@@ -2623,6 +2657,12 @@ class _LeadRowState extends State<_LeadRow> {
         ? (matchingAgent['_id'] ?? matchingAgent['id'])?.toString()
         : null;
 
+    final name = (widget.lead['name'] ?? 'Unnamed Lead').toString();
+    final shopName = (widget.lead['shopName'] ?? '').toString();
+    final phone = (widget.lead['phone'] ?? '').toString();
+    final avatarColor = _getAvatarColor(name);
+    final initials = _getInitials(name);
+
     return RepaintBoundary(
       child: MouseRegion(
         onEnter: (_) => setState(() => isHovered = true),
@@ -2631,10 +2671,16 @@ class _LeadRowState extends State<_LeadRow> {
         child: GestureDetector(
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
             decoration: BoxDecoration(
-              border: const Border(
-                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 0.5),
+              border: Border(
+                bottom: const BorderSide(color: Color(0xFFF1F5F9), width: 1),
+                left: isHovered
+                    ? const BorderSide(color: AppTheme.primaryColor, width: 3.5)
+                    : (widget.isSelected
+                        ? const BorderSide(color: AppTheme.primaryColor, width: 3.5)
+                        : BorderSide.none),
               ),
               color: rowBgColor,
             ),
@@ -2644,51 +2690,150 @@ class _LeadRowState extends State<_LeadRow> {
                   SizedBox(
                     width: 40,
                     child: Center(
-                      child: (isHovered || widget.isSelected)
-                          ? SelectionContainer.disabled(
-                              child: GestureDetector(
-                                onTap: () {}, // Prevent row tap
-                                child: _CustomCheckbox(
-                                  isSelected: widget.isSelected,
-                                  onTap: widget.onToggleSelection,
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
+                      child: Opacity(
+                        opacity: (isHovered || widget.isSelected) ? 1.0 : 0.0,
+                        child: IgnorePointer(
+                          ignoring: !(isHovered || widget.isSelected),
+                          child: GestureDetector(
+                            onTap: () {}, // Prevent row tap
+                            child: _CustomCheckbox(
+                              isSelected: widget.isSelected,
+                              onTap: widget.onToggleSelection,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
+                // Lead Name & Avatar Cell
                 Expanded(
                   flex: 28,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: 12,
+                      vertical: 10,
                       horizontal: 12,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(
-                          widget.lead['name'],
-                          style: _nameStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (widget.lead['shopName'] != null &&
-                            widget.lead['shopName'].toString().isNotEmpty &&
-                            widget.lead['shopName'].toString().toLowerCase() !=
-                                'my store')
-                          Text(
-                            widget.lead['shopName'],
-                            style: _subStyle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        CircleAvatar(
+                          radius: 17,
+                          backgroundColor: avatarColor.withValues(alpha: 0.14),
+                          child: Text(
+                            initials,
+                            style: GoogleFonts.outfit(
+                              color: avatarColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
                           ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                name,
+                                style: _nameStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (shopName.isNotEmpty &&
+                                  shopName.toLowerCase() != 'my store') ...[
+                                const SizedBox(height: 1),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.storefront_outlined,
+                                      size: 12,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        shopName,
+                                        style: _subStyle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                _cell(widget.lead['phone'], flex: 1.4, isSecondary: true),
-                _cell(
+                // Phone Number & Quick Hover Actions
+                Expanded(
+                  flex: 14,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            phone,
+                            style: _cellStyleText.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isHovered && phone.isNotEmpty) ...[
+                          GestureDetector(
+                            onTap: () => _launchWhatsApp(phone),
+                            child: Tooltip(
+                              message: 'WhatsApp',
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 13,
+                                  color: Color(0xFF10B981),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => _launchCall(phone),
+                            child: Tooltip(
+                              message: 'Call Phone',
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.call_outlined,
+                                  size: 13,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // Location Cell
+                _locationCell(
                   (widget.lead['city'] != null &&
                           widget.lead['city'].toString().trim().isNotEmpty &&
                           widget.lead['state'] != null &&
@@ -2698,32 +2843,36 @@ class _LeadRowState extends State<_LeadRow> {
                             ? widget.lead['city']
                             : (widget.lead['state'] ?? '')),
                   flex: 1.4,
-                  isSecondary: true,
                 ),
-                _cell(widget.lead['activity'], flex: 1.2, isSecondary: true),
+                // Last Activity Cell
+                _cell(widget.lead['activity'] ?? '-', flex: 1.2, isSecondary: true),
+                // Assigned Agent Cell
                 if (AuthService().isAdmin)
                   Expanded(
                     flex: 14,
                     child: Padding(
                       padding: const EdgeInsets.only(
                         left: 12,
-                        right: 36,
+                        right: 24,
                         top: 8,
                         bottom: 8,
                       ),
-                      child: SelectionContainer.disabled(
-                        child: GestureDetector(
-                          onTap: () {}, // Prevent row tap from triggering when clicking interactive element
-                          child: Container(
+                      child: GestureDetector(
+                        onTap: () {}, // Prevent row tap
+                        child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
+                              horizontal: 8,
+                              vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF9FAFB),
-                              borderRadius: BorderRadius.circular(6),
+                              color: selectedAgentValue != null
+                                  ? Colors.white
+                                  : const Color(0xFFF5F3FF),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(0xFFE5E7EB),
+                                color: selectedAgentValue != null
+                                    ? const Color(0xFFE2E8F0)
+                                    : const Color(0xFFDDD6FE),
                               ),
                             ),
                             child: DropdownButtonHideUnderline(
@@ -2732,11 +2881,18 @@ class _LeadRowState extends State<_LeadRow> {
                                 isExpanded: true,
                                 isDense: true,
                                 icon: const Icon(
-                                  Icons.arrow_drop_down,
+                                  Icons.keyboard_arrow_down_rounded,
                                   size: 16,
                                   color: AppTheme.textSecondary,
                                 ),
-                                hint: Text('-', style: _subStyle),
+                                hint: Text(
+                                  '👤 + Assign',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF7C3AED),
+                                  ),
+                                ),
                                 onChanged: (String? newAgentId) {
                                   if (widget.lead['id'] != null) {
                                     widget.onAssignAgent(
@@ -2748,10 +2904,18 @@ class _LeadRowState extends State<_LeadRow> {
                                 items: [
                                   DropdownMenuItem<String?>(
                                     value: null,
-                                    child: Text('-', style: _subStyle),
+                                    child: Text(
+                                      '👤 Unassigned',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
                                   ),
                                   ...widget.salesAgents.map((agent) {
-                                    final agentId = (agent['_id'] ?? agent['id'])?.toString() ?? '';
+                                    final agentId =
+                                        (agent['_id'] ?? agent['id'])?.toString() ?? '';
                                     final agentName =
                                         '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
                                             .trim();
@@ -2761,9 +2925,10 @@ class _LeadRowState extends State<_LeadRow> {
                                         agentName.isNotEmpty
                                             ? agentName
                                             : (agent['phoneNumber'] ?? 'Agent'),
-                                        style: _cellStyleText.copyWith(
-                                          fontSize: 12.5,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
                                           fontWeight: FontWeight.w700,
+                                          color: AppTheme.textPrimary,
                                         ),
                                       ),
                                     );
@@ -2775,8 +2940,9 @@ class _LeadRowState extends State<_LeadRow> {
                         ),
                       ),
                     ),
-                  ),
+                // Status Cell
                 _statusCell(widget.lead['status'] ?? 'prospect', flex: 1.4),
+                // Action Buttons Cell
                 Expanded(
                   flex: 14,
                   child: Align(
@@ -2784,30 +2950,28 @@ class _LeadRowState extends State<_LeadRow> {
                     child: Padding(
                       padding: const EdgeInsets.only(
                         left: 12,
-                        top: 10,
-                        bottom: 10,
+                        top: 8,
+                        bottom: 8,
                       ),
-                      child: SelectionContainer.disabled(
-                        child: GestureDetector(
-                          onTap: () {}, // Stop propagation for buttons
-                          child: _ConnectedActionButtons(
-                            onOpenProfile: () {
-                              final isVerified =
-                                  widget.lead['kycStatus'] == 'verified';
-                              final route = isVerified
-                                  ? '/dealers/profile'
-                                  : '/leads/profile';
-                              Navigator.pushNamed(
-                                context,
-                                route,
-                                arguments: widget.lead,
-                              );
-                            },
-                            onEdit: () => widget.onEdit(widget.lead),
-                            onDelete: () => widget.onDelete(
-                              widget.lead['id'] ?? '',
-                              widget.lead['name'] ?? '',
-                            ),
+                      child: GestureDetector(
+                        onTap: () {}, // Stop propagation for buttons
+                        child: _ConnectedActionButtons(
+                          onOpenProfile: () {
+                            final isVerified =
+                                widget.lead['kycStatus'] == 'verified';
+                            final route = isVerified
+                                ? '/dealers/profile'
+                                : '/leads/profile';
+                            Navigator.pushNamed(
+                              context,
+                              route,
+                              arguments: widget.lead,
+                            );
+                          },
+                          onEdit: () => widget.onEdit(widget.lead),
+                          onDelete: () => widget.onDelete(
+                            widget.lead['id'] ?? '',
+                            widget.lead['name'] ?? '',
                           ),
                         ),
                       ),
@@ -2829,7 +2993,7 @@ class _LeadRowState extends State<_LeadRow> {
       case 'call not picked':
         return 'Call Not Picked';
       case 'connected but not intrested':
-        return 'Connected But Not Interested';
+        return 'Not Interested';
       case 'quotation sent':
         return 'Quotation Sent';
       case 'negotiation':
@@ -2841,9 +3005,9 @@ class _LeadRowState extends State<_LeadRow> {
       case 'intrested':
         return 'Interested';
       case 'customer busy':
-        return 'Customer Busy';
+        return 'Busy';
       case 'call switch off':
-        return 'Call Switch Off';
+        return 'Switched Off';
       case 'prospect':
         return 'Prospect';
       default:
@@ -2865,11 +3029,44 @@ class _LeadRowState extends State<_LeadRow> {
         child: Text(
           text,
           textAlign: textAlign,
-          style: isBold 
-              ? _nameStyle 
-              : _cellStyleText.copyWith(color: isSecondary ? AppTheme.textSecondary : AppTheme.textBody),
+          style: isBold
+              ? _nameStyle
+              : _cellStyleText.copyWith(
+                  color: isSecondary
+                      ? AppTheme.textSecondary
+                      : AppTheme.textBody),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _locationCell(String text, {double flex = 1.0}) {
+    return Expanded(
+      flex: (flex * 10).toInt(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.location_on_outlined,
+              size: 13,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                text.isNotEmpty ? text : '-',
+                style: _cellStyleText.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12.5,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2878,17 +3075,39 @@ class _LeadRowState extends State<_LeadRow> {
   Widget _statusCell(String status, {double flex = 1.0}) {
     Color color = Colors.grey;
     switch (status.toLowerCase()) {
-      case 'kyc pending': color = Colors.amber; break;
-      case 'call not picked': color = Colors.orange; break;
-      case 'connected but not intrested': color = Colors.blueGrey; break;
-      case 'quotation sent': color = Colors.blue; break;
-      case 'negotiation': color = Colors.indigo; break;
-      case 'follow-up': color = Colors.deepPurple; break;
-      case 'lost': color = Colors.red; break;
-      case 'intrested': color = Colors.green; break;
-      case 'customer busy': color = Colors.teal; break;
-      case 'call switch off': color = Colors.redAccent; break;
-      case 'prospect': color = Colors.cyan; break;
+      case 'kyc pending':
+        color = const Color(0xFFF59E0B); // Amber
+        break;
+      case 'call not picked':
+        color = const Color(0xFFEA580C); // Orange
+        break;
+      case 'connected but not intrested':
+        color = const Color(0xFF64748B); // Slate
+        break;
+      case 'quotation sent':
+        color = const Color(0xFF0284C7); // Sky
+        break;
+      case 'negotiation':
+        color = const Color(0xFF6366F1); // Indigo
+        break;
+      case 'follow-up':
+        color = const Color(0xFF8B5CF6); // Violet
+        break;
+      case 'lost':
+        color = const Color(0xFFEF4444); // Red
+        break;
+      case 'intrested':
+        color = const Color(0xFF10B981); // Emerald
+        break;
+      case 'customer busy':
+        color = const Color(0xFF0D9488); // Teal
+        break;
+      case 'call switch off':
+        color = const Color(0xFFF43F5E); // Rose
+        break;
+      case 'prospect':
+        color = const Color(0xFF06B6D4); // Cyan
+        break;
     }
 
     return Expanded(
@@ -2900,15 +3119,33 @@ class _LeadRowState extends State<_LeadRow> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
             ),
-            child: Text(
-              _formatStatusName(status).toUpperCase(),
-              style: _statusTextStyle.copyWith(color: color),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _formatStatusName(status),
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),
