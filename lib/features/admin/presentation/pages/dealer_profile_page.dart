@@ -1390,6 +1390,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                           currentDealer.email!,
                                         if (currentDealer.phone.isNotEmpty)
                                           currentDealer.phone,
+                                        if (currentDealer.name.isNotEmpty)
+                                          currentDealer.name,
+                                        if (currentDealer.shopName != null &&
+                                            currentDealer.shopName!.isNotEmpty)
+                                          currentDealer.shopName!,
                                       ],
                                       events: events,
                                       isLoading: isLoadingEvents,
@@ -4217,11 +4222,122 @@ class _UserEventsCard extends StatefulWidget {
 class _UserEventsCardState extends State<_UserEventsCard> {
   final Set<int> _expandedIndices = {};
   String _selectedCategory = 'all';
+  String _selectedActorScope = 'all'; // 'all', 'user', 'sales'
+
+  bool _isSalesActorEvent(Map<String, dynamic> e) {
+    final payload = e['payload'] is Map
+        ? Map<String, dynamic>.from(e['payload'])
+        : <String, dynamic>{};
+    final eventType = (e['eventType'] ?? e['event'] ?? '')
+        .toString()
+        .toLowerCase();
+
+    // 1. Explicit Staff / CRM action types are ALWAYS Sales/Staff actions
+    const staffEventTypes = {
+      'assign_agent',
+      'bulk_assign_agent',
+      'update_dealer_status',
+      'update_lead_status',
+      'add_dealer_note',
+      'add_lead_note',
+      'note_added',
+      'toggle_block',
+      'edit_dealer',
+      'edit_lead',
+      'delete_lead',
+      'delete_dealer',
+      'kyc_verified',
+      'kyc_rejected',
+      'kyc_status_updated',
+      'lead_converted',
+      'call_logged',
+      'whatsapp_message_sent',
+      'order_created_by_agent',
+      'estimate_created',
+      'estimate_shared',
+      'create_sales_agent',
+      'status_changed',
+      'lead_status_changed',
+      'dealer_status_changed',
+    };
+    if (staffEventTypes.contains(eventType)) return true;
+
+    // 2. Check actorRole or role in root or payload
+    final actorRole =
+        (e['actorRole'] ??
+                e['role'] ??
+                payload['actorRole'] ??
+                payload['role'] ??
+                '')
+            .toString()
+            .toLowerCase();
+    if (actorRole == 'sales' ||
+        actorRole == 'admin' ||
+        actorRole == 'manager' ||
+        actorRole == 'telecaller' ||
+        actorRole == 'agent') {
+      return true;
+    }
+
+    // 3. Check performedBy (e.g. "Ankita", "Admin User", "Rajesh")
+    final performedBy = (e['performedBy'] ?? payload['performedBy'] ?? '')
+        .toString()
+        .trim();
+    if (performedBy.isNotEmpty) {
+      final pLower = performedBy.toLowerCase();
+      if (pLower.contains('admin') ||
+          pLower.contains('sales') ||
+          pLower.contains('staff') ||
+          pLower.contains('agent')) {
+        return true;
+      }
+      final isDealerThemself = widget.dealerIdentifiers.any((id) {
+        final idClean = id.trim().toLowerCase();
+        return idClean.isNotEmpty &&
+            (idClean == pLower || pLower.contains(idClean));
+      });
+      if (!isDealerThemself &&
+          pLower != 'guest' &&
+          pLower != 'anonymous' &&
+          pLower != 'customer') {
+        return true;
+      }
+    }
+
+    // 4. Check actor / agentId / adminId in root or payload
+    final actor =
+        (e['actor'] ??
+                payload['actor'] ??
+                payload['agentId'] ??
+                payload['adminId'] ??
+                payload['assignedBy'] ??
+                '')
+            .toString()
+            .trim();
+    if (actor.isNotEmpty) {
+      final aLower = actor.toLowerCase();
+      final isDealerThemself = widget.dealerIdentifiers.any((id) {
+        final idClean = id.trim().toLowerCase();
+        return idClean.isNotEmpty &&
+            (idClean == aLower || aLower.contains(idClean));
+      });
+      if (!isDealerThemself &&
+          aLower != 'guest' &&
+          aLower != 'anonymous' &&
+          aLower != 'customer') {
+        return true;
+      }
+    }
+
+    // 5. Default to customer app action
+    return false;
+  }
 
   bool _matchesCategory(
     String eventType,
     String category,
     Map<String, dynamic> payload,
+    bool isSalesEvent,
   ) {
     if (category == 'all') return true;
     if (category == 'marketing') {
@@ -4242,6 +4358,14 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       return eventType == 'payment_initiated' ||
           eventType == 'payment_success' ||
           eventType == 'payment_failed';
+    }
+    if (category == 'crm') {
+      return isSalesEvent ||
+          eventType == 'assign_agent' ||
+          eventType == 'update_dealer_status' ||
+          eventType == 'add_dealer_note' ||
+          eventType == 'edit_dealer' ||
+          eventType == 'toggle_block';
     }
     if (category == 'system') {
       return eventType == 'login_success' ||
@@ -4423,8 +4547,6 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       }
     }
 
-    // Contextual phrasing: If dealer did it, keep it direct.
-    // If someone else did it, identify them.
     final String actorSuffix = isDealerActor ? '' : ' by $actorName';
 
     switch (eventType) {
@@ -4502,12 +4624,115 @@ class _UserEventsCardState extends State<_UserEventsCard> {
     }
   }
 
+  Widget _buildActorScopeSelector(int allCount, int userCount, int salesCount) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildScopeButton(
+              id: 'all',
+              label: 'All Activities',
+              count: allCount,
+              icon: Icons.layers_outlined,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildScopeButton(
+              id: 'user',
+              label: 'Dealer App Actions',
+              count: userCount,
+              icon: Icons.phone_android_rounded,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildScopeButton(
+              id: 'sales',
+              label: 'Sales & Staff Actions',
+              count: salesCount,
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopeButton({
+    required String id,
+    required String label,
+    required int count,
+    required IconData icon,
+  }) {
+    final bool isSelected = _selectedActorScope == id;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedActorScope = id;
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected
+                  ? AppTheme.primaryColor
+                  : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '$label ($count)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? AppTheme.textPrimary
+                      : const Color(0xFF64748B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilterTabs() {
     final List<Map<String, String>> tabs = [
-      {'id': 'all', 'label': 'All Activities'},
-      {'id': 'marketing', 'label': 'Marketing'},
+      {'id': 'all', 'label': 'All Categories'},
       {'id': 'shopping', 'label': 'Cart & Store'},
       {'id': 'payments', 'label': 'Payments'},
+      {'id': 'marketing', 'label': 'Marketing'},
+      {'id': 'crm', 'label': 'Staff & CRM'},
       {'id': 'system', 'label': 'System Logs'},
     ];
 
@@ -4533,12 +4758,12 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                 ),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppTheme.primaryColor.withOpacity(0.1)
+                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isSelected
-                        ? AppTheme.primaryColor.withOpacity(0.3)
+                        ? AppTheme.primaryColor.withValues(alpha: 0.3)
                         : const Color(0xFFE2E8F0),
                     width: 1.5,
                   ),
@@ -4747,9 +4972,9 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: tipColor.withOpacity(0.06),
+        color: tipColor.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: tipColor.withOpacity(0.15)),
+        border: Border.all(color: tipColor.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -4761,7 +4986,7 @@ class _UserEventsCardState extends State<_UserEventsCard> {
               style: GoogleFonts.outfit(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: tipColor.withOpacity(0.9),
+                color: tipColor.withValues(alpha: 0.9),
               ),
             ),
           ),
@@ -4774,20 +4999,31 @@ class _UserEventsCardState extends State<_UserEventsCard> {
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
 
+    // Compute scope counts
+    int userEventsCount = 0;
+    int salesEventsCount = 0;
+    for (final e in widget.events) {
+      if (_isSalesActorEvent(e)) {
+        salesEventsCount++;
+      } else {
+        userEventsCount++;
+      }
+    }
+    final int allEventsCount = widget.events.length;
+
     final filteredEvents = widget.events.where((e) {
       final type = e['eventType']?.toString() ?? '';
-      final actorId = e['user']?.toString() ?? '';
+      final bool isSalesEvent = _isSalesActorEvent(e);
 
-      // Only display events where the dealer was the actor
-      final bool isDealerActor = widget.dealerIdentifiers.any(
-        (id) => id.toLowerCase() == actorId.toLowerCase(),
-      );
-      if (!isDealerActor) return false;
+      // 1. Actor scope filter
+      if (_selectedActorScope == 'user' && isSalesEvent) return false;
+      if (_selectedActorScope == 'sales' && !isSalesEvent) return false;
 
+      // 2. Category filter
       final payload = e['payload'] is Map
           ? Map<String, dynamic>.from(e['payload'])
           : <String, dynamic>{};
-      return _matchesCategory(type, _selectedCategory, payload);
+      return _matchesCategory(type, _selectedCategory, payload, isSalesEvent);
     }).toList();
 
     return Container(
@@ -4837,7 +5073,7 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -4852,6 +5088,13 @@ class _UserEventsCardState extends State<_UserEventsCard> {
             ],
           ),
           const SizedBox(height: 16),
+          // Segregated Actor Scope Tabs
+          _buildActorScopeSelector(
+            allEventsCount,
+            userEventsCount,
+            salesEventsCount,
+          ),
+          // Sub-category filter pills
           _buildFilterTabs(),
           const SizedBox(height: 20),
           if (widget.isLoading)
@@ -4875,7 +5118,7 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'No recent activity matching this filter.',
+                      'No activity matching this filter.',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         color: const Color(0xFF6B7280),
@@ -4896,7 +5139,6 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                 final eventType = event['eventType']?.toString() ?? '';
                 final timestamp = event['timestamp']?.toString() ?? '';
                 final details = event['details']?.toString() ?? '';
-                final actorId = event['user']?.toString() ?? '';
                 final payload = event['payload'] is Map
                     ? Map<String, dynamic>.from(event['payload'])
                     : <String, dynamic>{};
@@ -4904,15 +5146,11 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                     ? Map<String, dynamic>.from(event['userDetails'])
                     : null;
 
-                // Identify if the event was performed by the dealer we are looking at
-                final bool isDealerActor = widget.dealerIdentifiers.any(
-                  (id) => id.toLowerCase() == actorId.toLowerCase(),
-                );
+                final bool isSalesEvent = _isSalesActorEvent(event);
+                final bool isDealerActor = !isSalesEvent;
 
                 final visuals = _getEventVisuals(eventType);
-                final String displayLabel = isDealerActor
-                    ? (visuals['label'] as String)
-                    : '${visuals['label']} (Team Action)';
+                final String displayLabel = visuals['label'] as String;
 
                 final bool isExpanded = _expandedIndices.contains(index);
                 final bool isLast = index == filteredEvents.length - 1;
@@ -4928,8 +5166,8 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: (visuals['color'] as Color).withOpacity(
-                                0.1,
+                              color: (visuals['color'] as Color).withValues(
+                                alpha: 0.1,
                               ),
                               shape: BoxShape.circle,
                             ),
@@ -4959,15 +5197,66 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    displayLabel,
-                                    style: GoogleFonts.outfit(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: isDealerActor
-                                          ? const Color(0xFF1F2937)
-                                          : AppTheme.primaryColor,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        displayLabel,
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: isSalesEvent
+                                              ? const Color(0xFF6B21A8)
+                                              : const Color(0xFF1F2937),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSalesEvent
+                                              ? const Color(0xFFF3E8FF)
+                                              : const Color(0xFFE0F2FE),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: isSalesEvent
+                                                ? const Color(0xFFD8B4FE)
+                                                : const Color(0xFFBAE6FD),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isSalesEvent
+                                                  ? Icons.point_of_sale_rounded
+                                                  : Icons.campaign_rounded,
+                                              size: 11,
+                                              color: isSalesEvent
+                                                  ? const Color(0xFF7E22CE)
+                                                  : const Color(0xFF0369A1),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              isSalesEvent
+                                                  ? 'Sales Activity'
+                                                  : 'Marketing & App',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: isSalesEvent
+                                                    ? const Color(0xFF7E22CE)
+                                                    : const Color(0xFF0369A1),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   Row(
                                     children: [

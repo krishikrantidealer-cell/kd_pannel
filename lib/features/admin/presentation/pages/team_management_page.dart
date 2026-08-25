@@ -1393,7 +1393,19 @@ class _TeamManagementPageState extends State<TeamManagementPage>
       }
     }
 
-    // Process orders to calculate dealer-to-order ratio & sales revenue
+    final Map<String, String> dealerIdToAgentIdMap = {};
+    for (final entry in convertedDealersMap.entries) {
+      for (final dealer in entry.value) {
+        final dId = (dealer['_id'] ?? dealer['\$oid'] ?? dealer['id'])?.toString();
+        if (dId != null && dId.isNotEmpty) {
+          dealerIdToAgentIdMap[dId] = entry.key;
+        }
+      }
+    }
+
+    final Map<String, int> dealerOrdersCountMap = {};
+
+    // Process orders in O(1) per order using the inverted index
     for (final order in allOrders) {
       if (order['orderStatus'] == 'Cancelled') continue;
       final orderDate = order['createdAt'] ?? order['orderDate'];
@@ -1416,27 +1428,19 @@ class _TeamManagementPageState extends State<TeamManagementPage>
         order['totalAmount'] ?? order['grandTotal'] ?? 0,
       );
 
-      // Find sales agent of this dealer
-      for (final entry in convertedDealersMap.entries) {
-        final agentId = entry.key;
-        final dealersList = entry.value;
-        final isDealerOfAgent = dealersList.any((d) {
-          final dId = (d['_id'] ?? d['\$oid'] ?? d['id'])?.toString();
-          return dId == userId;
-        });
-
-        if (isDealerOfAgent) {
-          dealersWithOrdersMap.putIfAbsent(agentId, () => {}).add(userId);
-          agentOrdersCountMap[agentId] =
-              (agentOrdersCountMap[agentId] ?? 0) + 1;
-          agentSalesAmountMap[agentId] =
-              (agentSalesAmountMap[agentId] ?? 0.0) + orderAmount;
-          dealerSalesAmountMap[userId] =
-              (dealerSalesAmountMap[userId] ?? 0.0) + orderAmount;
-          totalTeamOrders++;
-          totalTeamSalesAmount += orderAmount;
-          break;
-        }
+      final agentId = dealerIdToAgentIdMap[userId];
+      if (agentId != null) {
+        dealersWithOrdersMap.putIfAbsent(agentId, () => {}).add(userId);
+        agentOrdersCountMap[agentId] =
+            (agentOrdersCountMap[agentId] ?? 0) + 1;
+        agentSalesAmountMap[agentId] =
+            (agentSalesAmountMap[agentId] ?? 0.0) + orderAmount;
+        dealerSalesAmountMap[userId] =
+            (dealerSalesAmountMap[userId] ?? 0.0) + orderAmount;
+        dealerOrdersCountMap[userId] =
+            (dealerOrdersCountMap[userId] ?? 0) + 1;
+        totalTeamOrders++;
+        totalTeamSalesAmount += orderAmount;
       }
     }
 
@@ -1703,6 +1707,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                 totalDealerOrders: agentOrdersCount,
                 totalSalesAmount: agentSalesAmount,
                 dealerSalesAmountMap: dealerSalesAmountMap,
+                dealerOrdersCountMap: dealerOrdersCountMap,
                 ordersPerDealer: ordersPerDealer,
                 dealerOrderActivationRate: dealerOrderActivationRate,
                 allOrders: allOrders,
@@ -1885,6 +1890,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
     required int totalDealerOrders,
     required double totalSalesAmount,
     required Map<String, double> dealerSalesAmountMap,
+    required Map<String, int> dealerOrdersCountMap,
     required double ordersPerDealer,
     required double dealerOrderActivationRate,
     required List<Map<String, dynamic>> allOrders,
@@ -2239,15 +2245,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                       final bool isLeadUpgrade =
                           createdVia == 'lead_conversion';
 
-                      final dealerOrdersCount = allOrders.where((o) {
-                        if (o['orderStatus'] == 'Cancelled') return false;
-                        final u = o['user'];
-                        if (u == null) return false;
-                        final uId =
-                            (u is Map ? (u['_id'] ?? u['\$oid'] ?? u['id']) : u)
-                                ?.toString();
-                        return uId == dId;
-                      }).length;
+                      final int dealerOrdersCount =
+                          (dId != null) ? (dealerOrdersCountMap[dId] ?? 0) : 0;
 
                       final double dealerSales = (dId != null)
                           ? (dealerSalesAmountMap[dId] ?? 0.0)

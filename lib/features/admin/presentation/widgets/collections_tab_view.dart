@@ -1157,6 +1157,8 @@ class _CollectionAvatar extends StatelessWidget {
             ? Image.network(
                 imageUrl!,
                 fit: BoxFit.cover,
+                cacheWidth: 150,
+                cacheHeight: 150,
                 errorBuilder: (context, error, stackTrace) =>
                     _buildPlaceholder(),
               )

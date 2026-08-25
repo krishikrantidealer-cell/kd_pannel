@@ -103,11 +103,15 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           properties: {
             'leadId': _lead!['_id'] ?? _lead!['id'] ?? '',
             'leadName':
-                '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim().isNotEmpty
-                    ? '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim()
-                    : (_lead!['name'] ?? ''),
+                '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
+                    .trim()
+                    .isNotEmpty
+                ? '${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
+                      .trim()
+                : (_lead!['name'] ?? ''),
             'details':
-                'Viewed lead profile for ${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'.trim(),
+                'Viewed lead profile for ${_lead!['firstName'] ?? ''} ${_lead!['lastName'] ?? ''}'
+                    .trim(),
           },
         );
       }
@@ -168,7 +172,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
   void _refreshLeadDetails() {
     final id = (_lead?['_id'] ?? _lead?['id'])?.toString();
-    if (id != null && id.isNotEmpty && RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(id)) {
+    if (id != null &&
+        id.isNotEmpty &&
+        RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(id)) {
       context.read<LeadsBloc>().add(FetchLeadDetailsEvent(id));
     }
   }
@@ -1806,9 +1812,17 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   List<Map<String, dynamic>> _getProfileTabs() {
     final bool isSales = AuthService().isSales;
     return [
-      {'icon': Icons.dashboard_outlined, 'label': 'Overview', 'key': 'overview'},
+      {
+        'icon': Icons.dashboard_outlined,
+        'label': 'Overview',
+        'key': 'overview',
+      },
       if (!isSales)
-        {'icon': Icons.analytics_outlined, 'label': 'Activities', 'key': 'activities'},
+        {
+          'icon': Icons.analytics_outlined,
+          'label': 'Activities',
+          'key': 'activities',
+        },
       {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
     ];
   }
@@ -1918,7 +1932,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
       },
       builder: (context, state) {
         final String? leadId = (_lead?['_id'] ?? _lead?['id'])?.toString();
-        final bool isDetailsMatching = state.currentLeadDetails != null &&
+        final bool isDetailsMatching =
+            state.currentLeadDetails != null &&
             leadId != null &&
             state.currentLeadDetails!['_id']?.toString() == leadId;
 
@@ -2118,7 +2133,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         Builder(
                           builder: (context) {
                             final tabs = _getProfileTabs();
-                            final safeIdx = (_activeTab >= 0 && _activeTab < tabs.length) ? _activeTab : 0;
+                            final safeIdx =
+                                (_activeTab >= 0 && _activeTab < tabs.length)
+                                ? _activeTab
+                                : 0;
                             final currentTabKey = tabs[safeIdx]['key'];
 
                             return SelectionContainer.disabled(
@@ -2142,7 +2160,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                       lead: activeLead,
                                                       salesAgents:
                                                           state.salesAgents,
-                                                      onAssignAgent: _assignAgent,
+                                                      onAssignAgent:
+                                                          _assignAgent,
                                                     ),
                                                   ),
                                                   const SizedBox(width: 32),
@@ -2150,7 +2169,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                     flex: 1,
                                                     child: _DealerKycDocumentsCard(
                                                       lead: activeLead,
-                                                      onViewDocument: _launchUrl,
+                                                      onViewDocument:
+                                                          _launchUrl,
                                                       onUpload:
                                                           _showUploadKycDialog,
                                                       isVertical: true,
@@ -2183,13 +2203,25 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                               userIdentifiers: [
                                                 leadId!,
                                                 if (activeLead['email'] != null)
-                                                  activeLead['email'].toString(),
+                                                  activeLead['email']
+                                                      .toString(),
                                                 if (activeLead['phone'] != null)
-                                                  activeLead['phone'].toString(),
+                                                  activeLead['phone']
+                                                      .toString(),
                                                 if (activeLead['phoneNumber'] !=
                                                     null)
                                                   activeLead['phoneNumber']
                                                       .toString(),
+                                                if (activeLead['firstName'] != null)
+                                                  activeLead['firstName'].toString(),
+                                                if (activeLead['lastName'] != null)
+                                                  activeLead['lastName'].toString(),
+                                                if (activeLead['name'] != null)
+                                                  activeLead['name'].toString(),
+                                                if (activeLead['leadName'] != null)
+                                                  activeLead['leadName'].toString(),
+                                                if (activeLead['shopName'] != null)
+                                                  activeLead['shopName'].toString(),
                                               ],
                                               events: events,
                                               isLoading: isLoadingEvents,
@@ -2239,9 +2271,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                         UpdateLeadDetailsEvent(
                                                           userId: leadId,
                                                           updateData: {
-                                                            'leadStatus': status,
+                                                            'leadStatus':
+                                                                status,
                                                             'leadNotes': notes,
-                                                            'noteType': noteType,
+                                                            'noteType':
+                                                                noteType,
                                                             'notePriority':
                                                                 notePriority,
                                                           },
@@ -2952,7 +2986,10 @@ class _LeadInformationCard extends StatelessWidget {
     }
   }
 
-  Map<String, String> _getDeepLinkAttributes(String? urlString, {Map<String, dynamic>? leadMap}) {
+  Map<String, String> _getDeepLinkAttributes(
+    String? urlString, {
+    Map<String, dynamic>? leadMap,
+  }) {
     final Map<String, String> result = {};
     if (leadMap != null) {
       final s = leadMap['utmSource'] ?? leadMap['utm_source'];
@@ -2960,11 +2997,16 @@ class _LeadInformationCard extends StatelessWidget {
       final c = leadMap['utmCampaign'] ?? leadMap['utm_campaign'];
       final t = leadMap['utmTerm'] ?? leadMap['utm_term'];
       final cnt = leadMap['utmContent'] ?? leadMap['utm_content'];
-      if (s != null && s.toString().isNotEmpty) result['utm_source'] = _cleanUtmValue(s.toString());
-      if (m != null && m.toString().isNotEmpty) result['utm_medium'] = _cleanUtmValue(m.toString());
-      if (c != null && c.toString().isNotEmpty) result['utm_campaign'] = _cleanUtmValue(c.toString());
-      if (t != null && t.toString().isNotEmpty) result['utm_term'] = _cleanUtmValue(t.toString());
-      if (cnt != null && cnt.toString().isNotEmpty) result['utm_content'] = _cleanUtmValue(cnt.toString());
+      if (s != null && s.toString().isNotEmpty)
+        result['utm_source'] = _cleanUtmValue(s.toString());
+      if (m != null && m.toString().isNotEmpty)
+        result['utm_medium'] = _cleanUtmValue(m.toString());
+      if (c != null && c.toString().isNotEmpty)
+        result['utm_campaign'] = _cleanUtmValue(c.toString());
+      if (t != null && t.toString().isNotEmpty)
+        result['utm_term'] = _cleanUtmValue(t.toString());
+      if (cnt != null && cnt.toString().isNotEmpty)
+        result['utm_content'] = _cleanUtmValue(cnt.toString());
     }
     if (urlString != null && urlString.trim().isNotEmpty) {
       try {
@@ -3202,8 +3244,14 @@ class _LeadInformationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if ((lead['deepLinkUrl'] != null && lead['deepLinkUrl'].toString().trim().isNotEmpty) ||
-                    (lead['utmSource'] ?? lead['utm_source'] ?? lead['utmCampaign'] ?? lead['utm_campaign'] ?? lead['source']) != null) ...[
+                if ((lead['deepLinkUrl'] != null &&
+                        lead['deepLinkUrl'].toString().trim().isNotEmpty) ||
+                    (lead['utmSource'] ??
+                            lead['utm_source'] ??
+                            lead['utmCampaign'] ??
+                            lead['utm_campaign'] ??
+                            lead['source']) !=
+                        null) ...[
                   _buildSectionHeader(
                     'Campaign & UTM Attribution',
                     Icons.insights_outlined,
@@ -3219,7 +3267,11 @@ class _LeadInformationCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (lead['deepLinkUrl'] != null && lead['deepLinkUrl'].toString().trim().isNotEmpty) ...[
+                        if (lead['deepLinkUrl'] != null &&
+                            lead['deepLinkUrl']
+                                .toString()
+                                .trim()
+                                .isNotEmpty) ...[
                           Row(
                             children: [
                               const Icon(
@@ -4067,8 +4119,114 @@ class _UserEventsCardState extends State<_UserEventsCard> {
   static const int pageSize = 5;
   final Set<int> _expandedIndices = {};
   String _selectedCategory = 'all';
+  String _selectedActorScope = 'all'; // 'all', 'user', 'sales'
 
-  bool _matchesCategory(String eventType, String category) {
+  bool _isSalesActorEvent(Map<String, dynamic> e) {
+    final payload = e['payload'] is Map
+        ? Map<String, dynamic>.from(e['payload'])
+        : <String, dynamic>{};
+    final eventType =
+        (e['eventType'] ?? e['event'] ?? '').toString().toLowerCase();
+
+    // 1. Explicit Staff / CRM action types are ALWAYS Sales/Staff actions
+    const staffEventTypes = {
+      'assign_agent',
+      'bulk_assign_agent',
+      'update_dealer_status',
+      'update_lead_status',
+      'add_dealer_note',
+      'add_lead_note',
+      'note_added',
+      'toggle_block',
+      'edit_dealer',
+      'edit_lead',
+      'delete_lead',
+      'delete_dealer',
+      'kyc_verified',
+      'kyc_rejected',
+      'kyc_status_updated',
+      'lead_converted',
+      'call_logged',
+      'whatsapp_message_sent',
+      'order_created_by_agent',
+      'estimate_created',
+      'estimate_shared',
+      'create_sales_agent',
+      'status_changed',
+      'lead_status_changed',
+      'dealer_status_changed',
+    };
+    if (staffEventTypes.contains(eventType)) return true;
+
+    // 2. Check actorRole or role in root or payload
+    final actorRole = (e['actorRole'] ??
+            e['role'] ??
+            payload['actorRole'] ??
+            payload['role'] ??
+            '')
+        .toString()
+        .toLowerCase();
+    if (actorRole == 'sales' ||
+        actorRole == 'admin' ||
+        actorRole == 'manager' ||
+        actorRole == 'telecaller' ||
+        actorRole == 'agent') {
+      return true;
+    }
+
+    // 3. Check performedBy (e.g. "Ankita", "Admin User", "Rajesh")
+    final performedBy =
+        (e['performedBy'] ?? payload['performedBy'] ?? '').toString().trim();
+    if (performedBy.isNotEmpty) {
+      final pLower = performedBy.toLowerCase();
+      if (pLower.contains('admin') ||
+          pLower.contains('sales') ||
+          pLower.contains('staff') ||
+          pLower.contains('agent')) {
+        return true;
+      }
+      final isCustomerThemself = widget.userIdentifiers.any((id) {
+        final idClean = id.trim().toLowerCase();
+        return idClean.isNotEmpty &&
+            (idClean == pLower || pLower.contains(idClean));
+      });
+      if (!isCustomerThemself &&
+          pLower != 'guest' &&
+          pLower != 'anonymous' &&
+          pLower != 'customer') {
+        return true;
+      }
+    }
+
+    // 4. Check actor / agentId / adminId in root or payload
+    final actor = (e['actor'] ??
+            payload['actor'] ??
+            payload['agentId'] ??
+            payload['adminId'] ??
+            payload['assignedBy'] ??
+            '')
+        .toString()
+        .trim();
+    if (actor.isNotEmpty) {
+      final aLower = actor.toLowerCase();
+      final isCustomerThemself = widget.userIdentifiers.any((id) {
+        final idClean = id.trim().toLowerCase();
+        return idClean.isNotEmpty &&
+            (idClean == aLower || aLower.contains(idClean));
+      });
+      if (!isCustomerThemself &&
+          aLower != 'guest' &&
+          aLower != 'anonymous' &&
+          aLower != 'customer') {
+        return true;
+      }
+    }
+
+    // 5. Default to customer app action
+    return false;
+  }
+
+  bool _matchesCategory(String eventType, String category, bool isSalesEvent) {
     if (category == 'all') return true;
     if (category == 'shopping') {
       return eventType == 'add_to_cart' ||
@@ -4080,6 +4238,21 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       return eventType == 'payment_initiated' ||
           eventType == 'payment_success' ||
           eventType == 'payment_failed';
+    }
+    if (category == 'marketing') {
+      return eventType == 'deep_link_open' ||
+          eventType == 'banner_click' ||
+          eventType == 'notification_open' ||
+          eventType == 'app_launch';
+    }
+    if (category == 'crm') {
+      return isSalesEvent ||
+          eventType == 'assign_agent' ||
+          eventType == 'update_lead_status' ||
+          eventType == 'add_lead_note' ||
+          eventType == 'edit_lead' ||
+          eventType == 'toggle_block' ||
+          eventType == 'lead_converted';
     }
     if (category == 'system') {
       return eventType == 'login_success' ||
@@ -4096,6 +4269,30 @@ class _UserEventsCardState extends State<_UserEventsCard> {
           'icon': Icons.login_rounded,
           'color': Colors.green,
           'label': 'Login Success',
+        };
+      case 'app_launch':
+        return {
+          'icon': Icons.launch_rounded,
+          'color': Colors.blue,
+          'label': 'App Launched',
+        };
+      case 'deep_link_open':
+        return {
+          'icon': Icons.link_rounded,
+          'color': Colors.purple,
+          'label': 'Deep Link Visit',
+        };
+      case 'banner_click':
+        return {
+          'icon': Icons.ads_click_rounded,
+          'color': Colors.orange,
+          'label': 'Marketing Banner Click',
+        };
+      case 'notification_open':
+        return {
+          'icon': Icons.notification_important_rounded,
+          'color': Colors.redAccent,
+          'label': 'Notification Interaction',
         };
       case 'profile_view':
         return {
@@ -4162,6 +4359,46 @@ class _UserEventsCardState extends State<_UserEventsCard> {
           'icon': Icons.warning_amber_rounded,
           'color': Colors.deepOrange,
           'label': 'Application Error',
+        };
+      case 'assign_agent':
+      case 'bulk_assign_agent':
+        return {
+          'icon': Icons.badge_outlined,
+          'color': Colors.indigo,
+          'label': 'Agent Assignment',
+        };
+      case 'toggle_block':
+        return {
+          'icon': Icons.block_flipped,
+          'color': Colors.red,
+          'label': 'Account Status Change',
+        };
+      case 'update_lead_status':
+      case 'update_dealer_status':
+        return {
+          'icon': Icons.flag_outlined,
+          'color': Colors.blue,
+          'label': 'Lead Status Update',
+        };
+      case 'add_lead_note':
+      case 'add_dealer_note':
+        return {
+          'icon': Icons.note_add_outlined,
+          'color': Colors.amber,
+          'label': 'Follow-Up Note Added',
+        };
+      case 'edit_lead':
+      case 'edit_dealer':
+        return {
+          'icon': Icons.edit_note_rounded,
+          'color': Colors.blueGrey,
+          'label': 'Profile Details Edited',
+        };
+      case 'lead_converted':
+        return {
+          'icon': Icons.verified_rounded,
+          'color': const Color(0xFF10B981),
+          'label': 'Converted to Dealer',
         };
       default:
         return {
@@ -4234,6 +4471,17 @@ class _UserEventsCardState extends State<_UserEventsCard> {
       case 'product_search':
         final query = payload['query'] ?? '';
         return 'Searched for products matching: "$query".';
+      case 'assign_agent':
+        return 'A sales representative was assigned to this lead.';
+      case 'update_lead_status':
+      case 'update_dealer_status':
+        final status = payload['newStatus'] ?? payload['status'] ?? 'updated';
+        return 'Lead status was updated to "$status".';
+      case 'add_lead_note':
+      case 'add_dealer_note':
+        return 'A follow-up note was added by the sales team.';
+      case 'lead_converted':
+        return 'Lead was successfully converted into a verified dealer.';
       default:
         return originalDetails.isNotEmpty
             ? originalDetails
@@ -4241,11 +4489,116 @@ class _UserEventsCardState extends State<_UserEventsCard> {
     }
   }
 
+  Widget _buildActorScopeSelector(int allCount, int userCount, int salesCount) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildScopeButton(
+              id: 'all',
+              label: 'All Activities',
+              count: allCount,
+              icon: Icons.layers_outlined,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildScopeButton(
+              id: 'user',
+              label: 'Lead App Actions',
+              count: userCount,
+              icon: Icons.phone_android_rounded,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildScopeButton(
+              id: 'sales',
+              label: 'Sales & Staff Actions',
+              count: salesCount,
+              icon: Icons.badge_outlined,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopeButton({
+    required String id,
+    required String label,
+    required int count,
+    required IconData icon,
+  }) {
+    final bool isSelected = _selectedActorScope == id;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedActorScope = id;
+          currentPage = 1;
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected
+                  ? AppTheme.primaryColor
+                  : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '$label ($count)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? const Color(0xFF1F2937)
+                      : const Color(0xFF64748B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilterTabs() {
     final List<Map<String, String>> tabs = [
-      {'id': 'all', 'label': 'All Activities'},
+      {'id': 'all', 'label': 'All Categories'},
       {'id': 'shopping', 'label': 'Cart & Store'},
       {'id': 'payments', 'label': 'Payments'},
+      {'id': 'marketing', 'label': 'Marketing'},
+      {'id': 'crm', 'label': 'Staff & CRM'},
       {'id': 'system', 'label': 'System Logs'},
     ];
 
@@ -4520,17 +4873,28 @@ class _UserEventsCardState extends State<_UserEventsCard> {
         return bTs.compareTo(aTs);
       });
 
+    // Compute scope counts
+    int userEventsCount = 0;
+    int salesEventsCount = 0;
+    for (final e in sortedEvents) {
+      if (_isSalesActorEvent(e)) {
+        salesEventsCount++;
+      } else {
+        userEventsCount++;
+      }
+    }
+    final int allEventsCount = sortedEvents.length;
+
     final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
-      final actorId = e['user']?.toString() ?? '';
+      final bool isSalesEvent = _isSalesActorEvent(e);
 
-      // Only display events where the lead was the actor
-      final bool isUserActor = widget.userIdentifiers.any(
-        (id) => id.toLowerCase() == actorId.toLowerCase(),
-      );
-      if (!isUserActor) return false;
+      // 1. Actor scope filter
+      if (_selectedActorScope == 'user' && isSalesEvent) return false;
+      if (_selectedActorScope == 'sales' && !isSalesEvent) return false;
 
-      return _matchesCategory(type, _selectedCategory);
+      // 2. Category filter
+      return _matchesCategory(type, _selectedCategory, isSalesEvent);
     }).toList();
 
     final totalEvents = filteredEvents.length;
@@ -4609,6 +4973,13 @@ class _UserEventsCardState extends State<_UserEventsCard> {
             ],
           ),
           const SizedBox(height: 16),
+          // Segregated Actor Scope Tabs
+          _buildActorScopeSelector(
+            allEventsCount,
+            userEventsCount,
+            salesEventsCount,
+          ),
+          // Sub-category filter pills
           _buildFilterTabs(),
           const SizedBox(height: 20),
           if (widget.isLoading)
@@ -4632,7 +5003,7 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'No recent activity matching this filter.',
+                      'No activity matching this filter.',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         color: const Color(0xFF6B7280),
@@ -4657,6 +5028,8 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                 final payload = event['payload'] is Map
                     ? Map<String, dynamic>.from(event['payload'])
                     : <String, dynamic>{};
+
+                final bool isSalesEvent = _isSalesActorEvent(event);
 
                 final visuals = _getEventVisuals(eventType);
                 final bool isExpanded = _expandedIndices.contains(globalIndex);
@@ -4704,13 +5077,66 @@ class _UserEventsCardState extends State<_UserEventsCard> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    visuals['label'] as String,
-                                    style: GoogleFonts.outfit(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: const Color(0xFF1F2937),
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        visuals['label'] as String,
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: isSalesEvent
+                                              ? const Color(0xFF6B21A8)
+                                              : const Color(0xFF1F2937),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSalesEvent
+                                              ? const Color(0xFFF3E8FF)
+                                              : const Color(0xFFE0F2FE),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: isSalesEvent
+                                                ? const Color(0xFFD8B4FE)
+                                                : const Color(0xFFBAE6FD),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isSalesEvent
+                                                  ? Icons.badge_outlined
+                                                  : Icons.phone_android_rounded,
+                                              size: 11,
+                                              color: isSalesEvent
+                                                  ? const Color(0xFF7E22CE)
+                                                  : const Color(0xFF0369A1),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              isSalesEvent
+                                                  ? 'Sales / Staff Action'
+                                                  : 'Lead App Action',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: isSalesEvent
+                                                    ? const Color(0xFF7E22CE)
+                                                    : const Color(0xFF0369A1),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   Row(
                                     children: [

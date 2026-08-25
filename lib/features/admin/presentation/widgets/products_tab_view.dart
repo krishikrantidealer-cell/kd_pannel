@@ -1066,6 +1066,8 @@ class _ProductsTabViewState extends State<ProductsTabView> {
             thumbnail,
             width: 36,
             height: 36,
+            cacheWidth: 120,
+            cacheHeight: 120,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
