@@ -107,10 +107,16 @@ class _OrdersPageState extends State<OrdersPage> {
           order.paymentMethod.toLowerCase().trim() ==
               state.selectedPaymentMethod.toLowerCase().trim();
 
+      final matchesOrderSource =
+          state.selectedOrderSource == 'All Sources' ||
+          (state.selectedOrderSource == 'Panel Orders' && order.isPanelOrder) ||
+          (state.selectedOrderSource == 'App Orders' && !order.isPanelOrder);
+
       return matchesSearch &&
           matchesOrderStatus &&
           matchesPaymentStatus &&
-          matchesPaymentMethod;
+          matchesPaymentMethod &&
+          matchesOrderSource;
     }).toList();
   }
 
@@ -592,7 +598,13 @@ class _OrdersPageState extends State<OrdersPage> {
       'Failed',
     ];
 
-    final List<String> paymentMethodOptions = ['All Methods', 'Online', 'COD'];
+    final List<String> paymentMethodOptions = ['All Methods', 'Online', 'Partial', 'COD'];
+
+    final List<String> orderSourceOptions = [
+      'All Sources',
+      'App Orders',
+      'Panel Orders',
+    ];
 
     final List<String> timeframeOptions = [
       'All Time',
@@ -614,6 +626,21 @@ class _OrdersPageState extends State<OrdersPage> {
             children: [
               Expanded(
                 child: _buildDropdown(
+                  orderSourceOptions,
+                  state.selectedOrderSource,
+                  (val) {
+                    context.read<OrdersBloc>().add(
+                      UpdateOrdersFilterEvent(
+                        selectedOrderSource: val!,
+                        currentPage: 1,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDropdown(
                   orderStatusOptions,
                   state.selectedOrderStatus,
                   (val) {
@@ -626,7 +653,11 @@ class _OrdersPageState extends State<OrdersPage> {
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               Expanded(
                 child: _buildDropdown(
                   paymentStatusOptions,
@@ -641,19 +672,23 @@ class _OrdersPageState extends State<OrdersPage> {
                   },
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDropdown(
+                  paymentMethodOptions,
+                  state.selectedPaymentMethod,
+                  (val) {
+                    context.read<OrdersBloc>().add(
+                      UpdateOrdersFilterEvent(
+                        selectedPaymentMethod: val!,
+                        currentPage: 1,
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
-            val,
-          ) {
-            context.read<OrdersBloc>().add(
-              UpdateOrdersFilterEvent(
-                selectedPaymentMethod: val!,
-                currentPage: 1,
-              ),
-            );
-          }),
         ],
       );
     }
@@ -670,11 +705,17 @@ class _OrdersPageState extends State<OrdersPage> {
         const SizedBox(height: 12),
         Row(
           children: [
+            _buildDropdown(orderSourceOptions, state.selectedOrderSource, (val) {
+              context.read<OrdersBloc>().add(
+                UpdateOrdersFilterEvent(selectedOrderSource: val!, currentPage: 1),
+              );
+            }, width: 140),
+            const SizedBox(width: 12),
             _buildDropdown(orderStatusOptions, state.selectedOrderStatus, (val) {
               context.read<OrdersBloc>().add(
                 UpdateOrdersFilterEvent(selectedOrderStatus: val!, currentPage: 1),
               );
-            }, width: 150),
+            }, width: 140),
             const SizedBox(width: 12),
             _buildDropdown(paymentStatusOptions, state.selectedPaymentStatus, (
               val,
@@ -682,7 +723,7 @@ class _OrdersPageState extends State<OrdersPage> {
               context.read<OrdersBloc>().add(
                 UpdateOrdersFilterEvent(selectedPaymentStatus: val!, currentPage: 1),
               );
-            }, width: 150),
+            }, width: 140),
             const SizedBox(width: 12),
             _buildDropdown(paymentMethodOptions, state.selectedPaymentMethod, (
               val,
@@ -992,16 +1033,24 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
                 child: Row(
                   children: [
-                    // ORDER ID
+                    // ORDER ID + SOURCE PILL
                     Expanded(
                       flex: 6,
-                      child: Text(
-                        order.orderId,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primaryColor,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            order.orderId,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          _buildSourcePill(order),
+                        ],
                       ),
                     ),
 
@@ -1183,6 +1232,35 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSourcePill(OrderModel order) {
+    final isPanel = order.isPanelOrder;
+    final hasCustomItems = order.items.any((i) => i.isCustomBasePack || i.isCustomPrice);
+
+    String label = isPanel ? 'Panel' : 'App';
+    if (hasCustomItems) {
+      label = 'Panel • Custom';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: isPanel ? const Color(0xFFF3E8FF) : const Color(0xFFE0F2FE),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isPanel ? const Color(0xFFD8B4FE) : const Color(0xFFBAE6FD),
+        ),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 9.5,
+          fontWeight: FontWeight.bold,
+          color: isPanel ? const Color(0xFF7E22CE) : const Color(0xFF0369A1),
+        ),
+      ),
     );
   }
 

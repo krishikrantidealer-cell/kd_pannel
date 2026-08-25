@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import '../../data/models/order_model.dart';
 
 abstract class OrdersEvent extends Equatable {
   const OrdersEvent();
@@ -21,6 +22,7 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
   final String? selectedOrderStatus;
   final String? selectedPaymentStatus;
   final String? selectedPaymentMethod;
+  final String? selectedOrderSource;
   final String? selectedTimeframe;
   final PickerDateRange? selectedRange;
   final bool resetRange;
@@ -32,6 +34,7 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
     this.selectedOrderStatus,
     this.selectedPaymentStatus,
     this.selectedPaymentMethod,
+    this.selectedOrderSource,
     this.selectedTimeframe,
     this.selectedRange,
     this.resetRange = false,
@@ -45,6 +48,7 @@ class UpdateOrdersFilterEvent extends OrdersEvent {
         selectedOrderStatus,
         selectedPaymentStatus,
         selectedPaymentMethod,
+        selectedOrderSource,
         selectedTimeframe,
         selectedRange,
         resetRange,
@@ -59,4 +63,12 @@ class ClearOrdersMessageEvent extends OrdersEvent {
 
 class ResetOrdersEvent extends OrdersEvent {
   const ResetOrdersEvent();
+}
+
+class UpdateSingleOrderEvent extends OrdersEvent {
+  final OrderModel updatedOrder;
+  const UpdateSingleOrderEvent(this.updatedOrder);
+
+  @override
+  List<Object?> get props => [updatedOrder];
 }

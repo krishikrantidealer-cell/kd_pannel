@@ -241,6 +241,20 @@ class OrderModel {
   DateTime? rtoAt;
   final String? assignedAgent;
   final String? assignedAgentId;
+  final String? source; // 'panel', 'app', etc.
+
+  bool get isPanelOrder {
+    final cleanId = orderId.toUpperCase().trim();
+    if (cleanId.startsWith('KD-') || cleanId.startsWith('KD')) return true;
+    if (cleanId.startsWith('ORD-') || cleanId.startsWith('ORD')) return false;
+    if (source != null && source!.isNotEmpty) {
+      final s = source!.toLowerCase().trim();
+      if (s == 'panel' || s == 'admin') return true;
+      if (s == 'app') return false;
+    }
+    return items.any((i) => i.isCustomBasePack || i.isCustomPrice) ||
+        paymentMethod == 'Partial';
+  }
 
   OrderModel({
     required this.id,
@@ -275,6 +289,7 @@ class OrderModel {
     this.rtoAt,
     this.assignedAgent,
     this.assignedAgentId,
+    this.source,
   });
 
   factory OrderModel.fromJson(dynamic jsonRaw) {
@@ -361,6 +376,10 @@ class OrderModel {
     final shippingRaw = json['shippingAddress'];
     final shippingMap = shippingRaw is Map ? Map<String, dynamic>.from(shippingRaw) : <String, dynamic>{};
 
+    final sourceVal = json['source']?.toString() ??
+        json['createdVia']?.toString() ??
+        json['orderSource']?.toString();
+
     return OrderModel(
       id: json['_id']?.toString() ?? '',
       orderId: json['orderId']?.toString() ?? '',
@@ -406,6 +425,79 @@ class OrderModel {
           : null,
       assignedAgent: agentName ?? json['assignedAgent']?.toString(),
       assignedAgentId: agentId,
+      source: sourceVal,
+    );
+  }
+
+  OrderModel copyWith({
+    String? id,
+    String? orderId,
+    String? userId,
+    String? customerName,
+    String? shopName,
+    String? customerPhone,
+    String? customerRole,
+    List<OrderItem>? items,
+    double? totalAmount,
+    double? discountAmount,
+    String? couponCode,
+    List<FreeItem>? freeItems,
+    ShippingAddress? shippingAddress,
+    String? paymentMethod,
+    String? paymentStatus,
+    String? razorpayPaymentId,
+    double? advanceAmount,
+    double? remainingAmount,
+    String? orderStatus,
+    String? courierStatus,
+    String? awbNumber,
+    String? courierName,
+    String? trackingUrl,
+    DateTime? placedAt,
+    DateTime? processingAt,
+    DateTime? shippedAt,
+    DateTime? outForDeliveryAt,
+    DateTime? deliveredAt,
+    DateTime? cancelledAt,
+    DateTime? rtoAt,
+    String? assignedAgent,
+    String? assignedAgentId,
+    String? source,
+  }) {
+    return OrderModel(
+      id: id ?? this.id,
+      orderId: orderId ?? this.orderId,
+      userId: userId ?? this.userId,
+      customerName: customerName ?? this.customerName,
+      shopName: shopName ?? this.shopName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      customerRole: customerRole ?? this.customerRole,
+      items: items ?? this.items,
+      totalAmount: totalAmount ?? this.totalAmount,
+      discountAmount: discountAmount ?? this.discountAmount,
+      couponCode: couponCode ?? this.couponCode,
+      freeItems: freeItems ?? this.freeItems,
+      shippingAddress: shippingAddress ?? this.shippingAddress,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      razorpayPaymentId: razorpayPaymentId ?? this.razorpayPaymentId,
+      advanceAmount: advanceAmount ?? this.advanceAmount,
+      remainingAmount: remainingAmount ?? this.remainingAmount,
+      orderStatus: orderStatus ?? this.orderStatus,
+      courierStatus: courierStatus ?? this.courierStatus,
+      awbNumber: awbNumber ?? this.awbNumber,
+      courierName: courierName ?? this.courierName,
+      trackingUrl: trackingUrl ?? this.trackingUrl,
+      placedAt: placedAt ?? this.placedAt,
+      processingAt: processingAt ?? this.processingAt,
+      shippedAt: shippedAt ?? this.shippedAt,
+      outForDeliveryAt: outForDeliveryAt ?? this.outForDeliveryAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      rtoAt: rtoAt ?? this.rtoAt,
+      assignedAgent: assignedAgent ?? this.assignedAgent,
+      assignedAgentId: assignedAgentId ?? this.assignedAgentId,
+      source: source ?? this.source,
     );
   }
 
@@ -444,6 +536,7 @@ class OrderModel {
       'cancelledAt': cancelledAt?.toIso8601String(),
       'rtoAt': rtoAt?.toIso8601String(),
       'assignedAgent': assignedAgent,
+      'source': source,
     };
   }
 }

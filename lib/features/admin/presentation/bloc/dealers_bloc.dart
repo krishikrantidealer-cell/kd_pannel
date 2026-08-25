@@ -28,7 +28,9 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<FetchDealerEventsMoreEvent>(_onFetchDealerEventsMore);
 
     _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
-      add(const FetchDealersDataEvent(forceRefresh: true));
+      if (!isClosed) {
+        add(const FetchDealersDataEvent(forceRefresh: true));
+      }
     });
   }
 

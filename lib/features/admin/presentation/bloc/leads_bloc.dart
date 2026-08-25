@@ -34,7 +34,9 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<ToggleAnalyticsViewModeEvent>(_onToggleAnalyticsViewMode);
 
     _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
-      add(const FetchLeadsDataEvent(forceRefresh: true));
+      if (!isClosed) {
+        add(const FetchLeadsDataEvent(forceRefresh: true));
+      }
     });
   }
 

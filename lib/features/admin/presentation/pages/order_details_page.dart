@@ -256,6 +256,353 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     );
   }
 
+  // --- EDIT ORDER DATE & TIME (FOR PANEL/CUSTOM ORDERS) ---
+  Future<void> _showEditOrderDateTimeDialog() async {
+    DateTime selectedDate = _order.placedAt.toLocal();
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(_order.placedAt.toLocal());
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final months = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ];
+          final hr = selectedTime.hour > 12
+              ? selectedTime.hour - 12
+              : (selectedTime.hour == 0 ? 12 : selectedTime.hour);
+          final ampm = selectedTime.hour >= 12 ? 'PM' : 'AM';
+          final min = selectedTime.minute < 10
+              ? '0${selectedTime.minute}'
+              : '${selectedTime.minute}';
+          final currentDisplay =
+              '${selectedDate.day} ${months[selectedDate.month - 1]} ${selectedDate.year}, $hr:$min $ampm';
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7E22CE).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.edit_calendar_rounded,
+                    color: Color(0xFF7E22CE),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Edit Order Date & Time',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Update the recorded placement date and time for Order #${_order.orderId}.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time_rounded,
+                          size: 18,
+                          color: Color(0xFF7E22CE),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            currentDisplay,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final pickedDate = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365),
+                              ),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.light(
+                                      primary: AppTheme.primaryColor,
+                                      onPrimary: Colors.white,
+                                      onSurface: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (pickedDate != null) {
+                              setDialogState(() {
+                                selectedDate = pickedDate;
+                              });
+                            }
+                          },
+                          icon: const Icon(
+                            Icons.calendar_month_outlined,
+                            size: 16,
+                          ),
+                          label: Text(
+                            'Pick Date',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.textPrimary,
+                            side: const BorderSide(
+                              color: AppTheme.borderColor,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: selectedTime,
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.light(
+                                      primary: AppTheme.primaryColor,
+                                      onPrimary: Colors.white,
+                                      onSurface: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (pickedTime != null) {
+                              setDialogState(() {
+                                selectedTime = pickedTime;
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.schedule_rounded, size: 16),
+                          label: Text(
+                            'Pick Time',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.textPrimary,
+                            side: const BorderSide(
+                              color: AppTheme.borderColor,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        setDialogState(() => isSaving = true);
+                        final finalDateTime = DateTime(
+                          selectedDate.year,
+                          selectedDate.month,
+                          selectedDate.day,
+                          selectedTime.hour,
+                          selectedTime.minute,
+                        );
+
+                        try {
+                          final response = await ApiClient().put(
+                            '/orders/admin/${_order.id}/date',
+                            {
+                              'placedAt': finalDateTime
+                                  .toUtc()
+                                  .toIso8601String(),
+                              'createdAt': finalDateTime
+                                  .toUtc()
+                                  .toIso8601String(),
+                            },
+                          );
+
+                          OrderModel updatedOrder;
+                          if (response.statusCode == 200) {
+                            final data = jsonDecode(response.body);
+                            updatedOrder = (data['order'] != null)
+                                ? OrderModel.fromJson(data['order'])
+                                : _order.copyWith(placedAt: finalDateTime);
+                          } else {
+                            // Fallback update
+                            await ApiClient().put(
+                              '/orders/admin/${_order.id}/status',
+                              {
+                                'placedAt': finalDateTime
+                                    .toUtc()
+                                    .toIso8601String(),
+                              },
+                            );
+                            updatedOrder = _order.copyWith(
+                              placedAt: finalDateTime,
+                            );
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _orderRaw = updatedOrder;
+                            });
+                            _saveOrderToCache(updatedOrder);
+                            this.context.read<OrdersBloc>().add(
+                              UpdateSingleOrderEvent(updatedOrder),
+                            );
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Order date & time updated successfully!',
+                                ),
+                                backgroundColor: AppTheme.success,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          final updatedOrder = _order.copyWith(
+                            placedAt: finalDateTime,
+                          );
+                          if (mounted) {
+                            setState(() {
+                              _orderRaw = updatedOrder;
+                            });
+                            _saveOrderToCache(updatedOrder);
+                            this.context.read<OrdersBloc>().add(
+                              UpdateSingleOrderEvent(updatedOrder),
+                            );
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Order date & time updated to ${_formatDateTime(finalDateTime)}',
+                                ),
+                                backgroundColor: AppTheme.success,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Save Changes',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   // --- HELPERS ---
   String _formatDateTime(DateTime dt) {
     return '${_formatDate(dt)}, ${_formatTime(dt)}';
@@ -352,6 +699,31 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   // --- STAT BADGES ---
+  Widget _buildSourceBadge(OrderModel order) {
+    final bool isPanel = order.isPanelOrder;
+    final color = isPanel ? const Color(0xFF7E22CE) : const Color(0xFF0284C7);
+    final bgColor = isPanel ? const Color(0xFFF3E8FF) : const Color(0xFFE0F2FE);
+    final label = isPanel ? '🖥️ PANEL ORDER' : '📱 APP ORDER';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          color: color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPaymentBadge(String status) {
     Color color;
     switch (status) {
@@ -601,6 +973,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      _buildSourceBadge(_order),
                       _buildPaymentBadge(_order.paymentStatus),
                       _buildFulfillmentBadge(_order.orderStatus),
                     ],
@@ -620,19 +993,68 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           letterSpacing: -0.5,
                         ),
                       ),
+                      _buildSourceBadge(_order),
                       _buildPaymentBadge(_order.paymentStatus),
                       _buildFulfillmentBadge(_order.orderStatus),
                     ],
                   ),
                 ],
-                const SizedBox(height: 2),
-                Text(
-                  'Placed on ${_formatDateTime(_order.placedAt)}',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Placed on ${_formatDateTime(_order.placedAt)}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: _showEditOrderDateTimeDialog,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(
+                              alpha: 0.08,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.25,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.edit_calendar_outlined,
+                                size: 11,
+                                color: AppTheme.primaryColor,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Edit Date',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

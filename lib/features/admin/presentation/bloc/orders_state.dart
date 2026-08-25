@@ -13,6 +13,7 @@ class OrdersState extends Equatable {
   final String selectedOrderStatus;
   final String selectedPaymentStatus;
   final String selectedPaymentMethod;
+  final String selectedOrderSource;
   final String selectedTimeframe;
   final PickerDateRange? selectedRange;
   final int currentPage;
@@ -28,6 +29,7 @@ class OrdersState extends Equatable {
     this.selectedOrderStatus = 'All Statuses',
     this.selectedPaymentStatus = 'All Payments',
     this.selectedPaymentMethod = 'All Methods',
+    this.selectedOrderSource = 'All Sources',
     this.selectedTimeframe = 'All Time',
     this.selectedRange,
     this.currentPage = 1,
@@ -42,6 +44,7 @@ class OrdersState extends Equatable {
     String? selectedOrderStatus,
     String? selectedPaymentStatus,
     String? selectedPaymentMethod,
+    String? selectedOrderSource,
     String? selectedTimeframe,
     PickerDateRange? selectedRange,
     int? currentPage,
@@ -55,6 +58,7 @@ class OrdersState extends Equatable {
       selectedOrderStatus: selectedOrderStatus ?? this.selectedOrderStatus,
       selectedPaymentStatus: selectedPaymentStatus ?? this.selectedPaymentStatus,
       selectedPaymentMethod: selectedPaymentMethod ?? this.selectedPaymentMethod,
+      selectedOrderSource: selectedOrderSource ?? this.selectedOrderSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       selectedRange: selectedRange ?? this.selectedRange,
       currentPage: currentPage ?? this.currentPage,
@@ -70,6 +74,7 @@ class OrdersState extends Equatable {
     String? selectedOrderStatus,
     String? selectedPaymentStatus,
     String? selectedPaymentMethod,
+    String? selectedOrderSource,
     String? selectedTimeframe,
     int? currentPage,
     int? pageSize,
@@ -82,6 +87,7 @@ class OrdersState extends Equatable {
       selectedOrderStatus: selectedOrderStatus ?? this.selectedOrderStatus,
       selectedPaymentStatus: selectedPaymentStatus ?? this.selectedPaymentStatus,
       selectedPaymentMethod: selectedPaymentMethod ?? this.selectedPaymentMethod,
+      selectedOrderSource: selectedOrderSource ?? this.selectedOrderSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       selectedRange: null,
       currentPage: currentPage ?? this.currentPage,
@@ -98,6 +104,7 @@ class OrdersState extends Equatable {
     String? selectedOrderStatus,
     String? selectedPaymentStatus,
     String? selectedPaymentMethod,
+    String? selectedOrderSource,
     int? currentPage,
     int? pageSize,
     String? errorMessage,
@@ -109,6 +116,7 @@ class OrdersState extends Equatable {
       selectedOrderStatus: selectedOrderStatus ?? this.selectedOrderStatus,
       selectedPaymentStatus: selectedPaymentStatus ?? this.selectedPaymentStatus,
       selectedPaymentMethod: selectedPaymentMethod ?? this.selectedPaymentMethod,
+      selectedOrderSource: selectedOrderSource ?? this.selectedOrderSource,
       currentPage: currentPage ?? this.currentPage,
       pageSize: pageSize ?? this.pageSize,
       errorMessage: errorMessage ?? this.errorMessage,
@@ -123,6 +131,7 @@ class OrdersState extends Equatable {
         selectedOrderStatus,
         selectedPaymentStatus,
         selectedPaymentMethod,
+        selectedOrderSource,
         selectedTimeframe,
         selectedRange,
         currentPage,

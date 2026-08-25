@@ -77,6 +77,10 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   // Search controller
   final TextEditingController _searchCtrl = TextEditingController();
 
+  // Order Placement Date & Time (Customizable for Panel Orders)
+  DateTime _orderPlacementDateTime = DateTime.now();
+  bool _isCustomOrderDate = false;
+
   @override
   void initState() {
     super.initState();
@@ -248,6 +252,9 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         'paymentStatus': _paymentMethod == 'FullPayment'
             ? 'Paid'
             : 'Partially Paid',
+        'placedAt': _orderPlacementDateTime.toUtc().toIso8601String(),
+        'createdAt': _orderPlacementDateTime.toUtc().toIso8601String(),
+        'source': 'panel',
       };
 
       final res = await ApiClient().post('/orders/admin/create', body);
@@ -1920,6 +1927,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               children: [
                 _buildReviewExecutiveBanner(),
                 const SizedBox(height: 18),
+                _buildOrderDateTimeCard(),
+                const SizedBox(height: 18),
                 _buildOrderSummaryCard(),
                 const SizedBox(height: 18),
                 _buildAddressForm(false),
@@ -1965,6 +1974,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
               children: [
                 _buildReviewExecutiveBanner(),
                 const SizedBox(height: 14),
+                _buildOrderDateTimeCard(),
+                const SizedBox(height: 14),
                 _buildOrderSummaryCard(),
                 const SizedBox(height: 16),
                 _buildAddressForm(true),
@@ -1981,6 +1992,287 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
         ),
         _buildReviewBottomBar(),
       ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Order Date & Time Selection (For Panel Created Orders)
+  // ---------------------------------------------------------------------------
+
+  Future<void> _selectOrderDateTime() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _orderPlacementDateTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null && mounted) {
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_orderPlacementDateTime),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: AppTheme.primaryColor,
+                onPrimary: Colors.white,
+                onSurface: AppTheme.textPrimary,
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      if (pickedTime != null && mounted) {
+        setState(() {
+          _orderPlacementDateTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+          _isCustomOrderDate = true;
+        });
+      }
+    }
+  }
+
+  Widget _buildOrderDateTimeCard() {
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final dt = _orderPlacementDateTime;
+    final hr = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    final min = dt.minute < 10 ? '0${dt.minute}' : '${dt.minute}';
+    final dateStr =
+        '${dt.day} ${months[dt.month - 1]} ${dt.year}, $hr:$min $ampm';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _isCustomOrderDate
+              ? const Color(0xFF7E22CE).withValues(alpha: 0.5)
+              : AppTheme.borderColor,
+        ),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (_isCustomOrderDate
+                          ? const Color(0xFF7E22CE)
+                          : AppTheme.primaryColor)
+                      .withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.access_time_rounded,
+                  size: 18,
+                  color: _isCustomOrderDate
+                      ? const Color(0xFF7E22CE)
+                      : AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Order Placement Date & Time',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        if (_isCustomOrderDate) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3E8FF),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFFD8B4FE),
+                              ),
+                            ),
+                            child: Text(
+                              'Custom Date',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF7E22CE),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      'Record when this deal was finalized or backdate offline orders',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.lightBorderColor),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.event_note_rounded,
+                  size: 18,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    dateStr,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                if (_isCustomOrderDate) ...[
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _orderPlacementDateTime = DateTime.now();
+                          _isCustomOrderDate = false;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.refresh_rounded,
+                              size: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Reset (Now)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: _selectOrderDateTime,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _isCustomOrderDate
+                            ? const Color(0xFF7E22CE)
+                            : AppTheme.primaryColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.edit_calendar_rounded,
+                            size: 13,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Change Date',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

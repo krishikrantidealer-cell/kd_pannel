@@ -15,9 +15,12 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     on<UpdateOrdersFilterEvent>(_onUpdateOrdersFilter);
     on<ClearOrdersMessageEvent>(_onClearOrdersMessage);
     on<ResetOrdersEvent>(_onResetOrders);
+    on<UpdateSingleOrderEvent>(_onUpdateSingleOrder);
 
     _wsSubscription = WebSocketService().ordersUpdates.listen((_) {
-      add(const FetchOrdersEvent(forceRefresh: true));
+      if (!isClosed) {
+        add(const FetchOrdersEvent(forceRefresh: true));
+      }
     });
   }
 
@@ -89,6 +92,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         selectedOrderStatus: event.selectedOrderStatus,
         selectedPaymentStatus: event.selectedPaymentStatus,
         selectedPaymentMethod: event.selectedPaymentMethod,
+        selectedOrderSource: event.selectedOrderSource,
         selectedTimeframe: event.selectedTimeframe,
         currentPage: event.currentPage,
         pageSize: event.pageSize,
@@ -99,6 +103,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         selectedOrderStatus: event.selectedOrderStatus,
         selectedPaymentStatus: event.selectedPaymentStatus,
         selectedPaymentMethod: event.selectedPaymentMethod,
+        selectedOrderSource: event.selectedOrderSource,
         selectedTimeframe: event.selectedTimeframe,
         selectedRange: event.selectedRange,
         currentPage: event.currentPage,
@@ -117,5 +122,17 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     Emitter<OrdersState> emit,
   ) {
     emit(state.copyWith(errorMessage: null));
+  }
+
+  void _onUpdateSingleOrder(
+    UpdateSingleOrderEvent event,
+    Emitter<OrdersState> emit,
+  ) {
+    final updatedList = state.orders.map((o) {
+      return (o.id == event.updatedOrder.id || o.orderId == event.updatedOrder.orderId)
+          ? event.updatedOrder
+          : o;
+    }).toList();
+    emit(state.copyWith(orders: updatedList));
   }
 }
