@@ -76,8 +76,8 @@ class _StatCardWidgetState extends State<StatCardWidget> {
 
     Widget content;
     if (widget.isCompact) {
-      final double cardHeight = isMobile ? 64.0 : 72.0;
-      final double padding = isMobile ? 10.0 : 12.0;
+      final double cardHeight = isMobile ? 58.0 : 64.0;
+      final double padding = isMobile ? 8.0 : 10.0;
 
       content = Container(
         width: widget.width,
@@ -89,8 +89,8 @@ class _StatCardWidgetState extends State<StatCardWidget> {
           boxShadow: [
             BoxShadow(
               color: widget.color.withOpacity(_isHovered ? 0.15 : 0.08),
-              blurRadius: _isHovered ? 15 : 10,
-              offset: Offset(0, _isHovered ? 6 : 4),
+              blurRadius: _isHovered ? 12 : 8,
+              offset: Offset(0, _isHovered ? 4 : 2),
             ),
             AppTheme.cardShadow.first,
           ],
@@ -106,7 +106,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                 angle: -0.2,
                 child: Icon(
                   widget.icon ?? Icons.analytics_outlined,
-                  size: 45,
+                  size: 40,
                   color: widget.color.withOpacity(0.04),
                 ),
               ),
@@ -117,11 +117,11 @@ class _StatCardWidgetState extends State<StatCardWidget> {
               child: Row(
                 children: [
                   Container(
-                    width: isMobile ? 32 : 38,
-                    height: isMobile ? 32 : 38,
+                    width: isMobile ? 28 : 34,
+                    height: isMobile ? 28 : 34,
                     decoration: BoxDecoration(
                       color: widget.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(7),
                       border: Border.all(
                         color: widget.color.withOpacity(0.2),
                         width: 1,
@@ -132,24 +132,24 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                           ? Image.asset(
                               widget.imagePath!,
                               color: widget.color,
-                              height: isMobile ? 16 : 18,
-                              width: isMobile ? 16 : 18,
+                              height: isMobile ? 14 : 16,
+                              width: isMobile ? 14 : 16,
                               fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) =>
                                   Icon(
                                     widget.icon ?? Icons.analytics_outlined,
                                     color: widget.color,
-                                    size: isMobile ? 16 : 18,
+                                    size: isMobile ? 14 : 16,
                                   ),
                             )
                           : Icon(
                               widget.icon ?? Icons.analytics_outlined,
                               color: widget.color,
-                              size: isMobile ? 16 : 18,
+                              size: isMobile ? 14 : 16,
                             ),
                     ),
                   ),
-                  SizedBox(width: isMobile ? 8 : 10),
+                  SizedBox(width: isMobile ? 6 : 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,9 +158,9 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                         Text(
                           widget.title,
                           style: TextStyle(
-                            fontSize: isMobile ? 10.5 : 11.5,
+                            fontSize: isMobile ? 10.0 : 11.0,
                             color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -174,7 +174,7 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                               child: _buildAnimatedValue(
                                 widget.value,
                                 TextStyle(
-                                  fontSize: isMobile ? 16 : 18,
+                                  fontSize: isMobile ? 15 : 16,
                                   fontWeight: FontWeight.w900,
                                   color: AppTheme.textPrimary,
                                 ),
@@ -186,9 +186,9 @@ class _StatCardWidgetState extends State<StatCardWidget> {
                                 child: Text(
                                   widget.subtext!,
                                   style: TextStyle(
-                                    fontSize: isMobile ? 9 : 10,
+                                    fontSize: isMobile ? 8.5 : 9.5,
                                     color: widget.color,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,

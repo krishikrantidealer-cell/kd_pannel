@@ -64,13 +64,19 @@ class ProductRepository {
     bool forceRefresh = false,
     String? search,
     String? category,
+    int limit = 2000,
   }) async {
     if (!forceRefresh && _cachedProducts != null && _isCacheValid(_productsCacheTime) && search == null && category == null) {
       return _cachedProducts!;
     }
 
     try {
-      final response = await _apiClient.get('/products');
+      final queryParams = <String>['limit=$limit'];
+      if (search != null && search.isNotEmpty) queryParams.add('search=${Uri.encodeComponent(search)}');
+      if (category != null && category != 'All' && category.isNotEmpty) queryParams.add('category=${Uri.encodeComponent(category)}');
+      final url = '/products?${queryParams.join('&')}';
+
+      final response = await _apiClient.get(url);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List list = data is List
@@ -129,7 +135,10 @@ class ProductRepository {
     }
 
     try {
-      final response = await _apiClient.get('/categories');
+      var response = await _apiClient.get('/products/categories');
+      if (response.statusCode != 200) {
+        response = await _apiClient.get('/categories');
+      }
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List list = data is List
@@ -164,7 +173,7 @@ class ProductRepository {
     }
 
     try {
-      final response = await _apiClient.get('/collections');
+      final response = await _apiClient.get('/collections?all=true');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List list = data is List

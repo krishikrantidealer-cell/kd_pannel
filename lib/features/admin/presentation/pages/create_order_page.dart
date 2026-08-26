@@ -123,10 +123,36 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   Future<void> _fetchProducts() async {
     setState(() => _isLoadingProducts = true);
     try {
-      final raw = await ProductRepository().getProducts();
-      final products = raw
-          .where((p) => (p['variants'] as List?)?.isNotEmpty == true)
-          .toList();
+      final raw = await ProductRepository().getProducts(forceRefresh: true);
+      final List<Map<String, dynamic>> products = [];
+      for (var item in raw) {
+        var p = Map<String, dynamic>.from(item);
+        final variantsRaw = p['variants'];
+        List<Map<String, dynamic>> variants = [];
+        if (variantsRaw is List && variantsRaw.isNotEmpty) {
+          variants = variantsRaw
+              .whereType<Map>()
+              .map((v) => Map<String, dynamic>.from(v))
+              .toList();
+        }
+
+        // If product doesn't have an explicit variants array, synthesize standard variant
+        if (variants.isEmpty) {
+          variants.add({
+            '_id': p['_id'] ?? p['id'] ?? '',
+            'size': p['packSize'] ?? p['size'] ?? 'Standard',
+            'price': (p['price'] ?? p['dealerPrice'] ?? p['mrp'] ?? 0),
+            'dealerPrice': (p['dealerPrice'] ?? p['price'] ?? 0),
+            'mrp': (p['mrp'] ?? p['comparePrice'] ?? p['price'] ?? 0),
+            'packVolume': (p['packVolume'] ?? 1),
+            'inventoryQuantity': (p['inventoryQuantity'] ?? p['stock'] ?? 0),
+          });
+          p['variants'] = variants;
+        }
+
+        products.add(p);
+      }
+
       if (mounted) {
         setState(() {
           _allProducts = products;
@@ -146,11 +172,16 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       if (query.trim().isEmpty) {
         _filteredProducts = _allProducts;
       } else {
+        final q = query.trim().toLowerCase();
         _filteredProducts = _allProducts.where((p) {
           final name = (p['name'] ?? p['title'] ?? '').toString().toLowerCase();
           final vendor = (p['vendor'] ?? '').toString().toLowerCase();
-          return name.contains(query.toLowerCase()) ||
-              vendor.contains(query.toLowerCase());
+          final techName = (p['technicalName'] ?? '').toString().toLowerCase();
+          final category = (p['category'] ?? p['categories'] ?? '').toString().toLowerCase();
+          return name.contains(q) ||
+              vendor.contains(q) ||
+              techName.contains(q) ||
+              category.contains(q);
         }).toList();
       }
     });
@@ -1319,7 +1350,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                 textAlignVertical: TextAlignVertical.center,
                 style: AppTheme.bodyMD,
                 decoration: InputDecoration(
-                  hintText: 'Search by product name or manufacturer...',
+                  hintText: 'Search by product name, manufacturer, or category...',
                   hintStyle: AppTheme.hint,
                   border: InputBorder.none,
                   isDense: true,
@@ -1327,7 +1358,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                 ),
               ),
             ),
-            if (_searchCtrl.text.isNotEmpty)
+            if (_searchCtrl.text.isNotEmpty) ...[
               GestureDetector(
                 onTap: () {
                   _searchCtrl.clear();
@@ -1339,6 +1370,59 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                   color: AppTheme.textSecondary,
                 ),
               ),
+              const SizedBox(width: 8),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    size: 14,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    _isLoadingProducts
+                        ? 'Loading...'
+                        : (_productSearch.isEmpty
+                            ? '${_allProducts.length} Products'
+                            : '${_filteredProducts.length} / ${_allProducts.length} Products'),
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'Refresh Catalog',
+              child: InkWell(
+                onTap: _isLoadingProducts ? null : _fetchProducts,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.refresh_rounded,
+                    size: 18,
+                    color: _isLoadingProducts
+                        ? AppTheme.textSecondary.withValues(alpha: 0.4)
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

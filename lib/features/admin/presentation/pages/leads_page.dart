@@ -3685,9 +3685,12 @@ class _MasterLeadsAnalyticsHeaderState
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final int columns = constraints.maxWidth >= 1200
-                  ? 5
-                  : (constraints.maxWidth >= 850 ? 3 : 2);
+              final int targetColumns = isSales ? 4 : 6;
+              final int columns = constraints.maxWidth >= 960
+                  ? targetColumns
+                  : (constraints.maxWidth >= 720
+                      ? 3
+                      : (constraints.maxWidth >= 460 ? 2 : 1));
               final double cardWidth =
                   (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
@@ -3700,8 +3703,8 @@ class _MasterLeadsAnalyticsHeaderState
                     title: 'New Today',
                     value: '$todayLeadsCount',
                     subtext: registeredTodayNowDeleted > 0
-                        ? '$registeredTodayNowDeleted deleted after registration'
-                        : 'leads registered today',
+                        ? '$registeredTodayNowDeleted deleted'
+                        : 'registered today',
                     icon: Icons.today_outlined,
                     color: const Color(0xFF00C896),
                     isCompact: true,
@@ -3733,7 +3736,7 @@ class _MasterLeadsAnalyticsHeaderState
                   width: cardWidth,
                   title: isSales ? 'My Assigned Leads' : 'Assigned Leads',
                   value: '$assignedCount',
-                  subtext: isSales ? 'Assigned active leads' : '+$totalTeamAssigned assigned today',
+                  subtext: isSales ? 'Active leads' : '+$totalTeamAssigned today',
                   icon: Icons.person_pin_outlined,
                   color: AppTheme.info,
                   isCompact: true,
@@ -3774,7 +3777,7 @@ class _MasterLeadsAnalyticsHeaderState
                   width: cardWidth,
                   title: isSales ? 'My Verified Dealers' : 'Verified Dealers',
                   value: '$verifiedDealersCount',
-                  subtext: isSales ? 'Converted dealers' : '+$totalTeamKycApproved verified today',
+                  subtext: isSales ? 'Verified' : '+$totalTeamKycApproved today',
                   icon: Icons.verified_user_outlined,
                   color: AppTheme.success,
                   isCompact: true,
@@ -3789,7 +3792,7 @@ class _MasterLeadsAnalyticsHeaderState
                   width: cardWidth,
                   title: isSales ? 'My Deleted Leads' : 'Deleted Leads',
                   value: '$totalAllTimeDeletedLeads',
-                  subtext: isSales ? 'Deleted leads' : '+$totalTeamDeleted deleted today',
+                  subtext: isSales ? 'Deleted' : '+$totalTeamDeleted today',
                   icon: Icons.delete_outline,
                   color: Colors.red.shade400,
                   isCompact: true,
