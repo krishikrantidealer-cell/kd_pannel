@@ -1543,6 +1543,217 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     }
   }
 
+  void _showReassignLeadDialog() {
+    if (_lead == null) return;
+    final leadName = _lead!['name'] ?? 'Lead';
+    final leadId = (_lead!['id'] ?? _lead!['_id'])?.toString() ?? '';
+    if (leadId.isEmpty) return;
+
+    final state = context.read<LeadsBloc>().state;
+    final salesAgents = state.salesAgents;
+    String? selectedAgentId = _lead!['agentId']?.toString();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.swap_horiz_rounded,
+                    color: Color(0xFFD97706),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reassign Lead',
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Transfer $leadName to another sales agent',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select New Sales Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedAgentId,
+                        isExpanded: true,
+                        hint: Text(
+                          'Choose sales teammate...',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        items: salesAgents.map((agent) {
+                          final agentId =
+                              (agent['_id'] ?? agent['id'])?.toString() ?? '';
+                          final name =
+                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                  .trim();
+                          final phone = (agent['phoneNumber'] ?? '').toString();
+                          return DropdownMenuItem<String>(
+                            value: agentId,
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline_rounded,
+                                  size: 16,
+                                  color: AppTheme.primaryColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    name.isNotEmpty ? '$name ($phone)' : phone,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedAgentId = val);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFFDE68A),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Once reassigned, this lead will be transferred to the selected agent and removed from your active list.',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: selectedAgentId == null
+                    ? null
+                    : () {
+                        Navigator.pop(dialogCtx);
+                        _assignAgent(selectedAgentId);
+                        if (AuthService().isSales) {
+                          Navigator.pop(context);
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                ),
+                child: Text(
+                  'Reassign Now',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _showUploadKycDialog() {
     final shopNameController = TextEditingController(
       text: _lead!['shopName'] ?? '',
@@ -2122,6 +2333,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                           onToggleBlock: _toggleBlockLead,
                           onEdit: _editLead,
                           onDelete: _deleteLead,
+                          onReassign: _showReassignLeadDialog,
                         ),
                         const SizedBox(height: 28),
 
@@ -2308,6 +2520,7 @@ class _FlatHeaderSection extends StatelessWidget {
   final VoidCallback onToggleBlock;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onReassign;
 
   const _FlatHeaderSection({
     required this.lead,
@@ -2317,6 +2530,7 @@ class _FlatHeaderSection extends StatelessWidget {
     required this.onToggleBlock,
     required this.onEdit,
     required this.onDelete,
+    this.onReassign,
   });
 
   Widget _buildMiniStat(String label, String value, Color color) {
@@ -2680,13 +2894,15 @@ class _FlatHeaderSection extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _ActionButton(
-          icon: Icons.edit_outlined,
-          label: 'Edit',
-          color: AppTheme.info,
-          isSolid: true,
-          onTap: onEdit,
-        ),
+        if (AuthService().isAdmin ||
+            AuthService().hasLeadPermission('update'))
+          _ActionButton(
+            icon: Icons.edit_outlined,
+            label: 'Edit',
+            color: AppTheme.info,
+            isSolid: true,
+            onTap: onEdit,
+          ),
         // _ActionButton(
         //   icon: FontAwesomeIcons.whatsapp,
         //   label: 'WhatsApp',
@@ -2703,6 +2919,15 @@ class _FlatHeaderSection extends StatelessWidget {
         //     );
         //   },
         // ),
+        if (AuthService().isAdmin ||
+            AuthService().hasLeadPermission('reassign'))
+          _ActionButton(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Reassign',
+            color: const Color(0xFFD97706),
+            isSolid: true,
+            onTap: onReassign,
+          ),
         _ActionButton(
           icon: Icons.person_add_outlined,
           label: 'Convert Dealer',
@@ -2735,6 +2960,9 @@ class _FlatHeaderSection extends StatelessWidget {
             isSolid: true,
             onTap: onToggleBlock,
           ),
+        ],
+        if (AuthService().isAdmin ||
+            AuthService().hasLeadPermission('delete'))
           _ActionButton(
             icon: Icons.delete_outline_rounded,
             label: 'Delete',
@@ -2742,7 +2970,6 @@ class _FlatHeaderSection extends StatelessWidget {
             isSolid: true,
             onTap: onDelete,
           ),
-        ],
       ],
     );
   }
@@ -3376,7 +3603,8 @@ class _LeadInformationCard extends StatelessWidget {
                   Icons.assignment_ind_outlined,
                 ),
                 const SizedBox(height: 10),
-                if (!AuthService().isSales) ...[
+                if (AuthService().isAdmin ||
+                    AuthService().hasLeadPermission('reassign')) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,

@@ -10,6 +10,7 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   StreamSubscription? _wsSubscription;
+  StreamSubscription? _repoSubscription;
   final UserRepository _userRepo = UserRepository();
   final NotificationRepository _notifRepo = NotificationRepository();
 
@@ -35,7 +36,17 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
 
     _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
       if (!isClosed) {
-        add(const FetchLeadsDataEvent(forceRefresh: true));
+        try {
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } catch (_) {}
+      }
+    });
+
+    _repoSubscription = _userRepo.onCacheInvalidated.listen((_) {
+      if (!isClosed) {
+        try {
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } catch (_) {}
       }
     });
   }
@@ -43,6 +54,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   @override
   Future<void> close() {
     _wsSubscription?.cancel();
+    _repoSubscription?.cancel();
     return super.close();
   }
 
@@ -249,11 +261,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         state.copyWith(
           status: LeadsStatus.success,
           actionSuccessMessage: event.agentId != null
-              ? 'Agent assigned successfully'
+              ? 'Lead reassigned successfully'
               : 'Agent unassigned',
         ),
       );
-      add(FetchLeadDetailsEvent(event.userId));
+      if (AuthService().isAdmin ||
+          event.agentId == AuthService().currentUserId) {
+        add(FetchLeadDetailsEvent(event.userId));
+      } else {
+        add(const FetchLeadsDataEvent(forceRefresh: true));
+      }
       // Refresh daily stats so banner count updates immediately
       add(
         FetchDailyLeadStatsEvent(

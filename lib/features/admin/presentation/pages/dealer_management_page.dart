@@ -931,30 +931,33 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           ],
           Row(
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _openCreateDealerPage(context),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: Text(
-                    'Create Dealer',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.white,
+              if (AuthService().isAdmin ||
+                  AuthService().hasDealerPermission('create')) ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openCreateDealerPage(context),
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: Text(
+                      'Create Dealer',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
+              ],
               Expanded(child: _buildTimeframeFilter(context, state, isMobile)),
               const SizedBox(width: 8),
               Container(
@@ -1006,30 +1009,34 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ElevatedButton.icon(
-              onPressed: () => _openCreateDealerPage(context),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text(
-                'Create Dealer',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+            if (AuthService().isAdmin ||
+                AuthService().hasDealerPermission('create'))
+              ElevatedButton.icon(
+                onPressed: () => _openCreateDealerPage(context),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(
+                  'Create Dealer',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
+            if (AuthService().isAdmin ||
+                AuthService().hasDealerPermission('create'))
+              const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: _isExporting ? null : _exportDealersToCSV,
               icon: _isExporting
@@ -2736,8 +2743,7 @@ class _DealerTableState extends State<_DealerTable> {
       const _DealerColumnConfig('Dealer Name', 32),
       const _DealerColumnConfig('Phone Number', 20),
       const _DealerColumnConfig('Location', 20),
-      if (AuthService().isAdmin)
-        const _DealerColumnConfig('Assigned Agent', 20),
+      if (AuthService().isAdmin) const _DealerColumnConfig('Assigned Agent', 20),
       const _DealerColumnConfig('Status', 16),
       const _DealerColumnConfig('Orders', 12, isCenter: true),
       const _DealerColumnConfig('Purchase Value', 20, isCenter: true),
@@ -3231,14 +3237,16 @@ class _DealerRowState extends State<_DealerRow> {
                                   color: const Color(0xFF7C3AED),
                                 ),
                               ),
-                              onChanged: (String? newAgentId) {
-                                if (widget.dealer.id != null) {
-                                  widget.onAssignAgent(
-                                    widget.dealer.id!,
-                                    newAgentId,
-                                  );
-                                }
-                              },
+                              onChanged: AuthService().hasDealerPermission('reassign')
+                                  ? (String? newAgentId) {
+                                      if (widget.dealer.id != null) {
+                                        widget.onAssignAgent(
+                                          widget.dealer.id!,
+                                          newAgentId,
+                                        );
+                                      }
+                                    }
+                                  : null,
                               items: [
                                 DropdownMenuItem<String?>(
                                   value: null,
@@ -3301,6 +3309,10 @@ class _DealerRowState extends State<_DealerRow> {
                       child: _ConnectedActionButtons(
                         onOpenProfile: widget.onTap,
                         onCreateOrder: widget.onCreateOrder,
+                        onReassign: (AuthService().isAdmin ||
+                                AuthService().hasDealerPermission('reassign'))
+                            ? _openReassignDialog
+                            : null,
                         onEdit: widget.onEdit,
                         onDelete: widget.onDelete,
                       ),
@@ -3311,6 +3323,210 @@ class _DealerRowState extends State<_DealerRow> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _openReassignDialog() {
+    final dealerName = widget.dealer.name.isNotEmpty ? widget.dealer.name : 'Dealer';
+    final dealerId = widget.dealer.id ?? '';
+    if (dealerId.isEmpty) return;
+
+    String? selectedAgentId;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.swap_horiz_rounded,
+                    color: Color(0xFFD97706),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reassign Dealer',
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Transfer $dealerName to another sales agent',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select New Sales Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedAgentId,
+                        isExpanded: true,
+                        hint: Text(
+                          'Choose sales teammate...',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        items: widget.salesAgents.map((agent) {
+                          final agentId =
+                              (agent['_id'] ?? agent['id'])?.toString() ?? '';
+                          final name =
+                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                  .trim();
+                          final phone = (agent['phoneNumber'] ?? '').toString();
+                          return DropdownMenuItem<String>(
+                            value: agentId,
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline_rounded,
+                                  size: 16,
+                                  color: AppTheme.primaryColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    name.isNotEmpty ? '$name ($phone)' : phone,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedAgentId = val);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFFDE68A),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Once reassigned, this dealer will be transferred to the selected agent and removed from your active list.',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: selectedAgentId == null
+                    ? null
+                    : () {
+                        Navigator.pop(dialogCtx);
+                        widget.onAssignAgent(dealerId, selectedAgentId);
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                ),
+                child: Text(
+                  'Reassign Now',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -3613,16 +3829,18 @@ class _CustomCheckboxState extends State<_CustomCheckbox> {
 }
 
 class _ConnectedActionButtons extends StatefulWidget {
-  final VoidCallback onOpenProfile;
+  final VoidCallback? onOpenProfile;
   final VoidCallback? onCreateOrder;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onReassign;
 
   const _ConnectedActionButtons({
-    required this.onOpenProfile,
+    this.onOpenProfile,
     this.onCreateOrder,
     required this.onEdit,
     required this.onDelete,
+    this.onReassign,
   });
 
   @override
@@ -3631,10 +3849,10 @@ class _ConnectedActionButtons extends StatefulWidget {
 }
 
 class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
-  bool isProfileHovered = false;
   bool isOrderHovered = false;
   bool isEditHovered = false;
   bool isDeleteHovered = false;
+  bool isReassignHovered = false;
 
   Widget _buildIconButton({
     required VoidCallback onTap,
@@ -3684,15 +3902,6 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildIconButton(
-          onTap: widget.onOpenProfile,
-          icon: Icons.open_in_new_rounded,
-          tooltip: 'Open Full Profile',
-          isHovered: isProfileHovered,
-          onHoverChanged: (val) => setState(() => isProfileHovered = val),
-          color: const Color(0xFF10B981),
-        ),
-        const SizedBox(width: 6),
         if (widget.onCreateOrder != null) ...[
           _buildIconButton(
             onTap: widget.onCreateOrder!,
@@ -3704,23 +3913,41 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
           ),
           const SizedBox(width: 6),
         ],
-        _buildIconButton(
-          onTap: widget.onEdit,
-          icon: Icons.edit_outlined,
-          tooltip: 'Edit Dealer',
-          isHovered: isEditHovered,
-          onHoverChanged: (val) => setState(() => isEditHovered = val),
-          color: AppTheme.info,
-        ),
-        const SizedBox(width: 6),
-        _buildIconButton(
-          onTap: widget.onDelete,
-          icon: Icons.delete_outline_rounded,
-          tooltip: 'Delete Dealer',
-          isHovered: isDeleteHovered,
-          onHoverChanged: (val) => setState(() => isDeleteHovered = val),
-          color: AppTheme.error,
-        ),
+        if (widget.onReassign != null) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onReassign!,
+            icon: Icons.swap_horiz_rounded,
+            tooltip: 'Reassign Dealer',
+            isHovered: isReassignHovered,
+            onHoverChanged: (val) => setState(() => isReassignHovered = val),
+            color: const Color(0xFFD97706),
+          ),
+        ],
+        if (AuthService().isAdmin ||
+            AuthService().hasDealerPermission('update')) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onEdit,
+            icon: Icons.edit_outlined,
+            tooltip: 'Edit Dealer',
+            isHovered: isEditHovered,
+            onHoverChanged: (val) => setState(() => isEditHovered = val),
+            color: AppTheme.info,
+          ),
+        ],
+        if (AuthService().isAdmin ||
+            AuthService().hasDealerPermission('delete')) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onDelete,
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Delete Dealer',
+            isHovered: isDeleteHovered,
+            onHoverChanged: (val) => setState(() => isDeleteHovered = val),
+            color: AppTheme.error,
+          ),
+        ],
       ],
     );
   }

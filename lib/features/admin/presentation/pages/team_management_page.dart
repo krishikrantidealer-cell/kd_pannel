@@ -9,6 +9,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/repositories/user_repository.dart';
 import 'package:kd_pannel/core/utils/currency_utils.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:http/http.dart' as http;
@@ -20,14 +22,19 @@ class TeamManagementPage extends StatefulWidget {
   State<TeamManagementPage> createState() => _TeamManagementPageState();
 }
 
-class _TeamManagementPageState extends State<TeamManagementPage>
-    with SingleTickerProviderStateMixin {
+class _TeamManagementPageState extends State<TeamManagementPage> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _permissionSearchController = TextEditingController();
   String _searchQuery = '';
+  String _permissionSearchQuery = '';
   bool _isActionLoading = false;
   int _currentPage = 1;
   final int _pageSize = 10;
-  late TabController _tabController;
+  int _selectedTabIndex = 0;
+
+  static final Map<String, Map<String, dynamic>> _persistedPermissionsCache = {};
+  final Map<String, Map<String, dynamic>> _agentPermissionsState = {};
+  final Set<String> _savingPermissionAgentIds = {};
 
   List<Map<String, dynamic>> _deletedUsersList = [];
   bool _isLoadingDeletedUsers = false;
@@ -36,13 +43,15 @@ class _TeamManagementPageState extends State<TeamManagementPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging && mounted) {
-        setState(() {});
+    _fetchDeletedUsers();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final leadsBloc = context.read<LeadsBloc>();
+      if (leadsBloc.state.status == LeadsStatus.initial ||
+          leadsBloc.state.salesAgents.isEmpty) {
+        leadsBloc.add(const FetchLeadsDataEvent(forceRefresh: true));
       }
     });
-    _fetchDeletedUsers();
   }
 
   Future<void> _fetchDeletedUsers() async {
@@ -61,8 +70,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
           }
         }
       }
-    } catch (e) {
-      debugPrint('[TeamManagementPage] Error fetching deleted users: $e');
+    } catch (_) {
+      // Graceful fallback
     } finally {
       if (mounted) setState(() => _isLoadingDeletedUsers = false);
     }
@@ -103,8 +112,8 @@ class _TeamManagementPageState extends State<TeamManagementPage>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
+    _permissionSearchController.dispose();
     super.dispose();
   }
 
@@ -517,9 +526,13 @@ class _TeamManagementPageState extends State<TeamManagementPage>
             ? <Map<String, dynamic>>[]
             : filteredAgents.sublist(startIndex, endIndex);
 
+        final bool isInitialOrLoading =
+            (state.status == LeadsStatus.loading ||
+                    state.status == LeadsStatus.initial) &&
+                state.allRawUsers.isEmpty;
+
         final Widget bodyContent = SelectionArea(
-          child:
-              (state.status == LeadsStatus.loading && state.allRawUsers.isEmpty)
+          child: isInitialOrLoading
               ? _buildShimmerLoading(isDesktop, isMobile)
               : ScrollConfiguration(
                   behavior: ScrollConfiguration.of(
@@ -552,98 +565,82 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    _tabController.index == 0
-                                        ? 'Monitor and coordinate your sales agent team assignments.'
-                                        : 'Track sales agent performance and lead-to-dealer conversions.',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: isMobile ? 12 : 14,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(4),
-                                child: TabBar(
-                                  controller: _tabController,
-                                  isScrollable: true,
-                                  tabAlignment: TabAlignment.start,
-                                  indicator: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.05,
+                                   Text(
+                                     _selectedTabIndex == 0
+                                         ? 'Monitor and coordinate your sales agent team assignments.'
+                                         : (_selectedTabIndex == 1
+                                             ? 'Track sales agent performance and lead-to-dealer conversions.'
+                                             : 'Configure granular Lead and Dealer action permissions for sales agents.'),
+                                     style: GoogleFonts.outfit(
+                                       fontSize: isMobile ? 12 : 14,
+                                       color: AppTheme.textSecondary,
+                                       fontWeight: FontWeight.w500,
+                                     ),
+                                   ),
+                                 ],
+                               ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildTabSelector(isMobile),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      height: 38,
+                                      width: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: AppTheme.borderColor,
                                         ),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
                                       ),
-                                    ],
-                                  ),
-                                  indicatorSize: TabBarIndicatorSize.tab,
-                                  labelColor: AppTheme.primaryColor,
-                                  unselectedLabelColor: AppTheme.textSecondary,
-                                  labelStyle: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                  unselectedLabelStyle: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                  dividerColor: Colors.transparent,
-                                  labelPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  tabs: const [
-                                    Tab(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.group_rounded, size: 16),
-                                          SizedBox(width: 8),
-                                          Text('Team Members'),
-                                        ],
-                                      ),
-                                    ),
-                                    Tab(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.trending_up_rounded,
-                                            size: 16,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text('Lead Dealer Conversion'),
-                                        ],
+                                      child: IconButton(
+                                        tooltip: 'Refresh Team Data',
+                                        padding: EdgeInsets.zero,
+                                        icon: state.status == LeadsStatus.loading
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppTheme.primaryColor,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.refresh_rounded,
+                                                size: 18,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                        onPressed: () {
+                                          _fetchDeletedUsers();
+                                          context.read<LeadsBloc>().add(
+                                                const FetchLeadsDataEvent(
+                                                  forceRefresh: true,
+                                                ),
+                                              );
+                                        },
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
+                             ],
+                           ),
+                           const SizedBox(height: 20),
 
-                          if (_tabController.index == 1)
-                            _buildConversionsTab(
-                              context,
-                              state,
-                              isDesktop,
-                              isMobile,
-                            )
+                           if (_selectedTabIndex == 2)
+                             _buildPermissionsTab(
+                               context,
+                               state,
+                               isDesktop,
+                               isMobile,
+                             )
+                           else if (_selectedTabIndex == 1)
+                             _buildConversionsTab(
+                               context,
+                               state,
+                               isDesktop,
+                               isMobile,
+                             )
                           else ...[
                             // Stats Summary Row
                             Row(
@@ -2994,6 +2991,1397 @@ class _TeamManagementPageState extends State<TeamManagementPage>
       ),
     );
   }
+
+  // ==========================================
+  // SEGMENTED TAB SELECTOR (100% Smooth 60fps)
+  // ==========================================
+
+  Widget _buildTabSelector(bool isMobile) {
+    final tabs = [
+      {'title': 'Team Members', 'icon': Icons.group_rounded},
+      {'title': 'Lead Dealer Conversion', 'icon': Icons.trending_up_rounded},
+      {'title': 'Permissions', 'icon': Icons.security_rounded},
+    ];
+
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(tabs.length, (index) {
+            final isSelected = _selectedTabIndex == index;
+            final tab = tabs[index];
+            return Padding(
+              padding: EdgeInsets.only(right: index < tabs.length - 1 ? 4 : 0),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    if (_selectedTabIndex != index) {
+                      setState(() {
+                        _selectedTabIndex = index;
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeInOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          tab['icon'] as IconData,
+                          size: 16,
+                          color: isSelected
+                              ? AppTheme.primaryColor
+                              : AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          tab['title'] as String,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w600,
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // PERMISSIONS TAB IMPLEMENTATION
+  // ==========================================
+
+  bool _toBool(dynamic val, {bool defaultValue = false}) {
+    if (val == null) return defaultValue;
+    if (val is bool) return val;
+    if (val is num) return val == 1;
+    if (val is String) {
+      final s = val.toLowerCase().trim();
+      if (s == 'true' || s == '1') return true;
+      if (s == 'false' || s == '0') return false;
+    }
+    return defaultValue;
+  }
+
+  Map<String, dynamic> _getAgentPermissions(Map<String, dynamic> agent) {
+    final agentId = agent['_id']?.toString() ?? '';
+    if (agentId.isNotEmpty && _persistedPermissionsCache.containsKey(agentId)) {
+      return _persistedPermissionsCache[agentId]!;
+    }
+    if (_agentPermissionsState.containsKey(agentId)) {
+      return _agentPermissionsState[agentId]!;
+    }
+    dynamic raw = agent['permissions'];
+    if (raw is String) {
+      try {
+        raw = jsonDecode(raw);
+      } catch (_) {}
+    }
+    if (raw is Map) {
+      final leadMap = raw['lead'] is Map
+          ? Map<String, dynamic>.from(raw['lead'])
+          : (raw['leads'] is Map
+              ? Map<String, dynamic>.from(raw['leads'])
+              : <String, dynamic>{});
+      final dealerMap = raw['dealer'] is Map
+          ? Map<String, dynamic>.from(raw['dealer'])
+          : (raw['dealers'] is Map
+              ? Map<String, dynamic>.from(raw['dealers'])
+              : <String, dynamic>{});
+      final perms = {
+        'lead': {
+          'create': _toBool(leadMap['create'], defaultValue: true),
+          'update': _toBool(leadMap['update'], defaultValue: true),
+          'reassign': _toBool(leadMap['reassign'], defaultValue: false),
+          'delete': _toBool(leadMap['delete'], defaultValue: true),
+        },
+        'dealer': {
+          'create': _toBool(dealerMap['create'], defaultValue: true),
+          'update': _toBool(dealerMap['update'], defaultValue: true),
+          'reassign': _toBool(dealerMap['reassign'], defaultValue: false),
+          'delete': _toBool(dealerMap['delete'], defaultValue: true),
+        }
+      };
+      if (agentId.isNotEmpty) {
+        _persistedPermissionsCache[agentId] = perms;
+      }
+      return perms;
+    }
+    final defaultPerms = {
+      'lead': {
+        'create': true,
+        'update': true,
+        'reassign': false,
+        'delete': true,
+      },
+      'dealer': {
+        'create': true,
+        'update': true,
+        'reassign': false,
+        'delete': true,
+      }
+    };
+    if (agentId.isNotEmpty) {
+      _persistedPermissionsCache[agentId] = defaultPerms;
+    }
+    return defaultPerms;
+  }
+
+  Future<void> _toggleAgentPermission(
+    Map<String, dynamic> agent,
+    String module,
+    String action,
+    bool newValue,
+  ) async {
+    final agentId = agent['_id']?.toString() ?? '';
+    if (agentId.isEmpty) return;
+
+    final currentPerms = _getAgentPermissions(agent);
+    final updatedPerms = {
+      'lead': Map<String, dynamic>.from(currentPerms['lead'] ?? {}),
+      'dealer': Map<String, dynamic>.from(currentPerms['dealer'] ?? {}),
+    };
+    updatedPerms[module]?[action] = newValue;
+
+    setState(() {
+      _persistedPermissionsCache[agentId] = updatedPerms;
+      _agentPermissionsState[agentId] = updatedPerms;
+      agent['permissions'] = updatedPerms;
+      _savingPermissionAgentIds.add(agentId);
+    });
+
+    try {
+      var res = await ApiClient().put('/users/$agentId', {
+        'permissions': updatedPerms,
+      });
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        res = await ApiClient().put('/users/sales/$agentId', {
+          'permissions': updatedPerms,
+        });
+      }
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        _persistedPermissionsCache[agentId] = updatedPerms;
+        agent['permissions'] = updatedPerms;
+        UserRepository().invalidateCache();
+        if (AuthService().currentUserId == agentId) {
+          AuthService().updatePermissions(updatedPerms);
+        }
+
+        final agentName =
+            '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+        final actionDisplay = action[0].toUpperCase() + action.substring(1);
+        final moduleDisplay = module[0].toUpperCase() + module.substring(1);
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    newValue
+                        ? Icons.check_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$moduleDisplay $actionDisplay permission ${newValue ? 'granted to' : 'revoked from'} $agentName',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor:
+                  newValue ? AppTheme.primaryColor : const Color(0xFF334155),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Server returned status ${res.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _persistedPermissionsCache[agentId] = currentPerms;
+        _agentPermissionsState[agentId] = currentPerms;
+        agent['permissions'] = currentPerms;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update permission: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPermissionAgentIds.remove(agentId);
+        });
+      }
+    }
+  }
+
+  Future<void> _applyPermissionPreset(
+    Map<String, dynamic> agent,
+    String presetType,
+  ) async {
+    final agentId = agent['_id']?.toString() ?? '';
+    if (agentId.isEmpty) return;
+
+    final Map<String, dynamic> updatedPerms;
+    if (presetType == 'full') {
+      updatedPerms = {
+        'lead': {'create': true, 'update': true, 'reassign': true, 'delete': true},
+        'dealer': {'create': true, 'update': true, 'reassign': true, 'delete': true},
+      };
+    } else if (presetType == 'standard') {
+      updatedPerms = {
+        'lead': {'create': true, 'update': true, 'reassign': false, 'delete': true},
+        'dealer': {'create': true, 'update': true, 'reassign': false, 'delete': true},
+      };
+    } else {
+      // restricted / read-only updates
+      updatedPerms = {
+        'lead': {'create': false, 'update': false, 'reassign': false, 'delete': false},
+        'dealer': {'create': false, 'update': false, 'reassign': false, 'delete': false},
+      };
+    }
+
+    final currentPerms = _getAgentPermissions(agent);
+    setState(() {
+      _persistedPermissionsCache[agentId] = updatedPerms;
+      _agentPermissionsState[agentId] = updatedPerms;
+      agent['permissions'] = updatedPerms;
+      _savingPermissionAgentIds.add(agentId);
+    });
+
+    try {
+      var res = await ApiClient().put('/users/$agentId', {
+        'permissions': updatedPerms,
+      });
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        res = await ApiClient().put('/users/sales/$agentId', {
+          'permissions': updatedPerms,
+        });
+      }
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        _persistedPermissionsCache[agentId] = updatedPerms;
+        agent['permissions'] = updatedPerms;
+        UserRepository().invalidateCache();
+        if (AuthService().currentUserId == agentId) {
+          AuthService().updatePermissions(updatedPerms);
+        }
+
+        final agentName =
+            '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+        final presetLabel = presetType == 'full'
+            ? 'Full Access'
+            : (presetType == 'standard'
+                ? 'Standard Access (Create, Update, Delete)'
+                : 'Restricted Access (View Only)');
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Applied $presetLabel preset to $agentName',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              backgroundColor: AppTheme.primaryColor,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Server error: ${res.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _persistedPermissionsCache[agentId] = currentPerms;
+        _agentPermissionsState[agentId] = currentPerms;
+        agent['permissions'] = currentPerms;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to apply preset: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPermissionAgentIds.remove(agentId);
+        });
+      }
+    }
+  }
+
+  Widget _buildPermissionsTab(
+    BuildContext context,
+    LeadsState state,
+    bool isDesktop,
+    bool isMobile,
+  ) {
+    final allSalesAgents = (state.salesAgents.isNotEmpty)
+        ? state.salesAgents
+        : state.allRawUsers.where((u) => u['role'] == 'sales').toList();
+
+    final filteredAgents = allSalesAgents.where((agent) {
+      final name =
+          '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.toLowerCase();
+      final email = (agent['email'] ?? '').toLowerCase();
+      final phone = (agent['phoneNumber'] ?? '').toLowerCase();
+      final query = _permissionSearchQuery.toLowerCase();
+      return name.contains(query) ||
+          email.contains(query) ||
+          phone.contains(query);
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Explainer Banner with Reassign Highlight
+        _buildPermissionExplainerBanner(isDesktop, isMobile),
+        const SizedBox(height: 20),
+
+        // 2. Search & Toolbar
+        _buildPermissionSearchBar(allSalesAgents.length, isMobile),
+        const SizedBox(height: 20),
+
+        // 3. Sales Agents Permission Cards
+        if (filteredAgents.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.security_outlined,
+                    size: 28,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  _permissionSearchQuery.isNotEmpty
+                      ? 'No sales agents matching "$_permissionSearchQuery"'
+                      : 'No sales agents found in system',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add a sales agent under the Team Members tab to configure their permissions.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: filteredAgents.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 16),
+            itemBuilder: (context, index) {
+              final agent = filteredAgents[index];
+              return _buildAgentPermissionCard(
+                agent,
+                isDesktop,
+                isMobile,
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPermissionExplainerBanner(bool isDesktop, bool isMobile) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF0F3820),
+            AppTheme.primaryColor,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Background subtle ambient icon
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(
+              Icons.shield_rounded,
+              size: 160,
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(isDesktop ? 22 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sales Agent Authorization & Role Permissions',
+                            style: GoogleFonts.outfit(
+                              fontSize: isMobile ? 15 : 18,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Configure granular Create, Update, Reassign, and Delete rules per team member.',
+                            style: GoogleFonts.outfit(
+                              fontSize: isMobile ? 11 : 12.5,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Reassign Explainer Highlight Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.swap_horiz_rounded,
+                          color: Color(0xFFFBBF24),
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Reassign Permission Workflow',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFFEF3C7),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'When Reassign is enabled, the sales agent can transfer an assigned lead or dealer to another sales teammate. Once reassigned, the lead or dealer is transferred to the new agent and will no longer be visible to this sales agent.',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                color: Colors.white.withValues(alpha: 0.9),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionSearchBar(int totalAgents, bool isMobile) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _permissionSearchController,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _permissionSearchQuery = val;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search sales agents to configure permissions...',
+                        hintStyle: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                  if (_permissionSearchQuery.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        _permissionSearchController.clear();
+                        setState(() {
+                          _permissionSearchQuery = '';
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.people_alt_outlined,
+                  size: 16,
+                  color: AppTheme.textPrimary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$totalAgents Sales Agents',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentPermissionCard(
+    Map<String, dynamic> agent,
+    bool isDesktop,
+    bool isMobile,
+  ) {
+    final agentId = agent['_id']?.toString() ?? '';
+    final firstName = agent['firstName'] ?? '';
+    final lastName = agent['lastName'] ?? '';
+    final name = '$firstName $lastName'.trim().isNotEmpty
+        ? '$firstName $lastName'.trim()
+        : (agent['name'] ?? 'Sales Agent');
+    final email = agent['email'] ?? '-';
+    final phone = agent['phoneNumber'] ?? '-';
+    final initials = (name.isNotEmpty ? name[0] : 'S').toUpperCase();
+
+    final perms = _getAgentPermissions(agent);
+    final leadPerms = perms['lead'] as Map<String, dynamic>? ?? {};
+    final dealerPerms = perms['dealer'] as Map<String, dynamic>? ?? {};
+
+    int activeCount = 0;
+    if (leadPerms['create'] == true) activeCount++;
+    if (leadPerms['update'] == true) activeCount++;
+    if (leadPerms['reassign'] == true) activeCount++;
+    if (leadPerms['delete'] == true) activeCount++;
+    if (dealerPerms['create'] == true) activeCount++;
+    if (dealerPerms['update'] == true) activeCount++;
+    if (dealerPerms['reassign'] == true) activeCount++;
+    if (dealerPerms['delete'] == true) activeCount++;
+
+    final isSaving = _savingPermissionAgentIds.contains(agentId);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: activeCount > 0
+              ? AppTheme.primaryColor.withValues(alpha: 0.15)
+              : AppTheme.borderColor,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Agent Card Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              border: Border(
+                bottom: BorderSide(
+                  color: const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Agent Avatar
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF34D399), Color(0xFF059669)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF059669).withValues(alpha: 0.25),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Name & Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              'SALES AGENT',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryColor,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.email_outlined,
+                                size: 13,
+                                color: AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                email,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.phone_outlined,
+                                size: 13,
+                                color: AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                phone,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Active Rules Counter Badge
+                if (!isMobile) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: activeCount > 0
+                          ? const Color(0xFFECFDF5)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: activeCount > 0
+                            ? const Color(0xFFA7F3D0)
+                            : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: activeCount > 0
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFF94A3B8),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$activeCount/8 Active',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: activeCount > 0
+                                ? const Color(0xFF047857)
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+
+                // Preset Quick Menu
+                PopupMenuButton<String>(
+                  onSelected: (val) => _applyPermissionPreset(agent, val),
+                  tooltip: 'Apply Permission Template',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'standard',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                            color: AppTheme.primaryColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Standard (Create, Update, Delete)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'full',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.admin_panel_settings_outlined,
+                            size: 16,
+                            color: Color(0xFF059669),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Full Access (All 8)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'restricted',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.lock_outline,
+                            size: 16,
+                            color: Color(0xFFE11D48),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Restricted (View Only)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Presets',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.arrow_drop_down,
+                          size: 16,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                if (isSaving) ...[
+                  const SizedBox(width: 10),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Two Permission Categories (Lead & Dealer)
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: isDesktop
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _buildPermissionModuleBox(
+                          title: 'Lead Permissions',
+                          subtitle: 'Rules applied when agent handles prospects & leads',
+                          icon: Icons.campaign_rounded,
+                          accentColor: const Color(0xFF0284C7),
+                          moduleKey: 'lead',
+                          permissions: leadPerms,
+                          onToggle: (action, val) =>
+                              _toggleAgentPermission(agent, 'lead', action, val),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildPermissionModuleBox(
+                          title: 'Dealer Permissions',
+                          subtitle: 'Rules applied when agent handles verified store accounts',
+                          icon: Icons.storefront_rounded,
+                          accentColor: const Color(0xFF0D9488),
+                          moduleKey: 'dealer',
+                          permissions: dealerPerms,
+                          onToggle: (action, val) =>
+                              _toggleAgentPermission(agent, 'dealer', action, val),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      _buildPermissionModuleBox(
+                        title: 'Lead Permissions',
+                        subtitle: 'Rules applied when agent handles prospects & leads',
+                        icon: Icons.campaign_rounded,
+                        accentColor: const Color(0xFF0284C7),
+                        moduleKey: 'lead',
+                        permissions: leadPerms,
+                        onToggle: (action, val) =>
+                            _toggleAgentPermission(agent, 'lead', action, val),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildPermissionModuleBox(
+                        title: 'Dealer Permissions',
+                        subtitle: 'Rules applied when agent handles verified store accounts',
+                        icon: Icons.storefront_rounded,
+                        accentColor: const Color(0xFF0D9488),
+                        moduleKey: 'dealer',
+                        permissions: dealerPerms,
+                        onToggle: (action, val) =>
+                            _toggleAgentPermission(agent, 'dealer', action, val),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionModuleBox({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color accentColor,
+    required String moduleKey,
+    required Map<String, dynamic> permissions,
+    required Function(String action, bool value) onToggle,
+  }) {
+    final bool canCreate = permissions['create'] ?? true;
+    final bool canUpdate = permissions['update'] ?? true;
+    final bool canReassign = permissions['reassign'] ?? true;
+    final bool canDelete = permissions['delete'] ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: accentColor, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const SizedBox(height: 10),
+
+          // 1. Create Permission
+          _buildPermissionToggleRow(
+            title: moduleKey == 'lead' ? 'Create Leads' : 'Create Dealers',
+            description: moduleKey == 'lead'
+                ? 'Allow adding new farmer & customer prospects'
+                : 'Allow onboarding new verified store accounts',
+            icon: Icons.add_circle_outline_rounded,
+            value: canCreate,
+            onChanged: (val) => onToggle('create', val),
+          ),
+
+          // 2. Update Permission
+          _buildPermissionToggleRow(
+            title: moduleKey == 'lead' ? 'Update Leads' : 'Update Dealers',
+            description: moduleKey == 'lead'
+                ? 'Allow modifying lead contact info, KYC & statuses'
+                : 'Allow updating store info, terms & KYC records',
+            icon: Icons.edit_outlined,
+            value: canUpdate,
+            onChanged: (val) => onToggle('update', val),
+          ),
+
+          // 3. Reassign Permission (with highlight indicator)
+          _buildPermissionToggleRow(
+            title: moduleKey == 'lead' ? 'Reassign Leads' : 'Reassign Dealers',
+            description: moduleKey == 'lead'
+                ? 'Can transfer leads to teammates (removes from active view)'
+                : 'Can transfer dealers to teammates (removes from active view)',
+            icon: Icons.swap_horiz_rounded,
+            value: canReassign,
+            isReassign: true,
+            onChanged: (val) => onToggle('reassign', val),
+          ),
+
+          // 4. Delete Permission
+          _buildPermissionToggleRow(
+            title: moduleKey == 'lead' ? 'Delete Leads' : 'Delete Dealers',
+            description: moduleKey == 'lead'
+                ? 'Allow archiving or soft-deleting lead records'
+                : 'Allow archiving or blocking dealer records',
+            icon: Icons.delete_outline_rounded,
+            value: canDelete,
+            isDestructive: true,
+            onChanged: (val) => onToggle('delete', val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionToggleRow({
+    required String title,
+    required String description,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    bool isReassign = false,
+    bool isDestructive = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: value ? Colors.white : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: value
+                ? (isReassign
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                    : const Color(0xFF10B981).withValues(alpha: 0.25))
+                : const Color(0xFFE5E7EB),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: value
+                  ? (isDestructive
+                      ? AppTheme.error
+                      : (isReassign
+                          ? const Color(0xFFD97706)
+                          : AppTheme.primaryColor))
+                  : const Color(0xFF94A3B8),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: value
+                              ? AppTheme.textPrimary
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                      if (isReassign) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFFFCD34D),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            'Transfers Out',
+                            style: GoogleFonts.outfit(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFB45309),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    description,
+                    style: GoogleFonts.outfit(
+                      fontSize: 10.5,
+                      color: const Color(0xFF64748B),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Transform.scale(
+              scale: 0.75,
+              child: Switch.adaptive(
+                value: value,
+                activeThumbColor: isDestructive
+                    ? AppTheme.error
+                    : (isReassign
+                        ? const Color(0xFFD97706)
+                        : AppTheme.primaryColor),
+                activeTrackColor: isDestructive
+                    ? AppTheme.error.withValues(alpha: 0.25)
+                    : (isReassign
+                        ? const Color(0xFFFDE68A)
+                        : const Color(0xFFA7F3D0)),
+                inactiveThumbColor: const Color(0xFF94A3B8),
+                inactiveTrackColor: const Color(0xFFE2E8F0),
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
 
 class _PageNumberButton extends StatefulWidget {

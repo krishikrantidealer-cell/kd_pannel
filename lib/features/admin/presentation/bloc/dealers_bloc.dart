@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -8,6 +9,7 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   StreamSubscription? _wsSubscription;
+  StreamSubscription? _repoSubscription;
   final UserRepository _userRepo = UserRepository();
 
   DealersBloc() : super(const DealersState()) {
@@ -29,7 +31,17 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
 
     _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
       if (!isClosed) {
-        add(const FetchDealersDataEvent(forceRefresh: true));
+        try {
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } catch (_) {}
+      }
+    });
+
+    _repoSubscription = _userRepo.onCacheInvalidated.listen((_) {
+      if (!isClosed) {
+        try {
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } catch (_) {}
       }
     });
   }
@@ -37,6 +49,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
   @override
   Future<void> close() {
     _wsSubscription?.cancel();
+    _repoSubscription?.cancel();
     return super.close();
   }
 
@@ -249,11 +262,17 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
       emit(
         state.copyWithMessages(
           status: DealersStatus.success,
-          actionSuccessMessage: 'Agent assigned successfully',
+          actionSuccessMessage: event.agentId != null
+              ? 'Dealer reassigned successfully'
+              : 'Agent unassigned',
         ),
       );
-      // Refresh only this dealer
-      add(FetchDealerDetailsEvent(event.userId));
+      if (AuthService().isAdmin ||
+          event.agentId == AuthService().currentUserId) {
+        add(FetchDealerDetailsEvent(event.userId));
+      } else {
+        add(const FetchDealersDataEvent(forceRefresh: true));
+      }
     } catch (e) {
       emit(
         state.copyWithMessages(

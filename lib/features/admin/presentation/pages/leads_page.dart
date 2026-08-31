@@ -1851,13 +1851,15 @@ class _LeadsTableCardState extends State<_LeadsTableCard> {
                   );
                 }),
               ],
-              onChanged: (val) {
-                if (val == 'unassign') {
-                  _handleBulkAssign(null);
-                } else if (val != null) {
-                  _handleBulkAssign(val);
-                }
-              },
+              onChanged: AuthService().hasLeadPermission('reassign')
+                  ? (val) {
+                      if (val == 'unassign') {
+                        _handleBulkAssign(null);
+                      } else if (val != null) {
+                        _handleBulkAssign(val);
+                      }
+                    }
+                  : null,
             ),
           ),
         ),
@@ -2860,86 +2862,89 @@ class _LeadRowState extends State<_LeadRow> {
                       child: GestureDetector(
                         onTap: () {}, // Prevent row tap
                         child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selectedAgentValue != null
+                                ? Colors.white
+                                : const Color(0xFFF5F3FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
                               color: selectedAgentValue != null
-                                  ? Colors.white
-                                  : const Color(0xFFF5F3FF),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: selectedAgentValue != null
-                                    ? const Color(0xFFE2E8F0)
-                                    : const Color(0xFFDDD6FE),
-                              ),
+                                  ? const Color(0xFFE2E8F0)
+                                  : const Color(0xFFDDD6FE),
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String?>(
-                                value: selectedAgentValue,
-                                isExpanded: true,
-                                isDense: true,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  size: 16,
-                                  color: AppTheme.textSecondary,
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              value: selectedAgentValue,
+                              isExpanded: true,
+                              isDense: true,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 16,
+                                color: AppTheme.textSecondary,
+                              ),
+                              hint: Text(
+                                '👤 + Assign',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF7C3AED),
                                 ),
-                                hint: Text(
-                                  '👤 + Assign',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF7C3AED),
-                                  ),
-                                ),
-                                onChanged: (String? newAgentId) {
-                                  if (widget.lead['id'] != null) {
-                                    widget.onAssignAgent(
-                                      widget.lead['id'],
-                                      newAgentId,
-                                    );
-                                  }
-                                },
-                                items: [
-                                  DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text(
-                                      '👤 Unassigned',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.textSecondary,
-                                      ),
+                              ),
+                              onChanged: AuthService().hasLeadPermission('reassign')
+                                  ? (String? newAgentId) {
+                                      if (widget.lead['id'] != null) {
+                                        widget.onAssignAgent(
+                                          widget.lead['id'],
+                                          newAgentId,
+                                        );
+                                      }
+                                    }
+                                  : null,
+                              items: [
+                                DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text(
+                                    '👤 Unassigned',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textSecondary,
                                     ),
                                   ),
-                                  ...widget.salesAgents.map((agent) {
-                                    final agentId =
-                                        (agent['_id'] ?? agent['id'])?.toString() ?? '';
-                                    final agentName =
-                                        '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                            .trim();
-                                    return DropdownMenuItem<String?>(
-                                      value: agentId,
-                                      child: Text(
-                                        agentName.isNotEmpty
-                                            ? agentName
-                                            : (agent['phoneNumber'] ?? 'Agent'),
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.textPrimary,
-                                        ),
+                                ),
+                                ...widget.salesAgents.map((agent) {
+                                  final agentId =
+                                      (agent['_id'] ?? agent['id'])?.toString() ??
+                                          '';
+                                  final agentName =
+                                      '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                          .trim();
+                                  return DropdownMenuItem<String?>(
+                                    value: agentId,
+                                    child: Text(
+                                      agentName.isNotEmpty
+                                          ? agentName
+                                          : (agent['phoneNumber'] ?? 'Agent'),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.textPrimary,
                                       ),
-                                    );
-                                  }),
-                                ],
-                              ),
+                                    ),
+                                  );
+                                }),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                 // Status Cell
                 _statusCell(widget.lead['status'] ?? 'prospect', flex: 1.4),
                 // Action Buttons Cell
@@ -2968,6 +2973,10 @@ class _LeadRowState extends State<_LeadRow> {
                               arguments: widget.lead,
                             );
                           },
+                          onReassign: (AuthService().isAdmin ||
+                                  AuthService().hasLeadPermission('reassign'))
+                              ? _openReassignDialog
+                              : null,
                           onEdit: () => widget.onEdit(widget.lead),
                           onDelete: () => widget.onDelete(
                             widget.lead['id'] ?? '',
@@ -2982,6 +2991,210 @@ class _LeadRowState extends State<_LeadRow> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _openReassignDialog() {
+    final leadName = widget.lead['name'] ?? 'Lead';
+    final leadId = widget.lead['id']?.toString() ?? '';
+    if (leadId.isEmpty) return;
+
+    String? selectedAgentId;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.swap_horiz_rounded,
+                    color: Color(0xFFD97706),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reassign Lead',
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Transfer $leadName to another sales agent',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select New Sales Agent',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedAgentId,
+                        isExpanded: true,
+                        hint: Text(
+                          'Choose sales teammate...',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        items: widget.salesAgents.map((agent) {
+                          final agentId =
+                              (agent['_id'] ?? agent['id'])?.toString() ?? '';
+                          final name =
+                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                  .trim();
+                          final phone = (agent['phoneNumber'] ?? '').toString();
+                          return DropdownMenuItem<String>(
+                            value: agentId,
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline_rounded,
+                                  size: 16,
+                                  color: AppTheme.primaryColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    name.isNotEmpty ? '$name ($phone)' : phone,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedAgentId = val);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFFDE68A),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Once reassigned, this lead will be transferred to the selected agent and removed from your active list.',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: selectedAgentId == null
+                    ? null
+                    : () {
+                        Navigator.pop(dialogCtx);
+                        widget.onAssignAgent(leadId, selectedAgentId);
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                ),
+                child: Text(
+                  'Reassign Now',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -3158,11 +3371,13 @@ class _ConnectedActionButtons extends StatefulWidget {
   final VoidCallback onOpenProfile;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onReassign;
 
   const _ConnectedActionButtons({
     required this.onOpenProfile,
     required this.onEdit,
     required this.onDelete,
+    this.onReassign,
   });
 
   @override
@@ -3174,6 +3389,7 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
   bool isProfileHovered = false;
   bool isEditHovered = false;
   bool isDeleteHovered = false;
+  bool isReassignHovered = false;
 
   Widget _buildIconButton({
     required VoidCallback onTap,
@@ -3231,24 +3447,41 @@ class _ConnectedActionButtonsState extends State<_ConnectedActionButtons> {
           onHoverChanged: (val) => setState(() => isProfileHovered = val),
           color: AppTheme.primaryColor,
         ),
-        const SizedBox(width: 6),
-        _buildIconButton(
-          onTap: widget.onEdit,
-          icon: Icons.edit_outlined,
-          tooltip: 'Edit Lead',
-          isHovered: isEditHovered,
-          onHoverChanged: (val) => setState(() => isEditHovered = val),
-          color: AppTheme.info,
-        ),
-        const SizedBox(width: 6),
-        _buildIconButton(
-          onTap: widget.onDelete,
-          icon: Icons.delete_outline_rounded,
-          tooltip: 'Delete Lead',
-          isHovered: isDeleteHovered,
-          onHoverChanged: (val) => setState(() => isDeleteHovered = val),
-          color: AppTheme.error,
-        ),
+        if (widget.onReassign != null) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onReassign!,
+            icon: Icons.swap_horiz_rounded,
+            tooltip: 'Reassign Lead',
+            isHovered: isReassignHovered,
+            onHoverChanged: (val) => setState(() => isReassignHovered = val),
+            color: const Color(0xFFD97706),
+          ),
+        ],
+        if (AuthService().isAdmin ||
+            AuthService().hasLeadPermission('update')) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onEdit,
+            icon: Icons.edit_outlined,
+            tooltip: 'Edit Lead',
+            isHovered: isEditHovered,
+            onHoverChanged: (val) => setState(() => isEditHovered = val),
+            color: AppTheme.info,
+          ),
+        ],
+        if (AuthService().isAdmin ||
+            AuthService().hasLeadPermission('delete')) ...[
+          const SizedBox(width: 6),
+          _buildIconButton(
+            onTap: widget.onDelete,
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Delete Lead',
+            isHovered: isDeleteHovered,
+            onHoverChanged: (val) => setState(() => isDeleteHovered = val),
+            color: AppTheme.error,
+          ),
+        ],
       ],
     );
   }

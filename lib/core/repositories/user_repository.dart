@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:kd_pannel/core/network/api_client.dart';
@@ -9,6 +10,10 @@ class UserRepository {
   UserRepository._internal();
 
   final ApiClient _apiClient = ApiClient();
+  final StreamController<void> _cacheInvalidationController =
+      StreamController<void>.broadcast();
+
+  Stream<void> get onCacheInvalidated => _cacheInvalidationController.stream;
 
   List<Map<String, dynamic>>? _cachedUsers;
   List<Map<String, dynamic>>? _cachedSalesAgents;
@@ -447,10 +452,13 @@ class UserRepository {
     throw Exception(data['message'] ?? 'Failed to permanently delete user');
   }
 
-  /// Invalidate cache
+  /// Invalidate cache and broadcast update to all active blocs
   void invalidateCache() {
     _cachedUsers = null;
     _cachedSalesAgents = null;
     _lastCacheTime = null;
+    if (!_cacheInvalidationController.isClosed) {
+      _cacheInvalidationController.add(null);
+    }
   }
 }
