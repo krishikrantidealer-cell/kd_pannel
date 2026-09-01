@@ -54,6 +54,20 @@ class AuthService {
     _isInitialized = true;
   }
 
+  Future<String> _getOrCreateDeviceId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? id = prefs.getString('kd_client_device_id');
+      if (id == null || id.isEmpty) {
+        id = 'admin-web-${DateTime.now().millisecondsSinceEpoch}-${(1000 + (DateTime.now().microsecond % 9000))}';
+        await prefs.setString('kd_client_device_id', id);
+      }
+      return id;
+    } catch (_) {
+      return 'admin-web-console';
+    }
+  }
+
   Future<bool> login({
     required String email,
     required String password,
@@ -62,10 +76,11 @@ class AuthService {
   }) async {
     _lastError = null;
     try {
+      final deviceId = await _getOrCreateDeviceId();
       final response = await ApiClient().post('/auth/admin/login', {
         'email': email,
         'password': password,
-        'deviceId': 'admin-console',
+        'deviceId': deviceId,
       });
 
       if (response.statusCode == 200) {

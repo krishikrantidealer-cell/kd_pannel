@@ -279,7 +279,7 @@ class _SidebarUserProfile extends StatelessWidget {
       message: !isExpanded ? '$name\n$email' : '',
       child: Container(
         height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
@@ -290,61 +290,81 @@ class _SidebarUserProfile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isSales
-                      ? [const Color(0xFF34D399), const Color(0xFF059669)]
-                      : [const Color(0xFFFA9527), const Color(0xFFFA6400)],
-                ),
-              ),
+            SizedBox(
+              width: 40,
               child: Center(
-                child: Text(
-                  initials,
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isSales
+                          ? [const Color(0xFF34D399), const Color(0xFF059669)]
+                          : [const Color(0xFFFA9527), const Color(0xFFFA6400)],
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-            if (isExpanded) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                width: isExpanded ? 160 : 0,
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: isExpanded ? 1.0 : 0.0,
+                  child: Container(
+                    width: 160,
+                    padding: const EdgeInsets.only(left: 6),
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                        Text(
+                          isSales ? 'Sales Agent' : 'Administrator',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                      ],
                     ),
-                    Text(
-                      isSales ? 'Sales Agent' : 'Administrator',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),
