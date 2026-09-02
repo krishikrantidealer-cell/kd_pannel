@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/product/product_form_helpers.dart';
 
 class ProductVariantCard extends StatelessWidget {
@@ -26,6 +27,8 @@ class ProductVariantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isAdmin = AuthService().isAdmin;
+
     // All units are available for base packing regardless of pack size unit
     const List<String> basePackingUnits = ['lit', 'ml', 'kg', 'gm', 'pcs'];
 
@@ -265,6 +268,32 @@ class ProductVariantCard extends StatelessWidget {
           isCompact: true,
         ),
       ),
+      if (isAdmin && variant['costRate'] != null) ...[
+        const SizedBox(width: 12),
+        Expanded(
+          child: buildProductFormField(
+            label: 'Cost Price (₹$liveSuffix)',
+            hint: 'e.g. 600',
+            controller: variant['costRate'],
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+            validator: (val) {
+              if (val == null || val.trim().isEmpty) return null;
+              final numVal = double.tryParse(val);
+              if (numVal == null || numVal <= 0) return 'Must be > 0';
+              return null;
+            },
+            prefixIcon: const Icon(
+              Icons.inventory_2_outlined,
+              size: 14,
+              color: Color(0xFFD97706),
+            ),
+            isCompact: true,
+          ),
+        ),
+      ],
       const SizedBox(width: 12),
       Expanded(
         child: buildProductFormField(

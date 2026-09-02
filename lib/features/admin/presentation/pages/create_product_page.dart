@@ -858,6 +858,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final String initialFarmerPrice = data?['farmerPrice'] != null
         ? data!['farmerPrice'].toString()
         : (data?['farmer_price'] != null ? data!['farmer_price'].toString() : '');
+    final String initialCostPrice = data?['costPrice'] != null
+        ? data!['costPrice'].toString()
+        : (data?['cost_price'] != null ? data!['cost_price'].toString() : '');
+    final String initialCostRate = data?['costRate'] != null
+        ? data!['costRate'].toString()
+        : (data?['cost_rate'] != null ? data!['cost_rate'].toString() : '');
     // 'packSize' is the carton/booking total string (new field).
     // Old products store the same value as a number in 'packVolume' (always in litres).
     String initialPackSize = '';
@@ -916,9 +922,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
     final priceCtrl = TextEditingController(text: initialPrice);
     final compareCtrl = TextEditingController(text: initialCompare);
     final farmerCtrl = TextEditingController(text: initialFarmerPrice);
+    final costCtrl = TextEditingController(text: initialCostPrice);
     final packValCtrl = TextEditingController(text: packVal);
     final compareRateCtrl = TextEditingController();
     final farmerRateCtrl = TextEditingController();
+    final costRateCtrl = TextEditingController(text: _parseRate(initialCostRate));
     final basePackingValCtrl = TextEditingController(text: basePackVal);
 
     // Resolve variant-level pricing tiers with proper fallbacks
@@ -1047,10 +1055,19 @@ class _CreateProductPageState extends State<CreateProductPage> {
           .toStringAsFixed(2);
     }
 
+    final double? finalCostPrice = double.tryParse(initialCostPrice);
+    if (costRateCtrl.text.isEmpty &&
+        finalCostPrice != null &&
+        initialCanonicalVolume > 0) {
+      costRateCtrl.text = (finalCostPrice / initialCanonicalVolume)
+          .toStringAsFixed(2);
+    }
+
     // Setup listeners to calculate prices on the fly!
     void recalculate() {
       final double? cRateVal = double.tryParse(compareRateCtrl.text);
       final double? fRateVal = double.tryParse(farmerRateCtrl.text);
+      final double? cpRateVal = double.tryParse(costRateCtrl.text);
       final double? bpVal = double.tryParse(basePackingValCtrl.text);
       final String bpUnit = variantRef.isNotEmpty
           ? (variantRef[0]['basePackingUnit'] as String? ?? basePackUnit)
@@ -1071,6 +1088,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
           farmerCtrl.text = computedFarmerPrice % 1 == 0
               ? computedFarmerPrice.toStringAsFixed(0)
               : computedFarmerPrice.toStringAsFixed(2);
+        }
+
+        if (cpRateVal != null) {
+          final computedCP = cpRateVal * canonicalVolume;
+          costCtrl.text = computedCP % 1 == 0
+              ? computedCP.toStringAsFixed(0)
+              : computedCP.toStringAsFixed(2);
         }
 
         for (var tier in variantPriceTiers) {
@@ -1099,6 +1123,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
     compareRateCtrl.addListener(recalculate);
     farmerRateCtrl.addListener(recalculate);
+    costRateCtrl.addListener(recalculate);
     packValCtrl.addListener(recalculate);
     basePackingValCtrl.addListener(recalculate);
     for (var controller in rates.values) {
@@ -1113,6 +1138,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
         'compareAtPrice': compareCtrl,
         'farmerPrice': farmerCtrl,
         'farmerRate': farmerRateCtrl,
+        'costPrice': costCtrl,
+        'costRate': costRateCtrl,
         'packSizeVal': packValCtrl,
         'packSizeUnit': packUnit,
         'compareRate': compareRateCtrl,
@@ -1136,6 +1163,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     variant['compareAtPrice']?.dispose();
     variant['farmerPrice']?.dispose();
     variant['farmerRate']?.dispose();
+    variant['costPrice']?.dispose();
+    variant['costRate']?.dispose();
     variant['packSizeVal']?.dispose();
     variant['compareRate']?.dispose();
     variant['basePackingVal']?.dispose();
@@ -1546,6 +1575,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ? '$farmerRateVal$suffix'
             : '';
 
+        final String costRateVal = (v['costRate'] as TextEditingController?)?.text.trim() ?? '';
+        final String costRateWithSuffix = costRateVal.isNotEmpty
+            ? '$costRateVal$suffix'
+            : '';
+
         final variantPriceTiers = v['priceTiers'] as List<Map<String, String>>;
 
         variantsData.add({
@@ -1555,6 +1589,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'compareAtPrice': mrpRateWithSuffix,
           'farmerPrice': (v['farmerPrice'] as TextEditingController?)?.text.trim() ?? '',
           'farmerRate': farmerRateWithSuffix,
+          'costPrice': (v['costPrice'] as TextEditingController?)?.text.trim() ?? '',
+          'costRate': costRateWithSuffix,
           'packSize': '${v['packSizeVal'].text}${v['packSizeUnit']}',
           'basePacking': '${v['basePackingVal'].text}${v['basePackingUnit']}',
           'unitCompareRate': mrpRateWithSuffix,
@@ -1631,6 +1667,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
               (v['farmerPrice'] ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''),
             ) ??
             0.0;
+        final costPriceVal =
+            double.tryParse(
+              (v['costPrice'] ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
 
         return {
           if (v['id'] != null) 'id': v['id'],
@@ -1639,6 +1680,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
           'price': priceVal,
           'compareAtPrice': compareVal,
           'farmerPrice': farmerPriceVal,
+          'costPrice': costPriceVal,
+          'costRate': v['costRate'] ?? '',
           // packVolume: legacy numeric field = total base-packing in canonical unit
           // e.g. 10lit → 10.0, 5000ml → 5.0, 2kg → 2.0, 500gm → 0.5, 10pcs → 10.0
           'packVolume': _getPackVolume(v['basePacking'] ?? ''),

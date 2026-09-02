@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 
 class ProductDetailsDialog extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -610,9 +611,13 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                 children: [
                                   Expanded(flex: 3, child: _tableHeader('PACK SIZE / VARIANT')),
                                   Expanded(flex: 2, child: _tableHeader('MRP (₹)')),
+                                  if (AuthService().isAdmin) Expanded(flex: 2, child: _tableHeader('COST PRICE (CP)')),
                                   Expanded(flex: 3, child: _tableHeader('TIER PRICING (ALL TIERS)')),
                                   Expanded(flex: 2, child: _tableHeader('FARMER PRICE (₹)')),
-                                  Expanded(flex: 2, child: _tableHeader('EST. MARGIN')),
+                                  if (AuthService().isAdmin)
+                                    Expanded(flex: 2, child: _tableHeader('GROSS PROFIT'))
+                                  else
+                                    Expanded(flex: 2, child: _tableHeader('EST. MARGIN')),
                                 ],
                               ),
                             ),
@@ -622,11 +627,16 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                             ...variants.asMap().entries.map((entry) {
                               final v = entry.value as Map;
                               final isLast = entry.key == variants.length - 1;
+                              final bool isAdmin = AuthService().isAdmin;
                               final String packSize = (v['size'] ?? v['packSize'] ?? 'Default').toString();
                               final double defaultPrice = double.tryParse(v['price']?.toString() ?? v['dealerPrice']?.toString() ?? '0') ?? 0.0;
                               final double mrp = double.tryParse(v['compareAtPrice']?.toString() ?? '0') ?? 0.0;
                               final dynamic fpRaw = v['farmerPrice'] ?? v['farmer_price'];
                               final double farmerPrice = fpRaw != null ? (double.tryParse(fpRaw.toString()) ?? 0.0) : 0.0;
+                              final dynamic cpRaw = v['costPrice'] ?? v['cost_price'];
+                              final double costPrice = cpRaw != null ? (double.tryParse(cpRaw.toString()) ?? 0.0) : 0.0;
+                              final dynamic crRaw = v['costRate'] ?? v['cost_rate'];
+                              final double? costRate = _parseRateValue(crRaw);
 
                               // Parse Price Tiers
                               final priceTiers = (v['priceTiers'] as List?) ?? (p['priceTiers'] as List?);
@@ -718,6 +728,35 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                         ),
                                       ),
                                     ),
+                                    // Cost Price (Admin Only)
+                                    if (isAdmin)
+                                      Expanded(
+                                        flex: 2,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              costRate != null && costRate > 0
+                                                  ? '₹${costRate % 1 == 0 ? costRate.toInt() : costRate.toStringAsFixed(1)}${baseUnit.isNotEmpty ? ' / $baseUnit' : ''}'
+                                                  : (costPrice > 0 ? '₹${costPrice % 1 == 0 ? costPrice.toInt() : costPrice.toStringAsFixed(2)}' : '—'),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFFD97706),
+                                              ),
+                                            ),
+                                            if (costPrice > 0 && (costRate == null || costPrice != costRate || packVolume > 1))
+                                              Text(
+                                                'Total: ₹${costPrice % 1 == 0 ? costPrice.toInt() : costPrice.toStringAsFixed(0)}',
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 10.5,
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                     // ALL TIER PRICES
                                     Expanded(
                                       flex: 3,
@@ -787,49 +826,94 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                                         ),
                                       ),
                                     ),
-                                    // Est. Margin (All Tiers)
-                                    Expanded(
-                                      flex: 2,
-                                      child: parsedTiers.isNotEmpty && farmerPrice > 0
-                                          ? Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: parsedTiers.map((t) {
-                                                final rVal = t['rate'] as double;
-                                                final marginAmt = farmerPrice - rVal;
-                                                final marginPct = (marginAmt / farmerPrice) * 100;
-                                                return Padding(
-                                                  padding: const EdgeInsets.symmetric(vertical: 2.5),
-                                                  child: Text(
-                                                    marginAmt > 0
-                                                        ? '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)'
-                                                        : '—',
+                                    // Gross Profit / Est. Margin
+                                    if (isAdmin)
+                                      Expanded(
+                                        flex: 2,
+                                        child: parsedTiers.isNotEmpty && costRate != null && costRate > 0
+                                            ? Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: parsedTiers.map((t) {
+                                                  final rVal = t['rate'] as double;
+                                                  final profitAmt = rVal - costRate;
+                                                  final marginPct = rVal > 0 ? (profitAmt / rVal) * 100 : 0.0;
+                                                  return Padding(
+                                                    padding: const EdgeInsets.symmetric(vertical: 2.5),
+                                                    child: Text(
+                                                      profitAmt != 0
+                                                          ? '₹${profitAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)'
+                                                          : '—',
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: profitAmt >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              )
+                                            : Builder(
+                                                builder: (_) {
+                                                  final effectiveCP = costRate ?? (packVolume > 0 ? costPrice / packVolume : costPrice);
+                                                  final profitAmt = (effectiveCP > 0 && defaultPrice > 0) ? (defaultPrice - effectiveCP) : 0.0;
+                                                  final marginPct = (defaultPrice > 0 && profitAmt != 0) ? (profitAmt / defaultPrice) * 100 : 0.0;
+                                                  if (effectiveCP <= 0 || profitAmt == 0) {
+                                                    return Text('—', style: GoogleFonts.outfit(fontSize: 12.5, color: AppTheme.textSecondary));
+                                                  }
+                                                  return Text(
+                                                    '₹${profitAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
                                                     style: GoogleFonts.outfit(
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,
-                                                      color: marginAmt > 0 ? const Color(0xFF059669) : AppTheme.textSecondary,
+                                                      color: profitAmt >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
                                                     ),
-                                                  ),
-                                                );
-                                              }).toList(),
-                                            )
-                                          : Builder(
-                                              builder: (_) {
-                                                final marginAmt = (farmerPrice > 0 && defaultPrice > 0) ? (farmerPrice - defaultPrice) : 0.0;
-                                                final marginPct = (farmerPrice > 0 && marginAmt > 0) ? (marginAmt / farmerPrice) * 100 : 0.0;
-                                                if (marginAmt <= 0) {
-                                                  return Text('—', style: GoogleFonts.outfit(fontSize: 12.5, color: AppTheme.textSecondary));
-                                                }
-                                                return Text(
-                                                  '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: const Color(0xFF059669),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      )
+                                    else
+                                      Expanded(
+                                        flex: 2,
+                                        child: parsedTiers.isNotEmpty && farmerPrice > 0
+                                            ? Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: parsedTiers.map((t) {
+                                                  final rVal = t['rate'] as double;
+                                                  final marginAmt = farmerPrice - rVal;
+                                                  final marginPct = (marginAmt / farmerPrice) * 100;
+                                                  return Padding(
+                                                    padding: const EdgeInsets.symmetric(vertical: 2.5),
+                                                    child: Text(
+                                                      marginAmt > 0
+                                                          ? '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)'
+                                                          : '—',
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: marginAmt > 0 ? const Color(0xFF059669) : AppTheme.textSecondary,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              )
+                                            : Builder(
+                                                builder: (_) {
+                                                  final marginAmt = (farmerPrice > 0 && defaultPrice > 0) ? (farmerPrice - defaultPrice) : 0.0;
+                                                  final marginPct = (farmerPrice > 0 && marginAmt > 0) ? (marginAmt / farmerPrice) * 100 : 0.0;
+                                                  if (marginAmt <= 0) {
+                                                    return Text('—', style: GoogleFonts.outfit(fontSize: 12.5, color: AppTheme.textSecondary));
+                                                  }
+                                                  return Text(
+                                                    '₹${marginAmt.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFF059669),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      ),
                                   ],
                                 ),
                               );
@@ -891,7 +975,11 @@ class _ProductDetailsDialogState extends State<ProductDetailsDialog> {
                           final tierStr = tiersList.isNotEmpty
                               ? tiersList.join(' | ')
                               : '₹$defaultPrice';
-                          summary.writeln('• $pack: [$tierStr] | Farmer ₹$fp');
+                          final dynamic cpVal = v['costPrice'] ?? v['cost_price'];
+                          final String cpSuffix = (AuthService().isAdmin && cpVal != null && cpVal.toString().isNotEmpty && cpVal != 0)
+                              ? ' | CP ₹$cpVal'
+                              : '';
+                          summary.writeln('• $pack: [$tierStr]$cpSuffix | Farmer ₹$fp');
                         }
                       }
                       _copyToClipboard(summary.toString(), 'Product summary copied to clipboard');

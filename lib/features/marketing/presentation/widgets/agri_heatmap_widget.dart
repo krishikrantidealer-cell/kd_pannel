@@ -1,845 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/features/marketing/data/india_state_districts.dart';
+import 'package:kd_pannel/features/marketing/domain/models/district_demand_data.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/heatmap/agri_heatmap_filter_bar.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/heatmap/agri_heatmap_metric_ribbon.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/heatmap/agri_heatmap_shimmer.dart';
+import 'package:kd_pannel/features/marketing/presentation/widgets/heatmap/district_intelligence_card.dart';
 
-class DistrictDemandData {
-  final String _rawDistrictName;
-  final String _rawStateName;
-  final String primaryCrop;
-  final String category;
-  final String subCategory;
-  final int registeredDealers; // users registered with this district address
-  final int activeBuyers; // unique users who placed ≥1 order from this district
-  final int activeDealers; // = registeredDealers (kept for compatibility)
-  final double searchVolumeIndex;
-  final double conversionRate;
-  final double grossRevenueRupees;
-  final int orderCount;
-  final Map<String, double>? categoryBreakdown;
-  final Map<String, double>? subCategoryBreakdown;
-  final Map<String, double>? productBreakdown;
-
-  const DistrictDemandData({
-    required String districtName,
-    required String stateName,
-    required this.primaryCrop,
-    this.category = 'General Products',
-    this.subCategory = '',
-    required this.activeDealers,
-    this.registeredDealers = 0,
-    this.activeBuyers = 0,
-    required this.searchVolumeIndex,
-    required this.conversionRate,
-    required this.grossRevenueRupees,
-    this.orderCount = 0,
-    this.categoryBreakdown,
-    this.subCategoryBreakdown,
-    this.productBreakdown,
-  }) : _rawDistrictName = districtName,
-       _rawStateName = stateName;
-
-  // Backend already returns canonical English names — just trim whitespace
-  String get districtName => _rawDistrictName.trim();
-  String get stateName => _rawStateName.trim();
-
-  int get activeFarmers => activeDealers;
-}
-
-String _formatCurrency(double rupees) {
-  if (rupees >= 100000) {
-    return '₹${(rupees / 100000).toStringAsFixed(2)} Lakh';
-  } else if (rupees >= 1000) {
-    return '₹${(rupees / 1000).toStringAsFixed(1)}k';
-  } else {
-    return '₹${rupees.toStringAsFixed(0)}';
-  }
-}
+// Re-export model for backwards-compatibility
+export 'package:kd_pannel/features/marketing/domain/models/district_demand_data.dart';
 
 class AgriHeatmapWidget extends StatefulWidget {
   final List<DistrictDemandData> districts;
   final bool isLoading;
 
-  static const Map<String, List<String>> _stateDistricts = {
-    "Andaman and Nicobar Islands": [
-      "Nicobars",
-      "North and Middle Andaman",
-      "South Andaman",
-    ],
-    "Andhra Pradesh": [
-      "Anantapur",
-      "Chittoor",
-      "East Godavari",
-      "Guntur",
-      "Krishna",
-      "Kurnool",
-      "Mahabubnagar",
-      "Nellore",
-      "Prakasam",
-      "Srikakulam",
-      "Visakhapatnam",
-      "Vizianagaram",
-      "West Godavari",
-      "YSR Kadapa",
-    ],
-    "Arunachal Pradesh": [
-      "Tawang",
-      "West Kameng",
-      "East Kameng",
-      "Papum Pare",
-      "Kurung Kumey",
-      "Kra Daadi",
-      "Lower Subansiri",
-      "Upper Subansiri",
-      "West Siang",
-      "East Siang",
-      "Siang",
-      "Upper Siang",
-      "Lower Siang",
-      "Lower Dibang Valley",
-      "Dibang Valley",
-      "Anjaw",
-      "Lohit",
-      "Namsai",
-      "Changlang",
-      "Tirap",
-      "Longding",
-    ],
-    "Assam": [
-      "Baksa",
-      "Barpeta",
-      "Biswanath",
-      "Bongaigaon",
-      "Cachar",
-      "Charaideo",
-      "Chirang",
-      "Darrang",
-      "Dhemaji",
-      "Dhubri",
-      "Dibrugarh",
-      "Goalpara",
-      "Golaghat",
-      "Hailakandi",
-      "Hojai",
-      "Jorhat",
-      "Kamrup Metropolitan",
-      "Kamrup",
-      "Karbi Anglong",
-      "Karimganj",
-      "Kokrajhar",
-      "Lakhimpur",
-      "Majuli",
-      "Morigaon",
-      "Nagaon",
-      "Nalbari",
-      "Dima Hasao",
-      "Sivasagar",
-      "Sonitpur",
-      "South Salmara-Mankachar",
-      "Tinsukia",
-      "Udalguri",
-      "West Karbi Anglong",
-    ],
-    "Bihar": [
-      "Araria",
-      "Arwal",
-      "Aurangabad",
-      "Banka",
-      "Begusarai",
-      "Bhagalpur",
-      "Bhojpur",
-      "Buxar",
-      "Darbhanga",
-      "East Champaran (Motihari)",
-      "Gaya",
-      "Gopalganj",
-      "Jamui",
-      "Jehanabad",
-      "Kaimur (Bhabua)",
-      "Katihar",
-      "Khagaria",
-      "Kishanganj",
-      "Lakhisarai",
-      "Madhepura",
-      "Madhubani",
-      "Munger (Monghyr)",
-      "Muzaffarpur",
-      "Nalanda",
-      "Nawada",
-      "Patna",
-      "Purnia (Purnea)",
-      "Rohtas",
-      "Saharsa",
-      "Samastipur",
-      "Saran",
-      "Sheikhpura",
-      "Sheohar",
-      "Sitamarhi",
-      "Siwan",
-      "Supaul",
-      "Vaishali",
-      "West Champaran",
-    ],
-    "Chandigarh (UT)": ["Chandigarh"],
-    "Chhattisgarh": [
-      "Balod",
-      "Baloda Bazar",
-      "Balrampur",
-      "Bastar",
-      "Bemetara",
-      "Bijapur",
-      "Bilaspur",
-      "Dantewada (South Bastar)",
-      "Dhamtari",
-      "Durg",
-      "Gariyaband",
-      "Janjgir-Champa",
-      "Jashpur",
-      "Kabirdham (Kawardha)",
-      "Kanker (North Bastar)",
-      "Kondagaon",
-      "Korba",
-      "Korea (Koriya)",
-      "Mahasamund",
-      "Mungeli",
-      "Narayanpur",
-      "Raigarh",
-      "Raipur",
-      "Rajnandgaon",
-      "Sukma",
-      "Surajpur",
-      "Surguja",
-    ],
-    "Dadra and Nagar Haveli (UT)": ["Dadra & Nagar Haveli"],
-    "Daman and Diu (UT)": ["Daman", "Diu"],
-    "Delhi (NCT)": [
-      "Central Delhi",
-      "East Delhi",
-      "New Delhi",
-      "North Delhi",
-      "North East Delhi",
-      "North West Delhi",
-      "Shahdara",
-      "South Delhi",
-      "South East Delhi",
-      "South West Delhi",
-      "West Delhi",
-    ],
-    "Goa": ["North Goa", "South Goa"],
-    "Gujarat": [
-      "Ahmedabad",
-      "Amreli",
-      "Anand",
-      "Aravalli",
-      "Banaskantha (Palanpur)",
-      "Bharuch",
-      "Bhavnagar",
-      "Botad",
-      "Chhota Udepur",
-      "Dahod",
-      "Dangs (Ahwa)",
-      "Devbhoomi Dwarka",
-      "Gandhinagar",
-      "Gir Somnath",
-      "Jamnagar",
-      "Junagadh",
-      "Kachchh",
-      "Kheda (Nadiad)",
-      "Mahisagar",
-      "Mehsana",
-      "Morbi",
-      "Narmada (Rajpipla)",
-      "Navsari",
-      "Panchmahal (Godhra)",
-      "Patan",
-      "Porbandar",
-      "Rajkot",
-      "Sabarkantha (Himmatnagar)",
-      "Surat",
-      "Surendranagar",
-      "Tapi (Vyara)",
-      "Vadodara",
-      "Valsad",
-    ],
-    "Haryana": [
-      "Ambala",
-      "Bhiwani",
-      "Charkhi Dadri",
-      "Faridabad",
-      "Fatehabad",
-      "Gurgaon",
-      "Hisar",
-      "Jhajjar",
-      "Jind",
-      "Kaithal",
-      "Karnal",
-      "Kurukshetra",
-      "Mahendragarh",
-      "Mewat",
-      "Palwal",
-      "Panchkula",
-      "Panipat",
-      "Rewari",
-      "Rohtak",
-      "Sirsa",
-      "Sonipat",
-      "Yamunanagar",
-    ],
-    "Himachal Pradesh": [
-      "Bilaspur",
-      "Chamba",
-      "Hamirpur",
-      "Kangra",
-      "Kinnaur",
-      "Kullu",
-      "Lahaul & Spiti",
-      "Mandi",
-      "Shimla",
-      "Sirmaur (Sirmour)",
-      "Solan",
-      "Una",
-    ],
-    "Jammu and Kashmir": [
-      "Anantnag",
-      "Bandipore",
-      "Baramulla",
-      "Budgam",
-      "Doda",
-      "Ganderbal",
-      "Jammu",
-      "Kargil",
-      "Kathua",
-      "Kishtwar",
-      "Kulgam",
-      "Kupwara",
-      "Leh",
-      "Poonch",
-      "Pulwama",
-      "Rajouri",
-      "Ramban",
-      "Reasi",
-      "Samba",
-      "Shopian",
-      "Srinagar",
-      "Udhampur",
-    ],
-    "Jharkhand": [
-      "Bokaro",
-      "Chatra",
-      "Deoghar",
-      "Dhanbad",
-      "Dumka",
-      "East Singhbhum",
-      "Garhwa",
-      "Giridih",
-      "Godda",
-      "Gumla",
-      "Hazaribag",
-      "Jamtara",
-      "Khunti",
-      "Koderma",
-      "Latehar",
-      "Lohardaga",
-      "Pakur",
-      "Palamu",
-      "Ramgarh",
-      "Ranchi",
-      "Sahibganj",
-      "Seraikela-Kharsawan",
-      "Simdega",
-      "West Singhbhum",
-    ],
-    "Karnataka": [
-      "Bagalkot",
-      "Ballari (Bellary)",
-      "Belagavi (Belgaum)",
-      "Bengaluru (Bangalore) Rural",
-      "Bengaluru (Bangalore) Urban",
-      "Bidar",
-      "Chamarajanagar",
-      "Chikballapur",
-      "Chikkamagaluru (Chikmagalur)",
-      "Chitradurga",
-      "Dakshina Kannada",
-      "Davangere",
-      "Dharwad",
-      "Gadag",
-      "Hassan",
-      "Haveri",
-      "Kalaburagi (Gulbarga)",
-      "Kodagu",
-      "Kolar",
-      "Koppal",
-      "Mandya",
-      "Mysuru (Mysore)",
-      "Raichur",
-      "Ramanagara",
-      "Shivamogga (Shimoga)",
-      "Tumakuru (Tumkur)",
-      "Udupi",
-      "Uttara Kannada (Karwar)",
-      "Vijayapura (Bijapur)",
-      "Yadgir",
-    ],
-    "Kerala": [
-      "Alappuzha",
-      "Ernakulam",
-      "Idukki",
-      "Kannur",
-      "Kasaragod",
-      "Kollam",
-      "Kottayam",
-      "Kozhikode",
-      "Malappuram",
-      "Palakkad",
-      "Pathanamthitta",
-      "Thiruvananthapuram",
-      "Thrissur",
-      "Wayanad",
-    ],
-    "Ladakh": ["Kargil", "Leh"],
-    "Lakshadweep (UT)": [
-      "Agatti",
-      "Amini",
-      "Androth",
-      "Bithra",
-      "Chethlath",
-      "Kavaratti",
-      "Kadmath",
-      "Kalpeni",
-      "Kilthan",
-      "Minicoy",
-    ],
-    "Madhya Pradesh": [
-      "Agar Malwa",
-      "Alirajpur",
-      "Anuppur",
-      "Ashoknagar",
-      "Balaghat",
-      "Barwani",
-      "Betul",
-      "Bhind",
-      "Bhopal",
-      "Burhanpur",
-      "Chhatarpur",
-      "Chhindwara",
-      "Damoh",
-      "Datia",
-      "Dewas",
-      "Dhar",
-      "Dindori",
-      "Guna",
-      "Gwalior",
-      "Harda",
-      "Hoshangabad",
-      "Indore",
-      "Jabalpur",
-      "Jhabua",
-      "Katni",
-      "Khandwa",
-      "Khargone",
-      "Mandla",
-      "Mandsaur",
-      "Morena",
-      "Narsinghpur",
-      "Neemuch",
-      "Panna",
-      "Raisen",
-      "Rajgarh",
-      "Ratlam",
-      "Rewa",
-      "Sagar",
-      "Satna",
-      "Sehore",
-      "Seoni",
-      "Shahdol",
-      "Shajapur",
-      "Sheopur",
-      "Shivpuri",
-      "Sidhi",
-      "Singrauli",
-      "Tikamgarh",
-      "Ujjain",
-      "Umaria",
-      "Vidisha",
-    ],
-    "Maharashtra": [
-      "Ahmednagar",
-      "Akola",
-      "Amravati",
-      "Aurangabad",
-      "Beed",
-      "Bhandara",
-      "Buldhana",
-      "Chandrapur",
-      "Dhule",
-      "Gadchiroli",
-      "Gondia",
-      "Hingoli",
-      "Jalgaon",
-      "Jalna",
-      "Kolhapur",
-      "Latur",
-      "Mumbai City",
-      "Mumbai Suburban",
-      "Nagpur",
-      "Nanded",
-      "Nandurbar",
-      "Nashik",
-      "Osmanabad",
-      "Palghar",
-      "Parbhani",
-      "Pune",
-      "Raigad",
-      "Ratnagiri",
-      "Sangli",
-      "Satara",
-      "Sindhudurg",
-      "Solapur",
-      "Thane",
-      "Wardha",
-      "Washim",
-      "Yavatmal",
-    ],
-    "Manipur": [
-      "Bishnupur",
-      "Chandel",
-      "Churachandpur",
-      "Imphal East",
-      "Imphal West",
-      "Jiribam",
-      "Kakching",
-      "Kamjong",
-      "Kangpokpi",
-      "Noney",
-      "Pherzawl",
-      "Senapati",
-      "Tamenglong",
-      "Tengnoupal",
-      "Thoubal",
-      "Ukhrul",
-    ],
-    "Meghalaya": [
-      "East Garo Hills",
-      "East Jaintia Hills",
-      "East Khasi Hills",
-      "North Garo Hills",
-      "Ri Bhoi",
-      "South Garo Hills",
-      "South West Garo Hills",
-      "South West Khasi Hills",
-      "West Garo Hills",
-      "West Jaintia Hills",
-      "West Khasi Hills",
-    ],
-    "Mizoram": [
-      "Aizawl",
-      "Champhai",
-      "Kolasib",
-      "Lawngtlai",
-      "Lunglei",
-      "Mamit",
-      "Saiha",
-      "Serchhip",
-    ],
-    "Nagaland": [
-      "Dimapur",
-      "Kiphire",
-      "Kohima",
-      "Longleng",
-      "Mokokchung",
-      "Mon",
-      "Peren",
-      "Phek",
-      "Tuensang",
-      "Wokha",
-      "Zunheboto",
-    ],
-    "Odisha": [
-      "Angul",
-      "Balangir",
-      "Balasore",
-      "Bargarh",
-      "Bhadrak",
-      "Boudh",
-      "Cuttack",
-      "Deogarh",
-      "Dhenkanal",
-      "Gajapati",
-      "Ganjam",
-      "Jagatsinghapur",
-      "Jajpur",
-      "Jharsuguda",
-      "Kalahandi",
-      "Kandhamal",
-      "Kendrapara",
-      "Kendujhar (Keonjhar)",
-      "Khordha",
-      "Koraput",
-      "Malkangiri",
-      "Mayurbhanj",
-      "Nabarangpur",
-      "Nayagarh",
-      "Nuapada",
-      "Puri",
-      "Rayagada",
-      "Sambalpur",
-      "Sonepur",
-      "Sundargarh",
-    ],
-    "Puducherry (UT)": ["Karaikal", "Mahe", "Pondicherry", "Yanam"],
-    "Punjab": [
-      "Amritsar",
-      "Barnala",
-      "Bathinda",
-      "Faridkot",
-      "Fatehgarh Sahib",
-      "Fazilka",
-      "Ferozepur",
-      "Gurdaspur",
-      "Hoshiarpur",
-      "Jalandhar",
-      "Kapurthala",
-      "Ludhiana",
-      "Mansa",
-      "Moga",
-      "Muktsar",
-      "Nawanshahr (Shahid Bhagat Singh Nagar)",
-      "Pathankot",
-      "Patiala",
-      "Rupnagar",
-      "Sahibzada Ajit Singh Nagar (Mohali)",
-      "Sangrur",
-      "Tarn Taran",
-    ],
-    "Rajasthan": [
-      "Ajmer",
-      "Alwar",
-      "Banswara",
-      "Baran",
-      "Barmer",
-      "Bharatpur",
-      "Bhilwara",
-      "Bikaner",
-      "Bundi",
-      "Chittorgarh",
-      "Churu",
-      "Dausa",
-      "Dholpur",
-      "Dungarpur",
-      "Hanumangarh",
-      "Jaipur",
-      "Jaisalmer",
-      "Jalore",
-      "Jhalawar",
-      "Jhunjhunu",
-      "Jodhpur",
-      "Karauli",
-      "Kota",
-      "Nagaur",
-      "Pali",
-      "Pratapgarh",
-      "Rajsamand",
-      "Sawai Madhopur",
-      "Sikar",
-      "Sirohi",
-      "Sri Ganganagar",
-      "Tonk",
-      "Udaipur",
-    ],
-    "Sikkim": ["East Sikkim", "North Sikkim", "South Sikkim", "West Sikkim"],
-    "Tamil Nadu": [
-      "Ariyalur",
-      "Chennai",
-      "Coimbatore",
-      "Cuddalore",
-      "Dharmapuri",
-      "Dindigul",
-      "Erode",
-      "Kanchipuram",
-      "Kanyakumari",
-      "Karur",
-      "Krishnagiri",
-      "Madurai",
-      "Nagapattinam",
-      "Namakkal",
-      "Nilgiris",
-      "Perambalur",
-      "Pudukkottai",
-      "Ramanathapuram",
-      "Salem",
-      "Sivaganga",
-      "Thanjavur",
-      "Theni",
-      "Thoothukudi (Tuticorin)",
-      "Tiruchirappalli",
-      "Tirunelveli",
-      "Tiruppur",
-      "Tiruvallur",
-      "Tiruvannamalai",
-      "Tiruvarur",
-      "Vellore",
-      "Viluppuram",
-      "Virudhunagar",
-    ],
-    "Telangana": [
-      "Adilabad",
-      "Bhadradri Kothagudem",
-      "Hyderabad",
-      "Jagtial",
-      "Jangaon",
-      "Jayashankar Bhoopalpally",
-      "Jogulamba Gadwal",
-      "Kamareddy",
-      "Karimnagar",
-      "Khammam",
-      "Komaram Bheem Asifabad",
-      "Mahabubabad",
-      "Mahabubnagar",
-      "Mancherial",
-      "Medak",
-      "Medchal",
-      "Nagarkurnool",
-      "Nalgonda",
-      "Nirmal",
-      "Nizamabad",
-      "Peddapalli",
-      "Rajanna Sircilla",
-      "Rangareddy",
-      "Sangareddy",
-      "Siddipet",
-      "Suryapet",
-      "Vikarabad",
-      "Wanaparthy",
-      "Warangal (Rural)",
-      "Warangal (Urban)",
-      "Yadadri Bhuvanagiri",
-    ],
-    "Tripura": [
-      "Dhalai",
-      "Gomati",
-      "Khowai",
-      "North Tripura",
-      "Sepahijala",
-      "South Tripura",
-      "Unakoti",
-      "West Tripura",
-    ],
-    "Uttarakhand": [
-      "Almora",
-      "Bageshwar",
-      "Champoli",
-      "Champawat",
-      "Dehradun",
-      "Haridwar",
-      "Nainital",
-      "Pauri Garhwal",
-      "Pithoragarh",
-      "Rudraprayag",
-      "Tehri Garhwal",
-      "Udham Singh Nagar",
-      "Uttarkashi",
-    ],
-    "Uttar Pradesh": [
-      "Agra",
-      "Aligarh",
-      "Allahabad",
-      "Ambedkar Nagar",
-      "Amethi (Chatrapati Sahuji Mahraj Nagar)",
-      "Amroha (J.P. Nagar)",
-      "Auraiya",
-      "Azamgarh",
-      "Baghpat",
-      "Bahraich",
-      "Ballia",
-      "Balrampur",
-      "Banda",
-      "Barabanki",
-      "Bareilly",
-      "Basti",
-      "Bhadohi",
-      "Bijnor",
-      "Budaun",
-      "Bulandshahr",
-      "Chandauli",
-      "Chitrakoot",
-      "Deoria",
-      "Etah",
-      "Etawah",
-      "Faizabad",
-      "Farrukhabad",
-      "Fatehpur",
-      "Firozabad",
-      "Gautam Buddha Nagar",
-      "Ghaziabad",
-      "Ghazipur",
-      "Gonda",
-      "Gorakhpur",
-      "Hamirpur",
-      "Hapur (Panchsheel Nagar)",
-      "Hardoi",
-      "Hathras",
-      "Jalaun",
-      "Jaunpur",
-      "Jhansi",
-      "Kannauj",
-      "Kanpur Dehat",
-      "Kanpur Nagar",
-      "Kanshiram Nagar (Kasganj)",
-      "Kaushambi",
-      "Kushinagar (Padrauna)",
-      "Lakhimpur - Kheri",
-      "Lalitpur",
-      "Lucknow",
-      "Maharajganj",
-      "Mahoba",
-      "Mainpuri",
-      "Mathura",
-      "Mau",
-      "Meerut",
-      "Mirzapur",
-      "Moradabad",
-      "Muzaffarnagar",
-      "Pilibhit",
-      "Pratapgarh",
-      "RaeBareli",
-      "Rampur",
-      "Saharanpur",
-      "Sambhal (Bhim Nagar)",
-      "Sant Kabir Nagar",
-      "Shahjahanpur",
-      "Shamali (Prabuddh Nagar)",
-      "Shravasti",
-      "Siddharth Nagar",
-      "Sitapur",
-      "Sonbhadra",
-      "Sultanpur",
-      "Unnao",
-      "Varanasi",
-    ],
-    "West Bengal": [
-      "Alipurduar",
-      "Bankura",
-      "Birbhum",
-      "Burdwan (Bardhaman)",
-      "Cooch Behar",
-      "Dakshin Dinajpur (South Dinajpur)",
-      "Darjeeling",
-      "Hooghly",
-      "Howrah",
-      "Jalpaiguri",
-      "Kalimpong",
-      "Kolkata",
-      "Malda",
-      "Murshidabad",
-      "Nadia",
-      "North 24 Parganas",
-      "Paschim Medinipur (West Medinipur)",
-      "Purba Medinipur (East Medinipur)",
-      "Purulia",
-      "South 24 Parganas",
-      "Uttar Dinajpur (North Dinajpur)",
-    ],
-  };
+  static const Map<String, List<String>> _stateDistricts = kIndiaStateDistricts;
 
   const AgriHeatmapWidget({
     super.key,
@@ -855,14 +31,10 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
   String _selectedState = 'All';
   String _selectedDistrict = 'All';
   String _selectedCategory = 'All';
-  String _selectedSubCategory = 'All';
   String _selectedProduct = 'All';
-  String _selectedActivityFilter =
-      'All'; // 'All', 'Active Only', 'Untapped Only'
+  String _selectedActivityFilter = 'All';
   String _searchQuery = '';
-
-  // Breakdown View Mode: 'None', 'Product', 'Category', 'SubCategory'
-  String _breakdownMode = 'None';
+  String _breakdownMode = 'None'; // 'None', 'Product', 'Category', 'SubCategory'
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -877,7 +49,6 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       _selectedState = 'All';
       _selectedDistrict = 'All';
       _selectedCategory = 'All';
-      _selectedSubCategory = 'All';
       _selectedProduct = 'All';
       _selectedActivityFilter = 'All';
       _searchQuery = '';
@@ -886,31 +57,22 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     });
   }
 
-  Map<String, double> _getEffectiveCategoryBreakdown(
-    DistrictDemandData district,
-  ) {
-    if (district.categoryBreakdown != null &&
-        district.categoryBreakdown!.isNotEmpty) {
+  Map<String, double> _getEffectiveCategoryBreakdown(DistrictDemandData district) {
+    if (district.categoryBreakdown != null && district.categoryBreakdown!.isNotEmpty) {
       return district.categoryBreakdown!;
     }
     return {district.category: district.grossRevenueRupees};
   }
 
-  Map<String, double> _getEffectiveProductBreakdown(
-    DistrictDemandData district,
-  ) {
-    if (district.productBreakdown != null &&
-        district.productBreakdown!.isNotEmpty) {
+  Map<String, double> _getEffectiveProductBreakdown(DistrictDemandData district) {
+    if (district.productBreakdown != null && district.productBreakdown!.isNotEmpty) {
       return district.productBreakdown!;
     }
     return {district.primaryCrop: district.grossRevenueRupees};
   }
 
-  Map<String, double> _getEffectiveSubCategoryBreakdown(
-    DistrictDemandData district,
-  ) {
-    if (district.subCategoryBreakdown != null &&
-        district.subCategoryBreakdown!.isNotEmpty) {
+  Map<String, double> _getEffectiveSubCategoryBreakdown(DistrictDemandData district) {
+    if (district.subCategoryBreakdown != null && district.subCategoryBreakdown!.isNotEmpty) {
       return district.subCategoryBreakdown!;
     }
     if (district.subCategory.isNotEmpty) {
@@ -919,25 +81,16 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     return {district.category: district.grossRevenueRupees};
   }
 
-  String _normalize(String input) =>
-      input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  String _normalize(String input) => input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   @override
   Widget build(BuildContext context) {
+    // 0. High-Fidelity Loading State
     if (widget.isLoading) {
-      return Container(
-        height: 300,
-        decoration: BoxDecoration(
-          color: AppTheme.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.primaryColor),
-        ),
-      );
+      return const AgriHeatmapShimmer();
     }
 
+    // 0. Empty State
     if (widget.districts.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(36),
@@ -945,14 +98,14 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
           color: AppTheme.cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: AppTheme.cardShadow,
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.6)),
         ),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1001,91 +154,42 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
 
     for (final d in widget.districts) {
       final dataStateKey = _normalize(d.stateName);
-      final dealerCount = d.registeredDealers > 0
-          ? d.registeredDealers
-          : d.activeDealers;
+      final dealerCount = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
 
       final matchedState = availableStates.firstWhere((s) {
         if (s == 'All') return false;
         final staticStateKey = _normalize(s);
-
         if (dataStateKey == staticStateKey) return true;
 
-        final sKey = staticStateKey
-            .replaceAll('and', '')
-            .replaceAll('islands', '')
-            .replaceAll('ut', '')
-            .replaceAll('nct', '');
-        final dKey = dataStateKey
-            .replaceAll('and', '')
-            .replaceAll('islands', '')
-            .replaceAll('ut', '')
-            .replaceAll('nct', '');
+        final sKey = staticStateKey.replaceAll('and', '').replaceAll('islands', '').replaceAll('ut', '').replaceAll('nct', '');
+        final dKey = dataStateKey.replaceAll('and', '').replaceAll('islands', '').replaceAll('ut', '').replaceAll('nct', '');
 
         if (sKey == dKey && sKey.length > 3) return true;
         if (sKey.contains(dKey) && dKey.length > 4) return true;
         if (dKey.contains(sKey) && sKey.length > 4) return true;
 
-        if (staticStateKey == 'andhrapradesh' &&
-            (dataStateKey == 'ap' || dataStateKey == 'andrapradesh'))
-          return true;
-        if (staticStateKey == 'uttarpradesh' &&
-            (dataStateKey == 'up' || dataStateKey == 'uttarpradesh'))
-          return true;
-        if (staticStateKey == 'madhyapradesh' &&
-            (dataStateKey == 'mp' || dataStateKey == 'madhyapradesh'))
-          return true;
-        if (staticStateKey == 'maharashtra' &&
-            (dataStateKey == 'mh' || dataStateKey == 'maha'))
-          return true;
-        if (staticStateKey == 'gujarat' &&
-            (dataStateKey == 'gj' || dataStateKey == 'gujrat'))
-          return true;
-        if (staticStateKey == 'rajasthan' &&
-            (dataStateKey == 'rj' || dataStateKey == 'rajs'))
-          return true;
-        if (staticStateKey == 'westbengal' &&
-            (dataStateKey == 'wb' || dataStateKey == 'bengal'))
-          return true;
-        if (staticStateKey == 'tamilnadu' &&
-            (dataStateKey == 'tn' || dataStateKey == 'tamil'))
-          return true;
-        if (staticStateKey == 'karnataka' &&
-            (dataStateKey == 'ka' || dataStateKey == 'karnatak'))
-          return true;
-        if (staticStateKey == 'telangana' &&
-            (dataStateKey == 'tg' ||
-                dataStateKey == 'ts' ||
-                dataStateKey == 'telengana'))
-          return true;
-        if (staticStateKey == 'jammukashmir' &&
-            (dataStateKey == 'jk' ||
-                dataStateKey == 'jammu' ||
-                dataStateKey == 'jammukashmir'))
-          return true;
-        if (staticStateKey == 'uttarakhand' &&
-            (dataStateKey == 'uk' ||
-                dataStateKey == 'uttaranchal' ||
-                dataStateKey == 'uttarkhand'))
-          return true;
-        if (staticStateKey == 'odisha' &&
-            (dataStateKey == 'orissa' || dataStateKey == 'odisa'))
-          return true;
-        if (staticStateKey == 'puducherryut' &&
-            (dataStateKey == 'pondicherry' || dataStateKey == 'puduchery'))
-          return true;
-        if (staticStateKey == 'lakshadweeput' &&
-            (dataStateKey == 'laccadive' || dataStateKey == 'lakshadweep'))
-          return true;
+        if (staticStateKey == 'andhrapradesh' && (dataStateKey == 'ap' || dataStateKey == 'andrapradesh')) return true;
+        if (staticStateKey == 'uttarpradesh' && (dataStateKey == 'up' || dataStateKey == 'uttarpradesh')) return true;
+        if (staticStateKey == 'madhyapradesh' && (dataStateKey == 'mp' || dataStateKey == 'madhyapradesh')) return true;
+        if (staticStateKey == 'maharashtra' && (dataStateKey == 'mh' || dataStateKey == 'maha')) return true;
+        if (staticStateKey == 'gujarat' && (dataStateKey == 'gj' || dataStateKey == 'gujrat')) return true;
+        if (staticStateKey == 'rajasthan' && (dataStateKey == 'rj' || dataStateKey == 'rajs')) return true;
+        if (staticStateKey == 'westbengal' && (dataStateKey == 'wb' || dataStateKey == 'bengal')) return true;
+        if (staticStateKey == 'tamilnadu' && (dataStateKey == 'tn' || dataStateKey == 'tamil')) return true;
+        if (staticStateKey == 'karnataka' && (dataStateKey == 'ka' || dataStateKey == 'karnatak')) return true;
+        if (staticStateKey == 'telangana' && (dataStateKey == 'tg' || dataStateKey == 'ts' || dataStateKey == 'telengana')) return true;
+        if (staticStateKey == 'jammukashmir' && (dataStateKey == 'jk' || dataStateKey == 'jammu' || dataStateKey == 'jammukashmir')) return true;
+        if (staticStateKey == 'uttarakhand' && (dataStateKey == 'uk' || dataStateKey == 'uttaranchal' || dataStateKey == 'uttarkhand')) return true;
+        if (staticStateKey == 'odisha' && (dataStateKey == 'orissa' || dataStateKey == 'odisa')) return true;
+        if (staticStateKey == 'puducherryut' && (dataStateKey == 'pondicherry' || dataStateKey == 'puduchery')) return true;
+        if (staticStateKey == 'lakshadweeput' && (dataStateKey == 'laccadive' || dataStateKey == 'lakshadweep')) return true;
 
         return false;
       }, orElse: () => '');
 
       if (matchedState.isNotEmpty) {
-        stateOrderCounts[matchedState] =
-            (stateOrderCounts[matchedState] ?? 0) + d.orderCount;
-        stateDealerCounts[matchedState] =
-            (stateDealerCounts[matchedState] ?? 0) + dealerCount;
+        stateOrderCounts[matchedState] = (stateOrderCounts[matchedState] ?? 0) + d.orderCount;
+        stateDealerCounts[matchedState] = (stateDealerCounts[matchedState] ?? 0) + dealerCount;
       } else {
         unmatchedOrders += d.orderCount;
         if (d.stateName.isNotEmpty) unmatchedStateNames.add(d.stateName);
@@ -1100,49 +204,32 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       }
     }
 
-    // Keep states that have orders or registered dealers
     availableStates.retainWhere(
-      (s) =>
-          s == 'All' ||
-          (stateOrderCounts[s] ?? 0) > 0 ||
-          (stateDealerCounts[s] ?? 0) > 0,
+      (s) => s == 'All' || (stateOrderCounts[s] ?? 0) > 0 || (stateDealerCounts[s] ?? 0) > 0,
     );
-    final String safeState = availableStates.contains(_selectedState)
-        ? _selectedState
-        : 'All';
+    final String safeState = availableStates.contains(_selectedState) ? _selectedState : 'All';
+    final int grandTotalOrders = widget.districts.fold(0, (sum, d) => sum + d.orderCount);
 
-    final int grandTotalOrders = widget.districts.fold(
-      0,
-      (sum, d) => sum + d.orderCount,
-    );
-
-    // 2. Filter by State (robust case-insensitive match against static list)
+    // 2. Filter by State
     final List<DistrictDemandData> stateFilteredDistricts = safeState == 'All'
         ? widget.districts
         : widget.districts.where((d) {
             final dataStateKey = _normalize(d.stateName);
             final selectedStateKey = _normalize(safeState);
             if (dataStateKey == selectedStateKey) return true;
-            if (selectedStateKey == 'uttarpradesh' && dataStateKey == 'up')
-              return true;
-            if (selectedStateKey == 'madhyapradesh' && dataStateKey == 'mp')
-              return true;
+            if (selectedStateKey == 'uttarpradesh' && dataStateKey == 'up') return true;
+            if (selectedStateKey == 'madhyapradesh' && dataStateKey == 'mp') return true;
             return false;
           }).toList();
 
     // 3. Available Districts & Counts
     final List<String> availableDistricts = ['All'];
     if (safeState != 'All') {
-      availableDistricts.addAll(
-        AgriHeatmapWidget._stateDistricts[safeState] ?? [],
-      );
+      availableDistricts.addAll(AgriHeatmapWidget._stateDistricts[safeState] ?? []);
     } else {
       final Set<String> distSet = widget.districts
           .where(
-            (d) =>
-                (d.orderCount > 0 || d.registeredDealers > 0) &&
-                d.districtName.isNotEmpty &&
-                d.districtName.toLowerCase() != 'unknown',
+            (d) => (d.orderCount > 0 || d.registeredDealers > 0) && d.districtName.isNotEmpty && d.districtName.toLowerCase() != 'unknown',
           )
           .map((d) => d.districtName)
           .toSet();
@@ -1153,52 +240,35 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
     final Map<String, int> districtDealerCounts = {};
     for (final d in stateFilteredDistricts) {
       final dataDistKey = _normalize(d.districtName);
-      final dealerCount = d.registeredDealers > 0
-          ? d.registeredDealers
-          : d.activeDealers;
+      final dealerCount = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
       final matchedDist = availableDistricts.firstWhere((dist) {
         if (dist == 'All') return false;
         final staticDistKey = _normalize(dist);
-        return dataDistKey.contains(staticDistKey) ||
-            staticDistKey.contains(dataDistKey);
+        return dataDistKey.contains(staticDistKey) || staticDistKey.contains(dataDistKey);
       }, orElse: () => '');
       if (matchedDist.isNotEmpty) {
-        districtOrderCounts[matchedDist] =
-            (districtOrderCounts[matchedDist] ?? 0) + d.orderCount;
-        districtDealerCounts[matchedDist] =
-            (districtDealerCounts[matchedDist] ?? 0) + dealerCount;
-      } else if ((d.orderCount > 0 || dealerCount > 0) &&
-          d.districtName.isNotEmpty) {
-        districtOrderCounts[d.districtName] =
-            (districtOrderCounts[d.districtName] ?? 0) + d.orderCount;
-        districtDealerCounts[d.districtName] =
-            (districtDealerCounts[d.districtName] ?? 0) + dealerCount;
+        districtOrderCounts[matchedDist] = (districtOrderCounts[matchedDist] ?? 0) + d.orderCount;
+        districtDealerCounts[matchedDist] = (districtDealerCounts[matchedDist] ?? 0) + dealerCount;
+      } else if ((d.orderCount > 0 || dealerCount > 0) && d.districtName.isNotEmpty) {
+        districtOrderCounts[d.districtName] = (districtOrderCounts[d.districtName] ?? 0) + d.orderCount;
+        districtDealerCounts[d.districtName] = (districtDealerCounts[d.districtName] ?? 0) + dealerCount;
         if (!availableDistricts.contains(d.districtName)) {
           availableDistricts.add(d.districtName);
         }
       }
     }
 
-    // Keep districts that have orders or registered dealers
     availableDistricts.retainWhere(
-      (d) =>
-          d == 'All' ||
-          (districtOrderCounts[d] ?? 0) > 0 ||
-          (districtDealerCounts[d] ?? 0) > 0,
+      (d) => d == 'All' || (districtOrderCounts[d] ?? 0) > 0 || (districtDealerCounts[d] ?? 0) > 0,
     );
-    final String safeDistrict = availableDistricts.contains(_selectedDistrict)
-        ? _selectedDistrict
-        : 'All';
+    final String safeDistrict = availableDistricts.contains(_selectedDistrict) ? _selectedDistrict : 'All';
 
-    // Compute Activity Filter Dealer Counts
+    // 4. Activity Filter Dealer Counts
     int activeDealersTotal = 0;
     int untappedDealersTotal = 0;
     for (final d in widget.districts) {
-      final reg = d.registeredDealers > 0
-          ? d.registeredDealers
-          : d.activeDealers;
+      final reg = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
       final buyers = d.activeBuyers;
-
       activeDealersTotal += buyers;
       if (reg > buyers) {
         untappedDealersTotal += (reg - buyers);
@@ -1216,91 +286,55 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
       orElse: () => optAll,
     );
 
-    final int stateFilteredTotalOrders = districtOrderCounts.values.fold(
-      0,
-      (sum, val) => sum + val,
-    );
+    final int stateFilteredTotalOrders = districtOrderCounts.values.fold(0, (sum, val) => sum + val);
 
-    // 4. Available Database Categories
-    final Set<String> categorySet = widget.districts
-        .map((d) => d.category.trim())
-        .where((c) => c.isNotEmpty)
-        .toSet();
+    // 5. Available Categories & Products
+    final Set<String> categorySet = widget.districts.map((d) => d.category.trim()).where((c) => c.isNotEmpty).toSet();
     for (final d in widget.districts) {
       if (d.categoryBreakdown != null) {
         categorySet.addAll(d.categoryBreakdown!.keys);
       }
     }
-    final List<String> availableCategories = [
-      'All',
-      ...categorySet.toList()..sort(),
-    ];
-    final String safeCategory = availableCategories.contains(_selectedCategory)
-        ? _selectedCategory
-        : 'All';
+    final List<String> availableCategories = ['All', ...categorySet.toList()..sort()];
+    final String safeCategory = availableCategories.contains(_selectedCategory) ? _selectedCategory : 'All';
 
-    // 5. Available Database Products
     final Set<String> productSet = {};
     for (final d in widget.districts) {
       if (d.productBreakdown != null) {
         productSet.addAll(d.productBreakdown!.keys);
       }
     }
-    final List<String> availableProducts = [
-      'All',
-      ...productSet.toList()..sort(),
-    ];
-    final String safeProduct = availableProducts.contains(_selectedProduct)
-        ? _selectedProduct
-        : 'All';
+    final List<String> availableProducts = ['All', ...productSet.toList()..sort()];
+    final String safeProduct = availableProducts.contains(_selectedProduct) ? _selectedProduct : 'All';
 
-    // 7. Filter Districts by State, District, Category, Product & Search Query
-    final List<DistrictDemandData>
-    filteredDistricts = stateFilteredDistricts.where((d) {
-      final matchesDistrict =
-          safeDistrict == 'All' ||
-          _normalize(d.districtName) == _normalize(safeDistrict);
+    // 6. Filter Districts
+    final List<DistrictDemandData> filteredDistricts = stateFilteredDistricts.where((d) {
+      final matchesDistrict = safeDistrict == 'All' || _normalize(d.districtName) == _normalize(safeDistrict);
 
       final catBreakdown = _getEffectiveCategoryBreakdown(d);
-      final matchesCategory =
-          safeCategory == 'All' ||
+      final matchesCategory = safeCategory == 'All' ||
           d.category.toLowerCase() == safeCategory.toLowerCase() ||
-          catBreakdown.keys.any(
-            (k) => k.toLowerCase() == safeCategory.toLowerCase(),
-          );
+          catBreakdown.keys.any((k) => k.toLowerCase() == safeCategory.toLowerCase());
 
       final prodBreakdown = _getEffectiveProductBreakdown(d);
-      final matchesProduct =
-          safeProduct == 'All' ||
-          prodBreakdown.keys.any(
-            (p) => p.toLowerCase() == safeProduct.toLowerCase(),
-          );
+      final matchesProduct = safeProduct == 'All' ||
+          prodBreakdown.keys.any((p) => p.toLowerCase() == safeProduct.toLowerCase());
 
-      final matchesSearch =
-          _searchQuery.isEmpty ||
+      final matchesSearch = _searchQuery.isEmpty ||
           d.districtName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           d.stateName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           d.primaryCrop.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           d.category.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          prodBreakdown.keys.any(
-            (p) => p.toLowerCase().contains(_searchQuery.toLowerCase()),
-          );
+          prodBreakdown.keys.any((p) => p.toLowerCase().contains(_searchQuery.toLowerCase()));
 
-      final matchesActivity =
-          _selectedActivityFilter.startsWith('All') ||
-          (_selectedActivityFilter.startsWith('Active Only') &&
-              (d.orderCount > 0 || d.activeBuyers > 0)) ||
-          (_selectedActivityFilter.startsWith('Untapped Only') &&
-              (d.orderCount == 0 || d.registeredDealers > d.activeBuyers));
+      final matchesActivity = _selectedActivityFilter.startsWith('All') ||
+          (_selectedActivityFilter.startsWith('Active Only') && (d.orderCount > 0 || d.activeBuyers > 0)) ||
+          (_selectedActivityFilter.startsWith('Untapped Only') && (d.orderCount == 0 || d.registeredDealers > d.activeBuyers));
 
-      return matchesDistrict &&
-          matchesCategory &&
-          matchesProduct &&
-          matchesSearch &&
-          matchesActivity;
+      return matchesDistrict && matchesCategory && matchesProduct && matchesSearch && matchesActivity;
     }).toList();
 
-    // Aggregated Metrics
+    // 7. Aggregated Metrics
     double totalRevenue = 0.0;
     for (final d in filteredDistricts) {
       if (_selectedProduct != 'All') {
@@ -1309,27 +343,21 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
           (k) => k.toLowerCase() == _selectedProduct.toLowerCase(),
           orElse: () => '',
         );
-        totalRevenue += key.isNotEmpty
-            ? (pBreakdown[key] ?? 0.0)
-            : d.grossRevenueRupees;
+        totalRevenue += key.isNotEmpty ? (pBreakdown[key] ?? 0.0) : d.grossRevenueRupees;
       } else if (_selectedCategory != 'All') {
         final catBreakdown = _getEffectiveCategoryBreakdown(d);
         final matchKey = catBreakdown.keys.firstWhere(
           (k) => k.toLowerCase() == _selectedCategory.toLowerCase(),
           orElse: () => '',
         );
-        totalRevenue += matchKey.isNotEmpty
-            ? (catBreakdown[matchKey] ?? 0.0)
-            : d.grossRevenueRupees;
+        totalRevenue += matchKey.isNotEmpty ? (catBreakdown[matchKey] ?? 0.0) : d.grossRevenueRupees;
       } else {
         totalRevenue += d.grossRevenueRupees;
       }
     }
 
     final int totalDealers = filteredDistricts.fold(0, (sum, d) {
-      final reg = d.registeredDealers > 0
-          ? d.registeredDealers
-          : d.activeDealers;
+      final reg = d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers;
       if (_selectedActivityFilter.startsWith('Untapped Only')) {
         return sum + (reg - d.activeBuyers).clamp(0, 999999);
       } else if (_selectedActivityFilter.startsWith('Active Only')) {
@@ -1340,21 +368,14 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
 
     final int totalRegisteredDealers = filteredDistricts.fold(
       0,
-      (sum, d) =>
-          sum +
-          (d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers),
+      (sum, d) => sum + (d.registeredDealers > 0 ? d.registeredDealers : d.activeDealers),
     );
-    final int totalOrders = filteredDistricts.fold(
-      0,
-      (sum, d) => sum + d.orderCount,
-    );
+    final int totalOrders = filteredDistricts.fold(0, (sum, d) => sum + d.orderCount);
     final double avgConversionRate = filteredDistricts.isNotEmpty
-        ? filteredDistricts.fold(0.0, (sum, d) => sum + d.conversionRate) /
-              filteredDistricts.length
+        ? filteredDistricts.fold(0.0, (sum, d) => sum + d.conversionRate) / filteredDistricts.length
         : 0.0;
 
-    final bool hasActiveFilters =
-        _selectedState != 'All' ||
+    final bool hasActiveFilters = _selectedState != 'All' ||
         _selectedDistrict != 'All' ||
         _selectedCategory != 'All' ||
         _selectedProduct != 'All' ||
@@ -1362,21 +383,20 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
         _searchQuery.isNotEmpty ||
         _breakdownMode != 'None';
 
-    return SelectionArea(
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        padding: const EdgeInsets.all(22),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
           color: AppTheme.cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.8)),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1388,9 +408,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                 return Flex(
                   direction: isDesktop ? Axis.horizontal : Axis.vertical,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: isDesktop
-                      ? CrossAxisAlignment.center
-                      : CrossAxisAlignment.start,
+                  crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
@@ -1405,7 +423,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF2E7D32).withOpacity(0.3),
+                                color: const Color(0xFF2E7D32).withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -1457,16 +475,10 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            _buildModeSegmentTab('None', '📊 Overview'),
-                            _buildModeSegmentTab(
-                              'Product',
-                              '📦 Product Breakdown',
-                            ),
-                            _buildModeSegmentTab('Category', '🏷️ Category'),
-                            _buildModeSegmentTab(
-                              'SubCategory',
-                              '📁 SubCategory',
-                            ),
+                            _buildModeSegmentTab('None', 'Overview', Icons.bar_chart_rounded),
+                            _buildModeSegmentTab('Product', 'Product Breakdown', Icons.inventory_2_rounded),
+                            _buildModeSegmentTab('Category', 'Category', Icons.label_rounded),
+                            _buildModeSegmentTab('SubCategory', 'SubCategory', Icons.folder_rounded),
                           ],
                         ),
                       ),
@@ -1477,595 +489,99 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
             ),
             const SizedBox(height: 20),
 
-            // Filters Bar Container
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isDesktop = constraints.maxWidth > 950;
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundColor.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Flex(
-                        direction: isDesktop ? Axis.horizontal : Axis.vertical,
-                        crossAxisAlignment: isDesktop
-                            ? CrossAxisAlignment.center
-                            : CrossAxisAlignment.start,
-                        children: [
-                          // 0. Activity Filter Dropdown
-                          Expanded(
-                            flex: isDesktop ? 2 : 0,
-                            child: _buildFilterDropdownColumn(
-                              label: 'ACTIVITY',
-                              value: activeFilterValue,
-                              icon: Icons.filter_alt_rounded,
-                              items: activityOptions,
-                              activeColor: const Color(0xFF00897B),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    if (val.startsWith('Active Only')) {
-                                      _selectedActivityFilter = 'Active Only';
-                                    } else if (val.startsWith(
-                                      'Untapped Only',
-                                    )) {
-                                      _selectedActivityFilter = 'Untapped Only';
-                                    } else {
-                                      _selectedActivityFilter = 'All';
-                                    }
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: isDesktop ? 10 : 0,
-                            height: isDesktop ? 0 : 10,
-                          ),
-
-                          // 1. State Dropdown
-                          Expanded(
-                            flex: isDesktop ? 2 : 0,
-                            child: _buildFilterDropdownColumn(
-                              label: 'STATE',
-                              value: safeState,
-                              icon: Icons.map_rounded,
-                              items: availableStates,
-                              itemCounts: stateOrderCounts,
-                              totalCount: grandTotalOrders,
-                              activeColor: AppTheme.primaryColor,
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedState = val;
-                                    _selectedDistrict = 'All';
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: isDesktop ? 10 : 0,
-                            height: isDesktop ? 0 : 10,
-                          ),
-
-                          // 2. District Dropdown
-                          Expanded(
-                            flex: isDesktop ? 2 : 0,
-                            child: _buildFilterDropdownColumn(
-                              label: 'DISTRICT',
-                              value: safeDistrict,
-                              icon: Icons.location_city_rounded,
-                              items: availableDistricts,
-                              itemCounts: districtOrderCounts,
-                              totalCount: stateFilteredTotalOrders,
-                              activeColor: const Color(0xFF0288D1),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedDistrict = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: isDesktop ? 10 : 0,
-                            height: isDesktop ? 0 : 10,
-                          ),
-
-                          // 3. Category Dropdown
-                          Expanded(
-                            flex: isDesktop ? 3 : 0,
-                            child: _buildFilterDropdownColumn(
-                              label: 'CATEGORY',
-                              value: safeCategory,
-                              icon: Icons.category_rounded,
-                              items: availableCategories,
-                              activeColor: const Color(0xFF7B1FA2),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedCategory = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: isDesktop ? 10 : 0,
-                            height: isDesktop ? 0 : 10,
-                          ),
-
-                          // 4. Product Dropdown
-                          if (availableProducts.length > 1) ...[
-                            Expanded(
-                              flex: isDesktop ? 3 : 0,
-                              child: _buildFilterDropdownColumn(
-                                label: 'PRODUCT',
-                                value: safeProduct,
-                                icon: Icons.inventory_2_rounded,
-                                items: availableProducts,
-                                activeColor: const Color(0xFFE65100),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      _selectedProduct = val;
-                                    });
-                                  }
-                                },
-                              ),
-                            ),
-                            SizedBox(
-                              width: isDesktop ? 10 : 0,
-                              height: isDesktop ? 0 : 10,
-                            ),
-                          ],
-
-                          // 5. Search Bar
-                          Expanded(
-                            flex: isDesktop ? 3 : 0,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'SEARCH',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppTheme.textSecondary,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.cardColor,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _searchQuery.isNotEmpty
-                                          ? AppTheme.primaryColor
-                                          : AppTheme.borderColor,
-                                      width: _searchQuery.isNotEmpty
-                                          ? 1.5
-                                          : 1.0,
-                                    ),
-                                  ),
-                                  child: TextField(
-                                    controller: _searchController,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: 'Search district, product...',
-                                      hintStyle: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      prefixIcon: const Icon(
-                                        Icons.search_rounded,
-                                        size: 18,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      suffixIcon: _searchQuery.isNotEmpty
-                                          ? IconButton(
-                                              icon: const Icon(
-                                                Icons.close_rounded,
-                                                size: 16,
-                                              ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _searchQuery = '';
-                                                  _searchController.clear();
-                                                });
-                                              },
-                                            )
-                                          : null,
-                                      border: InputBorder.none,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                          ),
-                                    ),
-                                    onChanged: (val) {
-                                      setState(() {
-                                        _searchQuery = val.trim();
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Reset Button
-                          if (hasActiveFilters) ...[
-                            SizedBox(
-                              width: isDesktop ? 10 : 0,
-                              height: isDesktop ? 0 : 10,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 14),
-                              child: InkWell(
-                                onTap: _resetFilters,
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  height: 42,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.red.withOpacity(0.3),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.refresh_rounded,
-                                        size: 16,
-                                        color: Colors.red,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Reset',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.red,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-
-                      // Quick Category Pills
-                      if (availableCategories.length > 2) ...[
-                        const SizedBox(height: 12),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              Text(
-                                'DATABASE CATEGORIES: ',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppTheme.textSecondary,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ...availableCategories
-                                  .where((c) => c != 'All')
-                                  .map((catName) {
-                                    final isSelected =
-                                        _selectedCategory.toLowerCase() ==
-                                        catName.toLowerCase();
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedCategory = isSelected
-                                                ? 'All'
-                                                : catName;
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(
-                                            milliseconds: 200,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? AppTheme.primaryColor
-                                                : AppTheme.primaryColor
-                                                      .withOpacity(0.08),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? AppTheme.primaryColor
-                                                  : AppTheme.primaryColor
-                                                        .withOpacity(0.3),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            catName,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 11.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : AppTheme.primaryColor,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  })
-                                  .toList(),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                );
+            // Filters Bar Component
+            AgriHeatmapFilterBar(
+              activeFilterValue: activeFilterValue,
+              activityOptions: activityOptions,
+              onActivityChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    if (val.startsWith('Active Only')) {
+                      _selectedActivityFilter = 'Active Only';
+                    } else if (val.startsWith('Untapped Only')) {
+                      _selectedActivityFilter = 'Untapped Only';
+                    } else {
+                      _selectedActivityFilter = 'All';
+                    }
+                  });
+                }
               },
+              safeState: safeState,
+              availableStates: availableStates,
+              stateOrderCounts: stateOrderCounts,
+              grandTotalOrders: grandTotalOrders,
+              onStateChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _selectedState = val;
+                    _selectedDistrict = 'All';
+                  });
+                }
+              },
+              safeDistrict: safeDistrict,
+              availableDistricts: availableDistricts,
+              districtOrderCounts: districtOrderCounts,
+              stateFilteredTotalOrders: stateFilteredTotalOrders,
+              onDistrictChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _selectedDistrict = val;
+                  });
+                }
+              },
+              safeCategory: safeCategory,
+              availableCategories: availableCategories,
+              onCategoryChanged: (cat) {
+                setState(() {
+                  _selectedCategory = cat ?? 'All';
+                });
+              },
+              safeProduct: safeProduct,
+              availableProducts: availableProducts,
+              onProductChanged: (prod) {
+                if (prod != null) {
+                  setState(() {
+                    _selectedProduct = prod;
+                  });
+                }
+              },
+              searchController: _searchController,
+              searchQuery: _searchQuery,
+              onSearchChanged: (val) {
+                setState(() {
+                  _searchQuery = val.trim();
+                });
+              },
+              onClearSearch: () {
+                setState(() {
+                  _searchQuery = '';
+                  _searchController.clear();
+                });
+              },
+              hasActiveFilters: hasActiveFilters,
+              onResetFilters: _resetFilters,
             ),
             const SizedBox(height: 16),
 
             // Executive Summary Metric Ribbon
-            Container(
-              clipBehavior: Clip.antiAlias,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primaryColor.withOpacity(0.08),
-                    const Color(0xFF0288D1).withOpacity(0.08),
-                  ],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppTheme.primaryColor.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Districts Displayed: ',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        '${filteredDistricts.length}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                      Text(
-                        ' / ${widget.districts.length}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      if (_selectedProduct != 'All') ...[
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE65100),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '📦 $_selectedProduct',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ] else if (_selectedCategory != 'All') ...[
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0288D1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '🏷️ $_selectedCategory',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        _selectedProduct != 'All'
-                            ? 'PRODUCT REVENUE: '
-                            : (_selectedCategory == 'All'
-                                  ? 'TOTAL REVENUE: '
-                                  : 'CATEGORY REVENUE: '),
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        _formatCurrency(totalRevenue),
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.success,
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Container(
-                        width: 1,
-                        height: 20,
-                        color: AppTheme.borderColor,
-                      ),
-                      const SizedBox(width: 18),
-                      Text(
-                        _selectedActivityFilter.startsWith('Untapped Only')
-                            ? 'UNTAPPED DEALERS: '
-                            : (_selectedActivityFilter.startsWith('Active Only')
-                                  ? 'ACTIVE BUYERS: '
-                                  : 'ACTIVE DEALERS: '),
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        '$totalDealers',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Container(
-                        width: 1,
-                        height: 20,
-                        color: AppTheme.borderColor,
-                      ),
-                      const SizedBox(width: 18),
-                      Text(
-                        'REGISTERED DEALERS: ',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        '$totalRegisteredDealers',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Container(
-                        width: 1,
-                        height: 20,
-                        color: AppTheme.borderColor,
-                      ),
-                      const SizedBox(width: 18),
-                      Text(
-                        'TOTAL ORDERS: ',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        '$totalOrders',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFFE65100),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Container(
-                        width: 1,
-                        height: 20,
-                        color: AppTheme.borderColor,
-                      ),
-                      const SizedBox(width: 18),
-                      Text(
-                        'AVG CONVERSION: ',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        '${avgConversionRate.toStringAsFixed(1)}%',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF7B1FA2),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            AgriHeatmapMetricRibbon(
+              displayedDistrictsCount: filteredDistricts.length,
+              totalDistrictsCount: widget.districts.length,
+              selectedProduct: _selectedProduct,
+              selectedCategory: _selectedCategory,
+              totalRevenue: totalRevenue,
+              totalDealers: totalDealers,
+              totalRegisteredDealers: totalRegisteredDealers,
+              totalOrders: totalOrders,
+              avgConversionRate: avgConversionRate,
+              selectedActivityFilter: _selectedActivityFilter,
             ),
             const SizedBox(height: 18),
 
             // District Intelligence Cards Grid
             if (filteredDistricts.isEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 48,
-                  horizontal: 24,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: AppTheme.backgroundColor,
@@ -2105,10 +621,7 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         textStyle: GoogleFonts.outfit(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
@@ -2125,598 +638,24 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth > 700;
+                  final double width = isWide
+                      ? (constraints.maxWidth - 28) / 3
+                      : (constraints.maxWidth - 14) / 2;
+
                   return Wrap(
                     spacing: 14,
                     runSpacing: 14,
                     children: filteredDistricts.map((district) {
-                      final double width = isWide
-                          ? (constraints.maxWidth - 28) / 3
-                          : (constraints.maxWidth - 14) / 2;
-
-                      final bool isHighDemand = district.searchVolumeIndex > 75;
-                      final bool isMedDemand = district.searchVolumeIndex > 50;
-
-                      final List<Color> topGradient = isHighDemand
-                          ? [const Color(0xFFFF5722), const Color(0xFFF4511E)]
-                          : (isMedDemand
-                                ? [
-                                    const Color(0xFFFF9800),
-                                    const Color(0xFFFB8C00),
-                                  ]
-                                : [
-                                    const Color(0xFF2E7D32),
-                                    const Color(0xFF43A047),
-                                  ]);
-
-                      final Color convColor = district.conversionRate >= 50.0
-                          ? const Color(0xFF2E7D32)
-                          : (district.conversionRate >= 25.0
-                                ? const Color(0xFF0288D1)
-                                : const Color(0xFFE65100));
-
-                      final Map<String, double> activeBreakdownMap =
-                          _breakdownMode == 'Product'
-                          ? _getEffectiveProductBreakdown(district)
-                          : (_breakdownMode == 'SubCategory'
-                                ? _getEffectiveSubCategoryBreakdown(district)
-                                : _getEffectiveCategoryBreakdown(district));
-
-                      return Container(
+                      return DistrictIntelligenceCard(
+                        district: district,
                         width: width,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: AppTheme.backgroundColor,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                          border: Border.all(color: AppTheme.borderColor),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // High-Impact Demand Gradient Strip - Submerged 100% Flush
-                            Container(
-                              height: 4,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: topGradient),
-                              ),
-                            ),
-
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // District Name & Volume Index Pill
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          district.districtName,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppTheme.textPrimary,
-                                            letterSpacing: -0.2,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: topGradient.first.withOpacity(
-                                            0.12,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                          border: Border.all(
-                                            color: topGradient.first
-                                                .withOpacity(0.3),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              isHighDemand
-                                                  ? Icons
-                                                        .local_fire_department_rounded
-                                                  : (isMedDemand
-                                                        ? Icons
-                                                              .trending_up_rounded
-                                                        : Icons
-                                                              .check_circle_rounded),
-                                              size: 13,
-                                              color: topGradient.first,
-                                            ),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              '${district.searchVolumeIndex.toInt()} Index',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w800,
-                                                color: topGradient.first,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-
-                                  // State & Main Category Badge
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.location_on_rounded,
-                                        size: 13,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        district.stateName,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '•',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.primaryColor
-                                                .withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              5,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            district.category,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppTheme.primaryColor,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  // Breakdown View Mode or Standard Metrics
-                                  if (_breakdownMode != 'None') ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.cardColor,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: AppTheme.borderColor,
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _breakdownMode == 'Product'
-                                                ? '📦 TOP PRODUCT DEMAND SHARE'
-                                                : (_breakdownMode ==
-                                                          'SubCategory'
-                                                      ? '📁 SUBCATEGORY REVENUE SHARE'
-                                                      : '🏷️ CATEGORY REVENUE SHARE'),
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppTheme.textSecondary,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          ...activeBreakdownMap.entries.map((
-                                            entry,
-                                          ) {
-                                            final total =
-                                                district.grossRevenueRupees > 0
-                                                ? district.grossRevenueRupees
-                                                : 1;
-                                            final pct =
-                                                ((entry.value / total) * 100)
-                                                    .clamp(5.0, 100.0);
-                                            final color =
-                                                _breakdownMode == 'Product'
-                                                ? const Color(0xFFE65100)
-                                                : (_breakdownMode ==
-                                                          'SubCategory'
-                                                      ? const Color(0xFF7B1FA2)
-                                                      : AppTheme.primaryColor);
-
-                                            return Padding(
-                                              padding: const EdgeInsets.only(
-                                                bottom: 6,
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .spaceBetween,
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          entry.key,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style:
-                                                              GoogleFonts.outfit(
-                                                                fontSize: 11.5,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                color: AppTheme
-                                                                    .textPrimary,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        _formatCurrency(
-                                                          entry.value,
-                                                        ),
-                                                        style:
-                                                            GoogleFonts.outfit(
-                                                              fontSize: 11.5,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w800,
-                                                              color: color,
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 3),
-                                                  ClipRRect(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          3,
-                                                        ),
-                                                    child: LinearProgressIndicator(
-                                                      value: pct / 100,
-                                                      minHeight: 5,
-                                                      backgroundColor: color
-                                                          .withOpacity(0.12),
-                                                      valueColor:
-                                                          AlwaysStoppedAnimation<
-                                                            Color
-                                                          >(color),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          }).toList(),
-                                        ],
-                                      ),
-                                    ),
-                                  ] else ...[
-                                    // Standard Overview Metrics Block
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.cardColor,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: AppTheme.borderColor,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _selectedProduct != 'All'
-                                                    ? 'PRODUCT REVENUE'
-                                                    : (_selectedCategory ==
-                                                              'All'
-                                                          ? 'TOTAL REVENUE'
-                                                          : 'CATEGORY REVENUE'),
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: AppTheme.textSecondary,
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                _formatCurrency(
-                                                  _selectedProduct != 'All'
-                                                      ? (_getEffectiveProductBreakdown(
-                                                              district,
-                                                            )[_selectedProduct] ??
-                                                            district
-                                                                .grossRevenueRupees)
-                                                      : (_selectedCategory ==
-                                                                'All'
-                                                            ? district
-                                                                  .grossRevenueRupees
-                                                            : (_getEffectiveCategoryBreakdown(
-                                                                    district,
-                                                                  )[_selectedCategory] ??
-                                                                  district
-                                                                      .grossRevenueRupees)),
-                                                ),
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: AppTheme.primaryColor,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Row(
-                                            children: [
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(
-                                                    0xFFE65100,
-                                                  ).withOpacity(0.08),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  border: Border.all(
-                                                    color: const Color(
-                                                      0xFFE65100,
-                                                    ).withOpacity(0.2),
-                                                  ),
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      'ORDERS',
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: const Color(
-                                                          0xFFE65100,
-                                                        ),
-                                                        letterSpacing: 0.5,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 1),
-                                                    Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                          Icons
-                                                              .shopping_cart_rounded,
-                                                          size: 13,
-                                                          color: Color(
-                                                            0xFFE65100,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 3,
-                                                        ),
-                                                        Text(
-                                                          '${district.orderCount}',
-                                                          style:
-                                                              GoogleFonts.outfit(
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w800,
-                                                                color:
-                                                                    const Color(
-                                                                      0xFFE65100,
-                                                                    ),
-                                                              ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.blue
-                                                      .withOpacity(0.08),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  border: Border.all(
-                                                    color: Colors.blue
-                                                        .withOpacity(0.2),
-                                                  ),
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      _selectedActivityFilter
-                                                              .startsWith(
-                                                                'Untapped Only',
-                                                              )
-                                                          ? 'UNTAPPED / REG'
-                                                          : 'DEALERS (ACTIVE / REG)',
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: Colors
-                                                            .blue
-                                                            .shade800,
-                                                        letterSpacing: 0.5,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 1),
-                                                    Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                          Icons
-                                                              .storefront_rounded,
-                                                          size: 13,
-                                                          color: Colors.blue,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 3,
-                                                        ),
-                                                        Text(
-                                                          _selectedActivityFilter
-                                                                  .startsWith(
-                                                                    'Untapped Only',
-                                                                  )
-                                                              ? '${(district.registeredDealers - district.activeBuyers).clamp(0, 9999)} / ${district.registeredDealers}'
-                                                              : '${district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers} / ${district.registeredDealers > 0 ? district.registeredDealers : (district.activeBuyers > 0 ? district.activeBuyers : district.activeDealers)}',
-                                                          style:
-                                                              GoogleFonts.outfit(
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w800,
-                                                                color: Colors
-                                                                    .blue
-                                                                    .shade900,
-                                                              ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 10),
-                                  // Dealer Conversion Rate Micro-Gauge Bar
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 7,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: convColor.withOpacity(0.06),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: convColor.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.stars_rounded,
-                                                  size: 14,
-                                                  color: convColor,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'Dealer Order Conversion',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        AppTheme.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            Text(
-                                              '${district.conversionRate.toStringAsFixed(1)}%',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w800,
-                                                color: convColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            3,
-                                          ),
-                                          child: LinearProgressIndicator(
-                                            value:
-                                                (district.conversionRate / 100)
-                                                    .clamp(0.02, 1.0),
-                                            minHeight: 4,
-                                            backgroundColor: convColor
-                                                .withOpacity(0.12),
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  convColor,
-                                                ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        breakdownMode: _breakdownMode,
+                        selectedProduct: _selectedProduct,
+                        selectedCategory: _selectedCategory,
+                        selectedActivityFilter: _selectedActivityFilter,
+                        getEffectiveProductBreakdown: _getEffectiveProductBreakdown,
+                        getEffectiveCategoryBreakdown: _getEffectiveCategoryBreakdown,
+                        getEffectiveSubCategoryBreakdown: _getEffectiveSubCategoryBreakdown,
                       );
                     }).toList(),
                   );
@@ -2724,12 +663,11 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
               ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   // Segment Tab Helper
-  Widget _buildModeSegmentTab(String modeKey, String label) {
+  Widget _buildModeSegmentTab(String modeKey, String label, IconData icon) {
     final isSelected = _breakdownMode == modeKey;
     return InkWell(
       onTap: () {
@@ -2747,123 +685,33 @@ class _AgriHeatmapWidgetState extends State<AgriHeatmapWidget> {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ]
               : null,
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-            color: isSelected ? Colors.white : AppTheme.textSecondary,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? Colors.white : AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
-    );
-  }
-
-  // Dropdown Column Helper
-  Widget _buildFilterDropdownColumn({
-    required String label,
-    required String value,
-    required IconData icon,
-    required List<String> items,
-    Map<String, int>? itemCounts,
-    int? totalCount,
-    required Color activeColor,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final isFiltered = value != 'All';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.textSecondary,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 42,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isFiltered ? activeColor : AppTheme.borderColor,
-              width: isFiltered ? 1.5 : 1.0,
-            ),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-              onChanged: onChanged,
-              items: items.map((itemVal) {
-                final count = itemVal == 'All'
-                    ? totalCount
-                    : (itemCounts != null ? (itemCounts[itemVal] ?? 0) : null);
-                return DropdownMenuItem<String>(
-                  value: itemVal,
-                  child: Row(
-                    children: [
-                      Icon(
-                        icon,
-                        size: 14,
-                        color: itemVal == 'All'
-                            ? AppTheme.textSecondary
-                            : activeColor,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          itemVal == 'All'
-                              ? 'All ${label.toLowerCase().endsWith('y') ? label.toLowerCase().substring(0, label.length - 1) + 'ies' : label.toLowerCase() + 's'}'
-                              : itemVal,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.outfit(
-                            fontWeight: itemVal == 'All'
-                                ? FontWeight.w600
-                                : FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      if (count != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Text(
-                            '($count)',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: itemVal == 'All'
-                                  ? AppTheme.textSecondary
-                                  : activeColor.withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -1344,9 +1344,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                             child: Row(
                               children: [
                                 Expanded(
-                                  flex: 5,
+                                  flex: 4,
                                   child: Text(
-                                    'PRODUCT NAME',
+                                    'PRODUCT & VARIANT',
                                     style: AppTheme.tableHeader,
                                   ),
                                 ),
@@ -1383,9 +1383,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                   ),
                                 ),
                                 Expanded(
-                                  flex: 2,
+                                  flex: 3,
                                   child: Text(
-                                    'AMOUNT',
+                                    AuthService().currentUserRole == UserRole.admin
+                                        ? 'PRICE & PROFIT'
+                                        : 'AMOUNT',
                                     style: AppTheme.tableHeader,
                                     textAlign: TextAlign.right,
                                   ),
@@ -1421,6 +1423,8 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                 item.quantity,
                               );
 
+                              final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+
                               return _ItemTableRow(
                                 productName: productName,
                                 technicalName: item.technicalName,
@@ -1429,6 +1433,8 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                 basePacking: basePacking,
                                 volume: volume,
                                 amount: item.price * item.quantity,
+                                costPrice: item.costPrice,
+                                isAdmin: isAdmin,
                                 isCustomBasePack: item.isCustomBasePack,
                                 isCustomPrice: item.isCustomPrice,
                               );
@@ -1889,6 +1895,16 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         ? (_order.advanceAmount / _order.totalAmount)
         : 0.0;
 
+    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+    final double totalCost = _order.items.fold(
+      0.0,
+      (sum, i) => sum + ((i.costPrice ?? 0.0) * i.quantity),
+    );
+    final double grossProfit = totalCost > 0 ? (_order.totalAmount - totalCost) : 0.0;
+    final double marginPct = (_order.totalAmount > 0 && grossProfit != 0)
+        ? (grossProfit / _order.totalAmount) * 100
+        : 0.0;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1949,6 +1965,99 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               valueColor: AppTheme.primaryColor,
             ),
           ),
+
+          // Admin Profit & Margin Intelligence Card
+          if (isAdmin && totalCost > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: grossProfit >= 0
+                      ? [const Color(0xFF059669).withValues(alpha: 0.08), const Color(0xFF10B981).withValues(alpha: 0.04)]
+                      : [const Color(0xFFDC2626).withValues(alpha: 0.08), const Color(0xFFEF4444).withValues(alpha: 0.04)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: grossProfit >= 0
+                      ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                      : const Color(0xFFEF4444).withValues(alpha: 0.35),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.monetization_on_rounded,
+                            size: 15,
+                            color: grossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'ADMIN PROFIT INTELLIGENCE',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: grossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: grossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '${marginPct.toStringAsFixed(1)}% Margin',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSummaryRow(
+                    'Cost of Goods (COGS)',
+                    '₹${totalCost.toStringAsFixed(2)}',
+                    fontSize: 11.5,
+                    valueColor: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSummaryRow(
+                    'Net Order Gross Profit',
+                    '${grossProfit >= 0 ? "+" : ""}₹${grossProfit.toStringAsFixed(2)}',
+                    isBold: true,
+                    fontSize: 13,
+                    valueColor: grossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                  ),
+                  if (_order.items.any((i) => (i.costPrice ?? 0.0) <= 0)) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '• Note: Profit is calculated only for items with a configured CP.',
+                      style: GoogleFonts.outfit(
+                        fontSize: 9.5,
+                        fontStyle: FontStyle.italic,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           // Advanced Partial Payment Visualizer
           if (hasPartial) ...[
             const SizedBox(height: 14),
@@ -2139,6 +2248,8 @@ class _ItemTableRow extends StatefulWidget {
   final String basePacking;
   final String volume;
   final double amount;
+  final double? costPrice;
+  final bool isAdmin;
   final bool isCustomBasePack;
   final bool isCustomPrice;
 
@@ -2150,6 +2261,8 @@ class _ItemTableRow extends StatefulWidget {
     required this.basePacking,
     required this.volume,
     required this.amount,
+    this.costPrice,
+    this.isAdmin = false,
     this.isCustomBasePack = false,
     this.isCustomPrice = false,
   });
@@ -2163,6 +2276,10 @@ class _ItemTableRowState extends State<_ItemTableRow> {
 
   @override
   Widget build(BuildContext context) {
+    final double effectiveCP = (widget.costPrice ?? 0.0) * widget.quantity;
+    final double profit = effectiveCP > 0 ? (widget.amount - effectiveCP) : 0.0;
+    final double marginPct = (widget.amount > 0 && profit != 0) ? (profit / widget.amount) * 100 : 0.0;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -2176,7 +2293,7 @@ class _ItemTableRowState extends State<_ItemTableRow> {
           children: [
             // Product Name & Technical Name
             Expanded(
-              flex: 5,
+              flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2292,9 +2409,9 @@ class _ItemTableRowState extends State<_ItemTableRow> {
                 textAlign: TextAlign.center,
               ),
             ),
-            // Amount
+            // Amount & Profit (Admin)
             Expanded(
-              flex: 2,
+              flex: 3,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -2308,6 +2425,62 @@ class _ItemTableRowState extends State<_ItemTableRow> {
                     ),
                     textAlign: TextAlign.right,
                   ),
+                  if (widget.isAdmin) ...[
+                    if (widget.costPrice != null && widget.costPrice! > 0) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'CP: ₹${effectiveCP.toStringAsFixed(0)}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: profit >= 0 ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: profit >= 0 ? const Color(0xFF10B981).withValues(alpha: 0.4) : const Color(0xFFEF4444).withValues(alpha: 0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              '${profit >= 0 ? "+" : ""}₹${profit.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: profit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppTheme.borderColor, width: 0.7),
+                        ),
+                        child: Text(
+                          'CP: Not Set',
+                          style: GoogleFonts.outfit(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                   if (widget.isCustomPrice) ...[
                     const SizedBox(height: 2),
                     Container(

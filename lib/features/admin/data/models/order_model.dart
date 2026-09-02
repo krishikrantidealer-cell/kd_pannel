@@ -14,6 +14,7 @@ class OrderItem {
   final bool isCustomBasePack;
   final bool isCustomPrice;
   final double? originalPrice;
+  final double? costPrice;
 
   OrderItem({
     required this.productId,
@@ -31,6 +32,7 @@ class OrderItem {
     this.isCustomBasePack = false,
     this.isCustomPrice = false,
     this.originalPrice,
+    this.costPrice,
   });
 
   factory OrderItem.fromJson(dynamic jsonRaw) {
@@ -55,6 +57,8 @@ class OrderItem {
     bool customPack = json['isCustomBasePack'] == true;
     bool customPrice = json['isCustomPrice'] == true;
     double? origPrice = (json['originalPrice'] as num?)?.toDouble();
+    double? cp = (json['costPrice'] as num?)?.toDouble() ??
+        (json['cost_price'] as num?)?.toDouble();
 
     if (productMap != null && productMap['variants'] is List) {
       final variantsList = productMap['variants'] as List;
@@ -84,6 +88,8 @@ class OrderItem {
         }
         packVol ??= (matchingVariant['packVolume'] as num?)?.toDouble();
         baseUnit ??= matchingVariant['basePackingUnit']?.toString();
+        cp ??= (matchingVariant['costPrice'] as num?)?.toDouble() ??
+            (matchingVariant['cost_price'] as num?)?.toDouble();
       }
     }
 
@@ -111,6 +117,7 @@ class OrderItem {
       isCustomBasePack: customPack,
       isCustomPrice: customPrice,
       originalPrice: origPrice,
+      costPrice: cp,
     );
   }
 
@@ -131,6 +138,7 @@ class OrderItem {
       'isCustomBasePack': isCustomBasePack,
       'isCustomPrice': isCustomPrice,
       'originalPrice': originalPrice,
+      'costPrice': costPrice,
     };
   }
 }
@@ -241,6 +249,8 @@ class OrderModel {
   DateTime? rtoAt;
   final String? assignedAgent;
   final String? assignedAgentId;
+  final String? createdBy;
+  final String? createdById;
   final String? source; // 'panel', 'app', etc.
 
   bool get isPanelOrder {
@@ -289,6 +299,8 @@ class OrderModel {
     this.rtoAt,
     this.assignedAgent,
     this.assignedAgentId,
+    this.createdBy,
+    this.createdById,
     this.source,
   });
 
@@ -380,6 +392,21 @@ class OrderModel {
         json['createdVia']?.toString() ??
         json['orderSource']?.toString();
 
+    String? createdByName;
+    String? createdById;
+    final dynamic createdByRaw = json['createdBy'];
+    if (createdByRaw != null) {
+      if (createdByRaw is Map) {
+        createdById = (createdByRaw['_id'] ?? createdByRaw['id'])?.toString();
+        final cFirst = createdByRaw['firstName']?.toString() ?? '';
+        final cLast = createdByRaw['lastName']?.toString() ?? '';
+        createdByName = '$cFirst $cLast'.trim();
+        if (createdByName.isEmpty) createdByName = createdByRaw['email']?.toString();
+      } else {
+        createdById = createdByRaw.toString();
+      }
+    }
+
     return OrderModel(
       id: json['_id']?.toString() ?? '',
       orderId: json['orderId']?.toString() ?? '',
@@ -425,6 +452,8 @@ class OrderModel {
           : null,
       assignedAgent: agentName ?? json['assignedAgent']?.toString(),
       assignedAgentId: agentId,
+      createdBy: createdByName ?? json['createdBy']?.toString(),
+      createdById: createdById,
       source: sourceVal,
     );
   }
@@ -462,6 +491,8 @@ class OrderModel {
     DateTime? rtoAt,
     String? assignedAgent,
     String? assignedAgentId,
+    String? createdBy,
+    String? createdById,
     String? source,
   }) {
     return OrderModel(
@@ -497,6 +528,8 @@ class OrderModel {
       rtoAt: rtoAt ?? this.rtoAt,
       assignedAgent: assignedAgent ?? this.assignedAgent,
       assignedAgentId: assignedAgentId ?? this.assignedAgentId,
+      createdBy: createdBy ?? this.createdBy,
+      createdById: createdById ?? this.createdById,
       source: source ?? this.source,
     );
   }
@@ -536,6 +569,7 @@ class OrderModel {
       'cancelledAt': cancelledAt?.toIso8601String(),
       'rtoAt': rtoAt?.toIso8601String(),
       'assignedAgent': assignedAgent,
+      'createdBy': createdBy,
       'source': source,
     };
   }
