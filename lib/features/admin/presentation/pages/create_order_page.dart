@@ -188,6 +188,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   }
 
   Future<void> _submitOrder() async {
+    if (_isSubmitting) return;
     if (_cart.isEmpty) {
       _showSnack('Add at least one product to continue.', isError: true);
       return;
@@ -199,6 +200,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
       return;
     }
     if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
 
     final double total = _cart.fold(0, (sum, c) => sum + c.lineTotal);
     
