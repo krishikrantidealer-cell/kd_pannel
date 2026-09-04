@@ -16,6 +16,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
+import 'package:kd_pannel/core/utils/local_cache_helper.dart';
 import 'package:kd_pannel/core/repositories/product_repository.dart';
 import 'package:kd_pannel/core/repositories/order_repository.dart';
 
@@ -123,23 +125,62 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   Future<void> _fetchProducts() async {
     setState(() => _isLoadingProducts = true);
     try {
-      final raw = await ProductRepository().getProducts(forceRefresh: true);
+      List<Map<String, dynamic>> raw = [];
+      try {
+        raw = await ProductRepository().getProducts(forceRefresh: false);
+      } catch (e) {
+        debugPrint('[CreateOrderPage] ProductRepository error: $e');
+      }
+
+      // Fallback: check ProductsBloc in memory
+      if (raw.isEmpty && mounted) {
+        try {
+          final blocProducts = context.read<ProductsBloc>().state.allProducts;
+          if (blocProducts.isNotEmpty) {
+            raw = blocProducts;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback: check LocalCacheHelper
+      if (raw.isEmpty) {
+        try {
+          final local = await LocalCacheHelper.getCachedProducts();
+          if (local != null && local.isNotEmpty) {
+            raw = local;
+          }
+        } catch (_) {}
+      }
+
       final List<Map<String, dynamic>> products = [];
       for (var item in raw) {
         var p = Map<String, dynamic>.from(item);
+        final pId = (p['_id'] ?? p['id'] ?? '').toString();
+        p['_id'] = pId;
+        p['id'] = pId;
+        final title = (p['title'] ?? p['name'] ?? 'Product').toString();
+        p['title'] = title;
+        p['name'] = title;
+
         final variantsRaw = p['variants'];
         List<Map<String, dynamic>> variants = [];
         if (variantsRaw is List && variantsRaw.isNotEmpty) {
-          variants = variantsRaw
-              .whereType<Map>()
-              .map((v) => Map<String, dynamic>.from(v))
-              .toList();
+          for (var v in variantsRaw) {
+            if (v is Map) {
+              var vMap = Map<String, dynamic>.from(v);
+              final vId = (vMap['_id'] ?? vMap['id'] ?? '').toString();
+              vMap['_id'] = vId;
+              vMap['id'] = vId;
+              variants.add(vMap);
+            }
+          }
         }
 
         // If product doesn't have an explicit variants array, synthesize standard variant
         if (variants.isEmpty) {
           variants.add({
-            '_id': p['_id'] ?? p['id'] ?? '',
+            '_id': pId,
+            'id': pId,
             'size': p['packSize'] ?? p['size'] ?? 'Standard',
             'price': (p['price'] ?? p['dealerPrice'] ?? p['mrp'] ?? 0),
             'dealerPrice': (p['dealerPrice'] ?? p['price'] ?? 0),
@@ -147,8 +188,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
             'packVolume': (p['packVolume'] ?? 1),
             'inventoryQuantity': (p['inventoryQuantity'] ?? p['stock'] ?? 0),
           });
-          p['variants'] = variants;
         }
+        p['variants'] = variants;
 
         products.add(p);
       }
@@ -1433,18 +1474,35 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   }
 
   Widget _buildProductCard(Map<String, dynamic> product, bool isMobile) {
-    final variants =
-        (product['variants'] as List?)
-            ?.map((v) => Map<String, dynamic>.from(v as Map))
-            .toList() ??
-        [];
-    final productId = product['_id'] ?? '';
+    final variantsRaw = product['variants'];
+    List<Map<String, dynamic>> variants = [];
+    if (variantsRaw is List) {
+      for (var v in variantsRaw) {
+        if (v is Map) {
+          variants.add(Map<String, dynamic>.from(v));
+        }
+      }
+    }
+    final productId = (product['_id'] ?? product['id'] ?? '').toString();
+    if (variants.isEmpty) {
+      variants.add({
+        '_id': productId,
+        'id': productId,
+        'size': 'Standard',
+        'price': 0,
+        'dealerPrice': 0,
+        'mrp': 0,
+        'packVolume': 1,
+        'inventoryQuantity': 0,
+      });
+    }
+
     final name = product['title'] ?? product['name'] ?? 'Product';
     final selectedIdx = _selectedVariantIndex[productId] ?? 0;
-    final safeIdx = selectedIdx < variants.length ? selectedIdx : 0;
+    final safeIdx = (selectedIdx >= 0 && selectedIdx < variants.length) ? selectedIdx : 0;
     final variant = variants[safeIdx];
 
-    final variantId = variant['_id'] ?? '';
+    final variantId = (variant['_id'] ?? variant['id'] ?? '').toString();
     final inCart = _qtyInCart(productId, variantId);
     final customVol = _customPackVolumes[variantId];
     final customPrice = _customPrices[variantId] ?? _getSalesOverride(variantId);

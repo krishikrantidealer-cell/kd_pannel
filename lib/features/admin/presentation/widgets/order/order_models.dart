@@ -90,7 +90,8 @@ double getVariantPrice(
 
   final List<ParsedTier> parsedTiers = [];
   for (var tier in priceTiers) {
-    final tierMap = Map<String, dynamic>.from(tier as Map);
+    if (tier is! Map) continue;
+    final tierMap = Map<String, dynamic>.from(tier);
     final tierId = tierMap['id']?.toString() ?? '';
     final tierName = tierMap['name']?.toString() ?? '';
 
