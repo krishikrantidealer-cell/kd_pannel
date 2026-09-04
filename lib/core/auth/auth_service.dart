@@ -225,27 +225,35 @@ class AuthService {
   /// Check lead permission for current sales agent (Admins always have full permission)
   bool hasLeadPermission(String action) {
     if (isAdmin) return true;
-    if (_permissions == null) return action != 'reassign';
+    final isRestrictedByDefault = action == 'reassign' || action == 'viewUnassigned' || action == 'unassigned';
+    if (_permissions == null) return !isRestrictedByDefault;
     final leadPerms = _permissions?['lead'] ?? _permissions?['leads'];
     if (leadPerms is Map) {
       if (leadPerms.containsKey(action)) {
-        return _toBool(leadPerms[action], defaultValue: action != 'reassign');
+        return _toBool(leadPerms[action], defaultValue: !isRestrictedByDefault);
+      }
+      if (action == 'viewUnassigned' && leadPerms.containsKey('unassigned')) {
+        return _toBool(leadPerms['unassigned'], defaultValue: false);
       }
     }
-    return action != 'reassign';
+    return !isRestrictedByDefault;
   }
 
   /// Check dealer permission for current sales agent (Admins always have full permission)
   bool hasDealerPermission(String action) {
     if (isAdmin) return true;
-    if (_permissions == null) return action != 'reassign';
+    final isRestrictedByDefault = action == 'reassign' || action == 'viewUnassigned' || action == 'unassigned';
+    if (_permissions == null) return !isRestrictedByDefault;
     final dealerPerms = _permissions?['dealer'] ?? _permissions?['dealers'];
     if (dealerPerms is Map) {
       if (dealerPerms.containsKey(action)) {
-        return _toBool(dealerPerms[action], defaultValue: action != 'reassign');
+        return _toBool(dealerPerms[action], defaultValue: !isRestrictedByDefault);
+      }
+      if (action == 'viewUnassigned' && dealerPerms.containsKey('unassigned')) {
+        return _toBool(dealerPerms['unassigned'], defaultValue: false);
       }
     }
-    return action != 'reassign';
+    return !isRestrictedByDefault;
   }
 
   Future<void> refreshProfile() async {

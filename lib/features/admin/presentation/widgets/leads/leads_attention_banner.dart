@@ -16,7 +16,8 @@ class LeadsAttentionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!AuthService().isAdmin || unassignedCount <= 0) {
+    final canViewUnassigned = AuthService().isAdmin || AuthService().hasLeadPermission('viewUnassigned');
+    if (!canViewUnassigned || unassignedCount <= 0) {
       return const SizedBox.shrink();
     }
 

@@ -85,12 +85,14 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
           'update': _toBool(leadMap['update'], defaultValue: true),
           'reassign': _toBool(leadMap['reassign'], defaultValue: false),
           'delete': _toBool(leadMap['delete'], defaultValue: true),
+          'viewUnassigned': _toBool(leadMap['viewUnassigned'] ?? leadMap['unassigned'], defaultValue: false),
         },
         'dealer': {
           'create': _toBool(dealerMap['create'], defaultValue: true),
           'update': _toBool(dealerMap['update'], defaultValue: true),
           'reassign': _toBool(dealerMap['reassign'], defaultValue: false),
           'delete': _toBool(dealerMap['delete'], defaultValue: true),
+          'viewUnassigned': _toBool(dealerMap['viewUnassigned'] ?? dealerMap['unassigned'], defaultValue: false),
         }
       };
       if (agentId.isNotEmpty) {
@@ -104,12 +106,14 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
         'update': true,
         'reassign': false,
         'delete': true,
+        'viewUnassigned': false,
       },
       'dealer': {
         'create': true,
         'update': true,
         'reassign': false,
         'delete': true,
+        'viewUnassigned': false,
       }
     };
     if (agentId.isNotEmpty) {
@@ -161,7 +165,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
 
         final agentName =
             '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-        final actionDisplay = action[0].toUpperCase() + action.substring(1);
+        final actionDisplay = action == 'viewUnassigned' ? 'Unassigned Pool Access' : (action[0].toUpperCase() + action.substring(1));
         final moduleDisplay = module[0].toUpperCase() + module.substring(1);
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -243,6 +247,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
       'update': enableAll,
       'reassign': enableAll,
       'delete': enableAll,
+      'viewUnassigned': enableAll,
     };
 
     setState(() {
@@ -299,12 +304,14 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
           'update': true,
           'reassign': true,
           'delete': true,
+          'viewUnassigned': true,
         },
         'dealer': {
           'create': true,
           'update': true,
           'reassign': true,
           'delete': true,
+          'viewUnassigned': true,
         },
       };
     } else if (presetType == 'standard') {
@@ -314,12 +321,14 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
           'update': true,
           'reassign': false,
           'delete': true,
+          'viewUnassigned': false,
         },
         'dealer': {
           'create': true,
           'update': true,
           'reassign': false,
           'delete': true,
+          'viewUnassigned': false,
         },
       };
     } else {
@@ -329,12 +338,14 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
           'update': false,
           'reassign': false,
           'delete': false,
+          'viewUnassigned': false,
         },
         'dealer': {
           'create': false,
           'update': false,
           'reassign': false,
           'delete': false,
+          'viewUnassigned': false,
         },
       };
     }
@@ -487,6 +498,15 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                   title: 'Reassign Permission (Transfers Out)',
                   desc:
                       'Allows transferring assigned leads or dealers to other sales teammates. Once transferred, the entity is removed from this agent’s active queue.',
+                ),
+                const SizedBox(height: 10),
+                _buildGuideCard(
+                  icon: Icons.explore_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  badge: 'DISCOVERY',
+                  title: 'Unassigned Pool Permission',
+                  desc:
+                      'Permits agent to view and filter unassigned farmer leads or unassigned store dealers from the global pool and assign/transfer them into their queue.',
                 ),
                 const SizedBox(height: 10),
                 _buildGuideCard(
@@ -846,6 +866,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
     int fullAccessCount = 0;
     int standardCount = 0;
     int reassignCount = 0;
+    int unassignedCount = 0;
     int restrictedCount = 0;
 
     for (final agent in allSalesAgents) {
@@ -857,16 +878,25 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
       if (lp['update'] == true) active++;
       if (lp['reassign'] == true) active++;
       if (lp['delete'] == true) active++;
+      if (lp['viewUnassigned'] == true) active++;
       if (dp['create'] == true) active++;
       if (dp['update'] == true) active++;
       if (dp['reassign'] == true) active++;
       if (dp['delete'] == true) active++;
+      if (dp['viewUnassigned'] == true) active++;
 
-      if (active == 8) fullAccessCount++;
-      if (active == 6 && lp['reassign'] != true && dp['reassign'] != true) {
+      if (active == 10) fullAccessCount++;
+      if (active == 6 &&
+          lp['reassign'] != true &&
+          dp['reassign'] != true &&
+          lp['viewUnassigned'] != true &&
+          dp['viewUnassigned'] != true) {
         standardCount++;
       }
       if (lp['reassign'] == true || dp['reassign'] == true) reassignCount++;
+      if (lp['viewUnassigned'] == true || dp['viewUnassigned'] == true) {
+        unassignedCount++;
+      }
       if (active <= 2) restrictedCount++;
     }
 
@@ -890,17 +920,26 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
       if (lp['update'] == true) active++;
       if (lp['reassign'] == true) active++;
       if (lp['delete'] == true) active++;
+      if (lp['viewUnassigned'] == true) active++;
       if (dp['create'] == true) active++;
       if (dp['update'] == true) active++;
       if (dp['reassign'] == true) active++;
       if (dp['delete'] == true) active++;
+      if (dp['viewUnassigned'] == true) active++;
 
-      if (_selectedFilter == 'full') return active == 8;
+      if (_selectedFilter == 'full') return active == 10;
       if (_selectedFilter == 'standard') {
-        return active == 6 && lp['reassign'] != true && dp['reassign'] != true;
+        return active == 6 &&
+            lp['reassign'] != true &&
+            dp['reassign'] != true &&
+            lp['viewUnassigned'] != true &&
+            dp['viewUnassigned'] != true;
       }
       if (_selectedFilter == 'reassign') {
         return lp['reassign'] == true || dp['reassign'] == true;
+      }
+      if (_selectedFilter == 'unassigned') {
+        return lp['viewUnassigned'] == true || dp['viewUnassigned'] == true;
       }
       if (_selectedFilter == 'restricted') return active <= 2;
 
@@ -916,6 +955,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
           fullCount: fullAccessCount,
           standardCount: standardCount,
           reassignCount: reassignCount,
+          unassignedCount: unassignedCount,
           restrictedCount: restrictedCount,
         ),
         const SizedBox(height: 14),
@@ -985,6 +1025,8 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                 _buildFilterPill('Standard ($standardCount)', 'standard'),
                 const SizedBox(width: 6),
                 _buildFilterPill('Reassign ($reassignCount)', 'reassign'),
+                const SizedBox(width: 6),
+                _buildFilterPill('Unassigned ($unassignedCount)', 'unassigned'),
                 const SizedBox(width: 6),
                 _buildFilterPill('Restricted ($restrictedCount)', 'restricted'),
                 const SizedBox(width: 14),
@@ -1088,6 +1130,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
     required int fullCount,
     required int standardCount,
     required int reassignCount,
+    required int unassignedCount,
     required int restrictedCount,
   }) {
     return Container(
@@ -1189,7 +1232,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Granular Create, Update, Reassign & Delete controls for team sales agents.',
+                        'Granular Create, Update, Reassign, Delete & Unassigned Pool controls for sales agents.',
                         style: GoogleFonts.outfit(
                           fontSize: widget.isMobile ? 11 : 12,
                           color: Colors.white.withValues(alpha: 0.8),
@@ -1223,6 +1266,12 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                     label: 'Reassign ⇄',
                     value: '$reassignCount',
                     badgeColor: const Color(0xFFFBBF24),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildStudioStatPill(
+                    label: 'Unassigned 👁️',
+                    value: '$unassignedCount',
+                    badgeColor: const Color(0xFFA78BFA),
                   ),
                   const SizedBox(width: 12),
                 ],
@@ -1380,10 +1429,10 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
         borderRadius: BorderRadius.circular(16),
         child: Table(
           columnWidths: const {
-            0: FlexColumnWidth(2.7),
-            1: FlexColumnWidth(3.8),
-            2: FlexColumnWidth(3.8),
-            3: FlexColumnWidth(1.7),
+            0: FlexColumnWidth(2.4),
+            1: FlexColumnWidth(4.2),
+            2: FlexColumnWidth(4.2),
+            3: FlexColumnWidth(1.6),
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -1440,10 +1489,12 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
               if (lp['update'] == true) activeCount++;
               if (lp['reassign'] == true) activeCount++;
               if (lp['delete'] == true) activeCount++;
+              if (lp['viewUnassigned'] == true) activeCount++;
               if (dp['create'] == true) activeCount++;
               if (dp['update'] == true) activeCount++;
               if (dp['reassign'] == true) activeCount++;
               if (dp['delete'] == true) activeCount++;
+              if (dp['viewUnassigned'] == true) activeCount++;
 
               final isSaving = _savingPermissionAgentIds.contains(agentId);
               final rowBgColor =
@@ -1451,7 +1502,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
 
               Color tierColor;
               String tierTag;
-              if (activeCount == 8) {
+              if (activeCount == 10) {
                 tierColor = const Color(0xFF10B981);
                 tierTag = 'FULL';
               } else if (activeCount >= 6) {
@@ -1619,6 +1670,20 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                           ),
                         ),
                         _buildListMicroToggleCapsule(
+                          label: 'Unassigned 👁️',
+                          icon: Icons.explore_rounded,
+                          isEnabled: lp['viewUnassigned'] == true,
+                          activeColor: const Color(0xFF8B5CF6),
+                          tooltip:
+                              'Allow discovering and filtering unassigned leads from the pool',
+                          onChanged: (val) => _toggleAgentPermission(
+                            agent,
+                            'lead',
+                            'viewUnassigned',
+                            val,
+                          ),
+                        ),
+                        _buildListMicroToggleCapsule(
                           label: 'Delete',
                           icon: Icons.delete_outline_rounded,
                           isEnabled: lp['delete'] == true,
@@ -1686,6 +1751,20 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                           ),
                         ),
                         _buildListMicroToggleCapsule(
+                          label: 'Unassigned 👁️',
+                          icon: Icons.explore_rounded,
+                          isEnabled: dp['viewUnassigned'] == true,
+                          activeColor: const Color(0xFF8B5CF6),
+                          tooltip:
+                              'Allow discovering and filtering unassigned dealers from the pool',
+                          onChanged: (val) => _toggleAgentPermission(
+                            agent,
+                            'dealer',
+                            'viewUnassigned',
+                            val,
+                          ),
+                        ),
+                        _buildListMicroToggleCapsule(
                           label: 'Delete',
                           icon: Icons.delete_outline_rounded,
                           isEnabled: dp['delete'] == true,
@@ -1740,7 +1819,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                             ),
                           ),
                           child: Text(
-                            '$activeCount/8',
+                            '$activeCount/10',
                             style: GoogleFonts.outfit(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
@@ -1756,7 +1835,9 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                           activeCount: activeCount,
                           isStandard: activeCount == 6 &&
                               lp['reassign'] != true &&
-                              dp['reassign'] != true,
+                              dp['reassign'] != true &&
+                              lp['viewUnassigned'] != true &&
+                              dp['viewUnassigned'] != true,
                           levelColor: tierColor,
                         ),
                       ],
@@ -1792,16 +1873,18 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
     if (lp['update'] == true) activeCount++;
     if (lp['reassign'] == true) activeCount++;
     if (lp['delete'] == true) activeCount++;
+    if (lp['viewUnassigned'] == true) activeCount++;
     if (dp['create'] == true) activeCount++;
     if (dp['update'] == true) activeCount++;
     if (dp['reassign'] == true) activeCount++;
     if (dp['delete'] == true) activeCount++;
+    if (dp['viewUnassigned'] == true) activeCount++;
 
     final isSaving = _savingPermissionAgentIds.contains(agentId);
 
     Color levelColor;
     String levelLabel;
-    if (activeCount == 8) {
+    if (activeCount == 10) {
       levelColor = const Color(0xFF10B981);
       levelLabel = 'FULL ACCESS';
     } else if (activeCount >= 6) {
@@ -1956,8 +2039,8 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                 ],
                 if (widget.isDesktop) ...[
                   _buildQuickPresetPill(
-                    label: '⚡ Full (8)',
-                    isSelected: activeCount == 8,
+                    label: '⚡ Full (10)',
+                    isSelected: activeCount == 10,
                     color: const Color(0xFF10B981),
                     onTap: () => _applyPermissionPreset(agent, 'full'),
                   ),
@@ -1966,7 +2049,9 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                     label: '✦ Standard',
                     isSelected: activeCount == 6 &&
                         lp['reassign'] != true &&
-                        dp['reassign'] != true,
+                        dp['reassign'] != true &&
+                        lp['viewUnassigned'] != true &&
+                        dp['viewUnassigned'] != true,
                     color: const Color(0xFF0284C7),
                     onTap: () => _applyPermissionPreset(agent, 'standard'),
                   ),
@@ -1983,7 +2068,9 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                     activeCount: activeCount,
                     isStandard: activeCount == 6 &&
                         lp['reassign'] != true &&
-                        dp['reassign'] != true,
+                        dp['reassign'] != true &&
+                        lp['viewUnassigned'] != true &&
+                        dp['viewUnassigned'] != true,
                     levelColor: levelColor,
                     isCompact: true,
                   ),
@@ -2104,11 +2191,13 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
     final bool canCreate = perms['create'] == true;
     final bool canUpdate = perms['update'] == true;
     final bool canReassign = perms['reassign'] == true;
+    final bool canViewUnassigned = perms['viewUnassigned'] == true;
     final bool canDelete = perms['delete'] == true;
 
     final int moduleActive = (canCreate ? 1 : 0) +
         (canUpdate ? 1 : 0) +
         (canReassign ? 1 : 0) +
+        (canViewUnassigned ? 1 : 0) +
         (canDelete ? 1 : 0);
 
     return Container(
@@ -2158,13 +2247,13 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
               ),
               InkWell(
                 onTap: () =>
-                    _applyModuleBatch(agent, moduleKey, moduleActive < 4),
+                    _applyModuleBatch(agent, moduleKey, moduleActive < 5),
                 borderRadius: BorderRadius.circular(4),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   child: Text(
-                    moduleActive < 4 ? 'Grant All' : 'Clear All',
+                    moduleActive < 5 ? 'Grant All' : 'Clear All',
                     style: GoogleFonts.outfit(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
@@ -2214,6 +2303,17 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                 isReassign: true,
                 onChanged: (val) =>
                     _toggleAgentPermission(agent, moduleKey, 'reassign', val),
+              ),
+              _buildSculptedToggleCapsule(
+                title: 'Unassigned 👁️',
+                subtitle: moduleKey == 'lead'
+                    ? 'Unassigned leads pool'
+                    : 'Unassigned store pool',
+                icon: Icons.explore_rounded,
+                isEnabled: canViewUnassigned,
+                activeColor: const Color(0xFF8B5CF6),
+                onChanged: (val) => _toggleAgentPermission(
+                    agent, moduleKey, 'viewUnassigned', val),
               ),
               _buildSculptedToggleCapsule(
                 title: 'Delete',

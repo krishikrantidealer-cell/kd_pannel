@@ -531,9 +531,19 @@ class _LeadsPageState extends State<LeadsPage> {
             final dynamic assignedAgent = u['assignedAgent'];
             final String? assignedAgentId = _normalizeId(
                 assignedAgent?['_id'] ?? assignedAgent?['\$oid'] ?? assignedAgent);
-            if (assignedAgentId == null ||
+            final bool isAssignedToMe = assignedAgentId != null &&
+                assignedAgentId.trim().isNotEmpty &&
+                assignedAgentId != '-' &&
+                assignedAgentId == AuthService().currentUserId;
+            final bool isUnassigned = assignedAgentId == null ||
                 assignedAgentId.trim().isEmpty ||
-                assignedAgentId != AuthService().currentUserId) {
+                assignedAgentId == '-';
+
+            if (isAssignedToMe) {
+              // Always show assigned leads
+            } else if (isUnassigned && AuthService().hasLeadPermission('viewUnassigned')) {
+              // Show unassigned leads if permission granted
+            } else {
               return false;
             }
           }
@@ -736,25 +746,29 @@ class _LeadsPageState extends State<LeadsPage> {
     }
 
     // 2. Chip Filtering
-    if (state.selectedFilterChip != 'All') {
-      if (state.selectedFilterChip == 'Unassigned') {
-        result = result
-            .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
-            .toList();
-      } else if (state.selectedFilterChip == 'Assigned') {
+    if (state.selectedFilterChip == 'All') {
+      if (AuthService().isSales) {
         result = result
             .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
             .toList();
-      } else if (state.selectedFilterChip == 'KYC Pending') {
-        result = result
-            .where(
-              (l) =>
-                  l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
-            )
-            .toList();
-      } else if (state.selectedFilterChip == 'Deleted') {
-        result = result.where((l) => l['isDeleted'] == true).toList();
       }
+    } else if (state.selectedFilterChip == 'Unassigned') {
+      result = result
+          .where((l) => l['agentId'] == null && l['kycStatus'] != 'verified')
+          .toList();
+    } else if (state.selectedFilterChip == 'Assigned') {
+      result = result
+          .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
+          .toList();
+    } else if (state.selectedFilterChip == 'KYC Pending') {
+      result = result
+          .where(
+            (l) =>
+                l['kycStatus'] == 'pending' || l['kycStatus'] == 'submitted',
+          )
+          .toList();
+    } else if (state.selectedFilterChip == 'Deleted') {
+      result = result.where((l) => l['isDeleted'] == true).toList();
     }
 
     // 3. Search Query
@@ -3592,7 +3606,7 @@ class _MasterLeadsAnalyticsHeaderState
     final todayLeadsCount = totalRegisteredToday ?? fallbackTodayCount;
 
 
-    final unassignedCount = isSales
+    final unassignedCount = (isSales && !AuthService().hasLeadPermission('viewUnassigned'))
         ? 0
         : (dailyStats['totalAllTimeUnassignedLeads'] ??
             userList.where((u) {
@@ -3918,7 +3932,8 @@ class _MasterLeadsAnalyticsHeaderState
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final int targetColumns = isSales ? 4 : 6;
+              final bool showUnassigned = !isSales || AuthService().hasLeadPermission('viewUnassigned');
+              final int targetColumns = (isSales && !showUnassigned) ? 4 : (isSales ? 5 : 6);
               final int columns = constraints.maxWidth >= 960
                   ? targetColumns
                   : (constraints.maxWidth >= 720
@@ -3943,6 +3958,9 @@ class _MasterLeadsAnalyticsHeaderState
                     isCompact: true,
                   ),
                 );
+              }
+
+              if (showUnassigned) {
                 cards.add(
                   StatCardWidget(
                     width: cardWidth,

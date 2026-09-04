@@ -1865,7 +1865,7 @@ class _DealerTableCardState extends State<_DealerTableCard> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (AuthService().isAdmin) ...[
+        if (AuthService().isAdmin || AuthService().hasDealerPermission('viewUnassigned')) ...[
           _buildTableDropdown('Assign', selectedAssign, [
             'All',
             'Unassigned',
@@ -2417,8 +2417,8 @@ class _DealerTableCardState extends State<_DealerTableCard> {
       }).toList();
     }
 
-    // Filter by Assigned Agent (only for admin)
-    if (AuthService().isAdmin &&
+    // Filter by Assigned Agent (for admin or sales agents with viewUnassigned permission)
+    if ((AuthService().isAdmin || AuthService().hasDealerPermission('viewUnassigned')) &&
         selectedAssign != 'Assign' &&
         selectedAssign != 'All') {
       tableDealers = tableDealers.where((d) {

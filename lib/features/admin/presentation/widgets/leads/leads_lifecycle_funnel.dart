@@ -23,9 +23,16 @@ class LeadsLifecycleFunnel extends StatelessWidget {
 
   List<String> get activeFilterChips {
     if (AuthService().isSales) {
+      if (AuthService().hasLeadPermission('viewUnassigned')) {
+        return [
+          'All',
+          'Unassigned',
+          'KYC Pending',
+          'Deleted',
+        ];
+      }
       return [
         'All',
-        'Assigned',
         'KYC Pending',
         'Deleted',
       ];
@@ -42,6 +49,11 @@ class LeadsLifecycleFunnel extends StatelessWidget {
   int? _getCount(String chip) {
     switch (chip) {
       case 'All':
+        if (AuthService().isSales) {
+          return dateFilteredLeads
+              .where((l) => l['agentId'] != null && l['kycStatus'] != 'verified')
+              .length;
+        }
         return dateFilteredLeads.length;
       case 'Unassigned':
         return dateFilteredLeads
