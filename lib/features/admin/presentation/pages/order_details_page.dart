@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/repositories/order_repository.dart';
 
 class OrderDetailsPage extends StatefulWidget {
   const OrderDetailsPage({super.key});
@@ -591,6 +592,831 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       )
                     : Text(
                         'Save Changes',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // --- EDIT COST PRICE (ADMIN ONLY) ---
+  Future<void> _showEditCostPriceDialog(int itemIndex) async {
+    if (_orderRaw == null || itemIndex < 0 || itemIndex >= _order.items.length) return;
+    
+    final item = _order.items[itemIndex];
+    final parsed = _parseProductTitle(item.title);
+    final productName = parsed['name'] ?? item.title;
+    final packing = (item.variantSize != null && item.variantSize!.isNotEmpty)
+        ? item.variantSize!
+        : (parsed['packing'] ?? 'Standard');
+    final basePacking = (item.basePacking != null && item.basePacking!.isNotEmpty)
+        ? item.basePacking!
+        : (parsed['basePacking'] ?? '-');
+
+    final double initialCP = item.costPrice ?? 0.0;
+    final cpController = TextEditingController(
+      text: initialCP > 0 ? (initialCP % 1 == 0 ? initialCP.toInt().toString() : initialCP.toStringAsFixed(2)) : '',
+    );
+    bool isSaving = false;
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final enteredCP = double.tryParse(cpController.text.trim()) ?? 0.0;
+          final double itemAmount = item.price * item.quantity;
+          final double newEffectiveCP = enteredCP * item.quantity;
+          final double newProfit = newEffectiveCP > 0 ? (itemAmount - newEffectiveCP) : 0.0;
+          final double newMarginPct = (itemAmount > 0 && newProfit != 0)
+              ? (newProfit / itemAmount) * 100
+              : 0.0;
+          final double oldEffectiveCP = (item.costPrice ?? 0.0) * item.quantity;
+          final double oldProfit = oldEffectiveCP > 0 ? (itemAmount - oldEffectiveCP) : 0.0;
+          final double profitDiff = newProfit - oldProfit;
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF059669).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.edit_document,
+                    color: Color(0xFF059669),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Edit Item Cost Price (CP)',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Admin Cost & Profit Override',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Product Summary Card
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            productName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          if (item.technicalName != null && item.technicalName!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              item.technicalName!,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _buildMiniBadge('Packing: $packing'),
+                              const SizedBox(width: 6),
+                              _buildMiniBadge('Base: $basePacking'),
+                              const SizedBox(width: 6),
+                              _buildMiniBadge('Qty: x${item.quantity}', isBold: true),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Order Selling Price:',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                '₹${item.price.toStringAsFixed(2)} / unit (Total: ₹${itemAmount.toStringAsFixed(2)})',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // CP Input Field
+                    Text(
+                      'Unit Cost Price (CP in ₹)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: cpController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF059669)),
+                        hintText: 'Enter unit CP (e.g. 450.00)',
+                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+                        errorText: errorText,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF059669), width: 1.5),
+                        ),
+                      ),
+                      onChanged: (_) {
+                        setDialogState(() {
+                          errorText = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Live Profit Preview Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: newProfit >= 0
+                              ? [const Color(0xFF059669).withValues(alpha: 0.08), const Color(0xFF10B981).withValues(alpha: 0.04)]
+                              : [const Color(0xFFDC2626).withValues(alpha: 0.08), const Color(0xFFEF4444).withValues(alpha: 0.04)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: newProfit >= 0
+                              ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                              : const Color(0xFFEF4444).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'REAL-TIME PROFIT PREVIEW',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                  color: newProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: newProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${newMarginPct.toStringAsFixed(1)}% Margin',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total COGS (x${item.quantity}):',
+                                style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                              ),
+                              Text(
+                                '₹${newEffectiveCP.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Line Item Net Profit:',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                              ),
+                              Text(
+                                '${newProfit >= 0 ? "+" : ""}₹${newProfit.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: newProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (oldEffectiveCP > 0 && profitDiff != 0) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Profit change vs previous: ${profitDiff >= 0 ? "+" : ""}₹${profitDiff.toStringAsFixed(2)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontStyle: FontStyle.italic,
+                                color: profitDiff >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final valStr = cpController.text.trim();
+                        final newCpVal = double.tryParse(valStr);
+                        if (newCpVal == null || newCpVal < 0) {
+                          setDialogState(() {
+                            errorText = 'Please enter a valid cost price (≥ 0)';
+                          });
+                          return;
+                        }
+
+                        setDialogState(() => isSaving = true);
+
+                        try {
+                          final updatedItems = List<OrderItem>.from(_order.items);
+                          updatedItems[itemIndex] = updatedItems[itemIndex].copyWith(
+                            costPrice: newCpVal,
+                          );
+
+                          final itemsJson = updatedItems.map((i) => i.toJson()).toList();
+                          final res = await OrderRepository().updateOrderItems(
+                            orderId: _order.id,
+                            items: itemsJson,
+                          );
+
+                          OrderModel updatedOrder;
+                          if (res['success'] == true && res['order'] != null) {
+                            try {
+                              updatedOrder = OrderModel.fromJson(res['order']);
+                            } catch (_) {
+                              updatedOrder = _order.copyWith(items: updatedItems);
+                            }
+                          } else {
+                            updatedOrder = _order.copyWith(items: updatedItems);
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _orderRaw = updatedOrder;
+                            });
+                            _saveOrderToCache(updatedOrder);
+                            this.context.read<OrdersBloc>().add(
+                              UpdateSingleOrderEvent(updatedOrder),
+                            );
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Cost price updated to ₹${newCpVal.toStringAsFixed(2)}! Profit recalculated.',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                                ),
+                                backgroundColor: const Color(0xFF059669),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setDialogState(() => isSaving = false);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error updating CP: $e'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Update Cost Price',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(String text, {bool isBold = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(
+          fontSize: 10.5,
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+          color: AppTheme.textPrimary,
+        ),
+      ),
+    );
+  }
+
+  // --- EDIT COURIER CHARGE (ADMIN ONLY) ---
+  Future<void> _showEditCourierChargeDialog() async {
+    if (_orderRaw == null) return;
+    final double initialCharge = _order.courierCharge;
+    final courierCtrl = TextEditingController(
+      text: initialCharge > 0 ? (initialCharge % 1 == 0 ? initialCharge.toInt().toString() : initialCharge.toStringAsFixed(2)) : '',
+    );
+    bool isSaving = false;
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final enteredCharge = double.tryParse(courierCtrl.text.trim()) ?? 0.0;
+          final double productsCost = _order.items.fold(
+            0.0,
+            (sum, i) => sum + ((i.costPrice ?? 0.0) * i.quantity),
+          );
+          final double newTotalCost = productsCost + enteredCharge;
+          final double newGrossProfit = (productsCost > 0 || enteredCharge > 0)
+              ? (_order.totalAmount - newTotalCost)
+              : 0.0;
+          final double newMarginPct = (_order.totalAmount > 0 && newGrossProfit != 0)
+              ? (newGrossProfit / _order.totalAmount) * 100
+              : 0.0;
+          final double oldTotalCost = productsCost + initialCharge;
+          final double oldGrossProfit = (productsCost > 0 || initialCharge > 0)
+              ? (_order.totalAmount - oldTotalCost)
+              : 0.0;
+          final double profitDiff = newGrossProfit - oldGrossProfit;
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.local_shipping_outlined,
+                    color: Color(0xFF2563EB),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Set Courier Charge',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Logistics Expense & Profit Recalculation',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Order Summary Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Order Total Receivable:',
+                                style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                              ),
+                              Text(
+                                '₹${_order.totalAmount.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Products COGS:',
+                                style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                              ),
+                              Text(
+                                '₹${productsCost.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                          if (_order.courierName != null && _order.courierName!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Assigned Courier:',
+                                  style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                                ),
+                                Text(
+                                  _order.courierName!,
+                                  style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Courier Charge Input Field
+                    Text(
+                      'Courier / Shipping Expense (₹)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: courierCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF2563EB)),
+                        hintText: 'Enter courier expense (e.g. 350.00)',
+                        hintStyle: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+                        errorText: errorText,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                      ),
+                      onChanged: (_) {
+                        setDialogState(() {
+                          errorText = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Live Profit Preview Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: newGrossProfit >= 0
+                              ? [const Color(0xFF059669).withValues(alpha: 0.08), const Color(0xFF10B981).withValues(alpha: 0.04)]
+                              : [const Color(0xFFDC2626).withValues(alpha: 0.08), const Color(0xFFEF4444).withValues(alpha: 0.04)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: newGrossProfit >= 0
+                              ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                              : const Color(0xFFEF4444).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'REAL-TIME PROFIT PREVIEW',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                  color: newGrossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: newGrossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${newMarginPct.toStringAsFixed(1)}% Margin',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total Expense (COGS + Courier):',
+                                style: GoogleFonts.outfit(fontSize: 11.5, color: AppTheme.textSecondary),
+                              ),
+                              Text(
+                                '₹${newTotalCost.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Net Order Realized Profit:',
+                                style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                              ),
+                              Text(
+                                '${newGrossProfit >= 0 ? "+" : ""}₹${newGrossProfit.toStringAsFixed(2)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: newGrossProfit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (initialCharge > 0 && profitDiff != 0) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Profit change vs previous: ${profitDiff >= 0 ? "+" : ""}₹${profitDiff.toStringAsFixed(2)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontStyle: FontStyle.italic,
+                                color: profitDiff >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final valStr = courierCtrl.text.trim();
+                        final newCharge = double.tryParse(valStr);
+                        if (newCharge == null || newCharge < 0) {
+                          setDialogState(() {
+                            errorText = 'Please enter a valid amount (≥ 0)';
+                          });
+                          return;
+                        }
+
+                        setDialogState(() => isSaving = true);
+
+                        try {
+                          final res = await OrderRepository().updateCourierCharge(
+                            orderId: _order.id,
+                            courierCharge: newCharge,
+                          );
+
+                          OrderModel updatedOrder;
+                          if (res['success'] == true && res['order'] != null) {
+                            try {
+                              updatedOrder = OrderModel.fromJson(res['order']);
+                            } catch (_) {
+                              updatedOrder = _order.copyWith(courierCharge: newCharge);
+                            }
+                          } else {
+                            updatedOrder = _order.copyWith(courierCharge: newCharge);
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _orderRaw = updatedOrder;
+                            });
+                            _saveOrderToCache(updatedOrder);
+                            this.context.read<OrdersBloc>().add(
+                              UpdateSingleOrderEvent(updatedOrder),
+                            );
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Courier expense updated to ₹${newCharge.toStringAsFixed(2)}! Profit recalculated.',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                                ),
+                                backgroundColor: const Color(0xFF2563EB),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setDialogState(() => isSaving = false);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error updating courier charge: $e'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Save Courier Cost',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                         ),
@@ -1437,6 +2263,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                                 isAdmin: isAdmin,
                                 isCustomBasePack: item.isCustomBasePack,
                                 isCustomPrice: item.isCustomPrice,
+                                onEditCostPrice: () => _showEditCostPriceDialog(idx),
                               );
                             },
                           ),
@@ -1772,6 +2599,46 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   )
                 : null,
           ),
+          if (AuthService().currentUserRole == UserRole.admin) ...[
+            const SizedBox(height: 10),
+            _buildMetaRowWithIcon(
+              icon: Icons.payments_outlined,
+              label: 'COURIER CHARGE',
+              value: _order.courierCharge > 0
+                  ? '₹${_order.courierCharge.toStringAsFixed(2)}'
+                  : 'Not Set (₹0.00)',
+              action: InkWell(
+                onTap: _showEditCourierChargeDialog,
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.edit, size: 11, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 3),
+                      Text(
+                        _order.courierCharge > 0 ? 'Edit' : '+Add',
+                        style: GoogleFonts.outfit(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (_order.trackingUrl != null && _order.trackingUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             MouseRegion(
@@ -1896,11 +2763,15 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         : 0.0;
 
     final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
-    final double totalCost = _order.items.fold(
+    final double productsCost = _order.items.fold(
       0.0,
       (sum, i) => sum + ((i.costPrice ?? 0.0) * i.quantity),
     );
-    final double grossProfit = totalCost > 0 ? (_order.totalAmount - totalCost) : 0.0;
+    final double courierExpense = _order.courierCharge;
+    final double totalCost = productsCost + courierExpense;
+    final double grossProfit = (productsCost > 0 || courierExpense > 0)
+        ? (_order.totalAmount - totalCost)
+        : 0.0;
     final double marginPct = (_order.totalAmount > 0 && grossProfit != 0)
         ? (grossProfit / _order.totalAmount) * 100
         : 0.0;
@@ -1967,7 +2838,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
           ),
 
           // Admin Profit & Margin Intelligence Card
-          if (isAdmin && totalCost > 0) ...[
+          if (isAdmin && (productsCost > 0 || courierExpense > 0)) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -2030,12 +2901,77 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   ),
                   const SizedBox(height: 10),
                   _buildSummaryRow(
-                    'Cost of Goods (COGS)',
-                    '₹${totalCost.toStringAsFixed(2)}',
+                    'Products COGS',
+                    '₹${productsCost.toStringAsFixed(2)}',
                     fontSize: 11.5,
                     valueColor: AppTheme.textSecondary,
                   ),
                   const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Courier Charge',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: _showEditCourierChargeDialog,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.edit, size: 9.5, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    courierExpense > 0 ? 'Edit' : '+Add',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        courierExpense > 0 ? '₹${courierExpense.toStringAsFixed(2)}' : '₹0.00',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: courierExpense > 0 ? const Color(0xFFDC2626) : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSummaryRow(
+                    'Total Cost (COGS + Courier)',
+                    '₹${totalCost.toStringAsFixed(2)}',
+                    fontSize: 11.5,
+                    valueColor: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: AppTheme.lightBorderColor),
+                  const SizedBox(height: 6),
                   _buildSummaryRow(
                     'Net Order Gross Profit',
                     '${grossProfit >= 0 ? "+" : ""}₹${grossProfit.toStringAsFixed(2)}',
@@ -2252,6 +3188,7 @@ class _ItemTableRow extends StatefulWidget {
   final bool isAdmin;
   final bool isCustomBasePack;
   final bool isCustomPrice;
+  final VoidCallback? onEditCostPrice;
 
   const _ItemTableRow({
     required this.productName,
@@ -2265,6 +3202,7 @@ class _ItemTableRow extends StatefulWidget {
     this.isAdmin = false,
     this.isCustomBasePack = false,
     this.isCustomPrice = false,
+    this.onEditCostPrice,
   });
 
   @override
@@ -2426,60 +3364,79 @@ class _ItemTableRowState extends State<_ItemTableRow> {
                     textAlign: TextAlign.right,
                   ),
                   if (widget.isAdmin) ...[
-                    if (widget.costPrice != null && widget.costPrice! > 0) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'CP: ₹${effectiveCP.toStringAsFixed(0)}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
+                    const SizedBox(height: 3),
+                    Tooltip(
+                      message: 'Click to edit Cost Price & profit',
+                      child: InkWell(
+                        onTap: widget.onEditCostPrice,
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: effectiveCP > 0
+                                ? (profit >= 0 ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2))
+                                : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: effectiveCP > 0
+                                  ? (profit >= 0
+                                      ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                                      : const Color(0xFFEF4444).withValues(alpha: 0.4))
+                                  : const Color(0xFFD1D5DB),
+                              width: 0.8,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: profit >= 0 ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: profit >= 0 ? const Color(0xFF10B981).withValues(alpha: 0.4) : const Color(0xFFEF4444).withValues(alpha: 0.4),
-                                width: 0.8,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.costPrice != null && widget.costPrice! > 0) ...[
+                                Text(
+                                  'CP: ₹${effectiveCP.toStringAsFixed(0)}',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${profit >= 0 ? "+" : ""}₹${profit.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: profit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ] else ...[
+                                Text(
+                                  'CP: Not Set',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFFD97706),
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '+Set CP',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 3),
+                              const Icon(
+                                Icons.edit_outlined,
+                                size: 10.5,
+                                color: Color(0xFF6B7280),
                               ),
-                            ),
-                            child: Text(
-                              '${profit >= 0 ? "+" : ""}₹${profit.toStringAsFixed(0)} (${marginPct.toStringAsFixed(0)}%)',
-                              style: GoogleFonts.outfit(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: profit >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 2),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: AppTheme.borderColor, width: 0.7),
-                        ),
-                        child: Text(
-                          'CP: Not Set',
-                          style: GoogleFonts.outfit(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textSecondary,
+                            ],
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ],
                   if (widget.isCustomPrice) ...[
                     const SizedBox(height: 2),

@@ -35,6 +35,44 @@ class OrderItem {
     this.costPrice,
   });
 
+  OrderItem copyWith({
+    String? productId,
+    String? variantId,
+    String? title,
+    String? vendor,
+    String? technicalName,
+    String? image,
+    int? quantity,
+    double? price,
+    String? variantSize,
+    String? basePacking,
+    double? packVolume,
+    String? basePackingUnit,
+    bool? isCustomBasePack,
+    bool? isCustomPrice,
+    double? originalPrice,
+    double? costPrice,
+  }) {
+    return OrderItem(
+      productId: productId ?? this.productId,
+      variantId: variantId ?? this.variantId,
+      title: title ?? this.title,
+      vendor: vendor ?? this.vendor,
+      technicalName: technicalName ?? this.technicalName,
+      image: image ?? this.image,
+      quantity: quantity ?? this.quantity,
+      price: price ?? this.price,
+      variantSize: variantSize ?? this.variantSize,
+      basePacking: basePacking ?? this.basePacking,
+      packVolume: packVolume ?? this.packVolume,
+      basePackingUnit: basePackingUnit ?? this.basePackingUnit,
+      isCustomBasePack: isCustomBasePack ?? this.isCustomBasePack,
+      isCustomPrice: isCustomPrice ?? this.isCustomPrice,
+      originalPrice: originalPrice ?? this.originalPrice,
+      costPrice: costPrice ?? this.costPrice,
+    );
+  }
+
   factory OrderItem.fromJson(dynamic jsonRaw) {
     if (jsonRaw is! Map) {
       return OrderItem(
@@ -239,7 +277,8 @@ class OrderModel {
   String? courierStatus;
   String? awbNumber;
   String? courierName;
-  String? trackingUrl;
+  final String? trackingUrl;
+  final double courierCharge;
   final DateTime placedAt;
   DateTime? processingAt;
   DateTime? shippedAt;
@@ -290,6 +329,7 @@ class OrderModel {
     this.awbNumber,
     this.courierName,
     this.trackingUrl,
+    this.courierCharge = 0.0,
     required this.placedAt,
     this.processingAt,
     this.shippedAt,
@@ -431,6 +471,10 @@ class OrderModel {
       awbNumber: json['awbNumber']?.toString(),
       courierName: json['courierName']?.toString(),
       trackingUrl: json['trackingUrl']?.toString(),
+      courierCharge: (json['courierCharge'] as num?)?.toDouble() ??
+          (json['courier_charge'] as num?)?.toDouble() ??
+          (json['shippingCharge'] as num?)?.toDouble() ??
+          0.0,
       placedAt: placedAtParsed,
       processingAt: json['processingAt'] != null
           ? DateTime.tryParse(json['processingAt'].toString())
@@ -482,6 +526,7 @@ class OrderModel {
     String? awbNumber,
     String? courierName,
     String? trackingUrl,
+    double? courierCharge,
     DateTime? placedAt,
     DateTime? processingAt,
     DateTime? shippedAt,
@@ -519,6 +564,7 @@ class OrderModel {
       awbNumber: awbNumber ?? this.awbNumber,
       courierName: courierName ?? this.courierName,
       trackingUrl: trackingUrl ?? this.trackingUrl,
+      courierCharge: courierCharge ?? this.courierCharge,
       placedAt: placedAt ?? this.placedAt,
       processingAt: processingAt ?? this.processingAt,
       shippedAt: shippedAt ?? this.shippedAt,
@@ -561,6 +607,7 @@ class OrderModel {
       'awbNumber': awbNumber,
       'courierName': courierName,
       'trackingUrl': trackingUrl,
+      'courierCharge': courierCharge,
       'placedAt': placedAt.toIso8601String(),
       'processingAt': processingAt?.toIso8601String(),
       'shippedAt': shippedAt?.toIso8601String(),

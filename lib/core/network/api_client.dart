@@ -25,7 +25,7 @@ class ApiClient {
   static const bool _useLocalBackend = false; // Set to true for local testing
 
   final String baseUrl = _useLocalBackend
-      ? 'http://localhost:5000/api'
+      ? 'http://localhost:8080/api'
       : 'https://krishi-backend-123180953109.asia-south1.run.app/api';
 
   String? _accessToken;

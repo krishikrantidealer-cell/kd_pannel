@@ -42,6 +42,91 @@ class OrderRepository {
     }
   }
 
+  /// Update order items / cost price for a specific order (Admin only)
+  Future<Map<String, dynamic>> updateOrderItems({
+    required String orderId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      // 1. Try dedicated admin items update endpoint
+      var response = await _apiClient.put(
+        '/orders/admin/$orderId/items',
+        {'items': items},
+      );
+
+      // 2. Fallback to /orders/admin/:id
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        response = await _apiClient.put(
+          '/orders/admin/$orderId',
+          {'items': items},
+        );
+      }
+
+      // 3. Fallback to /orders/admin/:id/status
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        response = await _apiClient.put(
+          '/orders/admin/$orderId/status',
+          {'items': items},
+        );
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'order': data['order'] ?? data,
+        };
+      } else {
+        final data = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to update order items (Status ${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      debugPrint('[OrderRepository] updateOrderItems error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// Update courier charge for an order (Admin only)
+  Future<Map<String, dynamic>> updateCourierCharge({
+    required String orderId,
+    required double courierCharge,
+  }) async {
+    try {
+      var response = await _apiClient.put(
+        '/orders/admin/$orderId/courier-charge',
+        {'courierCharge': courierCharge},
+      );
+
+      // Fallback
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        response = await _apiClient.put(
+          '/orders/admin/$orderId/status',
+          {'courierCharge': courierCharge},
+        );
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'order': data['order'] ?? data,
+        };
+      } else {
+        final data = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to update courier charge (Status ${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      debugPrint('[OrderRepository] updateCourierCharge error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   /// Get typed active CouponModels.
   Future<List<CouponModel>> getActiveCouponModels({bool forceRefresh = false}) async {
     final rawList = await getActiveCoupons(forceRefresh: forceRefresh);
