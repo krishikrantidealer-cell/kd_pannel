@@ -24,10 +24,8 @@ class _TrashPageState extends State<TrashPage> {
   
   List<Map<String, dynamic>> _deletedUsers = [];
   bool _isLoading = false;
-  bool _isLoadingMore = false;
   int _page = 1;
-  final int _limit = 20;
-  bool _hasMore = true;
+  int _limit = 20;
   int _totalCount = 0;
   String _selectedTab = 'Leads'; // 'Leads' or 'Dealers'
   String _searchQuery = '';
@@ -37,30 +35,15 @@ class _TrashPageState extends State<TrashPage> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
-    _fetchTrashData(isFirstLoad: true);
+    _fetchTrashData(page: 1);
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
-  }
-
-  void _onScroll() {
-    if (_isBottom && !_isLoading && !_isLoadingMore && _hasMore) {
-      _fetchTrashData(isFirstLoad: false);
-    }
-  }
-
-  bool get _isBottom {
-    if (!_scrollController.hasClients) return false;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.offset;
-    return currentScroll >= (maxScroll * 0.9);
   }
 
   void _onSearchChanged(String query) {
@@ -70,27 +53,20 @@ class _TrashPageState extends State<TrashPage> {
         setState(() {
           _searchQuery = query;
         });
-        _fetchTrashData(isFirstLoad: true);
+        _fetchTrashData(page: 1);
       }
     });
   }
 
-  Future<void> _fetchTrashData({bool isFirstLoad = true}) async {
+  Future<void> _fetchTrashData({int? page}) async {
     final int requestId = ++_currentRequestId;
+    final int targetPage = page ?? _page;
 
-    if (isFirstLoad) {
-      _debounce?.cancel();
-      setState(() {
-        _isLoading = true;
-        _page = 1;
-        _hasMore = true;
-        _deletedUsers = [];
-      });
-    } else {
-      setState(() {
-        _isLoadingMore = true;
-      });
-    }
+    _debounce?.cancel();
+    setState(() {
+      _isLoading = true;
+      _page = targetPage;
+    });
 
     try {
       final kycFilter = _selectedTab == 'Dealers' ? 'verified' : 'not_verified';
@@ -104,7 +80,7 @@ class _TrashPageState extends State<TrashPage> {
 
       final data = await UserRepository().fetchTrashUsers(
         kycStatus: kycFilter,
-        page: _page,
+        page: targetPage,
         limit: _limit,
         search: _searchQuery,
         startDate: startDate,
@@ -116,15 +92,7 @@ class _TrashPageState extends State<TrashPage> {
       final List<dynamic> usersList = data['users'] ?? [];
       setState(() {
         _totalCount = data['totalCount'] ?? 0;
-        if (isFirstLoad) {
-          _deletedUsers = List<Map<String, dynamic>>.from(usersList);
-        } else {
-          _deletedUsers.addAll(List<Map<String, dynamic>>.from(usersList));
-        }
-        _hasMore = data['hasMore'] ?? (usersList.length == _limit);
-        if (usersList.isNotEmpty) {
-          _page++;
-        }
+        _deletedUsers = List<Map<String, dynamic>>.from(usersList);
       });
     } catch (e) {
       if (requestId == _currentRequestId && mounted) {
@@ -134,7 +102,6 @@ class _TrashPageState extends State<TrashPage> {
       if (requestId == _currentRequestId && mounted) {
         setState(() {
           _isLoading = false;
-          _isLoadingMore = false;
         });
       }
     }
@@ -182,7 +149,7 @@ class _TrashPageState extends State<TrashPage> {
             'details': 'Restored user account from trash: $userName',
           });
           _showSnack('"$userName" has been restored successfully!');
-          _fetchTrashData(isFirstLoad: true);
+          _fetchTrashData();
         }
       } catch (e) {
         _showSnack(e.toString(), isError: true);
@@ -232,7 +199,7 @@ class _TrashPageState extends State<TrashPage> {
             'details': 'Permanently deleted user account: $userName',
           });
           _showSnack('"$userName" has been permanently deleted.');
-          _fetchTrashData(isFirstLoad: true);
+          _fetchTrashData();
         }
       } catch (e) {
         _showSnack(e.toString(), isError: true);
@@ -273,7 +240,7 @@ class _TrashPageState extends State<TrashPage> {
 
     return SelectionArea(
       child: RefreshIndicator(
-        onRefresh: () => _fetchTrashData(isFirstLoad: true),
+        onRefresh: () => _fetchTrashData(page: 1),
         color: AppTheme.primaryColor,
         child: SingleChildScrollView(
           controller: _scrollController,
@@ -341,18 +308,7 @@ class _TrashPageState extends State<TrashPage> {
                   ? _buildShimmerLoading(isMobile)
                   : items.isEmpty
                       ? _buildEmptyState()
-                      : Column(
-                          children: [
-                            _buildTrashTable(items, isMobile),
-                            if (_isLoadingMore)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 20),
-                                child: Center(
-                                  child: CircularProgressIndicator(color: AppTheme.primaryColor),
-                                ),
-                              ),
-                          ],
-                        ),
+                      : _buildTrashTable(items, isMobile),
             ],
           ),
         ),
@@ -389,7 +345,7 @@ class _TrashPageState extends State<TrashPage> {
       setState(() {
         _selectedDateRange = picked;
       });
-      _fetchTrashData(isFirstLoad: true);
+      _fetchTrashData(page: 1);
     }
   }
 
@@ -437,7 +393,7 @@ class _TrashPageState extends State<TrashPage> {
                   setState(() {
                     _selectedDateRange = null;
                   });
-                  _fetchTrashData(isFirstLoad: true);
+                  _fetchTrashData(page: 1);
                 },
                 child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.primaryColor),
               ),
@@ -500,7 +456,7 @@ class _TrashPageState extends State<TrashPage> {
                     setState(() {
                       _searchQuery = '';
                     });
-                    _fetchTrashData(isFirstLoad: true);
+                    _fetchTrashData(page: 1);
                   },
                   child: const Icon(Icons.clear_rounded, size: 18, color: AppTheme.textSecondary),
                 )
@@ -530,7 +486,7 @@ class _TrashPageState extends State<TrashPage> {
           setState(() {
             _selectedTab = tabName;
           });
-          _fetchTrashData(isFirstLoad: true);
+          _fetchTrashData(page: 1);
         }
       },
       borderRadius: BorderRadius.circular(8),
@@ -622,8 +578,243 @@ class _TrashPageState extends State<TrashPage> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: isMobile ? _buildMobileList(items) : _buildDesktopTable(items),
+        child: Column(
+          children: [
+            isMobile ? _buildMobileList(items) : _buildDesktopTable(items),
+            _buildTableFooter(_totalCount, isMobile),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildPageSizeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Show',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _limit,
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+              items: [10, 20, 50, 100]
+                  .map<DropdownMenuItem<int>>(
+                    (int val) => DropdownMenuItem<int>(value: val, child: Text('$val')),
+                  )
+                  .toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null && newValue != _limit) {
+                  setState(() {
+                    _limit = newValue;
+                  });
+                  _fetchTrashData(page: 1);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'entries',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableFooter(int total, bool isMobile) {
+    final start = total == 0 ? 0 : (_page - 1) * _limit + 1;
+    final end = (_page * _limit) > total ? total : (_page * _limit);
+
+    final footerPadding = isMobile
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+        : const EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+
+    return Container(
+      padding: footerPadding,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF9FAFB),
+        border: Border(top: BorderSide(color: Color(0xFFEAECF0))),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(16),
+        ),
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    _buildPageSizeSelector(),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildPaginationControls(total),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Showing $start to $end of $total entries',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _buildPageSizeSelector(),
+                  ],
+                ),
+                _buildPaginationControls(total),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildPaginationControls(int total) {
+    final int totalPages = (total / _limit).ceil();
+    final int displayPages = totalPages > 0 ? totalPages : 1;
+    final int currentPage = _page;
+
+    List<Widget> pageButtons = [];
+
+    if (displayPages <= 5) {
+      for (int i = 1; i <= displayPages; i++) {
+        pageButtons.add(
+          _TrashPageNumberButton(
+            page: i,
+            isActive: currentPage == i,
+            onTap: () => _fetchTrashData(page: i),
+          ),
+        );
+        if (i < displayPages) {
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+    } else {
+      pageButtons.add(
+        _TrashPageNumberButton(
+          page: 1,
+          isActive: currentPage == 1,
+          onTap: () => _fetchTrashData(page: 1),
+        ),
+      );
+      pageButtons.add(const SizedBox(width: 8));
+
+      if (currentPage > 3) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      final start = (currentPage - 1).clamp(2, displayPages - 1);
+      final end = (currentPage + 1).clamp(2, displayPages - 1);
+
+      for (int i = start; i <= end; i++) {
+        if (i > 1 && i < displayPages) {
+          pageButtons.add(
+            _TrashPageNumberButton(
+              page: i,
+              isActive: currentPage == i,
+              onTap: () => _fetchTrashData(page: i),
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 8));
+        }
+      }
+
+      if (currentPage < displayPages - 2) {
+        pageButtons.add(
+          Text(
+            '...',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        pageButtons.add(const SizedBox(width: 8));
+      }
+
+      pageButtons.add(
+        _TrashPageNumberButton(
+          page: displayPages,
+          isActive: currentPage == displayPages,
+          onTap: () => _fetchTrashData(page: displayPages),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _TrashPaginationNavButton(
+          onTap: currentPage > 1 ? () => _fetchTrashData(page: currentPage - 1) : null,
+          icon: Icons.chevron_left,
+          isDisabled: currentPage <= 1,
+        ),
+        const SizedBox(width: 12),
+        ...pageButtons,
+        const SizedBox(width: 12),
+        _TrashPaginationNavButton(
+          onTap: currentPage < displayPages ? () => _fetchTrashData(page: currentPage + 1) : null,
+          icon: Icons.chevron_right,
+          isDisabled: currentPage >= displayPages,
+        ),
+      ],
     );
   }
 
@@ -1627,6 +1818,102 @@ class _TrashUserDetailSheetState extends State<_TrashUserDetailSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRASH PAGINATION BUTTONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TrashPageNumberButton extends StatelessWidget {
+  final int page;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _TrashPageNumberButton({
+    required this.page,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.primaryColor : Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isActive ? AppTheme.primaryColor : AppTheme.borderColor,
+          ),
+        ),
+        child: Text(
+          '$page',
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: isActive ? Colors.white : AppTheme.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrashPaginationNavButton extends StatefulWidget {
+  final VoidCallback? onTap;
+  final IconData icon;
+  final bool isDisabled;
+
+  const _TrashPaginationNavButton({
+    required this.onTap,
+    required this.icon,
+    this.isDisabled = false,
+  });
+
+  @override
+  State<_TrashPaginationNavButton> createState() => _TrashPaginationNavButtonState();
+}
+
+class _TrashPaginationNavButtonState extends State<_TrashPaginationNavButton> {
+  bool isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.isDisabled
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.isDisabled ? null : widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: widget.isDisabled
+                ? Colors.white
+                : (isHovered ? const Color(0xFFF3F4F6) : Colors.white),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: Icon(
+            widget.icon,
+            size: 18,
+            color: widget.isDisabled
+                ? const Color(0xFFD1D5DB)
+                : AppTheme.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }
