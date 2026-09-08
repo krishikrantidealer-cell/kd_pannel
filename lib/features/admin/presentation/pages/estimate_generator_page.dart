@@ -1654,6 +1654,14 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                 onChanged: (val) {
                   setState(() {
                     _isGstEnabled = val;
+                    for (final item in _editingItems) {
+                      final p = ((item['price'] ?? 0.0) as num).toDouble();
+                      final q = ((item['quantity'] ?? 0.0) as num).toDouble();
+                      final g = val
+                          ? (((item['gst'] ?? 18.0) as num).toDouble())
+                          : 0.0;
+                      item['amount'] = p * q * (1 + g / 100);
+                    }
                   });
                 },
               ),
@@ -2537,9 +2545,11 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                     final String name = it['name'].toString().isEmpty
                         ? '[Untitled Item]'
                         : it['name'].toString();
-                    final price = (it['price'] ?? 0.0) as double;
-                    final qty = (it['quantity'] ?? 0.0) as double;
-                    final gst = (it['gst'] ?? 18.0) as double;
+                    final price = ((it['price'] ?? 0.0) as num).toDouble();
+                    final qty = ((it['quantity'] ?? 0.0) as num).toDouble();
+                    final gst = _isGstEnabled
+                        ? (((it['gst'] ?? 18.0) as num).toDouble())
+                        : 0.0;
                     final amt = price * qty * (1 + gst / 100);
                     final isEven = i % 2 == 1;
 
@@ -3024,7 +3034,11 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                   item['unit'] = _parseUnitFromSize(
                     sugg['variant']?['size']?.toString() ?? '',
                   );
-                  item['amount'] = price * (item['quantity'] ?? 0.0);
+                  final double g = _isGstEnabled
+                      ? (((item['gst'] ?? 18.0) as num).toDouble())
+                      : 0.0;
+                  item['amount'] =
+                      price * (item['quantity'] ?? 0.0) * (1 + g / 100);
 
                   final ctrls = _controllersCache[item];
                   if (ctrls != null) {

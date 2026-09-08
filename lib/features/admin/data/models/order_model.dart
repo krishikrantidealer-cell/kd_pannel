@@ -470,7 +470,11 @@ class OrderModel {
       courierStatus: json['courierStatus']?.toString(),
       awbNumber: json['awbNumber']?.toString(),
       courierName: json['courierName']?.toString(),
-      trackingUrl: json['trackingUrl']?.toString(),
+      trackingUrl: (json['trackingUrl'] != null && json['trackingUrl'].toString().trim().isNotEmpty)
+          ? json['trackingUrl'].toString().trim()
+          : ((json['awbNumber'] != null && json['awbNumber'].toString().trim().isNotEmpty)
+              ? 'https://www.delhivery.com/track/package/${json['awbNumber'].toString().trim()}'
+              : null),
       courierCharge: (json['courierCharge'] as num?)?.toDouble() ??
           (json['courier_charge'] as num?)?.toDouble() ??
           (json['shippingCharge'] as num?)?.toDouble() ??

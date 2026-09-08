@@ -2639,12 +2639,17 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ),
             ),
           ],
-          if (_order.trackingUrl != null && _order.trackingUrl!.isNotEmpty) ...[
+          if ((_order.trackingUrl != null && _order.trackingUrl!.isNotEmpty) || hasAwb) ...[
             const SizedBox(height: 12),
             MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
-                onTap: () => _launchUrl(_order.trackingUrl!),
+                onTap: () {
+                  final url = (_order.trackingUrl != null && _order.trackingUrl!.isNotEmpty)
+                      ? _order.trackingUrl!
+                      : 'https://www.delhivery.com/track/package/${_order.awbNumber!.trim()}';
+                  _launchUrl(url);
+                },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 8),
