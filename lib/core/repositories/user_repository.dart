@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:kd_pannel/core/network/api_client.dart';
 
@@ -32,13 +33,21 @@ class UserRepository {
       return {
         'users': _cachedUsers!,
         'salesAgents': _cachedSalesAgents!,
+        'orders': [],
       };
     }
 
+    final usersFuture = _apiClient.get('/users');
+    final salesFuture = _apiClient.get('/users?role=sales');
+    final ordersFuture = _apiClient.get('/orders/admin/all').catchError((e) {
+      debugPrint('[UserRepository] Orders non-fatal load error: $e');
+      return http.Response(jsonEncode({'success': true, 'orders': []}), 200);
+    });
+
     final results = await Future.wait([
-      _apiClient.get('/users'),
-      _apiClient.get('/users?role=sales'),
-      _apiClient.get('/orders/admin/all'),
+      usersFuture,
+      salesFuture.catchError((e) => http.Response(jsonEncode({'success': false}), 500)),
+      ordersFuture,
     ]);
 
     final usersRes = results[0];
@@ -61,25 +70,26 @@ class UserRepository {
     }
 
     if (salesRes.statusCode == 200) {
-      final data = jsonDecode(salesRes.body);
-      if (data['success'] == true) {
-        salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
-      } else {
-        throw Exception(data['message'] ?? 'Failed to parse sales agents');
-      }
-    } else {
-      throw Exception('Failed to load sales agents: ${salesRes.statusCode}');
+      try {
+        final data = jsonDecode(salesRes.body);
+        if (data['success'] == true) {
+          salesAgents = List<Map<String, dynamic>>.from(data['users'] ?? []);
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: extract sales agents from users list if sales endpoint failed
+    if (salesAgents.isEmpty && users.isNotEmpty) {
+      salesAgents = users.where((u) => u['role'] == 'sales').toList();
     }
 
     if (ordersRes.statusCode == 200) {
-      final data = jsonDecode(ordersRes.body);
-      if (data['success'] == true) {
-        orders = List<Map<String, dynamic>>.from(data['orders'] ?? []);
-      } else {
-        throw Exception(data['message'] ?? 'Failed to parse orders');
-      }
-    } else {
-      throw Exception('Failed to load orders: ${ordersRes.statusCode}');
+      try {
+        final data = jsonDecode(ordersRes.body);
+        if (data['success'] == true) {
+          orders = List<Map<String, dynamic>>.from(data['orders'] ?? []);
+        }
+      } catch (_) {}
     }
 
     _cachedUsers = users;

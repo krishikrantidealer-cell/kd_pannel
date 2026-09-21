@@ -224,7 +224,9 @@ class _LeadsPageState extends State<LeadsPage> {
     _leadsBloc = context.read<LeadsBloc>();
     final bloc = _leadsBloc!;
     _searchController.text = bloc.state.searchQuery;
-    if (bloc.state.status == LeadsStatus.initial) {
+    if (bloc.state.status == LeadsStatus.initial ||
+        bloc.state.status == LeadsStatus.failure ||
+        bloc.state.allRawUsers.isEmpty) {
       bloc.add(const FetchLeadsDataEvent());
     }
 

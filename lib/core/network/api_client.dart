@@ -21,12 +21,7 @@ class ApiClient {
     } catch (_) {}
   }
 
-  // Toggle between Local and Production backend
-  static const bool _useLocalBackend = false; // Set to true for local testing
-
-  final String baseUrl = _useLocalBackend
-      ? 'http://localhost:8080/api'
-      : 'https://krishi-backend-123180953109.asia-south1.run.app/api';
+  final String baseUrl = 'https://krishi-backend-123180953109.asia-south1.run.app/api';
 
   String? _accessToken;
   String? _refreshToken;
@@ -295,6 +290,9 @@ class ApiClient {
     try {
       final response = await future;
       return response;
+    } catch (e) {
+      _inFlightGetRequests.remove(key);
+      rethrow;
     } finally {
       Future.delayed(const Duration(milliseconds: 300), () {
         _inFlightGetRequests.remove(key);

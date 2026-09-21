@@ -45,7 +45,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     _dealersBloc = context.read<DealersBloc>();
     final bloc = _dealersBloc!;
     _searchController.text = bloc.state.searchQuery;
-    if (bloc.state.status == DealersStatus.initial) {
+    if (bloc.state.status == DealersStatus.initial ||
+        bloc.state.status == DealersStatus.failure ||
+        bloc.state.allRawUsers.isEmpty) {
       bloc.add(const FetchDealersDataEvent());
     }
 

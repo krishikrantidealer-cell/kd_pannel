@@ -136,6 +136,11 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
       if (token != null && role != null && userId != null) {
         _initialRoute = '/dashboard';
         WebSocketService().connect();
+        try {
+          context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+          context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+          context.read<OrdersBloc>().add(const FetchOrdersEvent());
+        } catch (_) {}
       }
     } catch (_) {}
 

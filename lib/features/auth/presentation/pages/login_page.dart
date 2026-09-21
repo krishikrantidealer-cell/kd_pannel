@@ -8,6 +8,14 @@ import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/core/utils/local_cache_helper.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/core/repositories/user_repository.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -210,6 +218,14 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       if (success) {
+        // Invalidate repository cache and dispatch fresh fetches across blocs
+        UserRepository().invalidateCache();
+        try {
+          context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+          context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+          context.read<OrdersBloc>().add(const FetchOrdersEvent());
+        } catch (_) {}
+
         // Clear any previous route-specific cache if necessary
         if (role == UserRole.admin) {
           _precacheProductData();
