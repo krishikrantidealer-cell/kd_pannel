@@ -174,6 +174,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
   Set<String>? _cachedAssignedUserKeys;
   Map<String, String>? _cachedUserTypeLookup;
   Map<String, String>? _cachedAssignedAgentLookup;
+  Map<String, String>? _cachedUserRoleLookup;
+  Set<String>? _cachedSalesAgentSet;
   Map<String, String> _cachedUserSearchIndex = {};
 
   DealersState? _lastDealersState;
@@ -186,7 +188,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (_lastDealersState == dealersState &&
         _lastLeadsState == leadsState &&
         _cachedAssignedUserKeys != null &&
-        _cachedAssignedAgentLookup != null) {
+        _cachedAssignedAgentLookup != null &&
+        _cachedUserRoleLookup != null &&
+        _cachedSalesAgentSet != null) {
       return;
     }
 
@@ -196,6 +200,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final Set<String> assignedKeys = {};
     final Map<String, String> typeLookup = {};
     final Map<String, String> agentLookup = {};
+    final Map<String, String> roleLookup = {};
+    final Set<String> salesAgentSet = {};
+    final Map<String, String> searchIndex = {};
 
     final currentUserId = AuthService().currentUserId;
     final currentUserEmail = AuthService().currentUserEmail;
@@ -204,6 +211,39 @@ class _UserEventsPageState extends State<UserEventsPage> {
       ...dealersState.salesAgents,
       ...leadsState.salesAgents,
     ];
+
+    for (final a in allSalesAgents) {
+      final fn = (a['firstName'] ?? '').toString().trim().toLowerCase();
+      final ln = (a['lastName'] ?? '').toString().trim().toLowerCase();
+      final full = '$fn $ln'.trim();
+      final name = (a['name'] ?? '').toString().trim().toLowerCase();
+      final email = (a['email'] ?? '').toString().trim().toLowerCase();
+      final phone = (a['phoneNumber'] ?? a['phone'] ?? '').toString().trim().toLowerCase();
+      final cleanP = phone.replaceAll(RegExp(r'\D'), '');
+      final uid = (a['_id'] ?? a['id'] ?? '').toString().trim().toLowerCase();
+
+      if (fn.isNotEmpty) salesAgentSet.add(fn);
+      if (ln.isNotEmpty) salesAgentSet.add(ln);
+      if (full.isNotEmpty) salesAgentSet.add(full);
+      if (name.isNotEmpty) salesAgentSet.add(name);
+      if (email.isNotEmpty) {
+        salesAgentSet.add(email);
+        roleLookup[email] = 'sales';
+      }
+      if (phone.isNotEmpty) {
+        salesAgentSet.add(phone);
+        roleLookup[phone] = 'sales';
+      }
+      if (cleanP.length >= 10) {
+        final p10 = cleanP.substring(cleanP.length - 10);
+        salesAgentSet.add(p10);
+        roleLookup[p10] = 'sales';
+      }
+      if (uid.isNotEmpty) {
+        salesAgentSet.add(uid);
+        roleLookup[uid] = 'sales';
+      }
+    }
 
     String? resolveAgentName(Map<String, dynamic> u) {
       final assignedAgent = u['assignedAgent'];
@@ -294,29 +334,45 @@ class _UserEventsPageState extends State<UserEventsPage> {
       final rawFirstName = (u['firstName'] ?? '').toString().toLowerCase();
       final rawLastName = (u['lastName'] ?? '').toString().toLowerCase();
       final rawShopName = (u['shopName'] ?? '').toString().toLowerCase();
+      final fullName = '$rawFirstName $rawLastName'.trim();
 
       final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
-      if (dbRole != 'user') return;
+      if (dbRole != 'user') {
+        if (uId.isNotEmpty) roleLookup[uId] = dbRole;
+        if (uEmail.isNotEmpty) roleLookup[uEmail] = dbRole;
+        if (uPhone.isNotEmpty) roleLookup[uPhone.toLowerCase()] = dbRole;
+        return;
+      }
+
+      final primaryContact = uEmail.isNotEmpty ? uEmail : (uPhone.isNotEmpty ? uPhone : uId);
+      if (fullName.isNotEmpty) searchIndex[fullName] = primaryContact;
+      if (rawShopName.isNotEmpty) searchIndex[rawShopName] = primaryContact;
+      if (uEmail.isNotEmpty) searchIndex[uEmail] = primaryContact;
+      if (uPhone.isNotEmpty) searchIndex[uPhone] = primaryContact;
+      if (cleanPhone.length >= 10) {
+        searchIndex[cleanPhone.substring(cleanPhone.length - 10)] = primaryContact;
+      }
 
       final kycStatus = u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-
-      // Determine Type: verified = Dealer, pending = Lead
       String type = kycStatus == 'verified' ? 'Dealer' : 'Lead';
       if (defaultType != null) type = defaultType;
 
-      final uName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-          .trim()
-          .toLowerCase();
-      final uShop = (u['shopName'] ?? '').toString().trim().toLowerCase();
-
-      if (uId.isNotEmpty) typeLookup[uId] ??= type;
-      if (uEmail.isNotEmpty) typeLookup[uEmail] ??= type;
+      if (uId.isNotEmpty) {
+        typeLookup[uId] ??= type;
+        roleLookup[uId] = 'user';
+      }
+      if (uEmail.isNotEmpty) {
+        typeLookup[uEmail] ??= type;
+        roleLookup[uEmail] = 'user';
+      }
 
       if (uPhone.isNotEmpty) {
         typeLookup[uPhone.toLowerCase()] ??= type;
+        roleLookup[uPhone.toLowerCase()] = 'user';
         if (cleanPhone.length >= 10) {
           final last10 = cleanPhone.substring(cleanPhone.length - 10);
           typeLookup[last10] = type;
+          roleLookup[last10] = 'user';
         }
       }
 
@@ -331,12 +387,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
             agentLookup[last10] = agentName;
           }
         }
-        if (uName.isNotEmpty) agentLookup[uName] = agentName;
-        if (uShop.isNotEmpty) agentLookup[uShop] = agentName;
+        if (fullName.isNotEmpty) agentLookup[fullName] = agentName;
+        if (rawShopName.isNotEmpty) agentLookup[rawShopName] = agentName;
       }
 
-      if (uName.isNotEmpty) typeLookup[uName] ??= type;
-      if (uShop.isNotEmpty) typeLookup[uShop] ??= type;
+      if (fullName.isNotEmpty) typeLookup[fullName] ??= type;
+      if (rawShopName.isNotEmpty) typeLookup[rawShopName] ??= type;
 
       if (isRawUserAssigned(u)) {
         if (uId.isNotEmpty) assignedKeys.add(uId);
@@ -350,8 +406,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
           }
         }
 
-        if (uName.isNotEmpty) assignedKeys.add(uName);
-        if (uShop.isNotEmpty) assignedKeys.add(uShop);
+        if (fullName.isNotEmpty) assignedKeys.add(fullName);
+        if (rawShopName.isNotEmpty) assignedKeys.add(rawShopName);
       }
     }
 
@@ -372,6 +428,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     _cachedAssignedUserKeys = assignedKeys;
     _cachedUserTypeLookup = typeLookup;
     _cachedAssignedAgentLookup = agentLookup;
+    _cachedUserRoleLookup = roleLookup;
+    _cachedSalesAgentSet = salesAgentSet;
+    _cachedUserSearchIndex = searchIndex;
   }
 
   String? _getAssignedAgent(String userName) {
@@ -480,7 +539,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           _lastDealersCount == dealersState.allRawUsers.length &&
           _lastLeadsCount == leadsState.allRawUsers.length &&
           _eventsLogs.isNotEmpty) {
-        // We still might need to merge if _eventsLogs was cleared, but usually it's fine
+        return;
       }
 
       _lastOrdersCount = dealersState.allRawOrders.length;
@@ -505,10 +564,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
             '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim();
         final displayPhone = (user['phoneNumber'] ?? user['phone'] ?? '')
             .toString();
-        if (displayName.isEmpty)
+        if (displayName.isEmpty) {
           displayName = (user['shopName'] ?? '').toString();
-        if (displayName.isEmpty)
+        }
+        if (displayName.isEmpty) {
           displayName = displayPhone.isNotEmpty ? displayPhone : 'New Customer';
+        }
 
         if (!AuthService().isSales ||
             _isUserAssignedToCurrentSalesAgent(
