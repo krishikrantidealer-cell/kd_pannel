@@ -15,6 +15,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 import 'package:kd_pannel/features/admin/data/models/order_model.dart';
 import 'package:kd_pannel/util/dealers.dart';
@@ -64,6 +65,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<OrdersBloc>().add(const FetchOrdersEvent());
+      context.read<LeadsBloc>().add(const FetchLeadsDataEvent());
       _checkAgentPresence();
       _fetchAgentEvents();
       _loadAgentNotes();
@@ -1926,23 +1929,43 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                           ),
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'July 2026',
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange,
-                          ),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          const months = [
+                            'January',
+                            'February',
+                            'March',
+                            'April',
+                            'May',
+                            'June',
+                            'July',
+                            'August',
+                            'September',
+                            'October',
+                            'November',
+                            'December'
+                          ];
+                          final now = DateTime.now();
+                          final monthName = months[now.month - 1];
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '$monthName ${now.year}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
