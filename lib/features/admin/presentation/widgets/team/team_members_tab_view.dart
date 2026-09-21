@@ -376,9 +376,21 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
     final Map<String, int> dealersCountMap = {};
 
     for (final user in widget.state.allRawUsers) {
+      final isDeleted = user['isDeleted'] == true ||
+          user['status'] == 'deleted' ||
+          user['trash'] == true;
+      if (isDeleted) continue;
+
       if (user['role'] == 'user' && user['assignedAgent'] != null) {
-        final agentId = user['assignedAgent']['_id'] ?? user['assignedAgent'];
-        if (agentId is String) {
+        final agentIdObj = user['assignedAgent'];
+        String? agentId;
+        if (agentIdObj is Map) {
+          agentId = (agentIdObj['_id'] ?? agentIdObj['\$oid'] ?? agentIdObj['id'])
+              ?.toString();
+        } else if (agentIdObj is String) {
+          agentId = agentIdObj;
+        }
+        if (agentId != null && agentId.isNotEmpty) {
           final isVerified = user['kycStatus'] == 'verified';
           if (isVerified) {
             dealersCountMap[agentId] = (dealersCountMap[agentId] ?? 0) + 1;
@@ -424,15 +436,20 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
             Expanded(
               child: buildSummaryCard(
                 'Assigned Leads',
-                widget.state.allRawUsers
-                    .where(
-                      (u) =>
-                          u['role'] == 'user' &&
-                          u['kycStatus'] != 'verified' &&
-                          u['assignedAgent'] != null,
-                    )
-                    .length
-                    .toString(),
+                widget.state.allRawUsers.where((u) {
+                  final isDeleted = u['isDeleted'] == true ||
+                      u['status'] == 'deleted' ||
+                      u['trash'] == true;
+                  final agent = u['assignedAgent'];
+                  final hasAgent = agent != null &&
+                      (agent is String
+                          ? agent.isNotEmpty
+                          : (agent is Map && agent.isNotEmpty));
+                  return !isDeleted &&
+                      u['role'] == 'user' &&
+                      u['kycStatus'] != 'verified' &&
+                      hasAgent;
+                }).length.toString(),
                 Icons.campaign_outlined,
                 Colors.blue,
               ),
@@ -441,15 +458,20 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
             Expanded(
               child: buildSummaryCard(
                 'Assigned Dealers',
-                widget.state.allRawUsers
-                    .where(
-                      (u) =>
-                          u['role'] == 'user' &&
-                          u['kycStatus'] == 'verified' &&
-                          u['assignedAgent'] != null,
-                    )
-                    .length
-                    .toString(),
+                widget.state.allRawUsers.where((u) {
+                  final isDeleted = u['isDeleted'] == true ||
+                      u['status'] == 'deleted' ||
+                      u['trash'] == true;
+                  final agent = u['assignedAgent'];
+                  final hasAgent = agent != null &&
+                      (agent is String
+                          ? agent.isNotEmpty
+                          : (agent is Map && agent.isNotEmpty));
+                  return !isDeleted &&
+                      u['role'] == 'user' &&
+                      u['kycStatus'] == 'verified' &&
+                      hasAgent;
+                }).length.toString(),
                 Icons.storefront_outlined,
                 Colors.teal,
               ),

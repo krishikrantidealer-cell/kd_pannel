@@ -963,36 +963,51 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             ? _formatTimeAgo(_agent!['createdAt'])
             : '-';
 
+        bool isAssignedToMe(dynamic assignedAgentObj) {
+          if (assignedAgentObj == null) return false;
+          if (assignedAgentObj is Map) {
+            final id = (assignedAgentObj['_id'] ??
+                    assignedAgentObj['\$oid'] ??
+                    assignedAgentObj['id'])
+                ?.toString();
+            return id == agentId;
+          } else if (assignedAgentObj is String) {
+            return assignedAgentObj == agentId;
+          }
+          return false;
+        }
+
         // Filter assigned leads & dealers
         final assignedLeads = leadsState.allRawUsers.where((u) {
+          final isDeleted = u['isDeleted'] == true ||
+              u['status'] == 'deleted' ||
+              u['trash'] == true;
           final isUser = u['role'] == 'user';
           final isNotVerified = u['kycStatus'] != 'verified';
-          final assignedToMe =
-              u['assignedAgent'] != null &&
-              (u['assignedAgent']['_id'] == agentId ||
-                  u['assignedAgent'] == agentId);
-          return isUser && isNotVerified && assignedToMe;
+          final assignedToMe = isAssignedToMe(u['assignedAgent']);
+          return !isDeleted && isUser && isNotVerified && assignedToMe;
         }).toList();
 
         final assignedDealers = leadsState.allRawUsers.where((u) {
+          final isDeleted = u['isDeleted'] == true ||
+              u['status'] == 'deleted' ||
+              u['trash'] == true;
           final isUser = u['role'] == 'user';
           final isVerified = u['kycStatus'] == 'verified';
-          final assignedToMe =
-              u['assignedAgent'] != null &&
-              (u['assignedAgent']['_id'] == agentId ||
-                  u['assignedAgent'] == agentId);
-          return isUser && isVerified && assignedToMe;
+          final assignedToMe = isAssignedToMe(u['assignedAgent']);
+          return !isDeleted && isUser && isVerified && assignedToMe;
         }).toList();
 
         return BlocBuilder<OrdersBloc, OrdersState>(
           builder: (context, ordersState) {
             // Filter orders for dealers/leads assigned to this agent
             final assignedClientIds = [
-              ...assignedLeads.map((e) => e['_id']),
-              ...assignedDealers.map((e) => e['_id']),
-            ];
+              ...assignedLeads.map((e) => e['_id']?.toString()),
+              ...assignedDealers.map((e) => e['_id']?.toString()),
+            ].whereType<String>().toSet();
 
             final agentOrders = ordersState.orders.where((o) {
+              if (o.orderStatus.toLowerCase() == 'cancelled') return false;
               final isAssignedByAgentId = o.assignedAgentId == agentId;
               final isAssignedByClient = assignedClientIds.contains(o.userId);
               return isAssignedByAgentId || isAssignedByClient;
@@ -1017,6 +1032,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             // Group orders by userId to efficiently compute high-value dealers
             final Map<String, double> dealerSalesMap = {};
             for (var o in ordersState.orders) {
+              if (o.orderStatus.toLowerCase() == 'cancelled') continue;
               final uid = o.userId;
               if (uid != null) {
                 dealerSalesMap[uid] =
@@ -1025,7 +1041,8 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
             }
 
             final int highValueDealersCount = assignedDealers.where((d) {
-              final dealerId = d['_id'];
+              final dealerId = (d['_id'] ?? d['\$oid'] ?? d['id'])?.toString();
+              if (dealerId == null) return false;
               final sales = dealerSalesMap[dealerId] ?? 0.0;
               return sales >= 500000;
             }).length;

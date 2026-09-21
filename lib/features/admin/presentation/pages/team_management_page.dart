@@ -6,6 +6,8 @@ import 'package:shimmer/shimmer.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
@@ -49,6 +51,9 @@ class _TeamManagementPageState extends State<TeamManagementPage>
       context.read<LeadsBloc>().add(
         const FetchLeadsDataEvent(forceRefresh: true),
       );
+      context.read<DealersBloc>().add(
+        const FetchDealersDataEvent(forceRefresh: true),
+      );
       _fetchDeletedUsers();
     });
   }
@@ -61,14 +66,14 @@ class _TeamManagementPageState extends State<TeamManagementPage>
 
   Future<void> _fetchDeletedUsers() async {
     try {
-      final res = await ApiClient().get('/users/trash');
+      final res = await ApiClient().get('/users?trash=true&limit=2000');
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data['success'] == true && data['data'] is List) {
-          if (mounted) {
+        if (data['success'] == true) {
+          final users = data['users'] ?? data['data'];
+          if (users is List && mounted) {
             setState(() {
-              _deletedUsersList =
-                  List<Map<String, dynamic>>.from(data['data']);
+              _deletedUsersList = List<Map<String, dynamic>>.from(users);
             });
           }
         }
@@ -115,6 +120,9 @@ class _TeamManagementPageState extends State<TeamManagementPage>
           _fetchDeletedUsers();
           context.read<LeadsBloc>().add(
             const FetchLeadsDataEvent(forceRefresh: true),
+          );
+          context.read<DealersBloc>().add(
+            const FetchDealersDataEvent(forceRefresh: true),
           );
         },
       ),
@@ -233,7 +241,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
             ),
             _buildCustomTabItem(
               index: 1,
-              title: 'Lead Conversion',
+              title: 'Sales & Conversions',
               icon: Icons.trending_up_rounded,
               count: totalConversions,
               accentColor: const Color(0xFF0284C7),
@@ -394,13 +402,6 @@ class _TeamManagementPageState extends State<TeamManagementPage>
 
         int totalTeamConversions = 0;
         for (final user in state.allRawUsers) {
-          if (user['role'] == 'user' &&
-              user['kycStatus'] == 'verified' &&
-              user['assignedAgent'] != null) {
-            totalTeamConversions++;
-          }
-        }
-        for (final user in _deletedUsersList) {
           if (user['role'] == 'user' &&
               user['kycStatus'] == 'verified' &&
               user['assignedAgent'] != null) {
