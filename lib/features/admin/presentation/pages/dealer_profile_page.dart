@@ -1709,7 +1709,6 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   }
 
   List<Map<String, dynamic>> _getProfileTabs() {
-    final bool isSales = AuthService().isSales;
     return [
       {
         'icon': Icons.dashboard_outlined,
@@ -1717,12 +1716,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         'key': 'overview',
       },
       {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
-      if (!isSales)
-        {
-          'icon': Icons.analytics_outlined,
-          'label': 'Activities',
-          'key': 'activities',
-        },
+      {
+        'icon': Icons.analytics_outlined,
+        'label': 'Activities',
+        'key': 'activities',
+      },
       {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
     ];
   }
