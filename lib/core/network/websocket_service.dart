@@ -96,7 +96,9 @@ class WebSocketService {
     final cleanUrl = baseApiUrl.replaceAll('/api', '');
     final wsProtocol = cleanUrl.startsWith('https') ? 'wss' : 'ws';
     final wsHost = cleanUrl.replaceFirst(RegExp(r'https?://'), '');
-    final wsUri = Uri.parse('$wsProtocol://$wsHost/?userId=$userId');
+    final token = ApiClient().accessToken;
+    final tokenParam = (token != null && token.isNotEmpty) ? '&token=$token' : '';
+    final wsUri = Uri.parse('$wsProtocol://$wsHost/?userId=$userId$tokenParam');
 
     // debugPrint('[WS] Connecting to $wsUri');
 
