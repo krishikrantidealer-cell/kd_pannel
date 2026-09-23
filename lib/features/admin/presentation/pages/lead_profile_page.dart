@@ -15,6 +15,9 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/utils/formatters.dart';
@@ -2496,6 +2499,27 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                     },
                                               ),
                                             ),
+                                          const SizedBox(height: 24),
+                                          CustomerTimelineWidget(
+                                            phone: activeLead['phone'] ?? activeLead['phoneNumber'],
+                                            userId: leadId,
+                                            customerName: activeLead['name'],
+                                            onTriggerCall: () {
+                                              final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
+                                              var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+                                              if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.substring(2);
+                                              context.read<CallLogsBloc>().add(TriggerOutboundCallEvent(cleanPhone));
+                                            },
+                                            onOpenWhatsApp: () {
+                                              final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
+                                              var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+                                              if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.substring(2);
+                                              Navigator.pushNamed(context, '/support', arguments: {
+                                                'phone': cleanPhone,
+                                                'name': activeLead['name'],
+                                              });
+                                            },
+                                          ),
                                         ],
                                       ),
                               ),
@@ -3125,36 +3149,40 @@ class _LeadInformationCard extends StatelessWidget {
   });
 
   Future<void> _makeCall(String phone, BuildContext context) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.substring(2);
+    }
 
     AnalyticsService().logEvent(
       'agent_call_lead',
       properties: {
         'leadId': lead['id'] ?? lead['_id'],
         'leadName': lead['name'],
-        'details': 'Initiated phone call to lead: ${lead['name']}',
+        'details': 'Initiated MyOperator call to lead: ${lead['name']}',
       },
     );
 
-    final url = Uri.parse('tel:$cleanPhone');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not initiate call to $phone'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
-    }
+    context.read<CallLogsBloc>().add(TriggerOutboundCallEvent(cleanPhone));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text('Connecting call to ${lead['name']} via MyOperator...'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF008069),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _openWhatsApp(String phone, BuildContext context) async {
     var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone.length == 10) {
-      cleanPhone = '91$cleanPhone';
+    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.substring(2);
     }
 
     AnalyticsService().logEvent(
@@ -3162,23 +3190,14 @@ class _LeadInformationCard extends StatelessWidget {
       properties: {
         'leadId': lead['id'] ?? lead['_id'],
         'leadName': lead['name'],
-        'details': 'Opened WhatsApp chat with lead: ${lead['name']}',
+        'details': 'Opened WhatsApp CRM chat with lead: ${lead['name']}',
       },
     );
 
-    final url = Uri.parse('https://wa.me/$cleanPhone');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not open WhatsApp for $phone'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
-    }
+    Navigator.pushNamed(context, '/support', arguments: {
+      'phone': cleanPhone,
+      'name': lead['name'],
+    });
   }
 
   void _copyToClipboard(String text, String label, BuildContext context) {

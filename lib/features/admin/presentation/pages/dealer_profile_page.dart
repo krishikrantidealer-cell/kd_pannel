@@ -18,6 +18,9 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1645,7 +1648,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                             ),
                                           ),
                                     )
-                                  : Column(
+                                  : currentTabKey == 'timeline'
+                                      ? CustomerTimelineWidget(
+                                          key: const ValueKey('timeline'),
+                                          userId: currentDealer.id,
+                                          phone: currentDealer.phone,
+                                        )
+                                      : Column(
                                       key: const ValueKey('notes'),
                                       children: [
                                         if (currentDealer.id != null)
@@ -1716,6 +1725,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         'key': 'overview',
       },
       {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
+      {
+        'icon': Icons.timeline_rounded,
+        'label': 'Timeline (360°)',
+        'key': 'timeline',
+      },
       {
         'icon': Icons.analytics_outlined,
         'label': 'Activities',
@@ -2276,51 +2290,65 @@ class _DealerHeroCard extends StatelessWidget {
             onTap: onReassign,
           ),
         _ActionButton(
-          icon: Icons.call,
-          label: 'Call',
+          icon: Icons.phone_forwarded_rounded,
+          label: '1-Click Call',
           color: const Color(0xFF2E7D32),
           isSolid: true,
-          onTap: () async {
+          onTap: () {
             AnalyticsService().logEvent(
               'agent_call_dealer',
               properties: {
                 'dealerId': dealer.id,
                 'dealerName': dealer.name,
-                'details': 'Initiated phone call to dealer: ${dealer.name}',
+                'details': 'Initiated OBD Cloud Call to dealer: ${dealer.name}',
               },
             );
-            final url = 'tel:${dealer.phone}';
-            final Uri uri = Uri.parse(url);
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri);
-            }
+            context.read<CallLogsBloc>().add(
+              TriggerOutboundCallEvent(
+                dealer.phone,
+                customerName: dealer.name,
+              ),
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.ring_volume_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Text('Connecting OBD call to ${dealer.name} (${dealer.phone})...'),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF2E7D32),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           },
         ),
-        // _ActionButton(
-        //   icon: FontAwesomeIcons.whatsapp,
-        //   label: 'WhatsApp',
-        //   color: const Color(0xFF25D366),
-        //   isSolid: true,
-        //   onTap: () {
-        //     AnalyticsService().logEvent(
-        //       'agent_whatsapp_dealer',
-        //       properties: {
-        //         'dealerId': dealer.id,
-        //         'dealerName': dealer.name,
-        //         'details': 'Opened WhatsApp CRM for dealer: ${dealer.name}',
-        //       },
-        //     );
-        //
-        //     final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
-        //     showDialog(
-        //       context: context,
-        //       builder: (context) => WhatsAppChatDialog(
-        //         phone: cleanPhone,
-        //         name: dealer.name,
-        //       ),
-        //     );
-        //   },
-        // ),
+        _ActionButton(
+          icon: FontAwesomeIcons.whatsapp,
+          label: 'WhatsApp',
+          color: const Color(0xFF25D366),
+          isSolid: true,
+          onTap: () {
+            AnalyticsService().logEvent(
+              'agent_whatsapp_dealer',
+              properties: {
+                'dealerId': dealer.id,
+                'dealerName': dealer.name,
+                'details': 'Opened WhatsApp CRM for dealer: ${dealer.name}',
+              },
+            );
+            final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
+            Navigator.pushNamed(
+              context,
+              '/support',
+              arguments: {
+                'phone': cleanPhone,
+                'name': dealer.name,
+              },
+            );
+          },
+        ),
         _ActionButton(
           icon: dealer.isBlocked
               ? Icons.lock_open_outlined
