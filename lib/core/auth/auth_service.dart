@@ -18,6 +18,8 @@ class AuthService {
   String? _currentUserName;
   double? _monthlyTarget;
   Map<String, dynamic>? _permissions;
+  Map<String, dynamic>? _myoperatorConfig;
+  bool _isAvailableForCalls = true;
   String? _lastError;
   String? _sessionId;
   bool _isInitialized = false;
@@ -28,6 +30,12 @@ class AuthService {
   String? get currentUserName => _currentUserName;
   double? get monthlyTarget => _monthlyTarget;
   Map<String, dynamic>? get permissions => _permissions;
+  Map<String, dynamic>? get myoperatorConfig => _myoperatorConfig;
+  bool get isAvailableForCalls => _isAvailableForCalls;
+  bool get isTelephonyEnabled => _currentUserRole == UserRole.admin || (_currentUserRole == UserRole.sales);
+  String? get agentDid => _myoperatorConfig?['did'];
+  String? get agentVid => _myoperatorConfig?['vid'] ?? _myoperatorConfig?['extension'];
+  String? get agentWhatsAppNumber => _myoperatorConfig?['whatsappNumber'];
   String? get lastError => _lastError;
   String? get sessionId => _sessionId;
   bool get isInitialized => _isInitialized;
@@ -50,6 +58,11 @@ class AuthService {
       if (permStr != null && permStr.isNotEmpty) {
         _permissions = jsonDecode(permStr);
       }
+      final myopStr = prefs.getString('kd_user_myop_config');
+      if (myopStr != null && myopStr.isNotEmpty) {
+        _myoperatorConfig = jsonDecode(myopStr);
+      }
+      _isAvailableForCalls = prefs.getBool('kd_user_available_calls') ?? true;
     } catch (_) {}
     _isInitialized = true;
   }
@@ -98,12 +111,16 @@ class AuthService {
           final userName = '$firstName $lastName'.trim();
           final monthlyTarget = (data['user']['monthlyTarget'] as num?)?.toDouble();
           final perms = data['user']['permissions'] as Map<String, dynamic>?;
+          final myop = data['user']['myoperatorConfig'] as Map<String, dynamic>?;
+          final available = data['user']['isAvailableForCalls'] as bool? ?? true;
 
           _currentUserId = userIdStr;
           _currentUserEmail = userEmailStr;
           _currentUserName = userName;
           _monthlyTarget = monthlyTarget;
           _permissions = perms;
+          _myoperatorConfig = myop;
+          _isAvailableForCalls = available;
 
           final prefs = await SharedPreferences.getInstance();
           if (userIdStr != null) {
@@ -121,6 +138,10 @@ class AuthService {
           if (perms != null) {
             await prefs.setString('kd_user_permissions', jsonEncode(perms));
           }
+          if (myop != null) {
+            await prefs.setString('kd_user_myop_config', jsonEncode(myop));
+          }
+          await prefs.setBool('kd_user_available_calls', available);
           if (rememberMe) {
             await prefs.setString('kd_user_role', userRoleStr);
           }
@@ -268,10 +289,14 @@ class AuthService {
           final userName = '$firstName $lastName'.trim();
           final monthlyTarget = (user['monthlyTarget'] as num?)?.toDouble();
           final perms = user['permissions'] as Map<String, dynamic>?;
+          final myop = user['myoperatorConfig'] as Map<String, dynamic>?;
+          final available = user['isAvailableForCalls'] as bool? ?? true;
           
           _currentUserName = userName;
           _monthlyTarget = monthlyTarget;
           _permissions = perms;
+          _myoperatorConfig = myop;
+          _isAvailableForCalls = available;
           
           final prefs = await SharedPreferences.getInstance();
           if (userName.isNotEmpty) {
@@ -283,6 +308,10 @@ class AuthService {
           if (perms != null) {
             await prefs.setString('kd_user_permissions', jsonEncode(perms));
           }
+          if (myop != null) {
+            await prefs.setString('kd_user_myop_config', jsonEncode(myop));
+          }
+          await prefs.setBool('kd_user_available_calls', available);
         }
       }
     } catch (e) {

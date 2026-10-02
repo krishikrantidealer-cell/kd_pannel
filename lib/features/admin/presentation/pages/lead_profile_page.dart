@@ -2515,10 +2515,25 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                               final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
                                               var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
                                               if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.substring(2);
-                                              Navigator.pushNamed(context, '/support', arguments: {
-                                                'phone': cleanPhone,
-                                                'name': activeLead['name'],
-                                              });
+                                              showDialog(
+                                                context: context,
+                                                barrierDismissible: true,
+                                                builder: (ctx) => Dialog(
+                                                  backgroundColor: Colors.transparent,
+                                                  insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    child: SizedBox(
+                                                      width: 850,
+                                                      height: 700,
+                                                      child: WhatsAppChatDialog(
+                                                        phone: cleanPhone,
+                                                        name: activeLead['name'] ?? 'Lead',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
                                             },
                                           ),
                                         ],
@@ -3195,10 +3210,25 @@ class _LeadInformationCard extends StatelessWidget {
       },
     );
 
-    Navigator.pushNamed(context, '/support', arguments: {
-      'phone': cleanPhone,
-      'name': lead['name'],
-    });
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: 850,
+            height: 700,
+            child: WhatsAppChatDialog(
+              phone: cleanPhone,
+              name: lead['name'] ?? 'Lead',
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _copyToClipboard(String text, String label, BuildContext context) {

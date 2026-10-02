@@ -10,6 +10,7 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 
 class WebCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -86,11 +87,18 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     return colors[hash % colors.length];
   }
 
+  List<dynamic> _approvedTemplates = [];
+  bool _isLoadingTemplates = false;
+  List<dynamic> _cannedResponses = [];
+  bool _isLoadingCanned = false;
+
   @override
   void initState() {
     super.initState();
     _fetchConversations();
     _fetchSalesAgents();
+    _fetchTemplates();
+    _fetchCannedResponses();
     _setupWebSocketListener();
 
     // Check for arguments passed from Leads/Dealers profile buttons
@@ -135,6 +143,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
         if (newConversation == null || newConversation['_id'] == null) return;
 
+        final isIncoming = (newMessage?['direction'] ?? '') == 'incoming';
+        if (isIncoming) {
+          TelephonyAudioService().playIncomingMessageTone();
+        }
+
         setState(() {
           // 1. Update matching conversation in list or insert it
           final String convId = newConversation['_id'].toString();
@@ -170,6 +183,39 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               _messages.add(newMessage);
               _scrollToBottom();
             }
+          } else if (isIncoming && mounted) {
+            // Show toast if from another contact
+            final contact = newConversation['contactId'] ?? {};
+            final senderName = contact['name'] ?? contact['phone'] ?? 'Lead';
+            final textSnippet = newMessage['content'] ?? (newMessage['mediaUrl'] != null ? '[Media Attachment]' : 'New Message');
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💬 $senderName: $textSnippet',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+                action: SnackBarAction(
+                  label: 'Open',
+                  textColor: Colors.white,
+                  onPressed: () => _selectConversation(newConversation),
+                ),
+                backgroundColor: const Color(0xFF008069),
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
           }
         });
       } else if (type == 'MESSAGE_STATUS_UPDATED') {
@@ -185,6 +231,14 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               _messages[index]['status'] = status;
             }
           });
+        }
+      } else if (type == 'CALL_UPDATE') {
+        final callData = data ?? {};
+        final callStatus = callData['status']?.toString().toLowerCase();
+        if (callStatus == 'missed' || callStatus == 'no-answer') {
+          TelephonyAudioService().playCallMissedTone();
+        } else {
+          TelephonyAudioService().playCallAlertTone();
         }
       }
     });
@@ -288,6 +342,46 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       }
     } catch (e) {
       debugPrint('[WhatsApp CRM] Error fetching sales agents: $e');
+    }
+  }
+
+  // API Call: Fetch approved WhatsApp templates from MyOperator WABA
+  Future<void> _fetchTemplates() async {
+    setState(() => _isLoadingTemplates = true);
+    try {
+      final res = await ApiClient().get('/templates');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        if (body['success'] == true && body['data'] != null) {
+          setState(() {
+            _approvedTemplates = List<dynamic>.from(body['data']);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[WhatsApp CRM] Error fetching approved templates: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingTemplates = false);
+    }
+  }
+
+  // API Call: Fetch Canned Responses / Quick Replies
+  Future<void> _fetchCannedResponses() async {
+    setState(() => _isLoadingCanned = true);
+    try {
+      final res = await ApiClient().get('/canned-responses');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        if (body['success'] == true && body['data'] != null) {
+          setState(() {
+            _cannedResponses = List<dynamic>.from(body['data']);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[WhatsApp CRM] Error fetching canned responses: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingCanned = false);
     }
   }
 
@@ -763,17 +857,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               physics: const BouncingScrollPhysics(),
               child: Row(
                 children: [
-                  _buildFilterTab('open', 'Open'),
+                  _buildFilterTab('open', '🟢 Open'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('closed', 'Closed'),
+                  _buildFilterTab('all', '💬 All Chats'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('snoozed', 'Snoozed'),
+                  _buildFilterTab('closed', '✅ Closed'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('cart', '🛒 Cart Pending'),
-                  const SizedBox(width: 6),
-                  _buildFilterTab('payment', '💳 Payment Due'),
-                  const SizedBox(width: 6),
-                  _buildFilterTab('restock', '📦 Restock Due'),
+                  _buildFilterTab('snoozed', '⏳ Snoozed'),
                 ],
               ),
             ),
@@ -1319,6 +1409,41 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                         ),
 
                       const SizedBox(width: 8),
+
+                      // ⚡ Canned Messages Button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF008069),
+                          side: const BorderSide(color: Color(0xFF008069), width: 1.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: const Icon(Icons.bolt_rounded, size: 14),
+                        label: Text(
+                          'Canned',
+                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _showCannedResponsesDialog(context),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // 📋 WhatsApp Templates & Approvals Button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1E293B),
+                          side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: const Icon(Icons.assignment_outlined, size: 14),
+                        label: Text(
+                          'Templates',
+                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _showTemplatesManagerDialog(context),
+                      ),
+                      const SizedBox(width: 8),
+
                       // Search button
                       IconButton(
                         icon: const Icon(
@@ -1757,63 +1882,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   }(),
           ),
 
-          // Quick Template Chips Bar for Sales Representatives (Mouse & Touch Drag Enabled)
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
-            height: 36,
-            child: ScrollConfiguration(
-              behavior: WebCustomScrollBehavior(),
-              child: ListView(
-                controller: _quickChipScrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  _buildQuickTemplateChip(
-                    '👋 Day 1 Welcome',
-                    'welcome_dealer_catalog',
-                    'Welcome & Catalog',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '🔥 Day 2 Best Sellers',
-                    'bestseller_pricing_update',
-                    'Best Seller Pricing',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '🛒 Cart Alert',
-                    'abandoned_cart_alert',
-                    'Items Pending',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '💳 Payment Reminder',
-                    'payment_invoice_reminder',
-                    'Invoice Due',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '🚚 Order Dispatch',
-                    'order_dispatch_tracking',
-                    'Order Dispatched',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '📦 30d Restock Alert',
-                    'dealer_stock_replenishment',
-                    'Restock Reminder',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildQuickTemplateChip(
-                    '🎁 Special Discount',
-                    'exclusive_dealer_discount',
-                    'Exclusive Offer',
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // Quick Template Bar for Sales Representatives (Dynamic WABA Approved Templates)
+          _buildQuickTemplateBar(),
 
           // Message/Note Mode Switcher
           Container(
@@ -2028,6 +2098,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ],
                 ),
                 const SizedBox(width: 8),
+                // Quick Canned Replies Icon
+                IconButton(
+                  icon: const Icon(
+                    Icons.bolt_rounded,
+                    color: Color(0xFF008069),
+                    size: 24,
+                  ),
+                  onPressed: () => _showCannedResponsesDialog(context),
+                  tooltip: 'Quick Canned Replies',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
                 // Template Icon
                 IconButton(
                   icon: const Icon(
@@ -2207,7 +2290,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'End-to-end encrypted Interakt API session',
+                    'End-to-end encrypted MyOperator WhatsApp Business API (WABA) session',
                     style: GoogleFonts.outfit(
                       fontSize: 11.5,
                       color: const Color(0xFF8696A0),
@@ -2263,11 +2346,17 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     return raw;
   }
 
-  // ⚡ Smart Retargeting Outreach Recommendation Banner for Sales Reps
+  // ⚡ Dynamic Smart Outreach Banner for Sales Reps
   Widget _buildSmartOutreachBanner() {
     if (_selectedConversation == null) return const SizedBox();
     final contact = _selectedConversation['contactId'] ?? {};
     final customerName = contact['name'] ?? 'Customer';
+
+    if (_approvedTemplates.isEmpty) return const SizedBox();
+
+    final firstTemplate = _approvedTemplates.first;
+    final templateName = (firstTemplate['name'] ?? firstTemplate['elementName'] ?? '').toString();
+    final displayName = templateName.replaceAll('_', ' ');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2294,7 +2383,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Recommended Action: Send Day 1 Welcome & Catalog to $customerName',
+                    'Recommended Action: Send "$displayName" to $customerName',
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -2326,11 +2415,85 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
             ),
             onPressed: () => _sendQuickTemplateDirectly(
-              'welcome_dealer_catalog',
-              'Welcome Catalog',
+              templateName,
+              '',
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Quick Template Chips Bar for Sales Representatives (Dynamic WABA Approved Templates)
+  Widget _buildQuickTemplateBar() {
+    if (_approvedTemplates.isEmpty) {
+      return Container(
+        color: Colors.white,
+        padding: const EdgeInsets.only(top: 6, left: 16, right: 16, bottom: 2),
+        child: Row(
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                if (_selectedConversation != null) {
+                  _showSendTemplateDialog(context, _selectedConversation['_id']);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF008069).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF008069).withValues(alpha: 0.25),
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.quickreply_rounded, size: 13, color: Color(0xFF008069)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Send Approved WhatsApp Template',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        color: const Color(0xFF008069),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+      height: 36,
+      child: ScrollConfiguration(
+        behavior: WebCustomScrollBehavior(),
+        child: ListView.separated(
+          controller: _quickChipScrollController,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          itemCount: _approvedTemplates.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final t = _approvedTemplates[index];
+            final name = (t['name'] ?? t['elementName'] ?? '').toString();
+            final displayName = name.replaceAll('_', ' ').toUpperCase();
+            return _buildQuickTemplateChip(
+              '⚡ $displayName',
+              name,
+              '',
+            );
+          },
+        ),
       ),
     );
   }
@@ -2340,7 +2503,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     String templateName,
     String defaultParam,
   ) async {
-    if (_selectedConversation == null) return;
+    if (_selectedConversation == null || templateName.isEmpty) return;
     final convId = _selectedConversation['_id'];
     final contact = _selectedConversation['contactId'] ?? {};
     final customerName = contact['name'] ?? 'Customer';
@@ -2372,7 +2535,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Outreach Template sent in 1-Tap!',
+                    'Template "$templateName" dispatched via MyOperator WABA!',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -2438,7 +2601,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final contact = _selectedConversation?['contactId'] ?? {};
     final customerName = contact['name'] ?? 'Customer';
     final TextEditingController templateNameController = TextEditingController(
-      text: initialTemplateName ?? 'welcome_dealer_catalog',
+      text: initialTemplateName ?? (_approvedTemplates.isNotEmpty ? (_approvedTemplates.first['name'] ?? _approvedTemplates.first['elementName'] ?? '') : ''),
     );
     final TextEditingController paramsController = TextEditingController(
       text: initialParam != null && initialParam.isNotEmpty
@@ -2454,7 +2617,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         surfaceTintColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 440,
+          width: 460,
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2479,7 +2642,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Send Approved Template',
+                        'Send WhatsApp Template',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -2500,7 +2663,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Select a pre-approved Interakt template. Recipient name and parameters are pre-filled automatically.',
+                'Send an approved WhatsApp Business template (WABA) to initiate or re-engage conversations outside the 24-hour window.',
                 style: GoogleFonts.outfit(
                   fontSize: 12.5,
                   color: const Color(0xFF64748B),
@@ -2508,76 +2671,98 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              StatefulBuilder(
-                builder: (context, setDialogState) {
-                  final Map<String, String> approvedTemplates = {
-                    'welcome_dealer_catalog': '👋 Day 1 Welcome & Catalog',
-                    'bestseller_pricing_update':
-                        '🔥 Day 2 Best Sellers & Pricing',
-                    'abandoned_cart_alert': '🛒 Abandoned Cart Alert',
-                    'payment_invoice_reminder': '💳 Payment & Invoice Reminder',
-                    'order_dispatch_tracking': '🚚 Order Dispatch & Tracking',
-                    'dealer_stock_replenishment': '📦 30d Restock Alert',
-                    'exclusive_dealer_discount': '🎁 Special Dealer Discount',
-                  };
-                  String selectedKey =
-                      approvedTemplates.containsKey(templateNameController.text)
-                      ? templateNameController.text
-                      : 'welcome_dealer_catalog';
+              if (_approvedTemplates.isNotEmpty) ...[
+                StatefulBuilder(
+                  builder: (context, setDialogState) {
+                    final currentVal = templateNameController.text.trim();
+                    final bool isInList = _approvedTemplates.any((t) =>
+                        (t['name'] ?? t['elementName'] ?? '').toString() == currentVal);
 
-                  return DropdownButtonFormField<String>(
-                    initialValue: selectedKey,
-                    decoration: InputDecoration(
-                      labelText: 'Approved Template',
-                      labelStyle: GoogleFonts.outfit(
-                        color: const Color(0xFF008069),
+                    return DropdownButtonFormField<String>(
+                      value: isInList ? currentVal : (_approvedTemplates.first['name'] ?? _approvedTemplates.first['elementName'] ?? '').toString(),
+                      decoration: InputDecoration(
+                        labelText: 'Approved Template',
+                        labelStyle: GoogleFonts.outfit(
+                          color: const Color(0xFF008069),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF008069),
+                            width: 1.8,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: true,
+                      ),
+                      style: GoogleFonts.outfit(
                         fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF111B21),
                       ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF008069),
-                          width: 1.8,
-                        ),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
-                    ),
-                    style: GoogleFonts.outfit(
+                      items: _approvedTemplates.map<DropdownMenuItem<String>>((t) {
+                        final tName = (t['name'] ?? t['elementName'] ?? '').toString();
+                        final lang = (t['language'] ?? t['languageCode'] ?? 'en').toString();
+                        return DropdownMenuItem<String>(
+                          value: tName,
+                          child: Text(
+                            '📄 $tName ($lang)',
+                            style: GoogleFonts.outfit(fontSize: 12.5),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          if (val != null) {
+                            templateNameController.text = val;
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+              ] else ...[
+                TextField(
+                  controller: templateNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Template Name',
+                    hintText: 'e.g. welcome_lead',
+                    labelStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF008069),
                       fontSize: 13,
-                      color: const Color(0xFF111B21),
+                      fontWeight: FontWeight.bold,
                     ),
-                    items: approvedTemplates.entries.map((e) {
-                      return DropdownMenuItem<String>(
-                        value: e.key,
-                        child: Text(
-                          e.value,
-                          style: GoogleFonts.outfit(fontSize: 12.5),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        if (val != null) {
-                          templateNameController.text = val;
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF008069),
+                        width: 1.8,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    isDense: true,
+                  ),
+                  style: GoogleFonts.outfit(fontSize: 13.5),
+                ),
+                const SizedBox(height: 14),
+              ],
               TextField(
                 controller: paramsController,
                 decoration: InputDecoration(
                   labelText: 'Body Variables (Optional)',
-                  hintText: 'Separated by commas, e.g. John, 1000',
+                  hintText: 'Separated by commas, e.g. $customerName, Special Offer',
                   labelStyle: GoogleFonts.outfit(
                     color: const Color(0xFF64748B),
                     fontSize: 13,
@@ -2688,11 +2873,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           _fetchMessages(conversationId);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text(
-                                  'Template message sent successfully',
+                                  'Template "$tName" dispatched successfully via MyOperator WABA',
                                 ),
-                                backgroundColor: Color(0xFF008069),
+                                backgroundColor: const Color(0xFF008069),
                               ),
                             );
                           }
@@ -2965,5 +3150,895 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     } catch (e) {
       debugPrint('[Status Update] Error: $e');
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚡ CANNED RESPONSES / QUICK REPLIES MANAGEMENT MODAL
+  // ══════════════════════════════════════════════════════════════════════════
+
+  void _showCannedResponsesDialog(BuildContext context) {
+    String searchQuery = '';
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final filtered = _cannedResponses.where((c) {
+            final title = (c['title'] ?? '').toString().toLowerCase();
+            final shortcut = (c['shortcut'] ?? '').toString().toLowerCase();
+            final msg = (c['message'] ?? '').toString().toLowerCase();
+            final q = searchQuery.toLowerCase();
+            return title.contains(q) || shortcut.contains(q) || msg.contains(q);
+          }).toList();
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 580,
+              height: 600,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.bolt_rounded, color: Color(0xFF008069), size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Canned Responses & Quick Replies',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF111B21),
+                                ),
+                              ),
+                              Text(
+                                '1-click insert pre-approved answers & sales scripts',
+                                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Search & Add Bar
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          alignment: Alignment.centerLeft,
+                          child: TextField(
+                            onChanged: (val) => setDialogState(() => searchQuery = val),
+                            style: GoogleFonts.outfit(fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'Search by shortcut (/bank) or keyword...',
+                              hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+                              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF64748B)),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF008069),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: Text(
+                          'New Canned Reply',
+                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          _showCreateCannedResponseDialog(context, onSaved: () {
+                            setDialogState(() {});
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 12),
+
+                  // List of canned messages
+                  Expanded(
+                    child: _isLoadingCanned
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                        : filtered.isEmpty
+                            ? Center(
+                                child: Text(
+                                  searchQuery.isEmpty ? 'No canned responses yet. Click "+ New Canned Reply" to add one.' : 'No canned replies match "$searchQuery"',
+                                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                                  textAlign: TextAlign.center,
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, idx) => const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                                itemBuilder: (context, idx) {
+                                  final item = filtered[idx];
+                                  final shortcut = item['shortcut'] ?? '';
+                                  final title = item['title'] ?? 'Quick Reply';
+                                  final message = item['message'] ?? '';
+                                  final category = item['category'] ?? 'General';
+                                  final itemId = item['_id']?.toString();
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF008069).withValues(alpha: 0.12),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    shortcut,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFF008069),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  title,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: const Color(0xFF1E293B),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                              ),
+                                              child: Text(
+                                                category,
+                                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          message,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12.5,
+                                            color: const Color(0xFF334155),
+                                            height: 1.35,
+                                          ),
+                                          maxLines: 4,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            if (itemId != null)
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                                tooltip: 'Delete Canned Reply',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                onPressed: () async {
+                                                  try {
+                                                    await ApiClient().delete('/canned-responses/$itemId');
+                                                    _fetchCannedResponses();
+                                                    setDialogState(() {
+                                                      _cannedResponses.removeWhere((c) => c['_id'] == itemId);
+                                                    });
+                                                  } catch (_) {}
+                                                },
+                                              ),
+                                            const SizedBox(width: 14),
+                                            ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF008069),
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              ),
+                                              icon: const Icon(Icons.send_rounded, size: 13),
+                                              label: Text('Insert into Chat', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                              onPressed: () {
+                                                Navigator.pop(context);
+                                                setState(() {
+                                                  _messageController.text = message;
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCreateCannedResponseDialog(BuildContext context, {VoidCallback? onSaved}) {
+    final titleController = TextEditingController();
+    final shortcutController = TextEditingController();
+    final messageController = TextEditingController();
+    String category = 'Sales';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 480,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Create Canned Response',
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: shortcutController,
+                  decoration: InputDecoration(
+                    labelText: 'Shortcut (e.g. /pricing or /bank)',
+                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF008069), fontWeight: FontWeight.w600),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                  ),
+                  style: GoogleFonts.outfit(fontSize: 13.5),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Title / Label (e.g. Bank Account Details)',
+                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                  ),
+                  style: GoogleFonts.outfit(fontSize: 13.5),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                  ),
+                  items: ['General', 'Sales', 'Support', 'Logistics', 'Finance']
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c, style: GoogleFonts.outfit(fontSize: 13))))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => category = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    labelText: 'Message Body',
+                    hintText: 'Type your standardized reply message here...',
+                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  style: GoogleFonts.outfit(fontSize: 13.5),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF008069),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final title = titleController.text.trim();
+                        final shortcut = shortcutController.text.trim();
+                        final msg = messageController.text.trim();
+                        if (title.isEmpty || shortcut.isEmpty || msg.isEmpty) return;
+
+                        Navigator.pop(context);
+                        try {
+                          final res = await ApiClient().post('/canned-responses', {
+                            'title': title,
+                            'shortcut': shortcut,
+                            'message': msg,
+                            'category': category,
+                          });
+                          if (res.statusCode == 200) {
+                            await _fetchCannedResponses();
+                            onSaved?.call();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Canned response created successfully!'),
+                                  backgroundColor: Color(0xFF008069),
+                                ),
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          debugPrint('[Create Canned Response] Error: $e');
+                        }
+                      },
+                      child: Text('Save Canned Reply', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 📋 WHATSAPP TEMPLATES & META APPROVAL MANAGEMENT MODAL
+  // ══════════════════════════════════════════════════════════════════════════
+
+  void _showTemplatesManagerDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 720,
+            height: 650,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF008069).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.assignment_outlined, color: Color(0xFF008069), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'WhatsApp Business Templates',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF111B21),
+                              ),
+                            ),
+                            Text(
+                              'Create Meta-approved templates with variable placeholders ({{1}}, {{2}})',
+                              style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Action Bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'All Templates (${_approvedTemplates.length})',
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF008069),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: Text(
+                        'Create New Template',
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        _showCreateTemplateDialog(context, onCreated: () {
+                          setDialogState(() {});
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                const SizedBox(height: 12),
+
+                // Template Grid / List
+                Expanded(
+                  child: _isLoadingTemplates
+                      ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                      : _approvedTemplates.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No WhatsApp templates found. Click "+ Create New Template" to submit one for approval.',
+                                style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: _approvedTemplates.length,
+                              separatorBuilder: (context, idx) => const SizedBox(height: 12),
+                              itemBuilder: (context, idx) {
+                                final t = _approvedTemplates[idx];
+                                final name = (t['name'] ?? t['elementName'] ?? 'template').toString();
+                                final category = (t['category'] ?? 'UTILITY').toString();
+                                final language = (t['language'] ?? 'en').toString();
+                                final body = (t['body'] ?? t['data']?['body'] ?? (t['components'] is List ? (t['components'] as List).firstWhere((c) => c['type'] == 'BODY', orElse: () => {})['text'] : null) ?? name).toString();
+                                final status = (t['status'] ?? 'APPROVED').toString().toUpperCase();
+                                final footer = (t['footer'] ?? '').toString();
+                                final templateId = t['_id']?.toString();
+
+                                Color statusColor = const Color(0xFF008069);
+                                String statusText = '🟢 Approved';
+                                if (status.contains('PENDING')) {
+                                  statusColor = Colors.orange[800]!;
+                                  statusText = '⏳ In Review (Meta)';
+                                } else if (status.contains('REJECT')) {
+                                  statusColor = Colors.red[700]!;
+                                  statusText = '❌ Rejected';
+                                }
+
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFE2E8F0),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  '$category • $language',
+                                                  style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: statusColor.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              statusText,
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: statusColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        body,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: const Color(0xFF334155),
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      if (footer.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Footer: $footer',
+                                          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          if (templateId != null)
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                              tooltip: 'Delete Template',
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(),
+                                              onPressed: () async {
+                                                try {
+                                                  await ApiClient().delete('/templates/$templateId');
+                                                  _fetchTemplates();
+                                                  setDialogState(() {
+                                                    _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
+                                                  });
+                                                } catch (_) {}
+                                              },
+                                            ),
+                                          if (status.contains('APPROV') && _selectedConversation != null) ...[
+                                            const SizedBox(width: 12),
+                                            ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF008069),
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              ),
+                                              icon: const Icon(Icons.send_rounded, size: 13),
+                                              label: Text('Send to Contact', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                              onPressed: () {
+                                                Navigator.pop(context);
+                                                _showSendTemplateDialog(
+                                                  context,
+                                                  _selectedConversation['_id'],
+                                                  initialTemplateName: name,
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCreateTemplateDialog(BuildContext context, {VoidCallback? onCreated}) {
+    final nameController = TextEditingController();
+    final bodyController = TextEditingController();
+    final footerController = TextEditingController();
+    final headerTextController = TextEditingController();
+    String category = 'UTILITY';
+    String language = 'en';
+    String headerType = 'NONE';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 560,
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Submit WhatsApp Template for Approval',
+                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Submitted templates will be forwarded to Meta / MyOperator for automated review and approval.',
+                    style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Template Name
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Template Name (lowercase, e.g. harvest_update)',
+                      labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF008069), fontWeight: FontWeight.bold),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Category & Language Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: category,
+                          decoration: InputDecoration(
+                            labelText: 'Category',
+                            labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'UTILITY', child: Text('Utility (Order/Account Updates)')),
+                            DropdownMenuItem(value: 'MARKETING', child: Text('Marketing (Offers/Promotions)')),
+                            DropdownMenuItem(value: 'AUTHENTICATION', child: Text('Authentication (OTPs)')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => category = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: language,
+                          decoration: InputDecoration(
+                            labelText: 'Language',
+                            labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'en', child: Text('English (en)')),
+                            DropdownMenuItem(value: 'hi', child: Text('Hindi (hi)')),
+                            DropdownMenuItem(value: 'mr', child: Text('Marathi (mr)')),
+                            DropdownMenuItem(value: 'gu', child: Text('Gujarati (gu)')),
+                            DropdownMenuItem(value: 'te', child: Text('Telugu (te)')),
+                            DropdownMenuItem(value: 'ta', child: Text('Tamil (ta)')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => language = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Header Type
+                  DropdownButtonFormField<String>(
+                    value: headerType,
+                    decoration: InputDecoration(
+                      labelText: 'Header Type',
+                      labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'NONE', child: Text('None')),
+                      DropdownMenuItem(value: 'TEXT', child: Text('Text Header')),
+                      DropdownMenuItem(value: 'IMAGE', child: Text('Image Header')),
+                      DropdownMenuItem(value: 'DOCUMENT', child: Text('PDF Document Header')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => headerType = val);
+                    },
+                  ),
+                  if (headerType == 'TEXT') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: headerTextController,
+                      decoration: InputDecoration(
+                        labelText: 'Header Text',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                      ),
+                      style: GoogleFonts.outfit(fontSize: 13.5),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+
+                  // Body Text
+                  TextField(
+                    controller: bodyController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: 'Template Body Text',
+                      hintText: 'Namaste {{1}}, your Krishi Kranti order #{{2}} is confirmed for dispatch!',
+                      helperText: 'Use {{1}}, {{2}} for dynamic contact variables (Name, Order ID, Price)',
+                      labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF008069), fontWeight: FontWeight.bold),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Footer Text
+                  TextField(
+                    controller: footerController,
+                    decoration: InputDecoration(
+                      labelText: 'Footer (Optional, e.g. Krishi Kranti Organics)',
+                      labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 20),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF008069),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () async {
+                          final name = nameController.text.trim();
+                          final body = bodyController.text.trim();
+                          if (name.isEmpty || body.isEmpty) return;
+
+                          Navigator.pop(context);
+
+                          try {
+                            final res = await ApiClient().post('/templates', {
+                              'name': name,
+                              'category': category,
+                              'language': language,
+                              'headerType': headerType,
+                              'headerText': headerTextController.text.trim(),
+                              'body': body,
+                              'footer': footerController.text.trim(),
+                            });
+
+                            if (res.statusCode == 200) {
+                              await _fetchTemplates();
+                              onCreated?.call();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Template submitted for Meta/MyOperator review!'),
+                                    backgroundColor: Color(0xFF008069),
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            debugPrint('[Create Template] Error: $e');
+                          }
+                        },
+                        child: Text('Submit for Approval', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

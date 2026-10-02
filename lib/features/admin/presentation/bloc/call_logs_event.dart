@@ -36,6 +36,18 @@ class TriggerOutboundCallEvent extends CallLogsEvent {
   List<Object?> get props => [customerPhone, customerName];
 }
 
+class EndActiveCallEvent extends CallLogsEvent {
+  final int durationSeconds;
+  const EndActiveCallEvent({this.durationSeconds = 0});
+
+  @override
+  List<Object?> get props => [durationSeconds];
+}
+
+class DismissDispositionModalEvent extends CallLogsEvent {
+  const DismissDispositionModalEvent();
+}
+
 class SaveCallDispositionEvent extends CallLogsEvent {
   final String callLogId;
   final String userDisposition;

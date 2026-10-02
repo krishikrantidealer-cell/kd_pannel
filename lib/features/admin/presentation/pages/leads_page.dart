@@ -19,6 +19,9 @@ import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_attention_banner.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_lifecycle_funnel.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_inspector_drawer.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/services/analytics_service.dart';
@@ -2642,19 +2645,83 @@ class _LeadRowState extends State<_LeadRow> {
     return parts[0][0].toUpperCase();
   }
 
-  void _launchWhatsApp(String phone) async {
-    final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    final uri = Uri.parse('https://wa.me/$cleaned');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  void _launchWhatsApp(String phone, String name) {
+    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.substring(2);
     }
+
+    AnalyticsService().logEvent(
+      'agent_whatsapp_lead',
+      properties: {
+        'leadName': name,
+        'phone': cleanPhone,
+        'details': 'Opened MyOperator WhatsApp CRM dialog for lead: $name',
+      },
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: 850,
+            height: 700,
+            child: WhatsAppChatDialog(
+              phone: cleanPhone,
+              name: name,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  void _launchCall(String phone) async {
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+  void _launchCall(String phone, String name) {
+    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.substring(2);
     }
+
+    AnalyticsService().logEvent(
+      'agent_call_lead',
+      properties: {
+        'leadName': name,
+        'phone': cleanPhone,
+        'details': 'Initiated MyOperator call to lead: $name',
+      },
+    );
+
+    context.read<CallLogsBloc>().add(
+      TriggerOutboundCallEvent(
+        cleanPhone,
+        customerName: name,
+      ),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Connecting call to $name via MyOperator... Your mobile will ring first to connect!',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF008069),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
@@ -2809,9 +2876,9 @@ class _LeadRowState extends State<_LeadRow> {
                         ),
                         if (isHovered && phone.isNotEmpty) ...[
                           GestureDetector(
-                            onTap: () => _launchWhatsApp(phone),
+                            onTap: () => _launchWhatsApp(phone, name),
                             child: Tooltip(
-                              message: 'WhatsApp',
+                              message: 'WhatsApp CRM',
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
@@ -2828,9 +2895,9 @@ class _LeadRowState extends State<_LeadRow> {
                           ),
                           const SizedBox(width: 4),
                           GestureDetector(
-                            onTap: () => _launchCall(phone),
+                            onTap: () => _launchCall(phone, name),
                             child: Tooltip(
-                              message: 'Call Phone',
+                              message: 'Call via MyOperator',
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(

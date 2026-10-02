@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,7 @@ class CallLogsPage extends StatefulWidget {
 
 class _CallLogsPageState extends State<CallLogsPage> {
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -31,6 +33,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -212,11 +215,39 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                   hintText: 'Search customer phone number...',
                                   hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
                                   prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF008069), size: 18),
+                                  suffixIcon: _searchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {});
+                                            context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                              search: '',
+                                              type: state.selectedType,
+                                              status: state.selectedStatus,
+                                              agentId: state.selectedAgentId,
+                                            ));
+                                          },
+                                        )
+                                      : null,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 ),
+                                onChanged: (val) {
+                                  _searchDebounce?.cancel();
+                                  _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                                    context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                      search: val.trim(),
+                                      type: state.selectedType,
+                                      status: state.selectedStatus,
+                                      agentId: state.selectedAgentId,
+                                    ));
+                                  });
+                                  setState(() {});
+                                },
                                 onSubmitted: (val) {
+                                  _searchDebounce?.cancel();
                                   context.read<CallLogsBloc>().add(FetchCallLogsEvent(
                                     search: val.trim(),
                                     type: state.selectedType,
@@ -261,6 +292,8 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                 DropdownMenuItem(value: 'answered', child: Text('✅ Answered')),
                                 DropdownMenuItem(value: 'missed', child: Text('❌ Missed')),
                                 DropdownMenuItem(value: 'busy', child: Text('⏳ Busy')),
+                                DropdownMenuItem(value: 'no-answer', child: Text('📵 No Answer')),
+                                DropdownMenuItem(value: 'failed', child: Text('⚠️ Failed')),
                               ],
                               onChanged: (val) {
                                 if (val != null) {
@@ -311,102 +344,154 @@ class _CallLogsPageState extends State<CallLogsPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: state.isLoading && state.callLogs.isEmpty
-                            ? const Padding(
+                        child: Column(
+                          children: [
+                            if (state.isLoading && state.callLogs.isEmpty)
+                              const Padding(
                                 padding: EdgeInsets.all(40),
                                 child: Center(child: CircularProgressIndicator(color: Color(0xFF008069))),
                               )
-                            : state.callLogs.isEmpty
-                                ? Padding(
-                                    padding: const EdgeInsets.all(40),
-                                    child: Center(
-                                      child: Text('No call logs found', style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF64748B))),
+                            else if (state.callLogs.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.all(40),
+                                child: Center(
+                                  child: Text('No call logs found', style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF64748B))),
+                                ),
+                              )
+                            else
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: state.callLogs.length,
+                                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                itemBuilder: (context, index) {
+                                  final log = state.callLogs[index];
+                                  final isOutbound = (log['direction'] ?? log['type']) == 'outbound';
+                                  final rawStatus = (log['status'] ?? 'initiated').toString().toLowerCase();
+                                  final String customerPhone = log['customerPhone'] ?? 'Unknown';
+                                  final contact = log['contactId'] is Map ? log['contactId'] : null;
+                                  final String contactName = (contact?['name'] ?? '').toString().trim();
+                                  final agent = log['agentId'] is Map ? log['agentId'] : {};
+                                  final String agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                                  final String recordingUrl = log['recordingUrl'] ?? '';
+                                  final int seconds = int.tryParse(log['durationSeconds']?.toString() ?? '0') ?? 0;
+                                  final String userDisposition = log['userDisposition'] ?? '';
+                                  final String notesText = (log['notes'] ?? log['followUpNote'] ?? '').toString().trim();
+
+                                  Color statusBg = const Color(0xFF008069).withValues(alpha: 0.1);
+                                  Color statusFg = const Color(0xFF008069);
+                                  String statusLabel = 'ANSWERED';
+
+                                  if (rawStatus == 'missed') {
+                                    statusBg = Colors.red.withValues(alpha: 0.1);
+                                    statusFg = Colors.red;
+                                    statusLabel = 'MISSED';
+                                  } else if (rawStatus == 'busy') {
+                                    statusBg = Colors.amber.withValues(alpha: 0.15);
+                                    statusFg = Colors.orange[800]!;
+                                    statusLabel = 'BUSY';
+                                  } else if (rawStatus == 'no-answer') {
+                                    statusBg = Colors.orange.withValues(alpha: 0.12);
+                                    statusFg = Colors.deepOrange;
+                                    statusLabel = 'NO ANSWER';
+                                  } else if (rawStatus == 'failed') {
+                                    statusBg = Colors.red.withValues(alpha: 0.1);
+                                    statusFg = Colors.redAccent;
+                                    statusLabel = 'FAILED';
+                                  } else if (rawStatus != 'answered') {
+                                    statusBg = Colors.grey.withValues(alpha: 0.12);
+                                    statusFg = Colors.grey[700]!;
+                                    statusLabel = rawStatus.toUpperCase();
+                                  }
+
+                                  String formattedDate = '';
+                                  if (log['createdAt'] != null) {
+                                    final date = DateTime.tryParse(log['createdAt'].toString())?.toLocal();
+                                    if (date != null) {
+                                      formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+                                    }
+                                  }
+
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                    leading: CircleAvatar(
+                                      backgroundColor: isOutbound
+                                          ? Colors.blue.withValues(alpha: 0.1)
+                                          : Colors.green.withValues(alpha: 0.1),
+                                      child: Icon(
+                                        isOutbound ? Icons.call_made_rounded : Icons.call_received_rounded,
+                                        color: isOutbound ? Colors.blue : Colors.green,
+                                        size: 18,
+                                      ),
                                     ),
-                                  )
-                                : ListView.separated(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: state.callLogs.length,
-                                    separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                                    itemBuilder: (context, index) {
-                                      final log = state.callLogs[index];
-                                      final isOutbound = (log['direction'] ?? log['type']) == 'outbound';
-                                      final isAnswered = log['status'] == 'answered';
-                                      final String customerPhone = log['customerPhone'] ?? 'Unknown';
-                                      final agent = log['agentId'] ?? {};
-                                      final String agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-                                      final String recordingUrl = log['recordingUrl'] ?? '';
-                                      final int seconds = int.tryParse(log['durationSeconds']?.toString() ?? '0') ?? 0;
-                                      final String userDisposition = log['userDisposition'] ?? '';
-
-                                      String formattedDate = '';
-                                      if (log['createdAt'] != null) {
-                                        final date = DateTime.tryParse(log['createdAt'].toString())?.toLocal();
-                                        if (date != null) {
-                                          formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(date);
-                                        }
-                                      }
-
-                                      return ListTile(
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                        leading: CircleAvatar(
-                                          backgroundColor: isOutbound
-                                              ? Colors.blue.withValues(alpha: 0.1)
-                                              : Colors.green.withValues(alpha: 0.1),
-                                          child: Icon(
-                                            isOutbound ? Icons.call_made_rounded : Icons.call_received_rounded,
-                                            color: isOutbound ? Colors.blue : Colors.green,
-                                            size: 18,
+                                    title: Row(
+                                      children: [
+                                        Text(
+                                          contactName.isNotEmpty ? contactName : '+$customerPhone',
+                                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF111B21)),
+                                        ),
+                                        if (contactName.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '(+$customerPhone)',
+                                            style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                                          ),
+                                        ],
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: statusBg,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            statusLabel,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: statusFg,
+                                            ),
                                           ),
                                         ),
-                                        title: Row(
-                                          children: [
-                                            Text(
-                                              '+$customerPhone',
-                                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF111B21)),
+                                        if (userDisposition.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(4),
                                             ),
-                                            const SizedBox(width: 10),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: isAnswered
-                                                    ? const Color(0xFF008069).withValues(alpha: 0.1)
-                                                    : Colors.red.withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                isAnswered ? 'ANSWERED' : 'MISSED',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isAnswered ? const Color(0xFF008069) : Colors.red,
-                                                ),
+                                            child: Text(
+                                              '📌 $userDisposition',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF8B5CF6),
                                               ),
                                             ),
-                                            if (userDisposition.isNotEmpty) ...[
-                                              const SizedBox(width: 8),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(3),
                                                 ),
                                                 child: Text(
-                                                  '📌 $userDisposition',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: const Color(0xFF8B5CF6),
-                                                  ),
+                                                  isOutbound ? 'Outbound' : 'Inbound',
+                                                  style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
                                                 ),
                                               ),
-                                            ],
-                                          ],
-                                        ),
-                                        subtitle: Padding(
-                                          padding: const EdgeInsets.only(top: 4.0),
-                                          child: Row(
-                                            children: [
+                                              const SizedBox(width: 8),
                                               if (agentName.isNotEmpty) ...[
                                                 Icon(Icons.support_agent_rounded, size: 13, color: Colors.grey.shade600),
                                                 const SizedBox(width: 4),
@@ -422,43 +507,143 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                               Text(formattedDate, style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
                                             ],
                                           ),
-                                        ),
-                                        trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // Disposition Button
-                                            OutlinedButton.icon(
-                                              onPressed: () => _openDispositionDialog(log),
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                              ),
-                                              icon: const Icon(Icons.assignment_turned_in_rounded, size: 14),
-                                              label: Text(
-                                                userDisposition.isEmpty ? 'Log ACW' : 'Edit ACW',
-                                                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
-                                              ),
+                                          if (notesText.isNotEmpty) ...[
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '💬 ACW Notes: $notesText',
+                                              style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            const SizedBox(width: 8),
-
-                                            if (recordingUrl.isNotEmpty)
-                                              ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: const Color(0xFF008069).withValues(alpha: 0.1),
-                                                  foregroundColor: const Color(0xFF008069),
-                                                  elevation: 0,
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                ),
-                                                icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                                label: Text('Listen Audio', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                                onPressed: () => _playRecording(recordingUrl),
-                                              ),
                                           ],
+                                        ],
+                                      ),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Disposition Button
+                                        OutlinedButton.icon(
+                                          onPressed: () => _openDispositionDialog(log),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          icon: const Icon(Icons.assignment_turned_in_rounded, size: 14),
+                                          label: Text(
+                                            userDisposition.isEmpty ? 'Log ACW' : 'Edit ACW',
+                                            style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
+                                          ),
                                         ),
-                                      );
-                                    },
-                                  ),
+                                        const SizedBox(width: 8),
+
+                                        if (recordingUrl.isNotEmpty)
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF008069).withValues(alpha: 0.1),
+                                              foregroundColor: const Color(0xFF008069),
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            ),
+                                            icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                            label: Text('Listen Audio', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                            onPressed: () => _playRecording(recordingUrl),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+
+                            // ── Pagination Footer ──────────────────────────────
+                            if (state.totalPages > 1 || state.totalCount > 0) ...[
+                              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Showing ${state.callLogs.length} of ${state.totalCount} call records',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: const Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        // Previous Page
+                                        OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: const Color(0xFF1E293B),
+                                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                          icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                                          label: Text('Prev', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                          onPressed: state.page > 1
+                                              ? () {
+                                                  context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                                    page: state.page - 1,
+                                                    type: state.selectedType,
+                                                    status: state.selectedStatus,
+                                                    agentId: state.selectedAgentId,
+                                                    search: state.searchQuery,
+                                                  ));
+                                                }
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: const Color(0xFF008069).withValues(alpha: 0.2)),
+                                          ),
+                                          child: Text(
+                                            'Page ${state.page} of ${state.totalPages}',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF008069),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        // Next Page
+                                        OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: const Color(0xFF1E293B),
+                                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                          icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                                          label: Text('Next', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                          onPressed: state.page < state.totalPages
+                                              ? () {
+                                                  context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                                    page: state.page + 1,
+                                                    type: state.selectedType,
+                                                    status: state.selectedStatus,
+                                                    agentId: state.selectedAgentId,
+                                                    search: state.searchQuery,
+                                                  ));
+                                                }
+                                              : null,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ],
                   ),

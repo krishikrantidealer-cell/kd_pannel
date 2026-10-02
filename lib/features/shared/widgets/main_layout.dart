@@ -24,6 +24,7 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_floating_dock.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget? child;
@@ -360,24 +361,29 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               )
             : null,
-        body: isDesktop
-            ? Row(
-                children: [
-                  SidebarWidget(
-                    currentIdx: safeIdx,
-                    onTabSelected: _handleTabSelected,
-                    onLogout: _handleLogout,
-                    isPinned: _isSidebarPinned,
-                    onPinToggle: () {
-                      setState(() {
-                        _isSidebarPinned = !_isSidebarPinned;
-                      });
-                    },
-                  ),
-                  Expanded(child: content),
-                ],
-              )
-            : content,
+        body: Stack(
+          children: [
+            isDesktop
+                ? Row(
+                    children: [
+                      SidebarWidget(
+                        currentIdx: safeIdx,
+                        onTabSelected: _handleTabSelected,
+                        onLogout: _handleLogout,
+                        isPinned: _isSidebarPinned,
+                        onPinToggle: () {
+                          setState(() {
+                            _isSidebarPinned = !_isSidebarPinned;
+                          });
+                        },
+                      ),
+                      Expanded(child: content),
+                    ],
+                  )
+                : content,
+            const TelephonyFloatingDock(),
+          ],
+        ),
       ),
     );
   }

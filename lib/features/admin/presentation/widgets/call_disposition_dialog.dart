@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:kd_pannel/app_theme.dart';
 
 class CallDispositionDialog extends StatefulWidget {
   final String callLogId;

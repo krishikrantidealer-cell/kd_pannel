@@ -11,6 +11,11 @@ class CallLogsState extends Equatable {
   final int totalPages;
   final bool isLoading;
   final bool isTriggeringCall;
+  final bool isCallActive;
+  final String? activeCallLogId;
+  final String? activeCustomerPhone;
+  final String? activeCustomerName;
+  final bool showPostCallDisposition;
   final bool isSavingDisposition;
 
   // Telephony Metrics & Leaderboards
@@ -38,6 +43,11 @@ class CallLogsState extends Equatable {
     this.totalPages = 1,
     this.isLoading = false,
     this.isTriggeringCall = false,
+    this.isCallActive = false,
+    this.activeCallLogId,
+    this.activeCustomerPhone,
+    this.activeCustomerName,
+    this.showPostCallDisposition = false,
     this.isSavingDisposition = false,
     this.totalCalls = 0,
     this.inboundCount = 0,
@@ -62,6 +72,12 @@ class CallLogsState extends Equatable {
     int? totalPages,
     bool? isLoading,
     bool? isTriggeringCall,
+    bool? isCallActive,
+    String? activeCallLogId,
+    bool clearActiveCallLogId = false,
+    String? activeCustomerPhone,
+    String? activeCustomerName,
+    bool? showPostCallDisposition,
     bool? isSavingDisposition,
     int? totalCalls,
     int? inboundCount,
@@ -88,6 +104,11 @@ class CallLogsState extends Equatable {
       totalPages: totalPages ?? this.totalPages,
       isLoading: isLoading ?? this.isLoading,
       isTriggeringCall: isTriggeringCall ?? this.isTriggeringCall,
+      isCallActive: isCallActive ?? this.isCallActive,
+      activeCallLogId: clearActiveCallLogId ? null : (activeCallLogId ?? this.activeCallLogId),
+      activeCustomerPhone: activeCustomerPhone ?? this.activeCustomerPhone,
+      activeCustomerName: activeCustomerName ?? this.activeCustomerName,
+      showPostCallDisposition: showPostCallDisposition ?? this.showPostCallDisposition,
       isSavingDisposition: isSavingDisposition ?? this.isSavingDisposition,
       totalCalls: totalCalls ?? this.totalCalls,
       inboundCount: inboundCount ?? this.inboundCount,
@@ -114,6 +135,11 @@ class CallLogsState extends Equatable {
         totalPages,
         isLoading,
         isTriggeringCall,
+        isCallActive,
+        activeCallLogId,
+        activeCustomerPhone,
+        activeCustomerName,
+        showPostCallDisposition,
         isSavingDisposition,
         totalCalls,
         inboundCount,

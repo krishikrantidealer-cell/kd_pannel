@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
+import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 import 'call_logs_event.dart';
 import 'call_logs_state.dart';
 
@@ -13,6 +14,8 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   CallLogsBloc() : super(const CallLogsState()) {
     on<FetchCallLogsEvent>(_onFetchCallLogs);
     on<TriggerOutboundCallEvent>(_onTriggerOutboundCall);
+    on<EndActiveCallEvent>(_onEndActiveCall);
+    on<DismissDispositionModalEvent>(_onDismissDispositionModal);
     on<SaveCallDispositionEvent>(_onSaveCallDisposition);
     on<WebSocketCallUpdateReceivedEvent>(_onWebSocketCallUpdate);
     on<ClearCallLogsMessageEvent>(_onClearMessages);
@@ -24,7 +27,7 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     _wsSubscription = WebSocketService().chatUpdates.listen((event) {
       final type = event['type'];
       final data = event['data'];
-      if (type == 'CALL_UPDATE' && data != null) {
+      if ((type == 'CALL_UPDATE' || type == 'CALL_ENDED') && data != null) {
         add(WebSocketCallUpdateReceivedEvent(data as Map<String, dynamic>));
       }
     });
@@ -128,7 +131,13 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     TriggerOutboundCallEvent event,
     Emitter<CallLogsState> emit,
   ) async {
-    emit(state.copyWith(isTriggeringCall: true));
+    emit(state.copyWith(
+      isTriggeringCall: true,
+      isCallActive: true,
+      activeCustomerPhone: event.customerPhone,
+      activeCustomerName: event.customerName,
+      showPostCallDisposition: false,
+    ));
     try {
       final res = await ApiClient().post('/calls/trigger', {
         'customerPhone': event.customerPhone,
@@ -136,15 +145,21 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
+        final logData = body['data']?['callLog'];
+        final callLogId = logData?['_id'] ?? logData?['callId'] ?? body['data']?['providerCallId'];
+
         emit(state.copyWith(
           isTriggeringCall: false,
-          successMessage: 'Outbound OBD call initiated via MyOperator!',
+          isCallActive: true,
+          activeCallLogId: callLogId?.toString(),
+          successMessage: 'Call connecting via MyOperator...',
         ));
         add(FetchCallLogsEvent(page: 1, type: state.selectedType, status: state.selectedStatus, agentId: state.selectedAgentId));
       } else {
         final body = jsonDecode(res.body);
         emit(state.copyWith(
           isTriggeringCall: false,
+          isCallActive: false,
           errorMessage: body['message'] ?? 'Failed to initiate outbound call',
         ));
       }
@@ -152,9 +167,44 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       debugPrint('[CallLogsBloc] Error triggering call: $e');
       emit(state.copyWith(
         isTriggeringCall: false,
+        isCallActive: false,
         errorMessage: 'Network error initiating call',
       ));
     }
+  }
+
+  Future<void> _onEndActiveCall(
+    EndActiveCallEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    final activeLogId = state.activeCallLogId;
+    final activePhone = state.activeCustomerPhone;
+
+    emit(state.copyWith(
+      isTriggeringCall: false,
+      isCallActive: false,
+      showPostCallDisposition: activeLogId != null || activePhone != null,
+    ));
+
+    try {
+      await ApiClient().post('/calls/end', {
+        if (activeLogId != null) 'callLogId': activeLogId,
+        if (activePhone != null) 'customerPhone': activePhone,
+        'durationSeconds': event.durationSeconds,
+      });
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Error ending active call: $e');
+    }
+  }
+
+  void _onDismissDispositionModal(
+    DismissDispositionModalEvent event,
+    Emitter<CallLogsState> emit,
+  ) {
+    emit(state.copyWith(
+      showPostCallDisposition: false,
+      clearActiveCallLogId: true,
+    ));
   }
 
   Future<void> _onSaveCallDisposition(
@@ -174,6 +224,8 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       if (res.statusCode == 200) {
         emit(state.copyWith(
           isSavingDisposition: false,
+          showPostCallDisposition: false,
+          clearActiveCallLogId: true,
           successMessage: 'Call disposition saved and synced to customer timeline',
         ));
         add(FetchCallLogsEvent(page: state.page, type: state.selectedType, status: state.selectedStatus, agentId: state.selectedAgentId));
@@ -199,18 +251,59 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   ) {
     final updatedLog = event.callLog;
     final logId = updatedLog['_id']?.toString();
-    if (logId == null) return;
+    final callStatus = (updatedLog['status'] ?? '').toString().toLowerCase();
+    final eventName = (updatedLog['event'] ?? '').toString().toLowerCase();
 
     final List<dynamic> currentLogs = List.from(state.callLogs);
-    final index = currentLogs.indexWhere((l) => l['_id']?.toString() == logId);
-
-    if (index != -1) {
-      currentLogs[index] = updatedLog;
-    } else {
-      currentLogs.insert(0, updatedLog);
+    if (logId != null) {
+      final index = currentLogs.indexWhere((l) => l['_id']?.toString() == logId);
+      if (index != -1) {
+        currentLogs[index] = updatedLog;
+      } else {
+        currentLogs.insert(0, updatedLog);
+      }
     }
 
-    emit(state.copyWith(callLogs: currentLogs));
+    // Determine if this update belongs to our active call
+    final customerPhone = (updatedLog['customerPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+    final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '');
+
+    final bool isThisActiveCall = state.isCallActive ||
+        (state.activeCallLogId != null &&
+          (state.activeCallLogId == logId ||
+           state.activeCallLogId == updatedLog['callId']?.toString() ||
+           state.activeCallLogId == updatedLog['providerCallId']?.toString())) ||
+        (activePhone.isNotEmpty && customerPhone.isNotEmpty && (activePhone.contains(customerPhone) || customerPhone.contains(activePhone)));
+
+    final bool isPayloadEnded = updatedLog['isEnded'] == true ||
+                                updatedLog['callEnded'] == true ||
+                                eventName.contains('end') ||
+                                eventName.contains('hung') ||
+                                eventName.contains('summary') ||
+                                eventName.contains('disconnect') ||
+                                eventName.contains('complete');
+
+    final bool isEnded = isPayloadEnded ||
+                         callStatus == 'completed' ||
+                         callStatus == 'missed' ||
+                         callStatus == 'ended' ||
+                         callStatus == 'failed' ||
+                         callStatus == 'no-answer' ||
+                         callStatus == 'disconnected' ||
+                         (updatedLog['recordingUrl'] != null && updatedLog['recordingUrl'].toString().isNotEmpty) ||
+                         (updatedLog['callSummary'] != null && updatedLog['callSummary'].toString().isNotEmpty && updatedLog['callSummary'] != 'In Progress');
+
+    if (isThisActiveCall && isEnded) {
+      TelephonyAudioService().playHangupTone();
+      emit(state.copyWith(
+        callLogs: currentLogs,
+        isCallActive: false,
+        isTriggeringCall: false,
+        showPostCallDisposition: true,
+      ));
+    } else {
+      emit(state.copyWith(callLogs: currentLogs));
+    }
   }
 
   void _onClearMessages(

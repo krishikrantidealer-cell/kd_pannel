@@ -2340,13 +2340,24 @@ class _DealerHeroCard extends StatelessWidget {
               },
             );
             final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
-            Navigator.pushNamed(
-              context,
-              '/support',
-              arguments: {
-                'phone': cleanPhone,
-                'name': dealer.name,
-              },
+            showDialog(
+              context: context,
+              barrierDismissible: true,
+              builder: (ctx) => Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: 850,
+                    height: 700,
+                    child: WhatsAppChatDialog(
+                      phone: cleanPhone,
+                      name: dealer.name,
+                    ),
+                  ),
+                ),
+              ),
             );
           },
         ),
