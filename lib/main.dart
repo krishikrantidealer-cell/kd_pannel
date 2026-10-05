@@ -73,6 +73,52 @@ class AppCache {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ── Global Error Boundaries for Web Stability ──────────────────────────────
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('[Flutter Global Error]: ${details.exceptionAsString()}');
+  };
+
+  ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 36),
+              const SizedBox(height: 12),
+              Text(
+                'Component Render Recovery',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF1E293B)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'An isolated render issue occurred in this section. The rest of the panel remains active.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+
   // Load brand images into memory buffer
   await AppCache.preload();
 

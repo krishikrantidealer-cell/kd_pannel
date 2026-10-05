@@ -41,39 +41,43 @@ class _MainLayoutState extends State<MainLayout> {
   String? _lastProcessedRoute;
   static bool _isSidebarPinned = true;
 
-  // Persistent static stack of Admin Pages (Preserves states!)
-  final List<Widget> _adminPages = [
-    const DashboardPage(),
-    const ProductsPage(),
-    const OrdersPage(),
-    const LeadsPage(),
-    const DealerManagementPage(),
-    const SalesCouponPage(),
-    const TeamManagementPage(),
-    const UserEventsPage(),
-    const AuditLogsContainerPage(),
-    const PushCampaignsPage(),
-    const TrashPage(),
-    const AlertsPage(),
-    const EstimateGeneratorPage(),
-    const WhatsAppCrmPage(),
-    const CallLogsPage(),
-  ];
-
-  // Persistent static stack of Sales Pages (Preserves states!)
-  final List<Widget> _salesPages = [
-    const SalesDashboardPage(),
-    const ProductsPage(),
-    const OrdersPage(),
-    const LeadsPage(),
-    const DealerManagementPage(),
-    const SalesCouponPage(),
-    const SalesCustomerEventsPage(),
-    const AlertsPage(),
-    const EstimateGeneratorPage(),
-    const WhatsAppCrmPage(),
-    const CallLogsPage(),
-  ];
+  Widget _getPageForIndex(int idx, UserRole role) {
+    if (role == UserRole.admin) {
+      switch (idx) {
+        case 0: return const DashboardPage();
+        case 1: return const ProductsPage();
+        case 2: return const OrdersPage();
+        case 3: return const LeadsPage();
+        case 4: return const DealerManagementPage();
+        case 5: return const SalesCouponPage();
+        case 6: return const TeamManagementPage();
+        case 7: return const UserEventsPage();
+        case 8: return const AuditLogsContainerPage();
+        case 9: return const PushCampaignsPage();
+        case 10: return const TrashPage();
+        case 11: return const AlertsPage();
+        case 12: return const EstimateGeneratorPage();
+        case 13: return const WhatsAppCrmPage();
+        case 14: return const CallLogsPage();
+        default: return const DashboardPage();
+      }
+    } else {
+      switch (idx) {
+        case 0: return const SalesDashboardPage();
+        case 1: return const ProductsPage();
+        case 2: return const OrdersPage();
+        case 3: return const LeadsPage();
+        case 4: return const DealerManagementPage();
+        case 5: return const SalesCouponPage();
+        case 6: return const SalesCustomerEventsPage();
+        case 7: return const AlertsPage();
+        case 8: return const EstimateGeneratorPage();
+        case 9: return const WhatsAppCrmPage();
+        case 10: return const CallLogsPage();
+        default: return const SalesDashboardPage();
+      }
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -291,12 +295,8 @@ class _MainLayoutState extends State<MainLayout> {
 
     final bool isDesktop = Responsive.isDesktop(context);
     final role = AuthService().currentUserRole ?? UserRole.admin;
-    final pages = role == UserRole.admin ? _adminPages : _salesPages;
-    final int safeIdx = (_currentIdx >= 0 && _currentIdx < pages.length)
-        ? _currentIdx
-        : 0;
-
-    final Widget screenContent = widget.child ?? pages[safeIdx];
+    final int safeIdx = _currentIdx >= 0 ? _currentIdx : 0;
+    final Widget screenContent = widget.child ?? _getPageForIndex(safeIdx, role);
 
     final Widget content = isDesktop
         ? screenContent

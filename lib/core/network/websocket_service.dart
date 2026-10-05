@@ -210,6 +210,8 @@ class WebSocketService {
           break;
         case 'NEW_MESSAGE':
         case 'MESSAGE_STATUS_UPDATED':
+        case 'CALL_UPDATE':
+        case 'CALL_ENDED':
           _chatUpdateController.add(Map<String, dynamic>.from(data));
           break;
         case 'FORCE_LOGOUT':

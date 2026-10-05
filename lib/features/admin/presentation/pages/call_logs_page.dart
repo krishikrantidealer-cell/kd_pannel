@@ -1,16 +1,22 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:js_interop';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:web/web.dart' as web;
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_state.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/call_disposition_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/telephony_leaderboard_widget.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 
 class CallLogsPage extends StatefulWidget {
   const CallLogsPage({super.key});
@@ -36,6 +42,370 @@ class _CallLogsPageState extends State<CallLogsPage> {
     _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _exportToCsv(List<dynamic> logs) async {
+    if (logs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No call logs available to export')),
+      );
+      return;
+    }
+
+    final StringBuffer csv = StringBuffer();
+    csv.writeln('Date,Direction,Customer Name,Customer Phone,Sales Agent,Status,Duration (Seconds),Disposition,Follow Up Date,ACW Notes,Recording URL');
+
+    for (final log in logs) {
+      final contact = log['contactId'];
+      final contactName = (contact is Map ? contact['name'] : '')?.toString().replaceAll(',', ' ') ?? '';
+      final customerPhone = (log['customerPhone'] ?? '').toString();
+      final agent = log['agentId'];
+      final agentName = (agent is Map ? '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim() : '')?.replaceAll(',', ' ') ?? '';
+      final direction = (log['direction'] ?? log['type'] ?? 'outbound').toString();
+      final status = (log['status'] ?? '').toString();
+      final duration = (log['durationSeconds'] ?? 0).toString();
+      final userDisposition = (log['userDisposition'] ?? '').toString().replaceAll(',', ' ');
+      final followUpDate = (log['followUpDate'] ?? '').toString();
+      final notes = (log['notes'] ?? '').toString().replaceAll('\n', ' ').replaceAll(',', ' ');
+      final recordingUrl = (log['recordingUrl'] ?? '').toString();
+      final createdAt = (log['createdAt'] ?? '').toString();
+
+      csv.writeln('"$createdAt","$direction","$contactName","$customerPhone","$agentName","$status","$duration","$userDisposition","$followUpDate","$notes","$recordingUrl"');
+    }
+
+    try {
+      if (kIsWeb) {
+        final blob = web.Blob([csv.toString().toJS].toJS, web.BlobPropertyBag(type: 'text/csv;charset=utf-8'));
+        final url = web.URL.createObjectURL(blob);
+        final anchor = web.HTMLAnchorElement()
+          ..href = url
+          ..download = 'call_logs_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+        web.document.body?.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        web.URL.revokeObjectURL(url);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Call logs CSV downloaded successfully!'), backgroundColor: Color(0xFF008069)),
+          );
+        }
+      } else {
+        final bytes = utf8.encode(csv.toString());
+        final base64Csv = base64Encode(bytes);
+        final uri = Uri.parse('data:text/csv;base64,$base64Csv');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Call logs exported successfully!'), backgroundColor: Color(0xFF008069)),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export CSV: $e')),
+        );
+      }
+    }
+  }
+
+  void _openAudioPlayer(dynamic log) async {
+    String recordingUrl = (log['recordingUrl'] ?? '').toString();
+    
+    if (recordingUrl.isEmpty) {
+      final callId = log['_id']?.toString() ?? '';
+      if (callId.isNotEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                  SizedBox(width: 12),
+                  Text('Fetching audio recording from MyOperator...'),
+                ],
+              ),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        try {
+          final res = await ApiClient().get('/call/recordings/$callId/url');
+          if (res.statusCode == 200) {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map && decoded['data'] is Map && decoded['data']['recordingUrl'] != null) {
+              recordingUrl = decoded['data']['recordingUrl'].toString();
+              log['recordingUrl'] = recordingUrl;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (recordingUrl.isEmpty) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Color(0xFF008069), size: 24),
+                const SizedBox(width: 8),
+                Text('Recording Not Synced Yet', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'The recording URL for this call has not been pushed by MyOperator Webhook yet, or the API token does not have direct pull permissions enabled.',
+                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF475569)),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('To enable automatic in-panel audio sync:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: const Color(0xFF1E293B))),
+                      const SizedBox(height: 4),
+                      Text('1. Go to MyOperator Dashboard → APIs & Webhooks', style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B))),
+                      Text('2. Set Webhook URL to your backend webhook endpoint', style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B))),
+                      Text('3. Check "Call Ended" and "Recordings"', style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF008069),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                label: Text('Open MyOperator Portal', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  launchUrl(Uri.parse('https://myoperator.com/app/call-logs'), mode: LaunchMode.externalApplication);
+                },
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    final phone = (log['customerPhone'] ?? '').toString();
+    final contact = log['contactId'];
+    final name = (contact is Map ? contact['name']?.toString() : null) ?? 'Customer (+$phone)';
+    final duration = int.tryParse((log['durationSeconds'] ?? 0).toString()) ?? 0;
+
+    web.HTMLAudioElement? audioEl;
+    if (kIsWeb) {
+      try {
+        audioEl = web.HTMLAudioElement();
+        audioEl.src = recordingUrl;
+      } catch (_) {}
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        bool isPlaying = false;
+        double currentPosition = 0;
+        double playbackSpeed = 1.0;
+        Timer? ticker;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void togglePlay() {
+              if (audioEl != null) {
+                if (isPlaying) {
+                  audioEl.pause();
+                  ticker?.cancel();
+                  setModalState(() => isPlaying = false);
+                } else {
+                  audioEl.play();
+                  ticker?.cancel();
+                  ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
+                    if (context.mounted && audioEl != null) {
+                      final el = audioEl;
+                      if (el != null) {
+                        setModalState(() {
+                          currentPosition = el.currentTime.toDouble();
+                          if (el.ended) {
+                            isPlaying = false;
+                            currentPosition = 0;
+                            ticker?.cancel();
+                          }
+                        });
+                      }
+                    }
+                  });
+                  setModalState(() => isPlaying = true);
+                }
+              } else {
+                _playRecording(recordingUrl);
+              }
+            }
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069).withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.graphic_eq_rounded, color: Color(0xFF008069), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: const Color(0xFF111B21))),
+                              Text('Duration: ${_formatDuration(duration)} • In-Panel Player', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B))),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                        onPressed: () {
+                          ticker?.cancel();
+                          audioEl?.pause();
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // Progress & Playback Controls
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      children: [
+                        // Slider / Progress bar
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: const Color(0xFF008069),
+                            inactiveTrackColor: const Color(0xFFCBD5E1),
+                            thumbColor: const Color(0xFF008069),
+                            trackHeight: 4,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          ),
+                          child: Slider(
+                            value: currentPosition.clamp(0.0, duration > 0 ? duration.toDouble() : 1.0),
+                            min: 0.0,
+                            max: duration > 0 ? duration.toDouble() : 1.0,
+                            onChanged: (val) {
+                              if (audioEl != null) {
+                                audioEl.currentTime = val;
+                              }
+                              setModalState(() => currentPosition = val);
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_formatDuration(currentPosition.toInt()), style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B))),
+                              Text(_formatDuration(duration), style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B))),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Speed selection
+                            Row(
+                              children: [
+                                Text('Speed: ', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B))),
+                                DropdownButton<double>(
+                                  value: playbackSpeed,
+                                  underline: const SizedBox(),
+                                  items: const [
+                                    DropdownMenuItem(value: 0.75, child: Text('0.75x')),
+                                    DropdownMenuItem(value: 1.0, child: Text('1.0x')),
+                                    DropdownMenuItem(value: 1.25, child: Text('1.25x')),
+                                    DropdownMenuItem(value: 1.5, child: Text('1.5x')),
+                                    DropdownMenuItem(value: 2.0, child: Text('2.0x')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      if (audioEl != null) {
+                                        audioEl.playbackRate = val;
+                                      }
+                                      setModalState(() => playbackSpeed = val);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            // In-Panel Play/Pause Button
+                            ElevatedButton.icon(
+                              onPressed: togglePlay,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF008069),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 18),
+                              label: Text(isPlaying ? 'Pause' : 'Play Audio', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      audioEl?.pause();
+    });
   }
 
   void _playRecording(String recordingUrl) async {
@@ -163,6 +533,36 @@ class _CallLogsPageState extends State<CallLogsPage> {
                     ),
                     Row(
                       children: [
+                        ElevatedButton.icon(
+                          onPressed: () => TelephonyHelper.showDialpad(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF008069),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.dialpad_rounded, size: 16),
+                          label: Text(
+                            'Dial Number',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _exportToCsv(state.callLogs),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF008069),
+                            side: const BorderSide(color: Color(0xFF008069)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.file_download_outlined, size: 16),
+                          label: Text(
+                            'Export CSV',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.refresh_rounded, color: Color(0xFF008069)),
                           onPressed: () => context.read<CallLogsBloc>().add(FetchCallLogsEvent(
@@ -187,6 +587,36 @@ class _CallLogsPageState extends State<CallLogsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── Scheduled Follow-ups Alert Ribbon ─────────────
+                      Builder(
+                        builder: (context) {
+                          final pendingFollowUps = state.callLogs.where((l) => l['followUpDate'] != null).toList();
+                          if (pendingFollowUps.isEmpty) return const SizedBox.shrink();
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.alarm_on_rounded, color: Color(0xFFD97706), size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    '${pendingFollowUps.length} Scheduled Follow-up callback(s) pending in this view. Review ACW notes and re-connect with leads.',
+                                    style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+
                       // Telephony Leaderboard & KPI Summary Ribbon (Feature #6)
                       TelephonyLeaderboardWidget(
                         totalCalls: state.totalCalls,
@@ -537,7 +967,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                         ),
                                         const SizedBox(width: 8),
 
-                                        if (recordingUrl.isNotEmpty)
+                                        if (recordingUrl.isNotEmpty || rawStatus == 'answered' || seconds > 0)
                                           ElevatedButton.icon(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: const Color(0xFF008069).withValues(alpha: 0.1),
@@ -546,9 +976,25 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                             ),
-                                            icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                            label: Text('Listen Audio', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                            onPressed: () => _playRecording(recordingUrl),
+                                            icon: const Icon(Icons.headphones_rounded, size: 16),
+                                            label: Text(recordingUrl.isNotEmpty ? 'Listen Audio' : 'Fetch Audio', style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                            onPressed: () => _openAudioPlayer(log),
+                                          )
+                                        else
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.mic_off_outlined, size: 13, color: Colors.grey.shade500),
+                                                const SizedBox(width: 4),
+                                                Text('No Audio', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                                              ],
+                                            ),
                                           ),
                                       ],
                                     ),

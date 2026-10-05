@@ -5,12 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 
 class WebCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -1441,6 +1445,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () => _showTemplatesManagerDialog(context),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // 📞 Call Action (WebCall + Mobile C2C - DRY Component)
+                      Builder(
+                        builder: (ctx) {
+                          final contact = _selectedConversation?['contactId'] ?? {};
+                          final String phone = (contact['phone'] ?? '').toString();
+                          final String name = (contact['name'] ?? 'Customer').toString();
+                          if (phone.isEmpty) return const SizedBox.shrink();
+                          return TelephonyCallButton(
+                            customerPhone: phone,
+                            customerName: name,
+                            variant: TelephonyButtonVariant.filled,
+                            color: const Color(0xFF008069),
+                          );
+                        },
                       ),
                       const SizedBox(width: 8),
 

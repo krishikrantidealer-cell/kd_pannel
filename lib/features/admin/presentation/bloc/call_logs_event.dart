@@ -29,11 +29,16 @@ class FetchCallLogsEvent extends CallLogsEvent {
 class TriggerOutboundCallEvent extends CallLogsEvent {
   final String customerPhone;
   final String? customerName;
+  final String callMode; // 'click2call' or 'webcall'
 
-  const TriggerOutboundCallEvent(this.customerPhone, {this.customerName});
+  const TriggerOutboundCallEvent(
+    this.customerPhone, {
+    this.customerName,
+    this.callMode = 'click2call',
+  });
 
   @override
-  List<Object?> get props => [customerPhone, customerName];
+  List<Object?> get props => [customerPhone, customerName, callMode];
 }
 
 class EndActiveCallEvent extends CallLogsEvent {

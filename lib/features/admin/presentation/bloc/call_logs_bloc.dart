@@ -10,6 +10,7 @@ import 'call_logs_state.dart';
 
 class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   StreamSubscription? _wsSubscription;
+  Timer? _activeCallPollingTimer;
 
   CallLogsBloc() : super(const CallLogsState()) {
     on<FetchCallLogsEvent>(_onFetchCallLogs);
@@ -25,16 +26,80 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
 
   void _initWebSocket() {
     _wsSubscription = WebSocketService().chatUpdates.listen((event) {
-      final type = event['type'];
-      final data = event['data'];
-      if ((type == 'CALL_UPDATE' || type == 'CALL_ENDED') && data != null) {
-        add(WebSocketCallUpdateReceivedEvent(data as Map<String, dynamic>));
+      try {
+        final type = event['type']?.toString();
+        final rawData = event['data'];
+        if ((type == 'CALL_UPDATE' || type == 'CALL_ENDED') && rawData != null) {
+          if (rawData is Map) {
+            final mapData = Map<String, dynamic>.from(rawData);
+            add(WebSocketCallUpdateReceivedEvent(mapData));
+          }
+        }
+      } catch (e) {
+        debugPrint('[CallLogsBloc] WS call event parse error: $e');
       }
     });
   }
 
+  void _startActiveCallPolling(String? callLogId, String? customerPhone) {
+    _activeCallPollingTimer?.cancel();
+    if (callLogId == null || callLogId.isEmpty || callLogId.startsWith('WEB_')) {
+      return;
+    }
+
+    _activeCallPollingTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+      if (!state.isCallActive && !state.isTriggeringCall) {
+        _activeCallPollingTimer?.cancel();
+        return;
+      }
+      try {
+        final res = await ApiClient().get('/calls/logs?limit=5');
+        if (res.statusCode == 200) {
+          final body = jsonDecode(res.body);
+          final List<dynamic> logs = body['data'] ?? [];
+          if (logs.isNotEmpty) {
+            final match = logs.firstWhere(
+              (l) => l['_id']?.toString() == callLogId ||
+                     l['callId']?.toString() == callLogId ||
+                     l['providerCallId']?.toString() == callLogId,
+              orElse: () => null,
+            );
+
+            if (match != null) {
+              final status = (match['status'] ?? '').toString().toLowerCase();
+              final isEnded = status == 'ended' ||
+                              status == 'completed' ||
+                              status == 'missed' ||
+                              status == 'failed' ||
+                              status == 'busy' ||
+                              status == 'rejected' ||
+                              status == 'no-answer' ||
+                              status == 'canceled' ||
+                              status == 'cancelled' ||
+                              status == 'disconnected' ||
+                              (match['recordingUrl'] != null && match['recordingUrl'].toString().isNotEmpty);
+              final isAnswered = status == 'answered';
+              if (isEnded) {
+                _activeCallPollingTimer?.cancel();
+                add(WebSocketCallUpdateReceivedEvent(match as Map<String, dynamic>));
+              } else if (isAnswered && !state.isCallActive) {
+                add(WebSocketCallUpdateReceivedEvent(match as Map<String, dynamic>));
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _stopActiveCallPolling() {
+    _activeCallPollingTimer?.cancel();
+    _activeCallPollingTimer = null;
+  }
+
   @override
   Future<void> close() {
+    _stopActiveCallPolling();
     _wsSubscription?.cancel();
     return super.close();
   }
@@ -68,7 +133,7 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
 
       String endpoint = '/calls/logs?page=${event.page}&limit=25';
       if (event.search.isNotEmpty) {
-        endpoint += '&customerPhone=${Uri.encodeComponent(event.search)}';
+        endpoint += '&search=${Uri.encodeComponent(event.search)}';
       }
       if (event.type != 'all') {
         endpoint += '&type=${event.type}';
@@ -133,7 +198,7 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   ) async {
     emit(state.copyWith(
       isTriggeringCall: true,
-      isCallActive: true,
+      isCallActive: false,
       activeCustomerPhone: event.customerPhone,
       activeCustomerName: event.customerName,
       showPostCallDisposition: false,
@@ -141,22 +206,26 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     try {
       final res = await ApiClient().post('/calls/trigger', {
         'customerPhone': event.customerPhone,
+        'callMode': event.callMode,
       });
+      debugPrint('[CallLogsBloc] /calls/trigger status: ${res.statusCode}, body: ${res.body}');
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         final logData = body['data']?['callLog'];
         final callLogId = logData?['_id'] ?? logData?['callId'] ?? body['data']?['providerCallId'];
 
+        _startActiveCallPolling(callLogId?.toString(), event.customerPhone);
         emit(state.copyWith(
-          isTriggeringCall: false,
-          isCallActive: true,
+          isTriggeringCall: true,
+          isCallActive: false,
           activeCallLogId: callLogId?.toString(),
-          successMessage: 'Call connecting via MyOperator...',
+          successMessage: '📱 Call dispatched! Ringing customer and agent...',
         ));
         add(FetchCallLogsEvent(page: 1, type: state.selectedType, status: state.selectedStatus, agentId: state.selectedAgentId));
       } else {
         final body = jsonDecode(res.body);
+        debugPrint('[CallLogsBloc] Call trigger failed: ${body['message']}');
         emit(state.copyWith(
           isTriggeringCall: false,
           isCallActive: false,
@@ -164,7 +233,7 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
         ));
       }
     } catch (e) {
-      debugPrint('[CallLogsBloc] Error triggering call: $e');
+      debugPrint('[CallLogsBloc] Error triggering call exception: $e');
       emit(state.copyWith(
         isTriggeringCall: false,
         isCallActive: false,
@@ -177,13 +246,15 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     EndActiveCallEvent event,
     Emitter<CallLogsState> emit,
   ) async {
+    _stopActiveCallPolling();
     final activeLogId = state.activeCallLogId;
     final activePhone = state.activeCustomerPhone;
+    final bool wasAnswered = state.isCallActive || (event.durationSeconds > 0);
 
     emit(state.copyWith(
       isTriggeringCall: false,
       isCallActive: false,
-      showPostCallDisposition: activeLogId != null || activePhone != null,
+      showPostCallDisposition: wasAnswered && (activeLogId != null || activePhone != null),
     ));
 
     try {
@@ -264,16 +335,30 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       }
     }
 
-    // Determine if this update belongs to our active call
+    // Strictly determine if this update belongs to our active call
     final customerPhone = (updatedLog['customerPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
     final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '');
+    final providerCallId = (updatedLog['providerCallId'] ?? '').toString();
+    final callId = (updatedLog['callId'] ?? '').toString();
 
-    final bool isThisActiveCall = state.isCallActive ||
-        (state.activeCallLogId != null &&
-          (state.activeCallLogId == logId ||
-           state.activeCallLogId == updatedLog['callId']?.toString() ||
-           state.activeCallLogId == updatedLog['providerCallId']?.toString())) ||
-        (activePhone.isNotEmpty && customerPhone.isNotEmpty && (activePhone.contains(customerPhone) || customerPhone.contains(activePhone)));
+    bool isThisActiveCall = false;
+    if (state.activeCallLogId != null && state.activeCallLogId!.isNotEmpty) {
+      if (state.activeCallLogId == logId ||
+          state.activeCallLogId == providerCallId ||
+          state.activeCallLogId == callId) {
+        isThisActiveCall = true;
+      }
+    } else if (state.isCallActive || state.isTriggeringCall) {
+      if (activePhone.isNotEmpty && customerPhone.isNotEmpty &&
+          (activePhone.endsWith(customerPhone) || customerPhone.endsWith(activePhone))) {
+        isThisActiveCall = true;
+      }
+    }
+
+    if (!isThisActiveCall) {
+      emit(state.copyWith(callLogs: currentLogs));
+      return;
+    }
 
     final bool isPayloadEnded = updatedLog['isEnded'] == true ||
                                 updatedLog['callEnded'] == true ||
@@ -281,7 +366,13 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
                                 eventName.contains('hung') ||
                                 eventName.contains('summary') ||
                                 eventName.contains('disconnect') ||
+                                eventName.contains('miss') ||
+                                eventName.contains('busy') ||
+                                eventName.contains('reject') ||
+                                eventName.contains('cancel') ||
                                 eventName.contains('complete');
+
+    debugPrint('[CallLogsBloc] Active call update matched: logId=$logId, activeCallLogId=${state.activeCallLogId}, callStatus=$callStatus, eventName=$eventName, isPayloadEnded=$isPayloadEnded');
 
     final bool isEnded = isPayloadEnded ||
                          callStatus == 'completed' ||
@@ -289,17 +380,37 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
                          callStatus == 'ended' ||
                          callStatus == 'failed' ||
                          callStatus == 'no-answer' ||
+                         callStatus == 'busy' ||
+                         callStatus == 'rejected' ||
+                         callStatus == 'canceled' ||
+                         callStatus == 'cancelled' ||
+                         callStatus == 'hangup' ||
                          callStatus == 'disconnected' ||
                          (updatedLog['recordingUrl'] != null && updatedLog['recordingUrl'].toString().isNotEmpty) ||
                          (updatedLog['callSummary'] != null && updatedLog['callSummary'].toString().isNotEmpty && updatedLog['callSummary'] != 'In Progress');
 
+    final bool isAnswered = (callStatus == 'answered' || eventName == 'call.answered' || eventName == 'answered') && !isEnded;
+
+    if (isThisActiveCall && isAnswered && !state.isCallActive) {
+      TelephonyAudioService().stopDialingTone();
+      emit(state.copyWith(
+        callLogs: currentLogs,
+        isTriggeringCall: false,
+        isCallActive: true,
+      ));
+      return;
+    }
+
     if (isThisActiveCall && isEnded) {
+      _stopActiveCallPolling();
       TelephonyAudioService().playHangupTone();
+      final int durationSec = int.tryParse(updatedLog['durationSeconds']?.toString() ?? '0') ?? 0;
+      final bool wasAnswered = state.isCallActive || callStatus == 'answered' || durationSec > 0;
       emit(state.copyWith(
         callLogs: currentLogs,
         isCallActive: false,
         isTriggeringCall: false,
-        showPostCallDisposition: true,
+        showPostCallDisposition: wasAnswered,
       ));
     } else {
       emit(state.copyWith(callLogs: currentLogs));

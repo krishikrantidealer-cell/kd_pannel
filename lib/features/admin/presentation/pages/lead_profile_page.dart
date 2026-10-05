@@ -18,6 +18,7 @@ import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/core/utils/formatters.dart';
@@ -3179,19 +3180,10 @@ class _LeadInformationCard extends StatelessWidget {
       },
     );
 
-    context.read<CallLogsBloc>().add(TriggerOutboundCallEvent(cleanPhone));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
-            const SizedBox(width: 8),
-            Text('Connecting call to ${lead['name']} via MyOperator...'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF008069),
-        behavior: SnackBarBehavior.floating,
-      ),
+    TelephonyHelper.initiateCall(
+      context,
+      customerPhone: cleanPhone,
+      customerName: lead['name'],
     );
   }
 

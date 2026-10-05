@@ -23,6 +23,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -2977,45 +2978,10 @@ class _DealerRowState extends State<_DealerRow> {
   }
 
   void _launchCall(String phone, String name) {
-    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-
-    AnalyticsService().logEvent(
-      'agent_call_dealer',
-      properties: {
-        'dealerName': name,
-        'phone': cleanPhone,
-        'details': 'Initiated MyOperator call to dealer: $name',
-      },
-    );
-
-    context.read<CallLogsBloc>().add(
-      TriggerOutboundCallEvent(
-        cleanPhone,
-        customerName: name,
-      ),
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Connecting call to $name via MyOperator... Your mobile will ring first to connect!',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF008069),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
+    TelephonyHelper.initiateCall(
+      context,
+      customerPhone: phone,
+      customerName: name,
     );
   }
 
@@ -3207,45 +3173,44 @@ class _DealerRowState extends State<_DealerRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (isHovered && phone.isNotEmpty) ...[
-                          GestureDetector(
-                            onTap: () => _launchWhatsApp(phone, displayName),
-                            child: Tooltip(
-                              message: 'WhatsApp CRM',
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  size: 13,
-                                  color: Color(0xFF10B981),
-                                ),
+                        if (phone.isNotEmpty)
+                          Opacity(
+                            opacity: isHovered ? 1.0 : 0.0,
+                            child: IgnorePointer(
+                              ignoring: !isHovered,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _launchWhatsApp(phone, displayName),
+                                    child: Tooltip(
+                                      message: 'WhatsApp CRM',
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Icon(
+                                          Icons.chat_bubble_outline_rounded,
+                                          size: 13,
+                                          color: Color(0xFF10B981),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  TelephonyCallButton(
+                                    customerPhone: phone,
+                                    customerName: displayName,
+                                    variant: TelephonyButtonVariant.iconOnly,
+                                    color: AppTheme.primaryColor,
+                                    iconSize: 13,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => _launchCall(phone, displayName),
-                            child: Tooltip(
-                              message: 'Call via MyOperator',
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.call_outlined,
-                                  size: 13,
-                                  color: AppTheme.primaryColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

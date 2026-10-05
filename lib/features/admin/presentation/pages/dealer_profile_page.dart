@@ -22,6 +22,7 @@ import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_
 import 'package:kd_pannel/features/shared/widgets/events/user_activity_audit_tab.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -2290,40 +2291,11 @@ class _DealerHeroCard extends StatelessWidget {
             isSolid: true,
             onTap: onReassign,
           ),
-        _ActionButton(
-          icon: Icons.phone_forwarded_rounded,
-          label: '1-Click Call',
+        TelephonyCallButton(
+          customerPhone: dealer.phone,
+          customerName: dealer.name,
+          variant: TelephonyButtonVariant.filled,
           color: const Color(0xFF2E7D32),
-          isSolid: true,
-          onTap: () {
-            AnalyticsService().logEvent(
-              'agent_call_dealer',
-              properties: {
-                'dealerId': dealer.id,
-                'dealerName': dealer.name,
-                'details': 'Initiated OBD Cloud Call to dealer: ${dealer.name}',
-              },
-            );
-            context.read<CallLogsBloc>().add(
-              TriggerOutboundCallEvent(
-                dealer.phone,
-                customerName: dealer.name,
-              ),
-            );
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.ring_volume_rounded, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Text('Connecting OBD call to ${dealer.name} (${dealer.phone})...'),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF2E7D32),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          },
         ),
         _ActionButton(
           icon: FontAwesomeIcons.whatsapp,

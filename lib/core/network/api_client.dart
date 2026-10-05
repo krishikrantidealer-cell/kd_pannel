@@ -21,7 +21,10 @@ class ApiClient {
     } catch (_) {}
   }
 
-  final String baseUrl = 'https://krishi-backend-123180953109.asia-south1.run.app/api';
+  final String baseUrl = const String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://krishi-backend-123180953109.asia-south1.run.app/api',
+  );
 
   String? _accessToken;
   String? _refreshToken;
