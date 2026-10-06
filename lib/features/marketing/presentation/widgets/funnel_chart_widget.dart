@@ -102,64 +102,62 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
       }
     }
 
-    return SelectionArea(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppTheme.cardColor,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar
+          _buildHeader(overallConversion),
+
+          const SizedBox(height: 20),
+
+          // KPI Metric Summary Grid
+          _buildKpiSummary(
+            maxCount,
+            finalStep.userCount,
+            overallConversion,
+            maxDropIndex,
+            maxDropPercent,
+          ),
+
+          const SizedBox(height: 24),
+
+          // View Mode Selector
+          _buildViewModeSelector(),
+
+          const SizedBox(height: 20),
+
+          // Render Active View Mode
+          if (_selectedViewMode == 'Flow')
+            _buildFlowView(maxCount)
+          else if (_selectedViewMode == 'Bars')
+            _buildBarsView(maxCount)
+          else
+            _buildMetricsView(maxCount),
+
+          // Detailed Selected Step Inspector Card
+          if (_selectedIndex != null &&
+              _selectedIndex! < widget.steps.length) ...[
+            const SizedBox(height: 20),
+            _buildStepDetailCard(
+              widget.steps[_selectedIndex!],
+              _selectedIndex!,
             ),
           ],
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Bar
-            _buildHeader(overallConversion),
-
-            const SizedBox(height: 20),
-
-            // KPI Metric Summary Grid
-            _buildKpiSummary(
-              maxCount,
-              finalStep.userCount,
-              overallConversion,
-              maxDropIndex,
-              maxDropPercent,
-            ),
-
-            const SizedBox(height: 24),
-
-            // View Mode Selector
-            _buildViewModeSelector(),
-
-            const SizedBox(height: 20),
-
-            // Render Active View Mode
-            if (_selectedViewMode == 'Flow')
-              _buildFlowView(maxCount)
-            else if (_selectedViewMode == 'Bars')
-              _buildBarsView(maxCount)
-            else
-              _buildMetricsView(maxCount),
-
-            // Detailed Selected Step Inspector Card
-            if (_selectedIndex != null &&
-                _selectedIndex! < widget.steps.length) ...[
-              const SizedBox(height: 20),
-              _buildStepDetailCard(
-                widget.steps[_selectedIndex!],
-                _selectedIndex!,
-              ),
-            ],
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -526,7 +524,7 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                     Container(
                       width: 2,
                       height: 24,
-                      color: step.stepColor.withOpacity(0.4),
+                      color: step.stepColor.withValues(alpha: 0.4),
                     ),
                     const SizedBox(width: 14),
                     Container(
@@ -591,40 +589,41 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? step.stepColor.withOpacity(0.08)
+                        ? step.stepColor.withValues(alpha: 0.08)
                         : (isHovered
-                              ? step.stepColor.withOpacity(0.03)
+                              ? step.stepColor.withValues(alpha: 0.03)
                               : AppTheme.cardColor),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isSelected
                           ? step.stepColor
                           : (isHovered
-                                ? step.stepColor.withOpacity(0.5)
+                                ? step.stepColor.withValues(alpha: 0.5)
                                 : AppTheme.borderColor),
                       width: isSelected ? 2 : 1,
                     ),
                     boxShadow: isHovered || isSelected
                         ? [
                             BoxShadow(
-                              color: step.stepColor.withOpacity(0.12),
+                              color: step.stepColor.withValues(alpha: 0.12),
                               blurRadius: 12,
                               offset: const Offset(0, 3),
                             ),
                           ]
                         : null,
                   ),
-                  child: Row(
-                    children: [
-                      // Step Badge Icon
-                      Container(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final bool isCompact = constraints.maxWidth < 580;
+
+                      final iconBadge = Container(
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: step.stepColor.withOpacity(0.12),
+                          color: step.stepColor.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: step.stepColor.withOpacity(0.3),
+                            color: step.stepColor.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Center(
@@ -634,136 +633,41 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                             size: 20,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
+                      );
 
-                      // Step Title & Sequence
-                      SizedBox(
-                        width: 150,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'STEP ${index + 1}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: step.stepColor,
-                                letterSpacing: 0.6,
-                              ),
+                      final titleSection = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'STEP ${index + 1}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: step.stepColor,
+                              letterSpacing: 0.6,
                             ),
-                            Text(
-                              step.stepName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
+                          ),
+                          Text(
+                            step.stepName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        ],
+                      );
 
-                      const SizedBox(width: 12),
-
-                      // Trapezoid Funnel Bar
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Stack(
-                              children: [
-                                Container(
-                                  height: 36,
-                                  width: constraints.maxWidth,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 600),
-                                  curve: Curves.easeOutCubic,
-                                  height: 36,
-                                  width: constraints.maxWidth * widthRatio,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        step.stepColor.withOpacity(0.8),
-                                        step.stepColor,
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: step.stepColor.withOpacity(0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  alignment: Alignment.centerLeft,
-                                  child: ClipRect(
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            '${step.userCount} Dealers • ${step.eventCount >= 1000 ? (step.eventCount / 1000).toStringAsFixed(1) + 'k' : step.eventCount} Actions',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                        if (constraints.maxWidth * widthRatio >
-                                            240) ...[
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              '${step.conversionRate.toStringAsFixed(1)}% of Total',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.white.withOpacity(
-                                                  0.9,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-
-                      const SizedBox(width: 16),
-
-                      // Conversion Badge
-                      Container(
-                        width: 80,
+                      final conversionBadge = Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: step.stepColor.withOpacity(0.08),
+                          color: step.stepColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: step.stepColor.withOpacity(0.2),
+                            color: step.stepColor.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Column(
@@ -772,7 +676,7 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                             Text(
                               '${step.conversionRate.toStringAsFixed(1)}%',
                               style: GoogleFonts.outfit(
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w800,
                                 color: step.stepColor,
                               ),
@@ -786,8 +690,116 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                      );
+
+                      final funnelBar = LayoutBuilder(
+                        builder: (context, barConstraints) {
+                          return Stack(
+                            children: [
+                              Container(
+                                height: 36,
+                                width: barConstraints.maxWidth,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 600),
+                                curve: Curves.easeOutCubic,
+                                height: 36,
+                                width: barConstraints.maxWidth * widthRatio,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      step.stepColor.withValues(alpha: 0.8),
+                                      step.stepColor,
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: step.stepColor.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: ClipRect(
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          '${step.userCount} Dealers • ${step.eventCount >= 1000 ? (step.eventCount / 1000).toStringAsFixed(1) + 'k' : step.eventCount} Actions',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      if (barConstraints.maxWidth * widthRatio > 220) ...[
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            '${step.conversionRate.toStringAsFixed(1)}% of Total',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white.withValues(alpha: 0.9),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+
+                      if (isCompact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                iconBadge,
+                                const SizedBox(width: 12),
+                                Expanded(child: titleSection),
+                                conversionBadge,
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            funnelBar,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          iconBadge,
+                          const SizedBox(width: 14),
+                          SizedBox(width: 140, child: titleSection),
+                          const SizedBox(width: 12),
+                          Expanded(child: funnelBar),
+                          const SizedBox(width: 16),
+                          conversionBadge,
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -825,70 +837,130 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? step.stepColor.withOpacity(0.08)
+                      ? step.stepColor.withValues(alpha: 0.08)
                       : (_hoveredIndex == index
-                            ? step.stepColor.withOpacity(0.03)
+                            ? step.stepColor.withValues(alpha: 0.03)
                             : AppTheme.cardColor),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
                         ? step.stepColor
                         : (_hoveredIndex == index
-                              ? step.stepColor.withOpacity(0.5)
+                              ? step.stepColor.withValues(alpha: 0.5)
                               : AppTheme.borderColor),
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 140,
-                      child: Text(
-                        step.stepName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? step.stepColor
-                              : AppTheme.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Stack(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isCompact = constraints.maxWidth < 520;
+
+                    if (isCompact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                step.stepName,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? step.stepColor
+                                      : AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                '${step.userCount} Dealers (${step.conversionRate.toStringAsFixed(1)}%)',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: step.stepColor,
+                                ),
+                              ),
+                            ],
                           ),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 500),
-                            height: 24,
-                            width:
-                                MediaQuery.of(context).size.width *
-                                widthRatio *
-                                0.4,
-                            decoration: BoxDecoration(
-                              color: step.stepColor,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                          const SizedBox(height: 8),
+                          Stack(
+                            children: [
+                              Container(
+                                height: 18,
+                                width: constraints.maxWidth,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 500),
+                                height: 18,
+                                width: constraints.maxWidth * widthRatio,
+                                decoration: BoxDecoration(
+                                  color: step.stepColor,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '${step.userCount} Dealers (${step.conversionRate.toStringAsFixed(1)}%)',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: step.stepColor,
-                      ),
-                    ),
-                  ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: Text(
+                            step.stepName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected
+                                  ? step.stepColor
+                                  : AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, barConstraints) {
+                              return Stack(
+                                children: [
+                                  Container(
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 500),
+                                    height: 24,
+                                    width: barConstraints.maxWidth * widthRatio,
+                                    decoration: BoxDecoration(
+                                      color: step.stepColor,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '${step.userCount} Dealers (${step.conversionRate.toStringAsFixed(1)}%)',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: step.stepColor,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -899,134 +971,143 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
   }
 
   Widget _buildMetricsView(int maxCount) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 2.8,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: widget.steps.length,
-      itemBuilder: (context, index) {
-        final step = widget.steps[index];
-        final isSelected = _selectedIndex == index;
-        final dropOffPercent =
-            index > 0 && widget.steps[index - 1].userCount > 0
-            ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100)
-                  .clamp(0.0, 100.0)
-            : 0.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 650;
 
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hoveredIndex = index),
-          onExit: (_) => setState(() => _hoveredIndex = null),
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedIndex = isSelected ? null : index;
-              });
-              widget.onStepSelected?.call(step.stepName);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? step.stepColor.withOpacity(0.08)
-                    : (_hoveredIndex == index
-                          ? step.stepColor.withOpacity(0.03)
-                          : step.stepColor.withOpacity(0.04)),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isSelected
-                      ? step.stepColor
-                      : (_hoveredIndex == index
-                            ? step.stepColor.withOpacity(0.5)
-                            : step.stepColor.withOpacity(0.2)),
-                  width: isSelected ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'STEP ${index + 1}: ${step.stepName.toUpperCase()}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: step.stepColor,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Icon(
-                        _getStepIcon(index, step.stepName),
-                        size: 16,
-                        color: step.stepColor,
-                      ),
-                    ],
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: isCompact ? 1 : 2,
+            childAspectRatio: isCompact ? 3.4 : 2.6,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: widget.steps.length,
+          itemBuilder: (context, index) {
+            final step = widget.steps[index];
+            final isSelected = _selectedIndex == index;
+            final dropOffPercent =
+                index > 0 && widget.steps[index - 1].userCount > 0
+                ? ((1 - (step.userCount / widget.steps[index - 1].userCount)) * 100)
+                      .clamp(0.0, 100.0)
+                : 0.0;
+
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _hoveredIndex = index),
+              onExit: (_) => setState(() => _hoveredIndex = null),
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedIndex = isSelected ? null : index;
+                  });
+                  widget.onStepSelected?.call(step.stepName);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? step.stepColor.withValues(alpha: 0.08)
+                        : (_hoveredIndex == index
+                              ? step.stepColor.withValues(alpha: 0.03)
+                              : step.stepColor.withValues(alpha: 0.04)),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected
+                          ? step.stepColor
+                          : (_hoveredIndex == index
+                                ? step.stepColor.withValues(alpha: 0.5)
+                                : step.stepColor.withValues(alpha: 0.2)),
+                      width: isSelected ? 2 : 1,
+                    ),
                   ),
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            '${step.userCount} Users',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
+                          Expanded(
+                            child: Text(
+                              'STEP ${index + 1}: ${step.stepName.toUpperCase()}',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: step.stepColor,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
+                          Icon(
+                            _getStepIcon(index, step.stepName),
+                            size: 16,
+                            color: step.stepColor,
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${step.userCount} Users',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                '${step.eventCount} Actions',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
                           Text(
-                            '${step.eventCount} Actions',
+                            '${step.conversionRate.toStringAsFixed(1)}%',
                             style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: step.stepColor,
                             ),
                           ),
                         ],
                       ),
-                      Text(
-                        '${step.conversionRate.toStringAsFixed(1)}%',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: step.stepColor,
+                      if (index > 0)
+                        Text(
+                          '${dropOffPercent.toStringAsFixed(1)}% churn from step ${index}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red.shade700,
+                          ),
+                        )
+                      else
+                        Text(
+                          '100% Initial Baseline Audience',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green.shade700,
+                          ),
                         ),
-                      ),
                     ],
                   ),
-                  if (index > 0)
-                    Text(
-                      '${dropOffPercent.toStringAsFixed(1)}% churn from step ${index}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red.shade700,
-                      ),
-                    )
-                  else
-                    Text(
-                      '100% Initial Baseline Audience',
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green.shade700,
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -1041,9 +1122,9 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: step.stepColor.withOpacity(0.06),
+        color: step.stepColor.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: step.stepColor.withOpacity(0.3)),
+        border: Border.all(color: step.stepColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1083,7 +1164,7 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
         color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(20),
         boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1105,7 +1186,7 @@ class _FunnelChartWidgetState extends State<FunnelChartWidget> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(

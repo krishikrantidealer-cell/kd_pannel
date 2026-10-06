@@ -1263,7 +1263,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
-          'Customer Events & Live Pulse',
+          'Live Buyer Intent & Active Shoppers',
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
@@ -1371,7 +1371,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
               Row(
                 children: [
                   Text(
-                    'Customer Events',
+                    'Live Buyer Intent',
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

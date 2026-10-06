@@ -181,9 +181,40 @@ class _UserEventsPageState extends State<UserEventsPage> {
   DealersState? _lastDealersState;
   LeadsState? _lastLeadsState;
 
+  DealersState? get _dealersStateSafe {
+    if (!mounted) return _lastDealersState;
+    try {
+      final state = context.read<DealersBloc>().state;
+      _lastDealersState = state;
+      return state;
+    } catch (_) {
+      return _lastDealersState;
+    }
+  }
+
+  LeadsState? get _leadsStateSafe {
+    if (!mounted) return _lastLeadsState;
+    try {
+      final state = context.read<LeadsBloc>().state;
+      _lastLeadsState = state;
+      return state;
+    } catch (_) {
+      return _lastLeadsState;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dealersStateSafe;
+    _leadsStateSafe;
+  }
+
   void _buildUserLookupIndexes() {
-    final dealersState = context.read<DealersBloc>().state;
-    final leadsState = context.read<LeadsBloc>().state;
+    final dealersState = _dealersStateSafe;
+    final leadsState = _leadsStateSafe;
+
+    if (dealersState == null || leadsState == null) return;
 
     if (_lastDealersState == dealersState &&
         _lastLeadsState == leadsState &&
@@ -411,19 +442,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
       }
     }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      for (final u in dealersState.allRawUsers) {
-        indexUser(u);
-      }
-    } catch (_) {}
-
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
-      for (final u in leadsState.allRawUsers) {
-        indexUser(u);
-      }
-    } catch (_) {}
+    for (final u in dealersState.allRawUsers) {
+      indexUser(u);
+    }
+    for (final u in leadsState.allRawUsers) {
+      indexUser(u);
+    }
 
     _cachedAssignedUserKeys = assignedKeys;
     _cachedUserTypeLookup = typeLookup;
@@ -530,10 +554,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
   int _lastLeadsCount = -1;
 
   void _mergeSalesCustomerEventsIntoLogs() {
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final leadsState = context.read<LeadsBloc>().state;
+    final dealersState = _dealersStateSafe;
+    final leadsState = _leadsStateSafe;
+    if (dealersState == null || leadsState == null) return;
 
+    try {
       // Only re-process if counts changed or it's the first time
       if (_lastOrdersCount == dealersState.allRawOrders.length &&
           _lastDealersCount == dealersState.allRawUsers.length &&
@@ -628,14 +653,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         ? cleanDigits.substring(cleanDigits.length - 10)
         : '';
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final leadsState = context.read<LeadsBloc>().state;
-      final allSalesAgents = [
-        ...dealersState.salesAgents,
-        ...leadsState.salesAgents,
-      ];
-      return allSalesAgents.any((a) {
+    final dealersState = _dealersStateSafe;
+    final leadsState = _leadsStateSafe;
+    final List<Map<String, dynamic>> allSalesAgents = [
+      if (dealersState != null) ...dealersState.salesAgents,
+      if (leadsState != null) ...leadsState.salesAgents,
+    ];
+    return allSalesAgents.any((a) {
         final fn =
             '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim().toLowerCase();
         final name = (a['name'] ?? '').toString().trim().toLowerCase();
@@ -656,8 +680,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
             (last10.isNotEmpty && p10 == last10) ||
             (uid.isNotEmpty && uid == lower);
       });
-    } catch (_) {}
-    return false;
   }
 
   String? _getUserRole(String userIdentifier, String? currentRole) {
@@ -677,10 +699,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
         : '';
 
     // 1. Try to find in Dealers
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final Map<String, dynamic>?
-      dealerData = dealersState.allRawUsers.firstWhere((u) {
+    final dealersState = _dealersStateSafe;
+    if (dealersState != null) {
+      final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere((u) {
         final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim()
             .toLowerCase();
@@ -704,11 +725,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
       if (dealerData != null && dealerData.isNotEmpty) {
         return dealerData['role']?.toString();
       }
-    } catch (_) {}
+    }
 
     // 2. Try to find in Leads
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
+    final leadsState = _leadsStateSafe;
+    if (leadsState != null) {
       final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((
         u,
       ) {
@@ -733,7 +754,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
       if (leadData != null && leadData.isNotEmpty) {
         return leadData['role']?.toString();
       }
-    } catch (_) {}
+    }
 
     return currentRole;
   }
@@ -747,8 +768,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
         : '';
 
     // 1. Try to find in Dealers
-    try {
-      final dealersState = context.read<DealersBloc>().state;
+    final dealersState = _dealersStateSafe;
+    if (dealersState != null) {
       final matchingUser = dealersState.allRawUsers.firstWhere((u) {
         final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim()
@@ -770,16 +791,18 @@ class _UserEventsPageState extends State<UserEventsPage> {
             phone.contains(queryLower) ||
             (last10.isNotEmpty && p10 == last10) ||
             uid.contains(queryLower);
-      });
-      return matchingUser['email'] ??
-          matchingUser['phoneNumber'] ??
-          matchingUser['phone'] ??
-          searchQuery;
-    } catch (_) {}
+      }, orElse: () => <String, dynamic>{});
+      if (matchingUser.isNotEmpty) {
+        return matchingUser['email'] ??
+            matchingUser['phoneNumber'] ??
+            matchingUser['phone'] ??
+            searchQuery;
+      }
+    }
 
     // 2. Try to find in Leads
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
+    final leadsState = _leadsStateSafe;
+    if (leadsState != null) {
       final matchingUser = leadsState.allRawUsers.firstWhere((u) {
         final fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim()
@@ -801,12 +824,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
             phone.contains(queryLower) ||
             (last10.isNotEmpty && p10 == last10) ||
             uid.contains(queryLower);
-      });
-      return matchingUser['email'] ??
-          matchingUser['phoneNumber'] ??
-          matchingUser['phone'] ??
-          searchQuery;
-    } catch (_) {}
+      }, orElse: () => <String, dynamic>{});
+      if (matchingUser.isNotEmpty) {
+        return matchingUser['email'] ??
+            matchingUser['phoneNumber'] ??
+            matchingUser['phone'] ??
+            searchQuery;
+      }
+    }
 
     return searchQuery;
   }
@@ -858,8 +883,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       });
 
       // Populate _nameToId mappings and add all assigned dealers and leads (only role == 'user')
-      try {
-        final dealersState = context.read<DealersBloc>().state;
+      final dealersState = _dealersStateSafe;
+      if (dealersState != null) {
         for (final u in dealersState.allRawUsers) {
           final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
           if (dbRole != 'user') continue;
@@ -897,10 +922,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
             usersSet.add(displayName);
           }
         }
-      } catch (_) {}
+      }
 
-      try {
-        final leadsState = context.read<LeadsBloc>().state;
+      final leadsState = _leadsStateSafe;
+      if (leadsState != null) {
         for (final u in leadsState.allRawUsers) {
           final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
           if (dbRole != 'user') continue;
@@ -938,7 +963,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             usersSet.add(displayName);
           }
         }
-      } catch (_) {}
+      }
 
       // Add currently active online users from Live Pulse (only role == 'user')
       for (final u in _realTimeUsers) {
@@ -1318,46 +1343,43 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return false;
     }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final leadsState = context.read<LeadsBloc>().state;
-      final allSalesAgents = [
-        ...dealersState.salesAgents,
-        ...leadsState.salesAgents,
-      ];
-      final matchedSalesAgent = allSalesAgents.firstWhere(
-        isMatch,
-        orElse: () => <String, dynamic>{},
-      );
-      if (matchedSalesAgent.isNotEmpty) {
-        final fName =
-            '${matchedSalesAgent['firstName'] ?? ''} ${matchedSalesAgent['lastName'] ?? ''}'
-                .trim();
-        final sName = (matchedSalesAgent['name'] ?? '').toString().trim();
-        final p = (matchedSalesAgent['phoneNumber'] ??
-                matchedSalesAgent['phone'] ??
-                '')
-            .toString()
-            .trim();
-        final id = (matchedSalesAgent['_id'] ??
-                matchedSalesAgent['id'] ??
-                cleanRaw)
-            .toString();
-        String name = fName.isNotEmpty
-            ? fName
-            : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Sales Agent'));
-        return {
-          'name': name,
-          'phone': p.isNotEmpty ? p : cleanPhone,
-          'id': id,
-          'userDetails': matchedSalesAgent,
-          'userType': 'Sales',
-        };
-      }
-    } catch (_) {}
+    final dealersState = _dealersStateSafe;
+    final leadsState = _leadsStateSafe;
+    final List<Map<String, dynamic>> allSalesAgents = [
+      if (dealersState != null) ...dealersState.salesAgents,
+      if (leadsState != null) ...leadsState.salesAgents,
+    ];
+    final matchedSalesAgent = allSalesAgents.firstWhere(
+      isMatch,
+      orElse: () => <String, dynamic>{},
+    );
+    if (matchedSalesAgent.isNotEmpty) {
+      final fName =
+          '${matchedSalesAgent['firstName'] ?? ''} ${matchedSalesAgent['lastName'] ?? ''}'
+              .trim();
+      final sName = (matchedSalesAgent['name'] ?? '').toString().trim();
+      final p = (matchedSalesAgent['phoneNumber'] ??
+              matchedSalesAgent['phone'] ??
+              '')
+          .toString()
+          .trim();
+      final id = (matchedSalesAgent['_id'] ??
+              matchedSalesAgent['id'] ??
+              cleanRaw)
+          .toString();
+      String name = fName.isNotEmpty
+          ? fName
+          : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Sales Agent'));
+      return {
+        'name': name,
+        'phone': p.isNotEmpty ? p : cleanPhone,
+        'id': id,
+        'userDetails': matchedSalesAgent,
+        'userType': 'Sales',
+      };
+    }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
+    if (dealersState != null) {
       final matchedDealer = dealersState.allRawUsers.firstWhere(
         isMatch,
         orElse: () => <String, dynamic>{},
@@ -1383,10 +1405,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
           'userType': 'Dealer',
         };
       }
-    } catch (_) {}
+    }
 
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
+    if (leadsState != null) {
       final matchedLead = leadsState.allRawUsers.firstWhere(
         isMatch,
         orElse: () => <String, dynamic>{},
@@ -1412,7 +1433,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           'userType': 'Lead',
         };
       }
-    } catch (_) {}
+    }
 
     // Fallback if not found in CRM
     String name = cleanName;
@@ -1815,25 +1836,23 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return false;
     }
 
-    if (mounted) {
-      try {
-        final dealersState = context.read<DealersBloc>().state;
-        final m = dealersState.allRawUsers.firstWhere(
+    final dealersState = _dealersStateSafe;
+    if (dealersState != null) {
+      final m = dealersState.allRawUsers.firstWhere(
+        isMatch,
+        orElse: () => <String, dynamic>{},
+      );
+      if (m.isNotEmpty) foundUser = m;
+    }
+
+    if (foundUser == null) {
+      final leadsState = _leadsStateSafe;
+      if (leadsState != null) {
+        final m = leadsState.allRawUsers.firstWhere(
           isMatch,
           orElse: () => <String, dynamic>{},
         );
         if (m.isNotEmpty) foundUser = m;
-      } catch (_) {}
-
-      if (foundUser == null && mounted) {
-        try {
-          final leadsState = context.read<LeadsBloc>().state;
-          final m = leadsState.allRawUsers.firstWhere(
-            isMatch,
-            orElse: () => <String, dynamic>{},
-          );
-          if (m.isNotEmpty) foundUser = m;
-        } catch (_) {}
       }
     }
 
@@ -1993,10 +2012,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
         : '';
 
     // 1. Try to find in Dealers
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      final Map<String, dynamic>?
-      dealerData = dealersState.allRawUsers.firstWhere((u) {
+    final dealersState = _dealersStateSafe;
+    if (dealersState != null) {
+      final Map<String, dynamic>? dealerData = dealersState.allRawUsers.firstWhere((u) {
         final String fullName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
             .trim()
             .toLowerCase();
@@ -2045,11 +2063,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
             dealerData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
       }
-    } catch (_) {}
+    }
 
     // 2. Try to find in Leads
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
+    final leadsState = _leadsStateSafe;
+    if (leadsState != null) {
       final Map<String, dynamic>? leadData = leadsState.allRawUsers.firstWhere((
         u,
       ) {
@@ -2099,7 +2117,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             leadData['phoneNumber'] ?? currentPhone ?? '';
         return {'name': displayName, 'phone': displayPhone};
       }
-    } catch (_) {}
+    }
 
     final String fallbackName = (currentName != null && currentName.isNotEmpty)
         ? currentName
@@ -2742,8 +2760,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       appBar: AppBar(
         title: Text(
           AuthService().isSales
-              ? 'Customer Activity & Live Pulse'
-              : 'Live Customer Activity Hub',
+              ? 'Live Buyer Intent & Active Shoppers'
+              : 'Marketing & Customer Telemetry Hub',
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
@@ -3448,8 +3466,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       );
     }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
+    final dealersState = _dealersStateSafe;
+    if (dealersState != null) {
       for (final u in dealersState.allRawUsers) {
         final address = (u['address'] is Map) ? u['address'] as Map : {};
 
@@ -3516,7 +3534,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
           }
         }
       }
-    } catch (_) {}
+    }
 
     // 2. Process events logs to identify buying behavior and revenue
     _eventsLogs.forEach((catKey, logs) {

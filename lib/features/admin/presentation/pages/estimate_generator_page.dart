@@ -5,7 +5,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/repositories/order_repository.dart';
 import 'package:kd_pannel/core/repositories/product_repository.dart';
 import 'package:kd_pannel/util/export_helper.dart';
@@ -507,6 +509,324 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
     printQuotation(estData);
   }
 
+  // ⚡ 1-Click WhatsApp Quotation Generator & Dispatcher
+  String _generateWhatsAppQuotationText(Map<String, dynamic> data) {
+    final clientName = (data['clientName'] ?? 'Valued Customer').toString().trim();
+    final estNo = (data['estimateNo'] ?? '').toString().trim();
+    final date = (data['date'] ?? '').toString().trim();
+    final items = data['items'] as List? ?? [];
+    final grandTotal = (data['grandTotal'] is num)
+        ? (data['grandTotal'] as num).toDouble()
+        : double.tryParse(data['grandTotal']?.toString() ?? '0') ?? 0.0;
+
+    final buffer = StringBuffer();
+    buffer.writeln('🌾 *KRISHIKRANTI ORGANICS* 🌾');
+    buffer.writeln('📋 *OFFICIAL ESTIMATE / QUOTATION*');
+    buffer.writeln('------------------------------------------');
+    buffer.writeln('👤 *Customer:* $clientName');
+    if (estNo.isNotEmpty) buffer.writeln('🔢 *Estimate No:* $estNo');
+    if (date.isNotEmpty) buffer.writeln('📅 *Date:* $date');
+    buffer.writeln('------------------------------------------');
+    buffer.writeln('📦 *Itemized Breakdown:*');
+
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      final name = (item['name'] ?? 'Product').toString().trim();
+      final qty = item['quantity'] ?? 1;
+      final price = item['price'] ?? 0;
+      final total = item['total'] ?? ((double.tryParse(qty.toString()) ?? 1) * (double.tryParse(price.toString()) ?? 0));
+      buffer.writeln('${i + 1}. *$name*');
+      buffer.writeln('   Qty: $qty × ₹$price = *₹$total*');
+    }
+
+    buffer.writeln('------------------------------------------');
+    buffer.writeln('💰 *Total Payable:* *₹${grandTotal.toStringAsFixed(2)}*');
+    buffer.writeln('------------------------------------------');
+    buffer.writeln('📞 *Support / Inquiries:* +91 93990 22060');
+    buffer.writeln('🌿 *Thank you for choosing KrishiKranti Organics!*');
+
+    return buffer.toString();
+  }
+
+  Future<void> _sendQuotationOnWhatsApp({Map<String, dynamic>? customData}) async {
+    final estData = customData ?? _collectEstimateData();
+    String rawPhone = (estData['clientPhone'] ?? '').toString().trim();
+    String clientName = (estData['clientName'] ?? 'Customer').toString().trim();
+
+    if (rawPhone.isEmpty) {
+      final phoneCtrl = TextEditingController();
+      final enteredPhone = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.phone_iphone_rounded, color: Color(0xFF008069)),
+              const SizedBox(width: 8),
+              Text(
+                'Customer Phone Number',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Please enter the 10-digit WhatsApp number for $clientName:',
+                style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixText: '+91 ',
+                  hintText: '9876543210',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF008069), width: 1.8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF008069),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final text = phoneCtrl.text.trim();
+                if (text.isNotEmpty) Navigator.pop(ctx, text);
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+
+      if (enteredPhone == null || enteredPhone.isEmpty) return;
+      rawPhone = enteredPhone;
+      if (customData == null) {
+        _clientPhoneCtrl.text = rawPhone;
+      }
+    }
+
+    final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    if (cleanPhone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 10-digit mobile number.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    // Auto-save active estimate state
+    if (customData == null) {
+      await _saveEstimate();
+    }
+
+    final quotationText = _generateWhatsAppQuotationText(estData);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF008069).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.send_rounded, color: Color(0xFF008069), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Send Quotation to +91 $cleanPhone',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          'Choose dispatch mode for ${estData['clientName'] ?? 'Customer'}',
+                          style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Option 1: Direct WhatsApp WABA API Dispatch
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF008069).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.bolt_rounded, color: Color(0xFF008069), size: 22),
+                ),
+                title: Text(
+                  'Send via MyOperator WABA CRM Chat',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Dispatches directly to customer\'s WhatsApp thread in your CRM',
+                  style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF008069)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    // 1. Get or create conversation for this phone
+                    final convRes = await ApiClient().post('/conversations/start', {
+                      'phone': cleanPhone,
+                      'name': clientName,
+                    });
+                    if (convRes.statusCode == 200 || convRes.statusCode == 201) {
+                      final body = jsonDecode(convRes.body);
+                      final conv = body['data'];
+                      final convId = conv['_id'];
+
+                      // 2. Send the formatted quotation message
+                      final msgRes = await ApiClient().post('/messages/send', {
+                        'conversationId': convId,
+                        'type': 'Text',
+                        'content': quotationText,
+                      });
+
+                      if (msgRes.statusCode == 200) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Quotation dispatched via WABA to +91 $cleanPhone!',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                              ),
+                              backgroundColor: const Color(0xFF008069),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                    }
+                    // Fallback to wa.me if backend WABA returned error
+                    final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=${Uri.encodeComponent(quotationText)}');
+                    await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+                  } catch (e) {
+                    final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=${Uri.encodeComponent(quotationText)}');
+                    await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              const Divider(height: 20),
+
+              // Option 2: Open WhatsApp Web / Direct App
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.open_in_new_rounded, color: Colors.blue, size: 22),
+                ),
+                title: Text(
+                  'Open in WhatsApp Web / App',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Opens standard WhatsApp chat with pre-filled quotation breakdown',
+                  style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Colors.blue),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=${Uri.encodeComponent(quotationText)}');
+                  if (await canLaunchUrl(waUrl)) {
+                    await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              const Divider(height: 20),
+
+              // Option 3: Copy Quotation Text to Clipboard
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.copy_rounded, color: Color(0xFF64748B), size: 22),
+                ),
+                title: Text(
+                  'Copy Quotation Text to Clipboard',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Paste anywhere into email, SMS, or external notes',
+                  style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await Clipboard.setData(ClipboardData(text: quotationText));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Quotation copied to clipboard!',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: const Color(0xFF008069),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // Live number to words for preview
   String _previewNumberToWords(double amount) {
     if (amount == 0) return 'Zero Rupees only';
@@ -901,6 +1221,24 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
               ),
             ),
             const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _isSaving ? null : () => _sendQuotationOnWhatsApp(),
+              icon: const Icon(Icons.send_rounded, size: 14),
+              label: Text(
+                'Send on WhatsApp',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF008069),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: FilledButton.icon(
@@ -1170,6 +1508,15 @@ class _EstimateGeneratorPageState extends State<EstimateGeneratorPage>
                                 ),
                               ),
                               const SizedBox(width: 12),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.send_rounded,
+                                  color: Color(0xFF008069),
+                                  size: 18,
+                                ),
+                                tooltip: 'Send on WhatsApp',
+                                onPressed: () => _sendQuotationOnWhatsApp(customData: est),
+                              ),
                               IconButton(
                                 icon: const Icon(
                                   Icons.edit_outlined,

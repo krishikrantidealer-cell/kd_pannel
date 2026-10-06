@@ -30,8 +30,15 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
         final type = event['type']?.toString();
         final rawData = event['data'];
         if ((type == 'CALL_UPDATE' || type == 'CALL_ENDED') && rawData != null) {
+          Map<String, dynamic> mapData = {};
           if (rawData is Map) {
-            final mapData = Map<String, dynamic>.from(rawData);
+            mapData = Map<String, dynamic>.from(rawData);
+          } else if (rawData is String) {
+            try {
+              mapData = Map<String, dynamic>.from(jsonDecode(rawData));
+            } catch (_) {}
+          }
+          if (mapData.isNotEmpty) {
             add(WebSocketCallUpdateReceivedEvent(mapData));
           }
         }
@@ -66,7 +73,10 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
             );
 
             if (match != null) {
-              final status = (match['status'] ?? '').toString().toLowerCase();
+              final Map<String, dynamic> matchMap = (match is Map)
+                  ? Map<String, dynamic>.from(match)
+                  : {};
+              final status = (matchMap['status'] ?? '').toString().toLowerCase();
               final isEnded = status == 'ended' ||
                               status == 'completed' ||
                               status == 'missed' ||
@@ -77,13 +87,17 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
                               status == 'canceled' ||
                               status == 'cancelled' ||
                               status == 'disconnected' ||
-                              (match['recordingUrl'] != null && match['recordingUrl'].toString().isNotEmpty);
+                              (matchMap['recordingUrl'] != null && matchMap['recordingUrl'].toString().isNotEmpty);
               final isAnswered = status == 'answered';
               if (isEnded) {
                 _activeCallPollingTimer?.cancel();
-                add(WebSocketCallUpdateReceivedEvent(match as Map<String, dynamic>));
+                if (matchMap.isNotEmpty) {
+                  add(WebSocketCallUpdateReceivedEvent(matchMap));
+                }
               } else if (isAnswered && !state.isCallActive) {
-                add(WebSocketCallUpdateReceivedEvent(match as Map<String, dynamic>));
+                if (matchMap.isNotEmpty) {
+                  add(WebSocketCallUpdateReceivedEvent(matchMap));
+                }
               }
             }
           }

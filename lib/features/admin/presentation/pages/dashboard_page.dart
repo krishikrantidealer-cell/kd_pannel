@@ -5,7 +5,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/dashboard_service.dart';
@@ -26,10 +25,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_state.dart';
 import 'package:kd_pannel/core/utils/formatters.dart';
-import 'user_events_page.dart';
 import 'orders_page.dart';
-import 'leads_page.dart';
-import 'dealer_management_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -4284,9 +4280,6 @@ class _StatusBadge extends StatelessWidget {
           break;
         case 'partially paid':
           color = AppTheme.teal;
-          break;
-        case 'failed':
-          color = AppTheme.error;
           break;
         default:
           color = AppTheme.textSecondary;

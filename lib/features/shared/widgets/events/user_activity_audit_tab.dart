@@ -343,33 +343,79 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
   ) {
     switch (eventType) {
       case 'add_to_cart':
-        final prod =
-            payload['productName'] ?? payload['productId'] ?? 'an item';
-        final qty = payload['quantity'] ?? 1;
-        final price = payload['price'] != null
-            ? ' at ₹${payload['price']}'
-            : '';
+        final prod = payload['productName'] ??
+            payload['name'] ??
+            payload['title'] ??
+            payload['productId'] ??
+            'an item';
+        final qty = payload['quantity'] ?? payload['qty'] ?? 1;
+        final rawPrice = payload['price'] ?? payload['amount'];
+        final price = rawPrice != null ? ' at ₹$rawPrice' : '';
         return 'Added "$prod" (Qty: $qty)$price to the shopping cart.';
       case 'checkout_started':
-        final val = payload['cartValue'] ?? '0';
-        final items = payload['itemCount'] ?? '0';
+        final val = payload['totalAmount'] ??
+            payload['cartValue'] ??
+            payload['amount'] ??
+            payload['total'] ??
+            payload['grandTotal'] ??
+            payload['subtotal'] ??
+            payload['cartTotal'] ??
+            payload['orderValue'] ??
+            payload['value'] ??
+            '0';
+        final dynamic rawItems = payload['itemCount'] ??
+            payload['itemsCount'] ??
+            payload['items_count'] ??
+            payload['item_count'] ??
+            payload['quantity'] ??
+            (payload['items'] is List
+                ? (payload['items'] as List).length
+                : (payload['items'] is num
+                    ? payload['items']
+                    : (payload['products'] is List
+                        ? (payload['products'] as List).length
+                        : null)));
+        final items = rawItems != null ? rawItems.toString() : '1';
         return 'Initiated checkout for $items items worth ₹$val.';
       case 'apply_coupon':
-        final code = payload['couponCode'] ?? 'coupon';
+        final code = payload['couponCode'] ??
+            payload['coupon'] ??
+            payload['code'] ??
+            'coupon';
         final success = payload['success'] == false
             ? 'unsuccessfully'
             : 'successfully';
         return 'Attempted to apply discount coupon "$code" $success.';
       case 'payment_success':
-        final amt = payload['amount'] ?? '0';
-        final id = payload['orderId'] ?? '-';
+        final amt = payload['amount'] ??
+            payload['totalAmount'] ??
+            payload['paidAmount'] ??
+            payload['orderValue'] ??
+            payload['total'] ??
+            '0';
+        final id = payload['orderId'] ??
+            payload['order_id'] ??
+            payload['transactionId'] ??
+            '-';
         return 'Successfully completed payment of ₹$amt for Order ID: $id.';
       case 'payment_failed':
-        final reason = payload['reason'] ?? 'declined';
-        final amt = payload['amount'] ?? '0';
+        final reason = payload['reason'] ??
+            payload['errorMessage'] ??
+            payload['error'] ??
+            payload['failureReason'] ??
+            'declined';
+        final amt = payload['amount'] ??
+            payload['totalAmount'] ??
+            payload['orderValue'] ??
+            payload['total'] ??
+            '0';
         return 'Payment attempt of ₹$amt failed. Reason: $reason.';
       case 'payment_initiated':
-        final amt = payload['amount'] ?? '0';
+        final amt = payload['amount'] ??
+            payload['totalAmount'] ??
+            payload['orderValue'] ??
+            payload['total'] ??
+            '0';
         return 'Initiated payment checkout for ₹$amt.';
       case 'banner_click':
         final banner =
@@ -576,16 +622,35 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       }
 
       String displayKey = key;
-      if (key == 'productId') displayKey = 'Product';
-      if (key == 'productName') displayKey = 'Product';
-      if (key == 'couponCode') displayKey = 'Coupon';
-      if (key == 'cartValue') displayKey = 'Value';
-      if (key == 'itemCount') displayKey = 'Items';
+      if (key == 'productId' || key == 'product_id') displayKey = 'Product';
+      if (key == 'productName' || key == 'product_name') displayKey = 'Product';
+      if (key == 'couponCode' || key == 'coupon_code') displayKey = 'Coupon';
+      if (key == 'cartValue' || key == 'cart_value') displayKey = 'Value';
+      if (key == 'totalAmount' || key == 'total_amount') displayKey = 'Total';
+      if (key == 'itemCount' ||
+          key == 'itemsCount' ||
+          key == 'items_count' ||
+          key == 'item_count') {
+        displayKey = 'Items';
+      }
       if (key == 'amount') displayKey = 'Amount';
+      if (key == 'subtotal') displayKey = 'Subtotal';
+      if (key == 'grandTotal' || key == 'grand_total') displayKey = 'Grand Total';
+      if (key == 'discountAmount' || key == 'discount_amount') {
+        displayKey = 'Discount';
+      }
 
+      final lowerKey = key.toLowerCase();
       String displayVal = value.toString();
-      if (key == 'amount' || key == 'cartValue' || key == 'price') {
-        displayVal = '₹$value';
+      if (lowerKey.contains('amount') ||
+          lowerKey.contains('price') ||
+          lowerKey.contains('total') ||
+          lowerKey.contains('value') ||
+          lowerKey.contains('subtotal') ||
+          lowerKey.contains('discount')) {
+        if (!displayVal.startsWith('₹') && num.tryParse(displayVal) != null) {
+          displayVal = '₹$value';
+        }
       }
 
       chips.add(
@@ -629,15 +694,38 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       }
 
       String displayKey = key;
-      if (key == 'productId') displayKey = 'Product ID';
-      if (key == 'productName') displayKey = 'Product Name';
-      if (key == 'couponCode') displayKey = 'Coupon Code';
-      if (key == 'cartValue') displayKey = 'Cart Total Value';
-      if (key == 'itemCount') displayKey = 'Number of Items';
+      if (key == 'productId' || key == 'product_id') displayKey = 'Product ID';
+      if (key == 'productName' || key == 'product_name') {
+        displayKey = 'Product Name';
+      }
+      if (key == 'couponCode' || key == 'coupon_code') {
+        displayKey = 'Coupon Code';
+      }
+      if (key == 'cartValue' || key == 'cart_value') {
+        displayKey = 'Cart Total Value';
+      }
+      if (key == 'totalAmount' || key == 'total_amount') {
+        displayKey = 'Total Amount';
+      }
+      if (key == 'itemCount' ||
+          key == 'itemsCount' ||
+          key == 'items_count' ||
+          key == 'item_count') {
+        displayKey = 'Number of Items';
+      }
       if (key == 'amount') displayKey = 'Transaction Amount';
+      if (key == 'subtotal') displayKey = 'Subtotal';
+      if (key == 'grandTotal' || key == 'grand_total') {
+        displayKey = 'Grand Total';
+      }
+      if (key == 'discountAmount' || key == 'discount_amount') {
+        displayKey = 'Discount Amount';
+      }
       if (key == 'price') displayKey = 'Price per Unit';
-      if (key == 'quantity') displayKey = 'Quantity Purchased';
-      if (key == 'orderId') displayKey = 'Order ID';
+      if (key == 'quantity' || key == 'qty') {
+        displayKey = 'Quantity Purchased';
+      }
+      if (key == 'orderId' || key == 'order_id') displayKey = 'Order ID';
       if (key == 'gateway') displayKey = 'Payment Gateway';
       if (key == 'reason') displayKey = 'Failure Reason';
       if (key == 'ip') displayKey = 'IP Address';
@@ -651,9 +739,17 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
         displayKey = displayKey.toUpperCase();
       }
 
+      final lowerKey = key.toLowerCase();
       String displayVal = value.toString();
-      if (key == 'amount' || key == 'cartValue' || key == 'price') {
-        displayVal = '₹$value';
+      if (lowerKey.contains('amount') ||
+          lowerKey.contains('price') ||
+          lowerKey.contains('total') ||
+          lowerKey.contains('value') ||
+          lowerKey.contains('subtotal') ||
+          lowerKey.contains('discount')) {
+        if (!displayVal.startsWith('₹') && num.tryParse(displayVal) != null) {
+          displayVal = '₹$value';
+        }
       }
 
       rows.add(

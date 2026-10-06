@@ -47,7 +47,7 @@ class RetentionMatrixWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppTheme.cardColor,
           borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
         ),
         child: const Center(
           child: CircularProgressIndicator(color: AppTheme.primaryColor),
@@ -61,15 +61,15 @@ class RetentionMatrixWidget extends StatelessWidget {
         color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
         boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 600;
+              final headerInfo = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -89,23 +89,51 @@ class RetentionMatrixWidget extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-              Container(
+              );
+
+              final badge = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
+                  color: Colors.purple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
                 ),
-                child: Text(
-                  'Seasonal Cohort Tracking',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.purple.shade700,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.query_builder_rounded, size: 14, color: Colors.purple.shade700),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Seasonal Cohort Tracking',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.purple.shade700,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              );
+
+              if (isCompact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    headerInfo,
+                    const SizedBox(height: 10),
+                    badge,
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  headerInfo,
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
           SingleChildScrollView(
@@ -164,11 +192,19 @@ class RetentionMatrixWidget extends StatelessWidget {
                       ),
                     ),
                     DataCell(
-                      Text(
-                        '${cohort.totalUsers}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${cohort.totalUsers}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -181,12 +217,21 @@ class RetentionMatrixWidget extends StatelessWidget {
 
                       return DataCell(
                         Container(
-                          width: 54,
+                          width: 56,
                           height: 32,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: bgColor,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: p >= 40
+                                ? [
+                                    BoxShadow(
+                                      color: bgColor.withValues(alpha: 0.25),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ]
+                                : null,
                           ),
                           child: Text(
                             p > 0 ? '${p.toStringAsFixed(0)}%' : '-',
@@ -204,8 +249,56 @@ class RetentionMatrixWidget extends StatelessWidget {
               }).toList(),
             ),
           ),
+          const SizedBox(height: 16),
+          // Heatmap Legend Scale
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Retention Scale:',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              _buildLegendItem('< 20%', const Color(0xFFC8E6C9), Colors.black87),
+              _buildLegendItem('20-40%', const Color(0xFF81C784), Colors.black87),
+              _buildLegendItem('40-60%', const Color(0xFF4CAF50), Colors.white),
+              _buildLegendItem('60-80%', const Color(0xFF2E7D32), Colors.white),
+              _buildLegendItem('80%+', const Color(0xFF1B5E20), Colors.white),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color, Color textColor) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: Colors.grey.shade300, width: 0.5),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

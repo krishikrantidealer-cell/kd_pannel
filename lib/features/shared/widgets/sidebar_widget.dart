@@ -43,7 +43,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 4},
     {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 5},
     {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 6},
-    {'icon': Icons.insights_rounded, 'title': 'Marketing', 'index': 7},
+    {'icon': Icons.insights_rounded, 'title': 'Marketing & Telemetry', 'index': 7},
     {'icon': Icons.local_activity_rounded, 'title': 'Sales Activity', 'index': 8},
     {'icon': Icons.notifications_active_rounded, 'title': 'Push Campaigns', 'index': 9},
     {'icon': Icons.delete_sweep_rounded, 'title': 'Trash Bin', 'index': 10},
@@ -64,7 +64,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.campaign_rounded, 'title': 'My Leads', 'index': 3},
     {'icon': Icons.storefront_rounded, 'title': 'My Dealers', 'index': 4},
     {'icon': Icons.price_change_rounded, 'title': 'My Price Coupons', 'index': 5},
-    {'icon': Icons.insights_rounded, 'title': 'Customer Events', 'index': 6},
+    {'icon': Icons.bolt_rounded, 'title': 'Live Buyer Intent', 'index': 6},
     {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 7},
     {'icon': Icons.description_rounded, 'title': 'Estimates', 'index': 8},
     {'icon': Icons.chat_rounded, 'title': 'WhatsApp CRM', 'index': 9},
@@ -437,9 +437,8 @@ class _SidebarHeader extends StatelessWidget {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 180),
                     opacity: isExpanded ? 1.0 : 0.0,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: 132,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

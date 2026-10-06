@@ -22,12 +22,16 @@ class TelephonyFloatingDock extends StatefulWidget {
 class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with SingleTickerProviderStateMixin {
   Timer? _callDurationTimer;
   Timer? _dismissTimer;
+  Timer? _safetyDismissTimer;
   int _secondsElapsed = 0;
   bool _isMuted = false;
   bool _isOnHold = false;
   bool _isMinimized = false;
   bool _isEnding = false;
   bool _isDisconnecting = false;
+  bool _wasCallOngoing = false;
+  bool _isDispositionDialogShowing = false;
+  String? _lastShownDispositionCallId;
 
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
@@ -50,6 +54,7 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
     TelephonyAudioService().stopDialingTone();
     _callDurationTimer?.cancel();
     _dismissTimer?.cancel();
+    _safetyDismissTimer?.cancel();
     _animController.dispose();
     super.dispose();
   }
@@ -57,6 +62,7 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
   void _startTimer() {
     _callDurationTimer?.cancel();
     _dismissTimer?.cancel();
+    _safetyDismissTimer?.cancel();
     _secondsElapsed = 0;
     _isEnding = false;
     _isDisconnecting = false;
@@ -75,6 +81,53 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
     _callDurationTimer = null;
   }
 
+  void _dismissDock(BuildContext context, CallLogsState state) {
+    if (_isEnding) return;
+    _wasCallOngoing = false;
+    TelephonyAudioService().stopDialingTone();
+    TelephonyAudioService().playHangupTone();
+    _stopTimer();
+
+    if (mounted) {
+      setState(() {
+        _isEnding = true;
+      });
+    }
+
+    _dismissTimer?.cancel();
+    _safetyDismissTimer?.cancel();
+
+    // Absolute fallback safety: force-close dock after 900ms no matter what
+    _safetyDismissTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted && _isEnding) {
+        setState(() {
+          _isEnding = false;
+          _isDisconnecting = false;
+          _secondsElapsed = 0;
+        });
+        _animController.reset();
+      }
+    });
+
+    final int delayMs = state.showPostCallDisposition ? 350 : 150;
+    _dismissTimer = Timer(Duration(milliseconds: delayMs), () {
+      if (mounted) {
+        _animController.reverse().then((_) {
+          if (mounted) {
+            setState(() {
+              _isEnding = false;
+              _isDisconnecting = false;
+              _secondsElapsed = 0;
+            });
+            if (state.showPostCallDisposition && state.activeCustomerPhone != null) {
+              _showDispositionDialog(context, state);
+            }
+          }
+        });
+      }
+    });
+  }
+
   String _formatDuration(int seconds) {
     final minutes = (seconds / 60).floor().toString().padLeft(2, '0');
     final secs = (seconds % 60).toString().padLeft(2, '0');
@@ -85,6 +138,13 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
     final callLogId = state.activeCallLogId ?? '';
     final phone = state.activeCustomerPhone ?? '';
     final name = state.activeCustomerName;
+
+    // Strict guard to prevent stacking multiple disposition dialogs
+    if (_isDispositionDialogShowing) return;
+    if (callLogId.isNotEmpty && _lastShownDispositionCallId == callLogId) return;
+
+    _isDispositionDialogShowing = true;
+    _lastShownDispositionCallId = callLogId;
 
     showDialog(
       context: context,
@@ -103,7 +163,8 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
           ));
         },
       ),
-    ).then((_) {
+    ).whenComplete(() {
+      _isDispositionDialogShowing = false;
       if (context.mounted) {
         context.read<CallLogsBloc>().add(const DismissDispositionModalEvent());
       }
@@ -148,7 +209,10 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
           context.read<CallLogsBloc>().add(const ClearCallLogsMessageEvent());
         }
 
-        if (state.isTriggeringCall || state.isCallActive) {
+        final bool isCurrentlyOngoing = state.isTriggeringCall || state.isCallActive;
+
+        if (isCurrentlyOngoing) {
+          _wasCallOngoing = true;
           _animController.forward();
           if (state.isCallActive) {
             TelephonyAudioService().stopDialingTone();
@@ -160,33 +224,8 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
             TelephonyAudioService().startDialingTone();
             _stopTimer();
           }
-        } else if (!state.isCallActive && !state.isTriggeringCall && !_isEnding) {
-          // Instant visual and acoustic feedback transition
-          TelephonyAudioService().stopDialingTone();
-          TelephonyAudioService().playHangupTone();
-          setState(() {
-            _isEnding = true;
-          });
-          _stopTimer();
-
-          _dismissTimer?.cancel();
-          final int delayMs = state.showPostCallDisposition ? 400 : 200;
-          _dismissTimer = Timer(Duration(milliseconds: delayMs), () {
-            if (mounted) {
-              _animController.reverse().then((_) {
-                if (mounted) {
-                  setState(() {
-                    _isEnding = false;
-                    _isDisconnecting = false;
-                    _secondsElapsed = 0;
-                  });
-                  if (state.showPostCallDisposition && state.activeCustomerPhone != null) {
-                    _showDispositionDialog(context, state);
-                  }
-                }
-              });
-            }
-          });
+        } else if (_wasCallOngoing || _isEnding) {
+          _dismissDock(context, state);
         }
       },
       builder: (context, state) {
@@ -464,10 +503,7 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
                                   final duration = _secondsElapsed;
                                   setState(() {
                                     _isDisconnecting = true;
-                                    _isEnding = true;
                                   });
-                                  _stopTimer();
-                                  TelephonyAudioService().playHangupTone();
                                   context.read<CallLogsBloc>().add(EndActiveCallEvent(durationSeconds: duration));
                                 },
                               ),

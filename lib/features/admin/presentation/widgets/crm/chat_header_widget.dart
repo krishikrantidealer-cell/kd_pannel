@@ -101,7 +101,7 @@ class ChatHeaderWidget extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        conversation.preferredLanguage.toUpperCase(),
+                        (conversation.preferredLanguage ?? 'EN').toUpperCase(),
                         style: GoogleFonts.outfit(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,

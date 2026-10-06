@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,8 +19,6 @@ import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart'
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_activity_audit_tab.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,7 +71,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
 
       final List<String> myIdentifiers = [
         if (_dealer!.email != null) _dealer!.email!.toString(),
-        if (_dealer!.phone != null) _dealer!.phone!.toString(),
+        _dealer!.phone.toString(),
         if (_dealer!.id != null) _dealer!.id!.toString(),
       ];
 
@@ -125,8 +122,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           'profile_view',
           properties: {
             'dealerId': args.id ?? '',
-            'dealerName': args.name ?? '',
-            'details': 'Viewed dealer profile for ${args.name ?? ''}',
+            'dealerName': args.name,
+            'details': 'Viewed dealer profile for ${args.name}',
           },
         );
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1465,6 +1466,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ),
                       const SizedBox(width: 8),
 
+                      // 📜 Customer Call History & MyOperator Recordings Drawer Button
+                      IconButton(
+                        icon: const Icon(
+                          Icons.history_edu_rounded,
+                          color: Color(0xFF008069),
+                          size: 21,
+                        ),
+                        tooltip: 'View Customer Call History & MyOperator Recordings',
+                        onPressed: () {
+                          final contact = _selectedConversation?['contactId'] ?? {};
+                          final String phone = (contact['phone'] ?? '').toString();
+                          final String name = (contact['name'] ?? 'Customer').toString();
+                          if (phone.isNotEmpty) {
+                            _showCustomerCallHistoryDrawer(context, phone, name);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+
                       // Search button
                       IconButton(
                         icon: const Icon(
@@ -1531,6 +1551,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
           // ⚡ Smart Retargeting Outreach Banner for Sales Representatives
           _buildSmartOutreachBanner(),
+
+          // 🕒 Meta 24-Hour Messaging Window Indicator
+          _buildMeta24HourWindowBanner(),
 
           // Message log thread
           Expanded(
@@ -2439,6 +2462,135 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               templateName,
               '',
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🕒 Meta 24-Hour Messaging Window Real-Time Indicator & Guard
+  Widget _buildMeta24HourWindowBanner() {
+    if (_selectedConversation == null) return const SizedBox.shrink();
+
+    DateTime? lastIncomingTime;
+    for (int i = _messages.length - 1; i >= 0; i--) {
+      final msg = _messages[i];
+      if (msg['direction'] == 'incoming') {
+        final raw = msg['createdAt'] ?? msg['timestamp'];
+        if (raw != null) {
+          lastIncomingTime = DateTime.tryParse(raw.toString());
+          break;
+        }
+      }
+    }
+
+    final bool isWindowOpen;
+    final int remainingHours;
+    final int remainingMinutes;
+
+    if (lastIncomingTime == null) {
+      isWindowOpen = false;
+      remainingHours = 0;
+      remainingMinutes = 0;
+    } else {
+      final elapsed = DateTime.now().difference(lastIncomingTime.toLocal());
+      if (elapsed.inHours < 24) {
+        isWindowOpen = true;
+        final rem = const Duration(hours: 24) - elapsed;
+        remainingHours = rem.inHours;
+        remainingMinutes = rem.inMinutes % 60;
+      } else {
+        isWindowOpen = false;
+        remainingHours = 0;
+        remainingMinutes = 0;
+      }
+    }
+
+    if (isWindowOpen) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFA5D6A7), width: 1.0),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 14),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '🟢 24h Meta Service Window Active (${remainingHours}h ${remainingMinutes}m remaining) · Free-form messages allowed',
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1B5E20),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFFCC80), width: 1.0),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100), size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    lastIncomingTime == null
+                        ? '⚠️ Meta 24-Hour Window Inactive. Customer has not sent an inbound message. Send an Approved Template to begin.'
+                        : '⚠️ Meta 24-Hour Service Window Closed. Free text will fail. Re-engage using an Approved Template.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFBF360C),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE65100),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            icon: const Icon(Icons.quickreply_rounded, size: 12),
+            label: Text(
+              'Select Template',
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: () {
+              if (_selectedConversation != null) {
+                _showSendTemplateDialog(context, _selectedConversation['_id']);
+              }
+            },
           ),
         ],
       ),
@@ -4059,6 +4211,255 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 📞 CUSTOMER TELEPHONY TIMELINE & MYOPERATOR RECORDING VAULT MODAL
+  // ══════════════════════════════════════════════════════════════════════════
+  void _showCustomerCallHistoryDrawer(BuildContext context, String rawPhone, String customerName) {
+    final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    List<dynamic> customerCalls = [];
+    bool isLoading = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          if (isLoading) {
+            ApiClient().get('/call/logs?search=$cleanPhone&limit=50').then((res) {
+              if (res.statusCode == 200) {
+                final body = jsonDecode(res.body);
+                final logs = body['data']?['callLogs'] ?? body['data'] ?? [];
+                if (context.mounted) {
+                  setDlgState(() {
+                    customerCalls = List<dynamic>.from(logs);
+                    isLoading = false;
+                  });
+                }
+              } else {
+                if (context.mounted) {
+                  setDlgState(() => isLoading = false);
+                }
+              }
+            }).catchError((_) {
+              if (context.mounted) {
+                setDlgState(() => isLoading = false);
+              }
+            });
+          }
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 580,
+              height: 600,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF008069), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Call History: $customerName',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF111B21)),
+                              ),
+                              Text(
+                                '+91 $cleanPhone · MyOperator Telephony Audit',
+                                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF008069)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Due to MyOperator portal security, recordings can be accessed directly in the MyOperator console with 1-click.',
+                            style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF475569)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: isLoading
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                        : customerCalls.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.phone_disabled_rounded, size: 48, color: Color(0xFFCBD5E1)),
+                                    const SizedBox(height: 12),
+                                    Text('No call records found for this number', style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B))),
+                                  ],
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: customerCalls.length,
+                                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                itemBuilder: (ctx, i) {
+                                  final call = customerCalls[i];
+                                  final status = (call['status'] ?? 'initiated').toString().toLowerCase();
+                                  final duration = int.tryParse((call['durationSeconds'] ?? 0).toString()) ?? 0;
+                                  final mins = duration ~/ 60;
+                                  final secs = duration % 60;
+                                  final durText = duration > 0 ? '${mins}m ${secs}s' : '0s';
+                                  final isOutbound = (call['direction'] ?? 'outbound').toString().toLowerCase() == 'outbound';
+                                  final agent = call['agentId'];
+                                  final agentName = agent is Map ? '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim() : 'Agent';
+                                  final rawDate = call['createdAt'];
+                                  final dateText = rawDate != null ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(rawDate.toString()).toLocal()) : '';
+                                  final userDisp = (call['userDisposition'] ?? call['disposition'] ?? '').toString().trim();
+                                  final notes = (call['notes'] ?? '').toString().trim();
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  isOutbound ? Icons.call_made_rounded : Icons.call_received_rounded,
+                                                  size: 16,
+                                                  color: isOutbound ? const Color(0xFF008069) : Colors.blue,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  isOutbound ? 'Outbound Call' : 'Inbound Call',
+                                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1E293B)),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: status == 'answered' || status == 'completed'
+                                                        ? const Color(0xFFE8F5E9)
+                                                        : const Color(0xFFFFEBEE),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    status.toUpperCase(),
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: status == 'answered' || status == 'completed'
+                                                          ? const Color(0xFF2E7D32)
+                                                          : const Color(0xFFC62828),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            Text(
+                                              dateText,
+                                              style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Text('⏱ Duration: $durText', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
+                                            const SizedBox(width: 14),
+                                            Text('👤 Agent: $agentName', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF475569))),
+                                          ],
+                                        ),
+                                        if (userDisp.isNotEmpty || notes.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFF9E6),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '📝 ${userDisp.isNotEmpty ? userDisp : ''}${notes.isNotEmpty ? ' · $notes' : ''}',
+                                              style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF5D4037), fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            TextButton.icon(
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: const Color(0xFF008069),
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              ),
+                                              icon: const Icon(Icons.open_in_new_rounded, size: 13),
+                                              label: Text(
+                                                'Listen in MyOperator Panel',
+                                                style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                              ),
+                                              onPressed: () async {
+                                                await Clipboard.setData(ClipboardData(text: cleanPhone));
+                                                final url = Uri.parse('https://in.app.myoperator.com/log');
+                                                if (await canLaunchUrl(url)) {
+                                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
