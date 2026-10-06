@@ -24,14 +24,16 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
   Timer? _dismissTimer;
   Timer? _safetyDismissTimer;
   int _secondsElapsed = 0;
-  bool _isMuted = false;
-  bool _isOnHold = false;
   bool _isMinimized = false;
   bool _isEnding = false;
   bool _isDisconnecting = false;
   bool _wasCallOngoing = false;
-  bool _isDispositionDialogShowing = false;
-  String? _lastShownDispositionCallId;
+
+  // Global static locks to guarantee that multiple ACW modals CANNOT stack
+  static bool _isDispositionDialogShowing = false;
+  static String? _lastShownDispositionCallId;
+  static String? _lastShownPhone;
+  static DateTime? _lastShownDispositionTime;
 
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
@@ -136,22 +138,33 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
 
   void _showDispositionDialog(BuildContext context, CallLogsState state) {
     final callLogId = state.activeCallLogId ?? '';
-    final phone = state.activeCustomerPhone ?? '';
+    final phone = (state.activeCustomerPhone ?? '').replaceFirst(RegExp(r'^\+?91'), '').trim();
     final name = state.activeCustomerName;
 
-    // Strict guard to prevent stacking multiple disposition dialogs
+    final now = DateTime.now();
+    // Strict multi-layer static guard to prevent stacking multiple disposition dialogs
     if (_isDispositionDialogShowing) return;
-    if (callLogId.isNotEmpty && _lastShownDispositionCallId == callLogId) return;
+    if (_lastShownDispositionTime != null && now.difference(_lastShownDispositionTime!).inSeconds < 5) {
+      return;
+    }
+    if (callLogId.isNotEmpty && _lastShownDispositionCallId == callLogId) {
+      return;
+    }
+    if (phone.isNotEmpty && _lastShownPhone == phone && _lastShownDispositionTime != null && now.difference(_lastShownDispositionTime!).inSeconds < 15) {
+      return;
+    }
 
     _isDispositionDialogShowing = true;
-    _lastShownDispositionCallId = callLogId;
+    _lastShownDispositionCallId = callLogId.isNotEmpty ? callLogId : null;
+    _lastShownPhone = phone.isNotEmpty ? phone : null;
+    _lastShownDispositionTime = now;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => CallDispositionDialog(
         callLogId: callLogId,
-        customerPhone: phone,
+        customerPhone: state.activeCustomerPhone ?? '',
         customerName: name,
         onSave: (disposition, followUpDate, followUpNote, notes) {
           context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
@@ -462,42 +475,28 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
                           ),
                         ),
                       ] else ...[
-                        const SizedBox(height: 14),
-                        // Controls Strip (Mute, Hold, Hangup)
+                        const SizedBox(height: 12),
+                        // Call Action Controls
                         Row(
                           children: [
+                            // Quick Action: Pre-open ACW Notes while on call
                             Expanded(
                               child: _buildDockButton(
-                                icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                                label: _isMuted ? 'Unmute' : 'Mute',
-                                isActive: _isMuted,
+                                icon: Icons.edit_note_rounded,
+                                label: 'Call Notes',
+                                isActive: false,
                                 onTap: () {
-                                  setState(() => _isMuted = !_isMuted);
-                                  if (_isMuted) {
-                                    TelephonyAudioService().playMuteTone();
-                                  } else {
-                                    TelephonyAudioService().playUnmuteTone();
-                                  }
+                                  _showDispositionDialog(context, state);
                                 },
                               ),
                             ),
                             const SizedBox(width: 8),
+                            // Primary Action: End Call
                             Expanded(
-                              child: _buildDockButton(
-                                icon: _isOnHold ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                                label: _isOnHold ? 'Resume' : 'Hold',
-                                isActive: _isOnHold,
-                                onTap: () {
-                                  setState(() => _isOnHold = !_isOnHold);
-                                  TelephonyAudioService().playHoldTone();
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
+                              flex: 2,
                               child: _buildDockButton(
                                 icon: Icons.call_end_rounded,
-                                label: _isDisconnecting ? 'Ending...' : 'End Call',
+                                label: _isDisconnecting ? 'Ending Call...' : 'End Call',
                                 isDestructive: true,
                                 onTap: () {
                                   final duration = _secondsElapsed;
