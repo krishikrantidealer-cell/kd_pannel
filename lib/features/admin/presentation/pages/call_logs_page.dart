@@ -558,26 +558,28 @@ class _CallLogsPageState extends State<CallLogsPage> {
                       children: [
                         ElevatedButton.icon(
                           onPressed: () async {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('🔄 Syncing call logs from MyOperator across all accounts...'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                            try {
-                              final res = await ApiClient().post('/calls/sync', {});
-                              if (res.statusCode == 200) {
-                                final body = jsonDecode(res.body);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(body['message'] ?? 'Calls synced successfully!'),
-                                      backgroundColor: const Color(0xFF008069),
-                                    ),
-                                  );
+                            if (isAdmin) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('🔄 Syncing call logs from MyOperator across all accounts...'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                              try {
+                                final res = await ApiClient().post('/calls/sync', {});
+                                if (res.statusCode == 200) {
+                                  final body = jsonDecode(res.body);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(body['message'] ?? 'Calls synced successfully!'),
+                                        backgroundColor: const Color(0xFF008069),
+                                      ),
+                                    );
+                                  }
                                 }
-                              }
-                            } catch (_) {}
+                              } catch (_) {}
+                            }
                             if (context.mounted) {
                               context.read<CallLogsBloc>().add(FetchCallLogsEvent(
                                 page: 1,
@@ -595,9 +597,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             elevation: 0,
                           ),
-                          icon: const Icon(Icons.sync_rounded, size: 16),
+                          icon: Icon(isAdmin ? Icons.sync_rounded : Icons.refresh_rounded, size: 16),
                           label: Text(
-                            'Sync MyOperator',
+                            isAdmin ? 'Sync MyOperator' : 'Refresh',
                             style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
