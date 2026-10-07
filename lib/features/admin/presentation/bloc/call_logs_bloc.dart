@@ -425,13 +425,22 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     final eventName = (updatedLog['event'] ?? '').toString().toLowerCase();
 
     final List<dynamic> currentLogs = List.from(state.callLogs);
-    if (logId != null) {
-      final index = currentLogs.indexWhere((l) => l['_id']?.toString() == logId);
-      if (index != -1) {
-        currentLogs[index] = updatedLog;
-      } else {
-        currentLogs.insert(0, updatedLog);
-      }
+    final providerCallId = (updatedLog['providerCallId'] ?? '').toString();
+    final callId = (updatedLog['callId'] ?? '').toString();
+
+    final index = currentLogs.indexWhere((l) {
+      final lid = l['_id']?.toString();
+      final lcallId = l['callId']?.toString();
+      final lproviderId = l['providerCallId']?.toString();
+      return (logId != null && logId.isNotEmpty && lid == logId) ||
+             (callId.isNotEmpty && (lcallId == callId || lid == callId || lproviderId == callId)) ||
+             (providerCallId.isNotEmpty && (lproviderId == providerCallId || lid == providerCallId || lcallId == providerCallId));
+    });
+
+    if (index != -1) {
+      currentLogs[index] = updatedLog;
+    } else {
+      currentLogs.insert(0, updatedLog);
     }
 
     // Recompute fast live metrics from current state
@@ -469,8 +478,6 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
                         '';
     final customerPhone = rawCustomer.toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
     final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-    final providerCallId = (updatedLog['providerCallId'] ?? '').toString();
-    final callId = (updatedLog['callId'] ?? '').toString();
 
     bool isThisActiveCall = false;
     if (state.activeCallLogId != null && state.activeCallLogId!.isNotEmpty) {
