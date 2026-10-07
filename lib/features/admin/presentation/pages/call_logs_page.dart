@@ -604,7 +604,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        if (_selectedLogIds.isNotEmpty) ...[
+                        if (isAdmin && _selectedLogIds.isNotEmpty) ...[
                           ElevatedButton.icon(
                             onPressed: () => _confirmBulkDelete(context),
                             style: ElevatedButton.styleFrom(
@@ -1147,8 +1147,8 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
-                                        // Row Selection Checkbox
-                                        if (rowLogId.isNotEmpty) ...[
+                                        // Row Selection Checkbox (Admin Only)
+                                        if (isAdmin && rowLogId.isNotEmpty) ...[
                                           SizedBox(
                                             width: 22,
                                             height: 22,
@@ -1503,8 +1503,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                  ),
                                                ),
 
-                                             // Delete Call Record Button
-                                             Builder(
+                                             // Delete Call Record Button (Admin Only)
+                                             if (isAdmin)
+                                               Builder(
                                                builder: (context) {
                                                  final logId = log['_id']?.toString() ?? log['callId']?.toString() ?? '';
                                                  if (logId.isEmpty) return const SizedBox.shrink();

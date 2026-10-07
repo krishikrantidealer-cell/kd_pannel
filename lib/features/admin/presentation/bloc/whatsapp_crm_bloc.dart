@@ -12,6 +12,7 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
 
   WhatsAppCrmBloc() : super(const WhatsAppCrmState()) {
     on<FetchConversationsEvent>(_onFetchConversations);
+    on<SyncRosterEvent>(_onSyncRoster);
     on<SelectConversationEvent>(_onSelectConversation);
     on<StartOrGetConversationEvent>(_onStartOrGetConversation);
     on<FetchMessagesEvent>(_onFetchMessages);
@@ -37,6 +38,13 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
         add(WebSocketNewMessageReceivedEvent(data as Map<String, dynamic>));
       } else if (type == 'MESSAGE_STATUS_UPDATED' && data != null) {
         add(WebSocketMessageStatusUpdatedEvent(data as Map<String, dynamic>));
+      } else if (type == 'CONVERSATION_ASSIGNED' || type == 'CONVERSATION_UPDATED') {
+        // Auto-refresh conversation list on real-time assignment
+        add(FetchConversationsEvent(
+          search: state.searchQuery,
+          status: state.selectedStatusFilter,
+          tab: state.selectedTabFilter,
+        ));
       }
     });
   }
@@ -54,6 +62,7 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
     emit(state.copyWith(
       isLoadingConversations: true,
       selectedStatusFilter: event.status,
+      selectedTabFilter: event.tab,
       searchQuery: event.search,
       conversationsPage: event.page,
     ));
@@ -72,7 +81,7 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
       }
 
       final endpoint =
-          '/conversations?status=${event.status}&search=${Uri.encodeComponent(event.search)}&page=${event.page}&limit=20';
+          '/conversations?status=${event.status}&tab=${event.tab}&search=${Uri.encodeComponent(event.search)}&page=${event.page}&limit=500';
       final res = await ApiClient().get(endpoint);
 
       if (res.statusCode == 200) {
@@ -114,6 +123,27 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
         isLoadingConversations: false,
         errorMessage: e.toString(),
       ));
+    }
+  }
+
+  Future<void> _onSyncRoster(
+    SyncRosterEvent event,
+    Emitter<WhatsAppCrmState> emit,
+  ) async {
+    emit(state.copyWith(isSyncingRoster: true));
+    try {
+      final res = await ApiClient().post('/conversations/sync-roster', {});
+      if (res.statusCode == 200) {
+        add(FetchConversationsEvent(
+          search: state.searchQuery,
+          status: state.selectedStatusFilter,
+          tab: state.selectedTabFilter,
+        ));
+      }
+    } catch (e) {
+      debugPrint('[WhatsAppCrmBloc] Error syncing roster: $e');
+    } finally {
+      emit(state.copyWith(isSyncingRoster: false));
     }
   }
 

@@ -10,18 +10,24 @@ abstract class WhatsAppCrmEvent extends Equatable {
 class FetchConversationsEvent extends WhatsAppCrmEvent {
   final String search;
   final String status;
+  final String tab; // 'all', 'active', 'leads', 'dealers', 'unread'
   final int page;
   final bool append;
 
   const FetchConversationsEvent({
     this.search = '',
     this.status = 'open',
+    this.tab = 'all',
     this.page = 1,
     this.append = false,
   });
 
   @override
-  List<Object?> get props => [search, status, page, append];
+  List<Object?> get props => [search, status, tab, page, append];
+}
+
+class SyncRosterEvent extends WhatsAppCrmEvent {
+  const SyncRosterEvent();
 }
 
 class SelectConversationEvent extends WhatsAppCrmEvent {

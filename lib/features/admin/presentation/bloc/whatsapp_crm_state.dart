@@ -12,9 +12,11 @@ class WhatsAppCrmState extends Equatable {
   final bool isLoadingMessages;
   final bool isSendingMessage;
   final bool isCalling;
+  final bool isSyncingRoster;
   final int conversationsPage;
   final int totalPages;
   final String selectedStatusFilter;
+  final String selectedTabFilter; // 'all', 'active', 'leads', 'dealers', 'unread'
   final String searchQuery;
   final String? errorMessage;
   final String? successMessage;
@@ -29,9 +31,11 @@ class WhatsAppCrmState extends Equatable {
     this.isLoadingMessages = false,
     this.isSendingMessage = false,
     this.isCalling = false,
+    this.isSyncingRoster = false,
     this.conversationsPage = 1,
     this.totalPages = 1,
     this.selectedStatusFilter = 'open',
+    this.selectedTabFilter = 'all',
     this.searchQuery = '',
     this.errorMessage,
     this.successMessage,
@@ -48,9 +52,11 @@ class WhatsAppCrmState extends Equatable {
     bool? isLoadingMessages,
     bool? isSendingMessage,
     bool? isCalling,
+    bool? isSyncingRoster,
     int? conversationsPage,
     int? totalPages,
     String? selectedStatusFilter,
+    String? selectedTabFilter,
     String? searchQuery,
     String? errorMessage,
     bool clearError = false,
@@ -69,9 +75,11 @@ class WhatsAppCrmState extends Equatable {
       isLoadingMessages: isLoadingMessages ?? this.isLoadingMessages,
       isSendingMessage: isSendingMessage ?? this.isSendingMessage,
       isCalling: isCalling ?? this.isCalling,
+      isSyncingRoster: isSyncingRoster ?? this.isSyncingRoster,
       conversationsPage: conversationsPage ?? this.conversationsPage,
       totalPages: totalPages ?? this.totalPages,
       selectedStatusFilter: selectedStatusFilter ?? this.selectedStatusFilter,
+      selectedTabFilter: selectedTabFilter ?? this.selectedTabFilter,
       searchQuery: searchQuery ?? this.searchQuery,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
@@ -89,9 +97,11 @@ class WhatsAppCrmState extends Equatable {
         isLoadingMessages,
         isSendingMessage,
         isCalling,
+        isSyncingRoster,
         conversationsPage,
         totalPages,
         selectedStatusFilter,
+        selectedTabFilter,
         searchQuery,
         errorMessage,
         successMessage,

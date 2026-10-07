@@ -52,6 +52,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   final ScrollController _quickChipScrollController = ScrollController();
 
   String _selectedStatus = 'open'; // open, closed, snoozed
+  String _selectedTab = 'all'; // all, active, leads, dealers, unread
+  bool _isSyncingRoster = false;
   int _conversationsPage = 1;
   int _conversationsTotalPages = 1;
   int _messagesPage = 1;
@@ -96,6 +98,12 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   bool _isLoadingTemplates = false;
   List<dynamic> _cannedResponses = [];
   bool _isLoadingCanned = false;
+
+  int _totalAllCount = 0;
+  int _totalLeadsCount = 0;
+  int _totalDealersCount = 0;
+  int _totalActiveCount = 0;
+  int _totalUnreadCount = 0;
 
   @override
   void initState() {
@@ -298,12 +306,12 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       _conversationsPage = page;
     });
     debugPrint(
-      '[WhatsApp CRM] Fetching page $_conversationsPage of $_conversationsTotalPages',
+      '[WhatsApp CRM] Fetching page $_conversationsPage of $_conversationsTotalPages (tab: $_selectedTab)',
     );
 
     try {
       final endpoint =
-          '/conversations?status=$_selectedStatus&search=$search&page=$page&limit=15';
+          '/conversations?status=$_selectedStatus&tab=$_selectedTab&search=$search&page=$page&limit=500';
       final res = await ApiClient().get(endpoint);
 
       if (res.statusCode == 200) {
@@ -316,6 +324,16 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               _conversations.addAll(body['data'] ?? []);
             }
             _conversationsTotalPages = body['pagination']?['pages'] ?? 1;
+            if (body['counts'] != null) {
+              final counts = body['counts'];
+              _totalAllCount = counts['all'] ?? _conversations.length;
+              _totalLeadsCount = counts['leads'] ?? 0;
+              _totalDealersCount = counts['dealers'] ?? 0;
+              _totalActiveCount = counts['active'] ?? 0;
+              _totalUnreadCount = counts['unread'] ?? 0;
+            } else {
+              _totalAllCount = _conversations.length;
+            }
           });
 
           // Auto-select first conversation if search returned elements and nothing is selected
@@ -330,6 +348,40 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       debugPrint('[WhatsApp CRM] Error fetching conversations: $e');
     } finally {
       setState(() => _isLoadingConversations = false);
+    }
+  }
+
+  // API Call: On-demand Roster Sync for Leads & Dealers
+  Future<void> _syncAssignedRoster() async {
+    setState(() => _isSyncingRoster = true);
+    try {
+      final res = await ApiClient().post('/conversations/sync-roster', {});
+      if (res.statusCode == 200) {
+        await _fetchConversations();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Assigned leads & dealers synchronized to WhatsApp roster!',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF008069),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[WhatsApp CRM] Error syncing roster: $e');
+    } finally {
+      if (mounted) setState(() => _isSyncingRoster = false);
     }
   }
 
@@ -354,7 +406,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   Future<void> _fetchTemplates() async {
     setState(() => _isLoadingTemplates = true);
     try {
-      final res = await ApiClient().get('/templates');
+      final res = await ApiClient().get('/whatsapp/templates');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true && body['data'] != null) {
@@ -731,14 +783,36 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.sync_rounded,
-                      color: Color(0xFF54656F),
-                      size: 20,
-                    ),
-                    onPressed: () => _fetchConversations(),
-                    tooltip: 'Refresh conversations',
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: _isSyncingRoster
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF008069),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.sync_rounded,
+                                color: Color(0xFF008069),
+                                size: 20,
+                              ),
+                        onPressed: _isSyncingRoster ? null : _syncAssignedRoster,
+                        tooltip: 'Sync Assigned Leads & Dealers',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.refresh_rounded,
+                          color: Color(0xFF54656F),
+                          size: 20,
+                        ),
+                        onPressed: () => _fetchConversations(),
+                        tooltip: 'Refresh conversations',
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -849,7 +923,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           ),
         ),
 
-        // Filters bar (Centered filter tabs with Mouse Drag & Wheel Scroll)
+        // Filters bar (Category Tabs: All, Leads, Dealers, Active Chats, Closed, Snoozed)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           color: Colors.white,
@@ -862,13 +936,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               physics: const BouncingScrollPhysics(),
               child: Row(
                 children: [
-                  _buildFilterTab('open', '🟢 Open'),
+                  _buildTabFilter('all', 'All (${_totalAllCount > 0 ? _totalAllCount : _conversations.length})'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('all', '💬 All Chats'),
+                  _buildTabFilter('leads', '🌱 Leads ($_totalLeadsCount)'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('closed', '✅ Closed'),
+                  _buildTabFilter('dealers', '🏪 Dealers ($_totalDealersCount)'),
                   const SizedBox(width: 6),
-                  _buildFilterTab('snoozed', '⏳ Snoozed'),
+                  _buildTabFilter('active', '⚡ Active ($_totalActiveCount)'),
+                  const SizedBox(width: 6),
+                  _buildTabFilter('unread', '🔔 Unread ($_totalUnreadCount)'),
+                  const SizedBox(width: 6),
+                  _buildStatusFilterTab('closed', '✅ Closed'),
+                  const SizedBox(width: 6),
+                  _buildStatusFilterTab('snoozed', '⏳ Snoozed'),
                 ],
               ),
             ),
@@ -884,12 +964,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                 )
               : _conversations.isEmpty
               ? Center(
-                  child: Text(
-                    'No conversations found',
-                    style: GoogleFonts.outfit(
-                      color: const Color(0xFF667781),
-                      fontSize: 13,
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox_outlined, size: 36, color: Colors.grey[400]),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No conversations in this view',
+                        style: GoogleFonts.outfit(
+                          color: const Color(0xFF667781),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton.icon(
+                        icon: const Icon(Icons.sync_rounded, size: 16),
+                        label: Text('Sync Assigned Contacts', style: GoogleFonts.outfit(fontSize: 12)),
+                        onPressed: _syncAssignedRoster,
+                      ),
+                    ],
                   ),
                 )
               : ListView.builder(
@@ -911,8 +1004,17 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       formattedTime = DateFormat('hh:mm a').format(date);
                     }
 
-                    final String name = contact['name'] ?? 'WhatsApp User';
+                    final String name = (contact['name'] ?? 'WhatsApp User').toString();
                     final Color avatarColor = _getAvatarColor(name);
+
+                    // Determine Lead vs Dealer from tags
+                    final List<dynamic> tags = List<dynamic>.from(contact['tags'] ?? []);
+                    final bool isDealer = tags.any((t) =>
+                        t.toString().toLowerCase().contains('dealer') ||
+                        t.toString().toLowerCase().contains('retailer'));
+
+                    final String lastText = (lastMsg['content'] ?? '').toString().trim();
+                    final bool hasNoMessages = lastText.isEmpty && lastMsg['type'] == null;
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(
@@ -964,14 +1066,43 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           MainAxisAlignment.spaceBetween,
                                       children: [
                                         Expanded(
-                                          child: Text(
-                                            name,
-                                            style: GoogleFonts.outfit(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13.5,
-                                              color: const Color(0xFF111B21),
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
+                                          child: Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  name,
+                                                  style: GoogleFonts.outfit(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13.5,
+                                                    color: const Color(0xFF111B21),
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 5,
+                                                  vertical: 1.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: isDealer
+                                                      ? const Color(0xFF0284C7).withValues(alpha: 0.12)
+                                                      : const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  isDealer ? '🏪 Dealer' : '🌱 Lead',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isDealer
+                                                        ? const Color(0xFF0284C7)
+                                                        : const Color(0xFF16A34A),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         Text(
@@ -993,13 +1124,20 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            _formatCleanMessageText(
-                                              lastMsg['content'] ??
-                                                  'Media Attachment',
-                                            ),
+                                            hasNoMessages
+                                                ? '✨ Ready for Outreach'
+                                                : _formatCleanMessageText(
+                                                    lastText.isNotEmpty
+                                                        ? lastText
+                                                        : 'Media Attachment',
+                                                  ),
                                             style: GoogleFonts.outfit(
                                               fontSize: 11.5,
-                                              color: const Color(0xFF667781),
+                                              fontStyle: hasNoMessages ? FontStyle.italic : FontStyle.normal,
+                                              color: hasNoMessages
+                                                  ? const Color(0xFF008069)
+                                                  : const Color(0xFF667781),
+                                              fontWeight: hasNoMessages ? FontWeight.w500 : FontWeight.normal,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -1042,7 +1180,46 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     );
   }
 
-  Widget _buildFilterTab(String status, String label) {
+  Widget _buildTabFilter(String tab, String label) {
+    final bool isSelected = _selectedTab == tab;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTab = tab;
+          _selectedConversation = null;
+        });
+        _fetchConversations();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5.5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE8F5E9) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF008069)
+                : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.2 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 11.5,
+            color: isSelected
+                ? const Color(0xFF008069)
+                : const Color(0xFF64748B),
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterTab(String status, String label) {
     final bool isSelected = _selectedStatus == status;
     return GestureDetector(
       onTap: () {
@@ -1054,7 +1231,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5.5),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFE8F5E9) : const Color(0xFFF8FAFC),
@@ -1572,14 +1749,148 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     }).toList();
 
                     if (filteredMessages.isEmpty) {
+                      if (_messageSearchQuery.isNotEmpty) {
+                        return Center(
+                          child: Text(
+                            'No matching messages found',
+                            style: GoogleFonts.outfit(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        );
+                      }
+
+                      final contact = _selectedConversation?['contactId'] ?? {};
+                      final String customerName = (contact['name'] ?? 'Customer').toString();
+                      final String customerPhone = (contact['phone'] ?? '').toString();
+                      final List<dynamic> tags = List<dynamic>.from(contact['tags'] ?? []);
+                      final bool isDealer = tags.any((t) =>
+                          t.toString().toLowerCase().contains('dealer') ||
+                          t.toString().toLowerCase().contains('retailer'));
+
                       return Center(
-                        child: Text(
-                          _messageSearchQuery.isEmpty
-                              ? 'No messages in this chat'
-                              : 'No matching messages found',
-                          style: GoogleFonts.outfit(
-                            color: Colors.grey[600],
-                            fontSize: 13,
+                        child: Container(
+                          width: 480,
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.mark_chat_unread_rounded,
+                                  size: 32,
+                                  color: Color(0xFF008069),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                customerName,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    customerPhone,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isDealer
+                                          ? const Color(0xFF0284C7).withValues(alpha: 0.12)
+                                          : const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      isDealer ? '🏪 Verified Dealer' : '🌱 Assigned Lead',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDealer ? const Color(0xFF0284C7) : const Color(0xFF16A34A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Text(
+                                  '💬 No prior chat history with this contact. Under Meta WhatsApp policies, choose an Approved Template below to start the conversation, or initiate a direct call.',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    color: const Color(0xFF475569),
+                                    height: 1.4,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF008069),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.send_rounded, size: 14),
+                                    label: Text('Send WhatsApp Template', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    onPressed: () => _showSendTemplateDialog(context, _selectedConversation['_id']),
+                                  ),
+                                  if (customerPhone.isNotEmpty)
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF008069),
+                                        side: const BorderSide(color: Color(0xFF008069)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
+                                      label: Text('Click-to-Call', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      onPressed: () => _triggerOutboundCall(customerPhone),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -3736,252 +4047,328 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // ══════════════════════════════════════════════════════════════════════════
 
   void _showTemplatesManagerDialog(BuildContext context) {
+    String filterScope = 'ALL'; // 'ALL', 'GLOBAL', 'PRIVATE'
+    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            width: 720,
-            height: 650,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF008069).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
+        builder: (context, setDialogState) {
+          final List<dynamic> filteredTemplates = _approvedTemplates.where((t) {
+            final bool isGlob = t['isGlobal'] == true;
+            if (filterScope == 'GLOBAL') return isGlob;
+            if (filterScope == 'PRIVATE') return !isGlob;
+            return true;
+          }).toList();
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 780,
+              height: 680,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.assignment_outlined, color: Color(0xFF008069), size: 22),
                           ),
-                          child: const Icon(Icons.assignment_outlined, color: Color(0xFF008069), size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'WhatsApp Business Templates',
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF111B21),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'WhatsApp Business Templates',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF111B21),
+                                ),
                               ),
-                            ),
-                            Text(
-                              'Create Meta-approved templates with variable placeholders ({{1}}, {{2}})',
-                              style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Action Bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'All Templates (${_approvedTemplates.length})',
-                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF008069),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
-                      icon: const Icon(Icons.add_rounded, size: 16),
-                      label: Text(
-                        'Create New Template',
-                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        _showCreateTemplateDialog(context, onCreated: () {
-                          setDialogState(() {});
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                const SizedBox(height: 12),
-
-                // Template Grid / List
-                Expanded(
-                  child: _isLoadingTemplates
-                      ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
-                      : _approvedTemplates.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No WhatsApp templates found. Click "+ Create New Template" to submit one for approval.',
-                                style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
-                                textAlign: TextAlign.center,
+                              Text(
+                                isAdmin
+                                    ? 'Manage Global and Agent-specific Meta approved templates'
+                                    : 'Manage your private templates and view company global templates',
+                                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
                               ),
-                            )
-                          : ListView.separated(
-                              itemCount: _approvedTemplates.length,
-                              separatorBuilder: (context, idx) => const SizedBox(height: 12),
-                              itemBuilder: (context, idx) {
-                                final t = _approvedTemplates[idx];
-                                final name = (t['name'] ?? t['elementName'] ?? 'template').toString();
-                                final category = (t['category'] ?? 'UTILITY').toString();
-                                final language = (t['language'] ?? 'en').toString();
-                                final body = (t['body'] ?? t['data']?['body'] ?? (t['components'] is List ? (t['components'] as List).firstWhere((c) => c['type'] == 'BODY', orElse: () => {})['text'] : null) ?? name).toString();
-                                final status = (t['status'] ?? 'APPROVED').toString().toUpperCase();
-                                final footer = (t['footer'] ?? '').toString();
-                                final templateId = t['_id']?.toString();
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-                                Color statusColor = const Color(0xFF008069);
-                                String statusText = '🟢 Approved';
-                                if (status.contains('PENDING')) {
-                                  statusColor = Colors.orange[800]!;
-                                  statusText = '⏳ In Review (Meta)';
-                                } else if (status.contains('REJECT')) {
-                                  statusColor = Colors.red[700]!;
-                                  statusText = '❌ Rejected';
-                                }
+                  // Filter & Action Bar
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Scope Tabs (All / Global / Private)
+                      Row(
+                        children: [
+                          _buildScopeFilterChip('ALL', 'All (${_approvedTemplates.length})', filterScope, (val) {
+                            setDialogState(() => filterScope = val);
+                          }),
+                          const SizedBox(width: 8),
+                          _buildScopeFilterChip('GLOBAL', '🌐 Company Global', filterScope, (val) {
+                            setDialogState(() => filterScope = val);
+                          }),
+                          const SizedBox(width: 8),
+                          _buildScopeFilterChip('PRIVATE', '🔒 Private Templates', filterScope, (val) {
+                            setDialogState(() => filterScope = val);
+                          }),
+                        ],
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF008069),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: Text(
+                          'Create New Template',
+                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          _showCreateTemplateDialog(context, onCreated: () {
+                            setDialogState(() {});
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 12),
 
-                                return Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(
-                                                name,
+                  // Template Grid / List
+                  Expanded(
+                    child: _isLoadingTemplates
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                        : filteredTemplates.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No templates found in this category.\nClick "+ Create New Template" to submit one for approval.',
+                                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B), height: 1.4),
+                                  textAlign: TextAlign.center,
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: filteredTemplates.length,
+                                separatorBuilder: (context, idx) => const SizedBox(height: 12),
+                                itemBuilder: (context, idx) {
+                                  final t = filteredTemplates[idx];
+                                  final name = (t['name'] ?? t['elementName'] ?? 'template').toString();
+                                  final title = (t['title'] ?? '').toString();
+                                  final category = (t['category'] ?? 'UTILITY').toString();
+                                  final language = (t['language'] ?? 'en').toString();
+                                  final body = (t['body'] ?? t['data']?['body'] ?? (t['components'] is List ? (t['components'] as List).firstWhere((c) => c['type'] == 'BODY', orElse: () => {})['text'] : null) ?? name).toString();
+                                  final status = (t['status'] ?? 'APPROVED').toString().toUpperCase();
+                                  final footer = (t['footer'] ?? '').toString();
+                                  final templateId = t['_id']?.toString();
+                                  final bool isGlobal = t['isGlobal'] == true;
+                                  final String creatorName = (t['createdBy']?['name'] ?? t['agentPhone'] ?? '').toString();
+
+                                  Color statusColor = const Color(0xFF008069);
+                                  String statusText = '🟢 Approved';
+                                  if (status.contains('PENDING')) {
+                                    statusColor = Colors.orange[800]!;
+                                    statusText = '⏳ In Review (Meta)';
+                                  } else if (status.contains('REJECT')) {
+                                    statusColor = Colors.red[700]!;
+                                    statusText = '❌ Rejected';
+                                  }
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Wrap(
+                                                crossAxisAlignment: WrapCrossAlignment.center,
+                                                spacing: 8,
+                                                runSpacing: 4,
+                                                children: [
+                                                  Text(
+                                                    title.isNotEmpty ? title : name,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFF0F172A),
+                                                    ),
+                                                  ),
+                                                  if (title.isNotEmpty)
+                                                    Text(
+                                                      '($name)',
+                                                      style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                                                    ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: isGlobal ? const Color(0xFF0284C7).withValues(alpha: 0.12) : const Color(0xFF64748B).withValues(alpha: 0.12),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      isGlobal ? '🌐 Company Global' : (creatorName.isNotEmpty ? '🔒 Private ($creatorName)' : '🔒 Private Template'),
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 10.5,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: isGlobal ? const Color(0xFF0284C7) : const Color(0xFF475569),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFE2E8F0),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      '$category • $language',
+                                                      style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: statusColor.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                statusText,
                                                 style: GoogleFonts.outfit(
-                                                  fontSize: 14,
+                                                  fontSize: 11,
                                                   fontWeight: FontWeight.bold,
-                                                  color: const Color(0xFF0F172A),
+                                                  color: statusColor,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFE2E8F0),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  '$category • $language',
-                                                  style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: statusColor.withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              statusText,
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: statusColor,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        body,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 13,
-                                          color: const Color(0xFF334155),
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                      if (footer.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'Footer: $footer',
-                                          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          if (templateId != null)
-                                            IconButton(
-                                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-                                              tooltip: 'Delete Template',
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                              onPressed: () async {
-                                                try {
-                                                  await ApiClient().delete('/templates/$templateId');
-                                                  _fetchTemplates();
-                                                  setDialogState(() {
-                                                    _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
-                                                  });
-                                                } catch (_) {}
-                                              },
-                                            ),
-                                          if (status.contains('APPROV') && _selectedConversation != null) ...[
-                                            const SizedBox(width: 12),
-                                            ElevatedButton.icon(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFF008069),
-                                                foregroundColor: Colors.white,
-                                                elevation: 0,
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              ),
-                                              icon: const Icon(Icons.send_rounded, size: 13),
-                                              label: Text('Send to Contact', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                                              onPressed: () {
-                                                Navigator.pop(context);
-                                                _showSendTemplateDialog(
-                                                  context,
-                                                  _selectedConversation['_id'],
-                                                  initialTemplateName: name,
-                                                );
-                                              },
                                             ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          body,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            color: const Color(0xFF334155),
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                        if (footer.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Footer: $footer',
+                                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                                          ),
                                         ],
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                ),
-              ],
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            if (templateId != null)
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                                tooltip: 'Delete Template',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                onPressed: () async {
+                                                  try {
+                                                    await ApiClient().delete('/whatsapp/templates/$templateId');
+                                                    _fetchTemplates();
+                                                    setDialogState(() {
+                                                      _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
+                                                    });
+                                                  } catch (_) {}
+                                                },
+                                              ),
+                                            if (status.contains('APPROV') && _selectedConversation != null) ...[
+                                              const SizedBox(width: 12),
+                                              ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFF008069),
+                                                  foregroundColor: Colors.white,
+                                                  elevation: 0,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                ),
+                                                icon: const Icon(Icons.send_rounded, size: 13),
+                                                label: Text('Send to Contact', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                                onPressed: () {
+                                                  Navigator.pop(context);
+                                                  _showSendTemplateDialog(
+                                                    context,
+                                                    _selectedConversation['_id'],
+                                                    initialTemplateName: name,
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScopeFilterChip(String scope, String label, String activeScope, ValueChanged<String> onSelect) {
+    final bool isSelected = scope == activeScope;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => onSelect(scope),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF008069) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF475569),
           ),
         ),
       ),
@@ -3990,12 +4377,15 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
   void _showCreateTemplateDialog(BuildContext context, {VoidCallback? onCreated}) {
     final nameController = TextEditingController();
+    final titleController = TextEditingController();
     final bodyController = TextEditingController();
     final footerController = TextEditingController();
     final headerTextController = TextEditingController();
     String category = 'UTILITY';
     String language = 'en';
     String headerType = 'NONE';
+    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+    bool isGlobal = isAdmin; // Default to global for Admin, private for Sales
 
     showDialog(
       context: context,
@@ -4005,7 +4395,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           surfaceTintColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Container(
-            width: 560,
+            width: 620,
             padding: const EdgeInsets.all(24),
             child: SingleChildScrollView(
               child: Column(
@@ -4027,16 +4417,29 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Submitted templates will be forwarded to Meta / MyOperator for automated review and approval.',
+                    'Submitted templates will be registered in Krishi CRM and submitted to Meta / MyOperator for automated review.',
                     style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
                   ),
                   const SizedBox(height: 16),
 
-                  // Template Name
+                  // Template Title (Human friendly)
+                  TextField(
+                    controller: titleController,
+                    decoration: InputDecoration(
+                      labelText: 'Friendly Title (e.g. Organic Catalog Share)',
+                      labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Template Name (Meta compliant identifier)
                   TextField(
                     controller: nameController,
                     decoration: InputDecoration(
-                      labelText: 'Template Name (lowercase, e.g. harvest_update)',
+                      labelText: 'Template Name (lowercase, e.g. organic_catalog_share)',
                       labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF008069), fontWeight: FontWeight.bold),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       isDense: true,
@@ -4044,6 +4447,64 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     style: GoogleFonts.outfit(fontSize: 13.5),
                   ),
                   const SizedBox(height: 12),
+
+                  // Admin Scope Switch
+                  if (isAdmin) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Company Global Template',
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                'Make this template available to all sales agents across the company',
+                                style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                          Switch(
+                            value: isGlobal,
+                            activeColor: const Color(0xFF008069),
+                            onChanged: (val) => setDialogState(() => isGlobal = val),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_rounded, size: 16, color: Color(0xFF16A34A)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Private Template: Only you and your admin can view and use this template.',
+                              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF166534)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
                   // Category & Language Row
                   Row(
@@ -4176,8 +4637,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           Navigator.pop(context);
 
                           try {
-                            final res = await ApiClient().post('/templates', {
+                            final res = await ApiClient().post('/whatsapp/templates', {
                               'name': name,
+                              'title': titleController.text.trim().isNotEmpty ? titleController.text.trim() : name,
+                              'isGlobal': isGlobal,
                               'category': category,
                               'language': language,
                               'headerType': headerType,
@@ -4186,7 +4649,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               'footer': footerController.text.trim(),
                             });
 
-                            if (res.statusCode == 200) {
+                            if (res.statusCode == 200 || res.statusCode == 201) {
                               await _fetchTemplates();
                               onCreated?.call();
                               if (mounted) {
