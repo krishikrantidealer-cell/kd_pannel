@@ -36,6 +36,8 @@ class AuthService {
   String? get agentDid => _myoperatorConfig?['did'];
   String? get agentVid => _myoperatorConfig?['vid'] ?? _myoperatorConfig?['extension'];
   String? get agentWhatsAppNumber => _myoperatorConfig?['whatsappNumber'];
+  String? get currentUserPhone => _myoperatorConfig?['phoneNumber'] ?? _myoperatorConfig?['phone'] ?? _myoperatorConfig?['whatsappNumber'];
+  String? get agentPhone => currentUserPhone;
   String? get lastError => _lastError;
   String? get sessionId => _sessionId;
   bool get isInitialized => _isInitialized;

@@ -252,8 +252,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
 
-    return SelectionArea(
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
@@ -822,8 +821,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
-    ), // closes Scaffold
-    ); // closes SelectionArea
+    );
   }
 
 

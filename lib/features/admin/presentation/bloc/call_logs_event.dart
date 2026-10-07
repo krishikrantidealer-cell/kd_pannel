@@ -78,9 +78,35 @@ class WebSocketCallUpdateReceivedEvent extends CallLogsEvent {
   const WebSocketCallUpdateReceivedEvent(this.callLog);
 
   @override
-  List<Object?> get props => [callLog];
+  List<Object?> get props => [
+    callLog['_id']?.toString(),
+    callLog['status']?.toString(),
+    callLog['event']?.toString(),
+    callLog['providerCallId']?.toString(),
+  ];
+}
+
+class DeleteCallLogEvent extends CallLogsEvent {
+  final String callLogId;
+  const DeleteCallLogEvent(this.callLogId);
+
+  @override
+  List<Object?> get props => [callLogId];
+}
+
+class BulkDeleteCallLogsEvent extends CallLogsEvent {
+  final List<String> callLogIds;
+  const BulkDeleteCallLogsEvent(this.callLogIds);
+
+  @override
+  List<Object?> get props => [callLogIds];
+}
+
+class ClearAllCallLogsEvent extends CallLogsEvent {
+  const ClearAllCallLogsEvent();
 }
 
 class ClearCallLogsMessageEvent extends CallLogsEvent {
   const ClearCallLogsMessageEvent();
 }
+

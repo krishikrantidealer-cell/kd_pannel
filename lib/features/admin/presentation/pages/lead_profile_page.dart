@@ -2506,12 +2506,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                             phone: activeLead['phone'] ?? activeLead['phoneNumber'],
                                             userId: leadId,
                                             customerName: activeLead['name'],
-                                            onTriggerCall: () {
-                                              final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
-                                              var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-                                              if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.substring(2);
-                                              context.read<CallLogsBloc>().add(TriggerOutboundCallEvent(cleanPhone));
-                                            },
                                             onOpenWhatsApp: () {
                                               final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
                                               var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');

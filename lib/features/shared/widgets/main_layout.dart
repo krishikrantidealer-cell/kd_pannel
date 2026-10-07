@@ -19,12 +19,12 @@ import 'package:kd_pannel/features/admin/presentation/pages/call_logs_page.dart'
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_customer_events_page.dart';
 import 'sidebar_widget.dart';
+import 'global_telephony_acw_listener.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
-import 'package:kd_pannel/features/shared/widgets/telephony_floating_dock.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget? child;
@@ -346,7 +346,7 @@ class _MainLayoutState extends State<MainLayout> {
             ],
           );
 
-    return SelectionArea(
+    return GlobalTelephonyAcwListener(
       child: Scaffold(
         key: _scaffoldKey,
         drawer: !isDesktop
@@ -381,7 +381,6 @@ class _MainLayoutState extends State<MainLayout> {
                     ],
                   )
                 : content,
-            const TelephonyFloatingDock(),
           ],
         ),
       ),

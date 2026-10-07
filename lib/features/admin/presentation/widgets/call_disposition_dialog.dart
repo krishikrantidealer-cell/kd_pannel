@@ -2,10 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+class AcwDraft {
+  String disposition;
+  DateTime? followUpDate;
+  TimeOfDay? followUpTime;
+  String followUpNote;
+  String notes;
+
+  AcwDraft({
+    this.disposition = 'Interested',
+    this.followUpDate,
+    this.followUpTime,
+    this.followUpNote = '',
+    this.notes = '',
+  });
+}
+
 class CallDispositionDialog extends StatefulWidget {
   final String callLogId;
   final String customerPhone;
   final String? customerName;
+  final String? initialDisposition;
+  final DateTime? initialFollowUpDate;
+  final String? initialFollowUpNote;
+  final String? initialNotes;
   final Function(String disposition, DateTime? followUpDate, String? followUpNote, String? notes) onSave;
   final VoidCallback? onOpenEstimate;
   final VoidCallback? onOpenWhatsApp;
@@ -15,6 +35,10 @@ class CallDispositionDialog extends StatefulWidget {
     required this.callLogId,
     required this.customerPhone,
     this.customerName,
+    this.initialDisposition,
+    this.initialFollowUpDate,
+    this.initialFollowUpNote,
+    this.initialNotes,
     required this.onSave,
     this.onOpenEstimate,
     this.onOpenWhatsApp,
@@ -25,11 +49,68 @@ class CallDispositionDialog extends StatefulWidget {
 }
 
 class _CallDispositionDialogState extends State<CallDispositionDialog> {
+  // In-memory static cache keyed by customer phone / call log ID
+  static final Map<String, AcwDraft> _draftCache = {};
+
+  String get _draftKey {
+    final cleanPhone = widget.customerPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    if (cleanPhone.isNotEmpty) return cleanPhone;
+    if (widget.callLogId.isNotEmpty) return widget.callLogId;
+    return 'active_call_draft';
+  }
+
   String _selectedDisposition = 'Interested';
   DateTime? _selectedFollowUpDate;
   TimeOfDay? _selectedFollowUpTime;
-  final TextEditingController _notesController = TextEditingController();
-  final TextEditingController _followUpNoteController = TextEditingController();
+  late final TextEditingController _notesController;
+  late final TextEditingController _followUpNoteController;
+
+  @override
+  void initState() {
+    super.initState();
+    final draft = _draftCache[_draftKey];
+    
+    // Prioritize draft, then widget initial values, then fallback
+    _selectedDisposition = draft?.disposition ?? 
+        ((widget.initialDisposition != null && widget.initialDisposition!.trim().isNotEmpty) 
+            ? widget.initialDisposition!.trim() 
+            : 'Interested');
+
+    _selectedFollowUpDate = draft?.followUpDate ?? widget.initialFollowUpDate;
+    if (_selectedFollowUpDate != null) {
+      _selectedFollowUpTime = draft?.followUpTime ?? TimeOfDay(hour: _selectedFollowUpDate!.hour, minute: _selectedFollowUpDate!.minute);
+    } else {
+      _selectedFollowUpTime = draft?.followUpTime;
+    }
+
+    final initNotes = draft?.notes ?? widget.initialNotes ?? '';
+    final initFollowNote = draft?.followUpNote ?? widget.initialFollowUpNote ?? '';
+
+    _notesController = TextEditingController(text: initNotes);
+    _followUpNoteController = TextEditingController(text: initFollowNote);
+
+    _notesController.addListener(_persistDraft);
+    _followUpNoteController.addListener(_persistDraft);
+  }
+
+  @override
+  void dispose() {
+    _notesController.removeListener(_persistDraft);
+    _followUpNoteController.removeListener(_persistDraft);
+    _notesController.dispose();
+    _followUpNoteController.dispose();
+    super.dispose();
+  }
+
+  void _persistDraft() {
+    _draftCache[_draftKey] = AcwDraft(
+      disposition: _selectedDisposition,
+      followUpDate: _selectedFollowUpDate,
+      followUpTime: _selectedFollowUpTime,
+      followUpNote: _followUpNoteController.text,
+      notes: _notesController.text,
+    );
+  }
 
   final List<Map<String, dynamic>> _dispositionOptions = [
     {
@@ -99,6 +180,7 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
         _selectedFollowUpDate = pickedDate;
         _selectedFollowUpTime = pickedTime ?? const TimeOfDay(hour: 11, minute: 0);
       });
+      _persistDraft();
     }
   }
 
@@ -113,6 +195,9 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
         _selectedFollowUpTime!.minute,
       );
     }
+
+    // Clear draft upon successful save
+    _draftCache.remove(_draftKey);
 
     widget.onSave(
       _selectedDisposition,
@@ -236,7 +321,10 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
                         final Color itemColor = item['color'];
 
                         return InkWell(
-                          onTap: () => setState(() => _selectedDisposition = item['label']),
+                          onTap: () {
+                            setState(() => _selectedDisposition = item['label']);
+                            _persistDraft();
+                          },
                           borderRadius: BorderRadius.circular(12),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 160),

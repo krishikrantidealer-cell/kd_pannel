@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
@@ -19,32 +20,39 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     on<DismissDispositionModalEvent>(_onDismissDispositionModal);
     on<SaveCallDispositionEvent>(_onSaveCallDisposition);
     on<WebSocketCallUpdateReceivedEvent>(_onWebSocketCallUpdate);
+    on<DeleteCallLogEvent>(_onDeleteCallLog);
+    on<BulkDeleteCallLogsEvent>(_onBulkDeleteCallLogs);
+    on<ClearAllCallLogsEvent>(_onClearAllCallLogs);
     on<ClearCallLogsMessageEvent>(_onClearMessages);
 
     _initWebSocket();
   }
 
   void _initWebSocket() {
+    _wsSubscription?.cancel();
     _wsSubscription = WebSocketService().chatUpdates.listen((event) {
+      if (isClosed) return;
       try {
-        final type = event['type']?.toString();
-        final rawData = event['data'];
+        final Map<String, dynamic> cleanEvent = Map<String, dynamic>.from(event);
+        final String? type = cleanEvent['type']?.toString();
+        final dynamic rawData = cleanEvent['data'];
+
         if ((type == 'CALL_UPDATE' || type == 'CALL_ENDED') && rawData != null) {
-          Map<String, dynamic> mapData = {};
           if (rawData is Map) {
-            mapData = Map<String, dynamic>.from(rawData);
-          } else if (rawData is String) {
-            try {
-              mapData = Map<String, dynamic>.from(jsonDecode(rawData));
-            } catch (_) {}
+            final Map<String, dynamic> mapData = Map<String, dynamic>.from(rawData);
+            if (mapData.isNotEmpty) {
+              add(WebSocketCallUpdateReceivedEvent(mapData));
+            }
           }
-          if (mapData.isNotEmpty) {
-            add(WebSocketCallUpdateReceivedEvent(mapData));
+        } else if (type == 'CALL_DELETED' && rawData != null) {
+          final String? deletedId = (rawData is Map ? rawData['id'] : rawData)?.toString();
+          if (deletedId != null && deletedId.isNotEmpty) {
+            add(DeleteCallLogEvent(deletedId));
           }
+        } else if (type == 'CALLS_CLEARED') {
+          add(const ClearAllCallLogsEvent());
         }
-      } catch (e) {
-        debugPrint('[CallLogsBloc] WS call event parse error: $e');
-      }
+      } catch (_) {}
     });
   }
 
@@ -73,8 +81,9 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
             );
 
             if (match != null) {
-              final Map<String, dynamic> matchMap = (match is Map)
-                  ? Map<String, dynamic>.from(match)
+              final cleanMatch = jsonDecode(jsonEncode(match));
+              final Map<String, dynamic> matchMap = (cleanMatch is Map)
+                  ? Map<String, dynamic>.from(cleanMatch)
                   : {};
               final status = (matchMap['status'] ?? '').toString().toLowerCase();
               final isEnded = status == 'ended' ||
@@ -115,6 +124,7 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   Future<void> close() {
     _stopActiveCallPolling();
     _wsSubscription?.cancel();
+    _wsDebounceFetchTimer?.cancel();
     return super.close();
   }
 
@@ -133,16 +143,71 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     ));
 
     try {
-      // Fetch agents if not present
+const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
+  {
+    'name': '👑 Yashraj Singh (Admin)',
+    'email': 'admin@krishikranti.com',
+    'phone': '+91 7316917246',
+    'line': 'Main Account (6ab0de5d51766538)',
+    'companyId': '6ab0de5d51766538',
+  },
+  {
+    'name': 'Anshika Gupta',
+    'email': 'ebsale08@gmail.com',
+    'phone': '+91 7316917267',
+    'line': 'Ram Ji Shukla - 2 (6abcea24dbd6a999)',
+    'companyId': '6abcea24dbd6a999',
+  },
+  {
+    'name': 'Runa Singh',
+    'email': 'essentialsale14@gmail.com',
+    'phone': '+91 7316917220',
+    'line': 'Ram Ji Shukla - 3 (6abcea4e66e65852)',
+    'companyId': '6abcea4e66e65852',
+  },
+  {
+    'name': 'Ajay Yadav',
+    'email': 'essentialsale8@gmail.com',
+    'phone': '+91 7316917210',
+    'line': 'Ram Ji Shukla - 4 (6abcea68a9843790)',
+    'companyId': '6abcea68a9843790',
+  },
+  {
+    'name': 'Yogesh Nandwanshi',
+    'email': 'sales3.essential@gmail.com',
+    'phone': '+91 7316917208',
+    'line': 'Ram Ji Shukla - 5 (6abcea80a6fa9438)',
+    'companyId': '6abcea80a6fa9438',
+  },
+  {
+    'name': 'Garima Gokulpure',
+    'email': 'essentialbiosciences12@gmail.com',
+    'phone': '+91 7316917216',
+    'line': 'Ram Ji Shukla - 6 (6abceacb44b44323)',
+    'companyId': '6abceacb44b44323',
+  },
+  {
+    'name': 'Eram Istiyaque',
+    'email': 'sales6.essential@gmail.com',
+    'phone': '+91 7316917216',
+    'line': 'Ram Ji Shukla - 6 (6abceacb44b44323)',
+    'companyId': '6abceacb44b44323',
+  },
+];
+
+      // Instantaneous agent list fallback (non-blocking)
       List<dynamic> agents = state.salesAgents;
       if (agents.isEmpty) {
-        final agentRes = await ApiClient().get('/users?role=sales');
-        if (agentRes.statusCode == 200) {
-          final agentBody = jsonDecode(agentRes.body);
-          if (agentBody['success'] == true) {
-            agents = agentBody['data'] ?? [];
-          }
-        }
+        agents = kTelephonyConfiguredAgents.map((cfg) => {
+          '_id': cfg['companyId'],
+          'firstName': cfg['name'],
+          'lastName': '',
+          'name': cfg['name'],
+          'email': cfg['email'],
+          'phoneNumber': cfg['phone'],
+          'accountName': cfg['line'],
+          'companyId': cfg['companyId'],
+        }).toList();
       }
 
       String endpoint = '/calls/logs?page=${event.page}&limit=25';
@@ -159,7 +224,26 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
         endpoint += '&agentId=${event.agentId}';
       }
 
-      final res = await ApiClient().get(endpoint);
+      // Concurrently fetch call logs and agent registry in parallel
+      final List<Future<dynamic>> parallelTasks = [
+        ApiClient().get(endpoint),
+        if (state.salesAgents.isEmpty) ApiClient().get('/calls/agents'),
+      ];
+
+      final results = await Future.wait(parallelTasks);
+      final res = results[0];
+
+      if (results.length > 1) {
+        try {
+          final agentRes = results[1];
+          if (agentRes.statusCode == 200) {
+            final agentBody = jsonDecode(agentRes.body);
+            if (agentBody['success'] == true && agentBody['agents'] != null && (agentBody['agents'] as List).isNotEmpty) {
+              agents = agentBody['agents'] as List<dynamic>;
+            }
+          }
+        } catch (_) {}
+      }
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
@@ -263,12 +347,11 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     _stopActiveCallPolling();
     final activeLogId = state.activeCallLogId;
     final activePhone = state.activeCustomerPhone;
-    final bool wasAnswered = state.isCallActive || (event.durationSeconds > 0);
 
     emit(state.copyWith(
       isTriggeringCall: false,
       isCallActive: false,
-      showPostCallDisposition: wasAnswered && (activeLogId != null || activePhone != null),
+      showPostCallDisposition: (activePhone != null && activePhone.isNotEmpty) || (activeLogId != null && activeLogId.isNotEmpty),
     ));
 
     try {
@@ -330,6 +413,8 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     }
   }
 
+  Timer? _wsDebounceFetchTimer;
+
   void _onWebSocketCallUpdate(
     WebSocketCallUpdateReceivedEvent event,
     Emitter<CallLogsState> emit,
@@ -349,9 +434,41 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       }
     }
 
-    // Strictly determine if this update belongs to our active call
-    final customerPhone = (updatedLog['customerPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
-    final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '');
+    // Recompute fast live metrics from current state
+    final totalCalls = currentLogs.length > state.totalCalls ? currentLogs.length : state.totalCalls;
+    final inbound = currentLogs.where((l) => (l['direction'] ?? l['type']) == 'inbound').length;
+    final outbound = currentLogs.where((l) => (l['direction'] ?? l['type']) == 'outbound').length;
+    final missed = currentLogs.where((l) {
+      final s = (l['status'] ?? '').toString().toLowerCase();
+      return s == 'missed' || s == 'no-answer';
+    }).length;
+
+    final currentUserId = AuthService().currentUserId;
+    final currentUserEmail = AuthService().currentUserEmail?.toLowerCase();
+    final currentUserPhone = AuthService().currentUserPhone?.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    final currentAgentWhatsApp = AuthService().agentWhatsAppNumber?.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+
+    final eventAgentId = (updatedLog['agentId'] is Map)
+        ? updatedLog['agentId']['_id']?.toString()
+        : updatedLog['agentId']?.toString();
+    final eventAgentEmail = (updatedLog['agentId'] is Map)
+        ? updatedLog['agentId']['email']?.toString().toLowerCase()
+        : null;
+    final eventAgentPhone = (updatedLog['agentPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+
+    final rawCustomer = updatedLog['customerPhone'] ??
+                        updatedLog['caller_number_raw'] ??
+                        updatedLog['cli'] ??
+                        updatedLog['caller_id'] ??
+                        updatedLog['customer_number'] ??
+                        updatedLog['number'] ??
+                        updatedLog['phone'] ??
+                        updatedLog['destination_number'] ??
+                        updatedLog['to'] ??
+                        '';
+    final customerPhone = rawCustomer.toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
     final providerCallId = (updatedLog['providerCallId'] ?? '').toString();
     final callId = (updatedLog['callId'] ?? '').toString();
 
@@ -369,9 +486,26 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       }
     }
 
-    if (!isThisActiveCall) {
-      emit(state.copyWith(callLogs: currentLogs));
-      return;
+    bool isAgentMatch = false;
+    if (isThisActiveCall) {
+      isAgentMatch = true;
+    } else if (currentUserId != null && eventAgentId != null && currentUserId == eventAgentId) {
+      isAgentMatch = true;
+    } else if (currentUserEmail != null && eventAgentEmail != null && currentUserEmail == eventAgentEmail) {
+      isAgentMatch = true;
+    } else if (currentUserPhone != null && currentUserPhone.isNotEmpty && eventAgentPhone.isNotEmpty &&
+               (currentUserPhone.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentUserPhone))) {
+      isAgentMatch = true;
+    } else if (currentAgentWhatsApp != null && currentAgentWhatsApp.isNotEmpty && eventAgentPhone.isNotEmpty &&
+               (currentAgentWhatsApp.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentAgentWhatsApp))) {
+      isAgentMatch = true;
+    } else if (state.isCallActive || state.isTriggeringCall) {
+      isAgentMatch = true;
+    } else if (isAdmin) {
+      final adminDids = ['7316917246', '07316917246'];
+      if (adminDids.any((d) => eventAgentPhone.endsWith(d) || d.endsWith(eventAgentPhone))) {
+        isAgentMatch = true;
+      }
     }
 
     final bool isPayloadEnded = updatedLog['isEnded'] == true ||
@@ -385,8 +519,6 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
                                 eventName.contains('reject') ||
                                 eventName.contains('cancel') ||
                                 eventName.contains('complete');
-
-    debugPrint('[CallLogsBloc] Active call update matched: logId=$logId, activeCallLogId=${state.activeCallLogId}, callStatus=$callStatus, eventName=$eventName, isPayloadEnded=$isPayloadEnded');
 
     final bool isEnded = isPayloadEnded ||
                          callStatus == 'completed' ||
@@ -409,25 +541,133 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       TelephonyAudioService().stopDialingTone();
       emit(state.copyWith(
         callLogs: currentLogs,
+        totalCalls: totalCalls,
+        inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
+        outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,
+        missedCount: missed > state.missedCount ? missed : state.missedCount,
         isTriggeringCall: false,
         isCallActive: true,
       ));
       return;
     }
 
-    if (isThisActiveCall && isEnded) {
+    if ((isThisActiveCall || isAgentMatch) && isEnded) {
       _stopActiveCallPolling();
-      TelephonyAudioService().playHangupTone();
-      final int durationSec = int.tryParse(updatedLog['durationSeconds']?.toString() ?? '0') ?? 0;
-      final bool wasAnswered = state.isCallActive || callStatus == 'answered' || durationSec > 0;
+      final String? userDisposition = updatedLog['userDisposition']?.toString();
+      final bool hasDisposition = userDisposition != null && userDisposition.isNotEmpty && userDisposition != 'null';
+
+      final customerName = (updatedLog['contactId'] is Map)
+          ? updatedLog['contactId']['name']?.toString()
+          : (updatedLog['customerName']?.toString() ?? (updatedLog['name']?.toString() ?? state.activeCustomerName));
+
+      final effectivePhone = customerPhone.isNotEmpty ? customerPhone : state.activeCustomerPhone;
+
       emit(state.copyWith(
         callLogs: currentLogs,
+        totalCalls: totalCalls,
+        inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
+        outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,
+        missedCount: missed > state.missedCount ? missed : state.missedCount,
         isCallActive: false,
         isTriggeringCall: false,
-        showPostCallDisposition: wasAnswered,
+        activeCallLogId: (logId != null && logId.isNotEmpty) ? logId : (providerCallId.isNotEmpty ? providerCallId : callId),
+        activeCustomerPhone: effectivePhone,
+        activeCustomerName: customerName,
+        showPostCallDisposition: !hasDisposition && (effectivePhone != null && effectivePhone.isNotEmpty),
       ));
     } else {
-      emit(state.copyWith(callLogs: currentLogs));
+      emit(state.copyWith(
+        callLogs: currentLogs,
+        totalCalls: totalCalls,
+        inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
+        outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,
+        missedCount: missed > state.missedCount ? missed : state.missedCount,
+      ));
+    }
+
+    // Schedule debounced full state sync in background
+    if (state.page == 1) {
+      _wsDebounceFetchTimer?.cancel();
+      _wsDebounceFetchTimer = Timer(const Duration(milliseconds: 1500), () {
+        add(FetchCallLogsEvent(
+          page: 1,
+          type: state.selectedType,
+          status: state.selectedStatus,
+          agentId: state.selectedAgentId,
+          search: state.searchQuery,
+        ));
+      });
+    }
+  }
+
+  Future<void> _onDeleteCallLog(
+    DeleteCallLogEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    final updatedLogs = state.callLogs.where((l) {
+      final id = l['_id']?.toString() ?? l['callId']?.toString() ?? l['providerCallId']?.toString();
+      return id != event.callLogId;
+    }).toList();
+
+    emit(state.copyWith(
+      callLogs: updatedLogs,
+      totalCount: state.totalCount > 0 ? state.totalCount - 1 : 0,
+    ));
+
+    try {
+      await ApiClient().delete('/calls/${event.callLogId}');
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Delete call log error: $e');
+    }
+  }
+
+  Future<void> _onBulkDeleteCallLogs(
+    BulkDeleteCallLogsEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    if (event.callLogIds.isEmpty) return;
+    final idsSet = event.callLogIds.toSet();
+    final updatedLogs = state.callLogs.where((l) {
+      final id = l['_id']?.toString() ?? l['callId']?.toString() ?? l['providerCallId']?.toString();
+      return !idsSet.contains(id);
+    }).toList();
+
+    final deletedCount = state.callLogs.length - updatedLogs.length;
+    emit(state.copyWith(
+      callLogs: updatedLogs,
+      totalCount: state.totalCount >= deletedCount ? state.totalCount - deletedCount : 0,
+    ));
+
+    try {
+      await ApiClient().post('/calls/bulk-delete', {
+        'ids': event.callLogIds,
+        'callLogIds': event.callLogIds,
+      });
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Bulk delete call logs error: $e');
+    }
+  }
+
+  Future<void> _onClearAllCallLogs(
+    ClearAllCallLogsEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    emit(state.copyWith(
+      callLogs: [],
+      totalCount: 0,
+      totalCalls: 0,
+      inboundCount: 0,
+      outboundCount: 0,
+      missedCount: 0,
+    ));
+
+    try {
+      await ApiClient().post('/calls/clear', {});
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Clear call logs error: $e');
+      try {
+        await ApiClient().delete('/calls/clear');
+      } catch (_) {}
     }
   }
 
