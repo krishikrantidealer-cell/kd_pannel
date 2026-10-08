@@ -3117,8 +3117,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               Expanded(
                                 child: Text(
                                   isRejected
-                                      ? 'This template was rejected by Meta policy and cannot be sent to customers.'
-                                      : 'This template is awaiting Meta / MyOperator review. You cannot dispatch messages with pending templates.',
+                                      ? 'This template was rejected by Meta policy and cannot be sent.'
+                                      : 'Template is marked In Review. If it is already created in MyOperator, click "Activate" to unlock.',
                                   style: GoogleFonts.outfit(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
@@ -3126,6 +3126,30 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   ),
                                 ),
                               ),
+                              if (isPending && currentTpl?['_id'] != null) ...[
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF008069),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
+                                  onPressed: () async {
+                                    final tplId = currentTpl?['_id']?.toString();
+                                    if (tplId != null) {
+                                      final res = await ApiClient().patch('/whatsapp/templates/$tplId', {'status': 'APPROVED'});
+                                      if (res.statusCode == 200) {
+                                        setDialogState(() {
+                                          currentTpl?['status'] = 'APPROVED';
+                                        });
+                                      }
+                                    }
+                                  },
+                                  child: Text('Activate & Send', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -4400,7 +4424,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
     bool isGlobal = isAdmin; // Default to global for Admin, private for Sales
     bool autoSlug = true;
-    bool isAlreadyApproved = false;
+    bool isAlreadyApproved = true;
 
     showDialog(
       context: context,
