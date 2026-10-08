@@ -413,16 +413,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   Future<void> _fetchTemplates({bool forceSync = false}) async {
     setState(() => _isLoadingTemplates = true);
     try {
-      final endpoint = forceSync ? '/whatsapp/templates?sync=true' : '/whatsapp/templates';
+      final endpoint = forceSync ? '/whatsapp/templates?sync=true&status=APPROVED' : '/whatsapp/templates?status=APPROVED';
       final res = await ApiClient().get(endpoint);
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true && body['data'] != null) {
           final list = List<dynamic>.from(body['data']);
           setState(() {
-            _approvedTemplates = list;
+            _approvedTemplates = list.where((t) {
+              final s = (t['status'] ?? t['waba_template_status'] ?? '').toString().toUpperCase();
+              return s == 'APPROVED' || s == 'ACTIVE';
+            }).toList();
           });
-          debugPrint('[WhatsApp CRM] Loaded ${list.length} approved templates from backend.');
+          debugPrint('[WhatsApp CRM] Loaded ${_approvedTemplates.length} approved templates from backend.');
         }
       }
     } catch (e) {
