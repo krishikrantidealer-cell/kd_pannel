@@ -4001,7 +4001,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // ══════════════════════════════════════════════════════════════════════════
 
   void _showTemplatesManagerDialog(BuildContext context) {
-    String filterScope = 'ALL'; // 'ALL', 'GLOBAL', 'PRIVATE'
     final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     bool isSyncing = false;
@@ -4010,12 +4009,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (innerCtx, setDialogState) {
-          final List<dynamic> filteredTemplates = _approvedTemplates.where((t) {
-            final bool isGlob = t['isGlobal'] != false;
-            if (filterScope == 'GLOBAL') return isGlob;
-            if (filterScope == 'PRIVATE') return t['isGlobal'] == false;
-            return true;
-          }).toList();
+          final List<dynamic> filteredTemplates = _approvedTemplates;
 
           return Dialog(
             backgroundColor: Colors.white,
@@ -4055,9 +4049,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                 ),
                               ),
                               Text(
-                                isAdmin
-                                    ? 'Manage Global and Agent-specific Meta approved templates'
-                                    : 'Manage your private templates and view company global templates',
+                                'Meta approved WhatsApp templates synced from MyOperator',
                                 style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
                               ),
                             ],
@@ -4076,21 +4068,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Scope Tabs (All / Global / Private)
-                      Row(
-                        children: [
-                          _buildScopeFilterChip('ALL', 'All (${_approvedTemplates.length})', filterScope, (val) {
-                            setDialogState(() => filterScope = val);
-                          }),
-                          const SizedBox(width: 8),
-                          _buildScopeFilterChip('GLOBAL', '🌐 Company Global', filterScope, (val) {
-                            setDialogState(() => filterScope = val);
-                          }),
-                          const SizedBox(width: 8),
-                          _buildScopeFilterChip('PRIVATE', '🔒 Private Templates', filterScope, (val) {
-                            setDialogState(() => filterScope = val);
-                          }),
-                        ],
+                      Text(
+                        'Approved Templates (${_approvedTemplates.length})',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF475569),
+                        ),
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
@@ -4147,7 +4131,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                       const Icon(Icons.description_outlined, size: 44, color: Color(0xFF94A3B8)),
                                       const SizedBox(height: 10),
                                       Text(
-                                        'No templates found in this category.',
+                                        'No approved templates found.',
                                         style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
                                       ),
                                       const SizedBox(height: 6),
@@ -4173,19 +4157,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   final status = (t['status'] ?? 'APPROVED').toString().toUpperCase();
                                   final footer = (t['footer'] ?? '').toString();
                                   final templateId = t['_id']?.toString();
-                                  final bool isGlobal = t['isGlobal'] == true;
-                                  String creatorName = '';
-                                  if (t['createdBy'] is Map) {
-                                    final cb = t['createdBy'] as Map<String, dynamic>;
-                                    creatorName = (cb['name'] ?? '${cb['firstName'] ?? ''} ${cb['lastName'] ?? ''}').toString().trim();
-                                    if (creatorName.isEmpty) creatorName = (cb['email'] ?? '').toString();
-                                  } else if (t['agentId'] is Map) {
-                                    final ag = t['agentId'] as Map<String, dynamic>;
-                                    creatorName = (ag['name'] ?? '${ag['firstName'] ?? ''} ${ag['lastName'] ?? ''}').toString().trim();
-                                  }
-                                  if (creatorName.isEmpty) {
-                                    creatorName = (t['agentPhone'] ?? '').toString();
-                                  }
 
                                   Color statusColor = const Color(0xFF008069);
                                   String statusText = '🟢 Approved';
@@ -4229,21 +4200,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                       '($name)',
                                                       style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
                                                     ),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: isGlobal ? const Color(0xFF0284C7).withValues(alpha: 0.12) : const Color(0xFF64748B).withValues(alpha: 0.12),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      isGlobal ? '🌐 Company Global' : (creatorName.isNotEmpty ? '🔒 Private ($creatorName)' : '🔒 Private Template'),
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 10.5,
-                                                        fontWeight: FontWeight.w700,
-                                                        color: isGlobal ? const Color(0xFF0284C7) : const Color(0xFF475569),
-                                                      ),
-                                                    ),
-                                                  ),
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                                     decoration: BoxDecoration(
@@ -4391,28 +4347,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     );
   }
 
-  Widget _buildScopeFilterChip(String scope, String label, String activeScope, ValueChanged<String> onSelect) {
-    final bool isSelected = scope == activeScope;
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => onSelect(scope),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF008069) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFF475569),
-          ),
-        ),
-      ),
-    );
-  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // 📞 CUSTOMER TELEPHONY TIMELINE & MYOPERATOR RECORDING VAULT MODAL
