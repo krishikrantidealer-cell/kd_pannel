@@ -212,8 +212,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     : int.tryParse(_conversations[index]['unreadCount']?.toString() ?? '0') ?? 0)
                 : 0);
             newConversation['unreadCount'] = prevUnread + 1;
+            if (prevUnread == 0) {
+              _totalUnreadCount = _totalUnreadCount + 1;
+            }
           } else if (isCurrentlySelected) {
             newConversation['unreadCount'] = 0;
+            // Instantly clear unread count on backend DB when viewing active thread
+            ApiClient().put('/api/conversations/$convId/read', {}).catchError((_) => null);
           }
 
           if (index != -1) {
@@ -726,10 +731,37 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       _selectedConversation = conversation;
       _messages = [];
       _replyingToMessage = null;
+      final int prevUnread = (conversation['unreadCount'] is int
+          ? conversation['unreadCount']
+          : int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0);
+      if (prevUnread > 0) {
+        _totalUnreadCount = (_totalUnreadCount - 1).clamp(0, 999999);
+      }
       conversation['unreadCount'] = 0;
     });
     // Fetch chat history
     _fetchMessages(conversation['_id']);
+  }
+
+  Future<void> _markConversationAsUnread(dynamic conversation) async {
+    final convId = conversation['_id']?.toString();
+    if (convId == null) return;
+    setState(() {
+      final int prevUnread = (conversation['unreadCount'] is int
+          ? conversation['unreadCount']
+          : int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0);
+      if (prevUnread == 0) {
+        _totalUnreadCount += 1;
+      }
+      conversation['unreadCount'] = 1;
+      if (_selectedConversation?['_id']?.toString() == convId) {
+        _selectedConversation = null;
+        _messages = [];
+      }
+    });
+    try {
+      await ApiClient().put('/api/conversations/$convId/unread', {});
+    } catch (_) {}
   }
 
   void _scrollToBottom() {
@@ -1151,7 +1183,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 child: Text(
                                                   name,
                                                   style: GoogleFonts.outfit(
-                                                    fontWeight: FontWeight.w600,
+                                                    fontWeight: unreadCount > 0 ? FontWeight.w700 : FontWeight.w600,
                                                     fontSize: 13.5,
                                                     color: const Color(0xFF111B21),
                                                   ),
@@ -1281,8 +1313,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                   fontStyle: hasNoMessages ? FontStyle.italic : FontStyle.normal,
                                                   color: hasNoMessages
                                                       ? const Color(0xFF008069)
-                                                      : const Color(0xFF667781),
-                                                  fontWeight: hasNoMessages ? FontWeight.w500 : FontWeight.normal,
+                                                      : (unreadCount > 0 ? const Color(0xFF111B21) : const Color(0xFF667781)),
+                                                  fontWeight: (hasNoMessages || unreadCount > 0) ? FontWeight.w600 : FontWeight.normal,
                                                 ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
@@ -1292,20 +1324,22 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                         ),
                                         if (unreadCount > 0)
                                           Container(
+                                            constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
+                                              horizontal: 5.5,
                                               vertical: 2,
                                             ),
+                                            alignment: Alignment.center,
                                             decoration: BoxDecoration(
                                               color: const Color(0xFF25D366),
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
                                             child: Text(
-                                              '$unreadCount',
+                                              unreadCount > 99 ? '99+' : '$unreadCount',
                                               style: GoogleFonts.outfit(
                                                 color: Colors.white,
-                                                fontSize: 9.5,
+                                                fontSize: 10,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
