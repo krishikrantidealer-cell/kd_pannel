@@ -70,10 +70,10 @@ class _MainLayoutState extends State<MainLayout> {
         case 4: return const DealerManagementPage();
         case 5: return const SalesCouponPage();
         case 6: return const SalesCustomerEventsPage();
-        case 7: return const AlertsPage();
-        case 8: return const EstimateGeneratorPage();
-        case 9: return const WhatsAppCrmPage();
-        case 10: return const CallLogsPage();
+        case 7: return const WhatsAppCrmPage();
+        case 8: return const CallLogsPage();
+        case 9: return const EstimateGeneratorPage();
+        case 10: return const AlertsPage();
         default: return const SalesDashboardPage();
       }
     }
@@ -156,13 +156,13 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 5;
         } else if (routeName == '/marketing' || routeName == '/customer' || routeName == '/events') {
           _currentIdx = 6;
-        } else if (routeName == '/alerts') {
+        } else if (routeName == '/support' || routeName == '/whatsapp') {
           _currentIdx = 7;
-        } else if (routeName == '/sales/estimates') {
+        } else if (routeName == '/calls' || routeName == '/call-recordings') {
           _currentIdx = 8;
-        } else if (routeName == '/support') {
+        } else if (routeName == '/sales/estimates' || routeName == '/estimates') {
           _currentIdx = 9;
-        } else if (routeName == '/calls') {
+        } else if (routeName == '/alerts') {
           _currentIdx = 10;
         } else {
           _currentIdx = 0;
@@ -201,10 +201,10 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 4) route = '/dealers';
       if (index == 5) route = '/sales/coupons';
       if (index == 6) route = '/marketing';
-      if (index == 7) route = '/alerts';
-      if (index == 8) route = '/sales/estimates';
-      if (index == 9) route = '/support';
-      if (index == 10) route = '/calls';
+      if (index == 7) route = '/support';
+      if (index == 8) route = '/calls';
+      if (index == 9) route = '/sales/estimates';
+      if (index == 10) route = '/alerts';
     }
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
