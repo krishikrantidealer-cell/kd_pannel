@@ -1558,21 +1558,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           }
                         },
                       ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        icon: const Icon(Icons.assignment_outlined, size: 14, color: Color(0xFF008069)),
-                        label: Text(
-                          'Templates',
-                          style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF008069)),
-                        ),
-                        onPressed: () {
-                          _showTemplatesManagerDialog(context);
-                        },
-                      ),
                       const SizedBox(width: 6),
 
                       // 🔍 In-Chat Message Search
