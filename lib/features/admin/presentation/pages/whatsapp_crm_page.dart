@@ -2961,7 +2961,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Create and register official templates with Meta & MyOperator first.',
+                              'Sync approved templates from your MyOperator dashboard in Templates Manager.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
                             ),
@@ -4081,63 +4081,40 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           }),
                         ],
                       ),
-                      Row(
-                        children: [
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF008069)),
-                              foregroundColor: const Color(0xFF008069),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: isSyncing
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF008069)),
-                                  )
-                                : const Icon(Icons.sync_rounded, size: 16),
-                            label: Text(
-                              isSyncing ? 'Syncing...' : 'Sync MyOperator',
-                              style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: isSyncing
-                                ? null
-                                : () async {
-                                    setDialogState(() => isSyncing = true);
-                                    await _fetchTemplates(forceSync: true);
-                                    if (context.mounted) {
-                                      setDialogState(() => isSyncing = false);
-                                      scaffoldMessenger.showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Templates synchronized with MyOperator WABA.'),
-                                          backgroundColor: Color(0xFF008069),
-                                        ),
-                                      );
-                                    }
-                                  },
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF008069),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            ),
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            label: Text(
-                              'Create New Template',
-                              style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () {
-                              _showCreateTemplateDialog(context, onCreated: () {
-                                setDialogState(() {});
-                              });
-                            },
-                          ),
-                        ],
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF008069),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: isSyncing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.sync_rounded, size: 16),
+                        label: Text(
+                          isSyncing ? 'Syncing...' : 'Sync MyOperator',
+                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: isSyncing
+                            ? null
+                            : () async {
+                                setDialogState(() => isSyncing = true);
+                                await _fetchTemplates(forceSync: true);
+                                if (context.mounted) {
+                                  setDialogState(() => isSyncing = false);
+                                  scaffoldMessenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Templates synchronized with MyOperator WABA.'),
+                                      backgroundColor: Color(0xFF008069),
+                                    ),
+                                  );
+                                }
+                              },
                       ),
                     ],
                   ),
@@ -4151,10 +4128,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                         ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
                         : filteredTemplates.isEmpty
                             ? Center(
-                                child: Text(
-                                  'No templates found in this category.\nClick "+ Create New Template" to submit one for approval.',
-                                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B), height: 1.4),
-                                  textAlign: TextAlign.center,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.description_outlined, size: 44, color: Color(0xFF94A3B8)),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        'No templates found in this category.',
+                                        style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Create approved templates in your MyOperator Dashboard,\nthen click "Sync MyOperator" above to load them here.',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B), height: 1.4),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               )
                             : ListView.separated(
@@ -4407,666 +4399,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             color: isSelected ? Colors.white : const Color(0xFF475569),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showCreateTemplateDialog(BuildContext context, {VoidCallback? onCreated}) {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final nameController = TextEditingController();
-    final titleController = TextEditingController();
-    final bodyController = TextEditingController();
-    final footerController = TextEditingController();
-    final headerTextController = TextEditingController();
-    String category = 'UTILITY';
-    String language = 'en';
-    String headerType = 'NONE';
-    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
-    bool isGlobal = isAdmin; // Default to global for Admin, private for Sales
-    bool autoSlug = true;
-    bool isAlreadyApproved = true;
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (innerCtx, setDialogState) {
-          final String currentTitle = titleController.text;
-          final String currentBody = bodyController.text;
-          final String currentHeader = headerTextController.text;
-          final String currentFooter = footerController.text;
-
-          void insertVariable(String varTag) {
-            final text = bodyController.text;
-            final selection = bodyController.selection;
-            if (selection.start >= 0 && selection.end >= 0) {
-              final newText = text.replaceRange(selection.start, selection.end, varTag);
-              bodyController.value = TextEditingValue(
-                text: newText,
-                selection: TextSelection.collapsed(offset: selection.start + varTag.length),
-              );
-            } else {
-              bodyController.text = '$text $varTag'.trim();
-            }
-            setDialogState(() {});
-          }
-
-          return Dialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 820,
-              constraints: const BoxConstraints(maxHeight: 680),
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Header ──
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF008069).withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.mark_chat_unread_rounded, color: Color(0xFF008069), size: 18),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isAlreadyApproved ? 'Register Existing Meta Template' : 'Create WhatsApp Business Template',
-                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                              ),
-                              Text(
-                                isAlreadyApproved
-                                    ? 'Activate an approved template from your MyOperator/Meta dashboard immediately'
-                                    : 'Submit for Meta & MyOperator automated compliance review',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  const SizedBox(height: 14),
-
-                  // ── Body Columns: Editor + Live Preview ──
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left Column: Form Fields
-                        Expanded(
-                          flex: 11,
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Existing Approval Toggle
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isAlreadyApproved ? const Color(0xFF008069).withValues(alpha: 0.08) : const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isAlreadyApproved ? const Color(0xFF008069).withValues(alpha: 0.35) : const Color(0xFFE2E8F0),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Checkbox(
-                                        value: isAlreadyApproved,
-                                        activeColor: const Color(0xFF008069),
-                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        onChanged: (val) {
-                                          setDialogState(() => isAlreadyApproved = val ?? false);
-                                        },
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Already Approved on MyOperator / Meta',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: isAlreadyApproved ? const Color(0xFF008069) : const Color(0xFF1E293B),
-                                              ),
-                                            ),
-                                            Text(
-                                              'Enable if template is already created & approved on MyOperator. Activates instantly without review.',
-                                              style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Title & Identifier
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: titleController,
-                                        onChanged: (val) {
-                                          if (autoSlug) {
-                                            final slug = val
-                                                .toLowerCase()
-                                                .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-                                                .replaceAll(RegExp(r'^_+|_+$'), '');
-                                            nameController.text = slug;
-                                          }
-                                          setDialogState(() {});
-                                        },
-                                        decoration: InputDecoration(
-                                          labelText: 'Friendly Title',
-                                          hintText: 'e.g. Order Confirmation',
-                                          labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          isDense: true,
-                                        ),
-                                        style: GoogleFonts.outfit(fontSize: 13),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: nameController,
-                                        onChanged: (_) {
-                                          autoSlug = false;
-                                          setDialogState(() {});
-                                        },
-                                        decoration: InputDecoration(
-                                          labelText: 'Meta Template Name',
-                                          hintText: 'e.g. order_confirmation',
-                                          labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF008069), fontWeight: FontWeight.w600),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          isDense: true,
-                                        ),
-                                        style: GoogleFonts.firaCode(fontSize: 13),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-
-                                // Category & Language
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        value: category,
-                                        isExpanded: true,
-                                        decoration: InputDecoration(
-                                          labelText: 'Category',
-                                          labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          isDense: true,
-                                        ),
-                                        items: [
-                                          DropdownMenuItem(
-                                            value: 'UTILITY',
-                                            child: Text('Utility (Account/Orders)', style: GoogleFonts.outfit(fontSize: 12.5), overflow: TextOverflow.ellipsis),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'MARKETING',
-                                            child: Text('Marketing (Promotions)', style: GoogleFonts.outfit(fontSize: 12.5), overflow: TextOverflow.ellipsis),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'AUTHENTICATION',
-                                            child: Text('Authentication (OTPs)', style: GoogleFonts.outfit(fontSize: 12.5), overflow: TextOverflow.ellipsis),
-                                          ),
-                                        ],
-                                        onChanged: (val) {
-                                          if (val != null) setDialogState(() => category = val);
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        value: language,
-                                        isExpanded: true,
-                                        decoration: InputDecoration(
-                                          labelText: 'Language',
-                                          labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          isDense: true,
-                                        ),
-                                        items: [
-                                          DropdownMenuItem(value: 'en', child: Text('English (en)', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'hi', child: Text('Hindi (hi)', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'mr', child: Text('Marathi (mr)', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'gu', child: Text('Gujarati (gu)', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                        ],
-                                        onChanged: (val) {
-                                          if (val != null) setDialogState(() => language = val);
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-
-                                // Header Type
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        value: headerType,
-                                        isExpanded: true,
-                                        decoration: InputDecoration(
-                                          labelText: 'Header Type',
-                                          labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          isDense: true,
-                                        ),
-                                        items: [
-                                          DropdownMenuItem(value: 'NONE', child: Text('No Header', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'TEXT', child: Text('Text Header', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'IMAGE', child: Text('Image Header', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                          DropdownMenuItem(value: 'DOCUMENT', child: Text('Document (PDF) Header', style: GoogleFonts.outfit(fontSize: 12.5))),
-                                        ],
-                                        onChanged: (val) {
-                                          if (val != null) setDialogState(() => headerType = val);
-                                        },
-                                      ),
-                                    ),
-                                    if (headerType == 'TEXT') ...[
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: headerTextController,
-                                          onChanged: (_) => setDialogState(() {}),
-                                          decoration: InputDecoration(
-                                            labelText: 'Header Text',
-                                            hintText: 'e.g. Order Confirmed!',
-                                            labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                            isDense: true,
-                                          ),
-                                          style: GoogleFonts.outfit(fontSize: 13),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-
-                                // Scope Banner
-                                if (isAdmin)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF8FAFC),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Global Template (Visible to all agents)',
-                                          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                                        ),
-                                        Transform.scale(
-                                          scale: 0.8,
-                                          child: Switch(
-                                            value: isGlobal,
-                                            activeColor: const Color(0xFF008069),
-                                            onChanged: (val) => setDialogState(() => isGlobal = val),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                const SizedBox(height: 10),
-
-                                // Body text area + variable insertion toolbar
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Body Message *',
-                                          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text('Insert: ', style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B))),
-                                            InkWell(
-                                              onTap: () => insertVariable('{{1}}'),
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF008069).withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text('{{1}} Name', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF008069))),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            InkWell(
-                                              onTap: () => insertVariable('{{2}}'),
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF008069).withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text('{{2}} Order ID', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF008069))),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            InkWell(
-                                              onTap: () => insertVariable('{{3}}'),
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF008069).withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text('{{3}} Amount', style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF008069))),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TextField(
-                                      controller: bodyController,
-                                      maxLines: 4,
-                                      onChanged: (_) => setDialogState(() {}),
-                                      decoration: InputDecoration(
-                                        hintText: 'Namaste {{1}}, your Krishi Kranti order #{{2}} is confirmed for dispatch!',
-                                        hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                        contentPadding: const EdgeInsets.all(12),
-                                      ),
-                                      style: GoogleFonts.outfit(fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-
-                                // Footer Field
-                                TextField(
-                                  controller: footerController,
-                                  onChanged: (_) => setDialogState(() {}),
-                                  decoration: InputDecoration(
-                                    labelText: 'Footer Note (Optional)',
-                                    hintText: 'e.g. Krishi Kranti Organics',
-                                    labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    isDense: true,
-                                  ),
-                                  style: GoogleFonts.outfit(fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // Vertical Divider
-                        Container(
-                          width: 1,
-                          height: double.infinity,
-                          color: const Color(0xFFE2E8F0),
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-
-                        // Right Column: Live WhatsApp Message Bubble Preview
-                        Expanded(
-                          flex: 9,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFEAE2), // WhatsApp chat wallpaper background
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                            ),
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.visibility_rounded, size: 14, color: Color(0xFF54656F)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Live WhatsApp Preview',
-                                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF54656F)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Expanded(
-                                  child: Align(
-                                    alignment: Alignment.topLeft,
-                                    child: Container(
-                                      constraints: const BoxConstraints(maxWidth: 290),
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: const BorderRadius.only(
-                                          topLeft: Radius.circular(0),
-                                          topRight: Radius.circular(10),
-                                          bottomLeft: Radius.circular(10),
-                                          bottomRight: Radius.circular(10),
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.06),
-                                            offset: const Offset(0, 1),
-                                            blurRadius: 2,
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          // Header preview
-                                          if (headerType == 'TEXT' && currentHeader.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(bottom: 6),
-                                              child: Text(
-                                                currentHeader,
-                                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
-                                              ),
-                                            )
-                                          else if (headerType == 'IMAGE')
-                                            Container(
-                                              height: 100,
-                                              width: double.infinity,
-                                              margin: const EdgeInsets.only(bottom: 6),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFE2E8F0),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: const Icon(Icons.image_rounded, color: Color(0xFF94A3B8), size: 36),
-                                            )
-                                          else if (headerType == 'DOCUMENT')
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
-                                              margin: const EdgeInsets.only(bottom: 6),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 20),
-                                                  const SizedBox(width: 6),
-                                                  Text('catalog_attachment.pdf', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600)),
-                                                ],
-                                              ),
-                                            ),
-
-                                          // Body preview
-                                          Text(
-                                            currentBody.isNotEmpty
-                                                ? currentBody
-                                                : 'Template message body preview will appear here...',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 12.5,
-                                              color: currentBody.isNotEmpty ? const Color(0xFF111B21) : const Color(0xFF94A3B8),
-                                              height: 1.35,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-
-                                          // Footer preview
-                                          if (currentFooter.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(bottom: 4),
-                                              child: Text(
-                                                currentFooter,
-                                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF667781)),
-                                              ),
-                                            ),
-
-                                          // Timestamp
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                DateFormat('hh:mm a').format(DateTime.now()),
-                                                style: GoogleFonts.outfit(fontSize: 10, color: const Color(0xFF667781)),
-                                              ),
-                                              const SizedBox(width: 3),
-                                              const Icon(Icons.done_all_rounded, size: 13, color: Color(0xFF53BDEB)),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // ── Actions ──
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: () => Navigator.pop(innerCtx),
-                        child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF008069),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          elevation: 0,
-                        ),
-                        icon: Icon(isAlreadyApproved ? Icons.check_circle_outline_rounded : Icons.send_rounded, size: 16),
-                        onPressed: () async {
-                          final name = nameController.text.trim();
-                          final body = bodyController.text.trim();
-                          if (name.isEmpty || body.isEmpty) return;
-
-                          Navigator.pop(innerCtx);
-
-                          try {
-                            final res = await ApiClient().post('/whatsapp/templates', {
-                              'name': name,
-                              'title': titleController.text.trim().isNotEmpty ? titleController.text.trim() : name,
-                              'isGlobal': isGlobal,
-                              'category': category,
-                              'language': language,
-                              'headerType': headerType,
-                              'headerText': headerTextController.text.trim(),
-                              'body': body,
-                              'footer': footerController.text.trim(),
-                              'status': isAlreadyApproved ? 'APPROVED' : 'PENDING',
-                            });
-
-                            if (res.statusCode == 200 || res.statusCode == 201) {
-                              await _fetchTemplates();
-                              onCreated?.call();
-                              if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(isAlreadyApproved
-                                        ? 'Template "$name" registered & activated!'
-                                        : 'Template submitted for Meta/MyOperator review!'),
-                                    backgroundColor: const Color(0xFF008069),
-                                  ),
-                                );
-                              }
-                            } else {
-                              if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to save template: HTTP ${res.statusCode}'),
-                                    backgroundColor: Colors.red[700],
-                                  ),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            debugPrint('[Create Template] Error: $e');
-                          }
-                        },
-                        label: Text(
-                          isAlreadyApproved ? 'Register & Activate Template' : 'Submit for Approval',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
