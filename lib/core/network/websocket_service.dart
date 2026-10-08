@@ -210,6 +210,8 @@ class WebSocketService {
           break;
         case 'NEW_MESSAGE':
         case 'MESSAGE_STATUS_UPDATED':
+        case 'AGENT_TYPING_START':
+        case 'AGENT_TYPING_STOP':
         case 'CALL_UPDATE':
         case 'CALL_ENDED':
         case 'CALL_DELETED':
@@ -256,6 +258,22 @@ class WebSocketService {
 
   void triggerNotificationUpdate() {
     _triggerNotificationUpdate();
+  }
+
+  void sendTypingStart(String conversationId) {
+    if (!_isConnected || conversationId.isEmpty) return;
+    _send({
+      'type': 'TYPING_START',
+      'conversationId': conversationId,
+    });
+  }
+
+  void sendTypingStop(String conversationId) {
+    if (!_isConnected || conversationId.isEmpty) return;
+    _send({
+      'type': 'TYPING_STOP',
+      'conversationId': conversationId,
+    });
   }
 
   void disconnect() {

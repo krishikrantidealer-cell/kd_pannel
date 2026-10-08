@@ -98,6 +98,34 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   List<dynamic> _cannedResponses = [];
   bool _isLoadingCanned = false;
 
+  // Real-time Agent Typing Trackers: conversationId -> Map { agentId, agentName, timer }
+  final Map<String, Map<String, dynamic>> _activeTypingAgents = {};
+  Timer? _myTypingDebounceTimer;
+  bool _isCurrentlyTypingLocally = false;
+
+  void _onMessageTextChanged(String text) {
+    final convId = _selectedConversation?['_id']?.toString();
+    if (convId == null || convId.isEmpty) return;
+
+    if (text.trim().isNotEmpty) {
+      if (!_isCurrentlyTypingLocally) {
+        _isCurrentlyTypingLocally = true;
+        WebSocketService().sendTypingStart(convId);
+      }
+      _myTypingDebounceTimer?.cancel();
+      _myTypingDebounceTimer = Timer(const Duration(milliseconds: 2500), () {
+        _isCurrentlyTypingLocally = false;
+        WebSocketService().sendTypingStop(convId);
+      });
+    } else {
+      if (_isCurrentlyTypingLocally) {
+        _isCurrentlyTypingLocally = false;
+        _myTypingDebounceTimer?.cancel();
+        WebSocketService().sendTypingStop(convId);
+      }
+    }
+  }
+
   int _totalAllCount = 0;
   int _totalLeadsCount = 0;
   int _totalDealersCount = 0;
@@ -133,6 +161,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _myTypingDebounceTimer?.cancel();
+    if (_isCurrentlyTypingLocally && _selectedConversation?['_id'] != null) {
+      WebSocketService().sendTypingStop(_selectedConversation!['_id'].toString());
+    }
+    for (final info in _activeTypingAgents.values) {
+      (info['timer'] as Timer?)?.cancel();
+    }
     _websocketSubscription?.cancel();
     _searchController.dispose();
     _messageController.dispose();
@@ -242,6 +277,39 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             if (index != -1) {
               _messages[index]['status'] = status;
             }
+          });
+        }
+      } else if (type == 'AGENT_TYPING_START' && data != null) {
+        final convId = data['conversationId']?.toString();
+        final agentId = data['agentId']?.toString();
+        final agentName = data['agentName']?.toString() ?? 'Agent';
+        final currentUserId = AuthService().currentUserId;
+
+        if (convId != null && agentId != null && agentId != currentUserId) {
+          setState(() {
+            (_activeTypingAgents[convId]?['timer'] as Timer?)?.cancel();
+            final timer = Timer(const Duration(milliseconds: 3500), () {
+              if (mounted) {
+                setState(() {
+                  _activeTypingAgents.remove(convId);
+                });
+              }
+            });
+
+            _activeTypingAgents[convId] = {
+              'agentId': agentId,
+              'agentName': agentName,
+              'timer': timer,
+            };
+          });
+        }
+      } else if (type == 'AGENT_TYPING_STOP' && data != null) {
+        final convId = data['conversationId']?.toString();
+        final agentId = data['agentId']?.toString();
+        if (convId != null && _activeTypingAgents[convId]?['agentId'] == agentId) {
+          setState(() {
+            (_activeTypingAgents[convId]?['timer'] as Timer?)?.cancel();
+            _activeTypingAgents.remove(convId);
           });
         }
       } else if (type == 'CALL_UPDATE') {
@@ -495,6 +563,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     if (_messageController.text.trim().isEmpty || _selectedConversation == null)
       return;
 
+    final convId = _selectedConversation?['_id']?.toString();
+    if (_isCurrentlyTypingLocally && convId != null) {
+      _isCurrentlyTypingLocally = false;
+      _myTypingDebounceTimer?.cancel();
+      WebSocketService().sendTypingStop(convId);
+    }
+
     final content = _messageController.text.trim();
     _messageController.clear();
 
@@ -619,6 +694,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
 
   void _selectConversation(dynamic conversation) {
+    if (_isCurrentlyTypingLocally && _selectedConversation?['_id'] != null) {
+      _isCurrentlyTypingLocally = false;
+      _myTypingDebounceTimer?.cancel();
+      WebSocketService().sendTypingStop(_selectedConversation!['_id'].toString());
+    }
     setState(() {
       _selectedConversation = conversation;
       _messages = [];
@@ -1147,24 +1227,46 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: Text(
-                                            hasNoMessages
-                                                ? '✨ Ready for Outreach'
-                                                : _formatCleanMessageText(
-                                                    lastText.isNotEmpty
-                                                        ? lastText
-                                                        : 'Media Attachment',
+                                          child: Builder(
+                                            builder: (context) {
+                                              final String convIdStr = (conv['_id'] ?? '').toString();
+                                              final bool isOtherAgentTyping = _activeTypingAgents.containsKey(convIdStr);
+                                              final String typingAgentName = _activeTypingAgents[convIdStr]?['agentName'] ?? 'Agent';
+
+                                              if (isOtherAgentTyping) {
+                                                return Text(
+                                                  '✍️ $typingAgentName is typing...',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11.5,
+                                                    fontStyle: FontStyle.italic,
+                                                    color: const Color(0xFF008069),
+                                                    fontWeight: FontWeight.bold,
                                                   ),
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 11.5,
-                                              fontStyle: hasNoMessages ? FontStyle.italic : FontStyle.normal,
-                                              color: hasNoMessages
-                                                  ? const Color(0xFF008069)
-                                                  : const Color(0xFF667781),
-                                              fontWeight: hasNoMessages ? FontWeight.w500 : FontWeight.normal,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                );
+                                              }
+
+                                              return Text(
+                                                hasNoMessages
+                                                    ? '✨ Ready for Outreach'
+                                                    : _formatCleanMessageText(
+                                                        lastText.isNotEmpty
+                                                            ? lastText
+                                                            : 'Media Attachment',
+                                                      ),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 11.5,
+                                                  fontStyle: hasNoMessages ? FontStyle.italic : FontStyle.normal,
+                                                  color: hasNoMessages
+                                                      ? const Color(0xFF008069)
+                                                      : const Color(0xFF667781),
+                                                  fontWeight: hasNoMessages ? FontWeight.w500 : FontWeight.normal,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              );
+                                            },
                                           ),
                                         ),
                                         if (unreadCount > 0)
@@ -2281,6 +2383,38 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             ),
           ),
 
+          // Real-time Agent Typing Collision Indicator
+          if (_selectedConversation != null &&
+              _activeTypingAgents.containsKey((_selectedConversation!['_id'] ?? '').toString()))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 7),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF0FDF4),
+                border: Border(
+                  top: BorderSide(color: Color(0xFFDCFCE7), width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF008069)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '✍️ ${_activeTypingAgents[(_selectedConversation!['_id'] ?? '').toString()]!['agentName']} is typing a response...',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF008069),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Web Input Tray Bar (WhatsApp Web grey)
           Container(
             padding: const EdgeInsets.only(
@@ -2479,6 +2613,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           )
                         : TextField(
                             controller: _messageController,
+                            onChanged: _onMessageTextChanged,
                             style: GoogleFonts.outfit(
                               fontSize: 13.5,
                               color: const Color(0xFF111B21),
