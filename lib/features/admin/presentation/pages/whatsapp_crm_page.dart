@@ -1837,7 +1837,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             );
                           }
 
-                          return SelectionContainer.disabled(
+                          return SelectionArea(
                             child: ListView.builder(
                               controller: _messageScrollController,
                               padding: const EdgeInsets.symmetric(
