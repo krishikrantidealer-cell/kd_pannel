@@ -16,8 +16,8 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
+import 'package:kd_pannel/features/shared/widgets/media_explorer_dialog.dart';
 
 class WebCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -2800,30 +2800,71 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ],
                 ),
                 const SizedBox(width: 6),
-                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media)
+                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media Explorer)
                 PopupMenuButton<String>(
                   icon: const Icon(
                     Icons.attach_file_rounded,
                     color: Color(0xFF64748B),
                     size: 22,
                   ),
-                  tooltip: 'Attach Media',
+                  tooltip: 'Attach Media & Explorer',
                   elevation: 8,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   color: Colors.white,
                   surfaceTintColor: Colors.white,
                   onSelected: (value) {
-                    if (value == 'Image' || value == 'Document') {
-                      _showAttachmentDialog(context, value);
+                    if (_selectedConversation == null) return;
+                    final convId = _selectedConversation['_id'].toString();
+
+                    if (value == 'Image' || value == 'Document' || value == 'Catalog' || value == 'Collateral' || value == 'Explorer') {
+                      MediaExplorerDialog.show(
+                        context,
+                        conversationId: convId,
+                        initialMediaType: value == 'Explorer' ? 'Catalog' : value,
+                        onMediaSent: () => _fetchMessages(convId),
+                      );
                     } else if (value == 'Canned') {
                       _showCannedResponsesDialog(context);
                     } else if (value == 'Template') {
-                      if (_selectedConversation != null) {
-                        _showSendTemplateDialog(context, _selectedConversation['_id']);
-                      }
+                      _showSendTemplateDialog(context, convId);
                     }
                   },
                   itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'Catalog',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFDCFCE7),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.storefront_rounded,
+                              color: Color(0xFF16A34A),
+                              size: 17,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Product Catalog Explorer',
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                'Search & send products directly (Interakt style)',
+                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'Image',
                       child: Row(
@@ -2850,7 +2891,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                 style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
                               ),
                               Text(
-                                'PNG, JPG, WebP upload or URL',
+                                'Upload from device or public URL',
                                 style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
                               ),
                             ],
@@ -2881,11 +2922,46 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Document & Catalogs',
+                                'Documents & PDF',
                                 style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
                               ),
                               Text(
                                 'PDF, DOCX, XLS, CSV files',
+                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 1),
+                    PopupMenuItem(
+                      value: 'Collateral',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFEF3C7),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.collections_bookmark_rounded,
+                              color: Color(0xFFD97706),
+                              size: 17,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Company Collateral & QR',
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                'Catalogues, payment QRs & certifications',
                                 style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
                               ),
                             ],
