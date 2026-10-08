@@ -1,3 +1,4 @@
+import "package:kd_pannel/features/admin/presentation/pages/engagement_hub_page.dart";
 import "package:kd_pannel/features/admin/presentation/pages/push_campaigns_page.dart";
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
@@ -38,6 +39,7 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
+  int _engagementSubTab = 0;
   String? _lastProcessedRoute;
   static bool _isSidebarPinned = true;
 
@@ -51,14 +53,12 @@ class _MainLayoutState extends State<MainLayout> {
         case 4: return const DealerManagementPage();
         case 5: return const SalesCouponPage();
         case 6: return const TeamManagementPage();
-        case 7: return const UserEventsPage();
-        case 8: return const AuditLogsContainerPage();
-        case 9: return const PushCampaignsPage();
-        case 10: return const TrashPage();
+        case 7: return EngagementHubPage(initialTab: _engagementSubTab);
+        case 8: return const WhatsAppCrmPage();
+        case 9: return const CallLogsPage();
+        case 10: return const EstimateGeneratorPage();
         case 11: return const AlertsPage();
-        case 12: return const EstimateGeneratorPage();
-        case 13: return const WhatsAppCrmPage();
-        case 14: return const CallLogsPage();
+        case 12: return const TrashPage();
         default: return const DashboardPage();
       }
     } else {
@@ -115,26 +115,29 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 3;
         } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 4;
-        } else if (routeName == '/sales/coupons') {
+        } else if (routeName == '/sales/coupons' || routeName == '/coupons') {
           _currentIdx = 5;
         } else if (routeName == '/team' || routeName.startsWith('/team/')) {
           _currentIdx = 6;
-        } else if (routeName == '/marketing') {
+        } else if (routeName == '/marketing' || routeName == '/engagement') {
           _currentIdx = 7;
-        } else if (routeName == '/logs' || routeName == '/admin/logs') {
-          _currentIdx = 8;
+          _engagementSubTab = 0;
         } else if (routeName == '/push-campaigns' || routeName == '/campaigns') {
+          _currentIdx = 7;
+          _engagementSubTab = 1;
+        } else if (routeName == '/logs' || routeName == '/admin/logs') {
+          _currentIdx = 7;
+          _engagementSubTab = 2;
+        } else if (routeName == '/support' || routeName == '/whatsapp') {
+          _currentIdx = 8;
+        } else if (routeName == '/calls' || routeName == '/call-recordings') {
           _currentIdx = 9;
-        } else if (routeName == '/trash') {
+        } else if (routeName == '/sales/estimates' || routeName == '/estimates') {
           _currentIdx = 10;
         } else if (routeName == '/alerts') {
           _currentIdx = 11;
-        } else if (routeName == '/sales/estimates') {
+        } else if (routeName == '/trash') {
           _currentIdx = 12;
-        } else if (routeName == '/support') {
-          _currentIdx = 13;
-        } else if (routeName == '/calls') {
-          _currentIdx = 14;
         } else {
           _currentIdx = 0;
         }
@@ -185,13 +188,11 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 5) route = '/sales/coupons';
       if (index == 6) route = '/team';
       if (index == 7) route = '/marketing';
-      if (index == 8) route = '/logs';
-      if (index == 9) route = '/push-campaigns';
-      if (index == 10) route = '/trash';
+      if (index == 8) route = '/support';
+      if (index == 9) route = '/calls';
+      if (index == 10) route = '/sales/estimates';
       if (index == 11) route = '/alerts';
-      if (index == 12) route = '/sales/estimates';
-      if (index == 13) route = '/support';
-      if (index == 14) route = '/calls';
+      if (index == 12) route = '/trash';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/products';

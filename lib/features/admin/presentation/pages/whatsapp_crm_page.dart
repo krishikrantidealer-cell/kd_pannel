@@ -3825,12 +3825,12 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final titleController = TextEditingController();
     final shortcutController = TextEditingController();
     final messageController = TextEditingController();
-    String category = 'Sales';
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (innerCtx, setDialogState) => Dialog(
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -3850,7 +3850,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(innerCtx),
                     ),
                   ],
                 ),
@@ -3909,7 +3909,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(innerCtx),
                       child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
                     ),
                     const SizedBox(width: 12),
@@ -3924,7 +3924,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                         final msg = messageController.text.trim();
                         if (title.isEmpty || shortcut.isEmpty || msg.isEmpty) return;
 
-                        Navigator.pop(context);
+                        Navigator.pop(innerCtx);
                         try {
                           final res = await ApiClient().post('/canned-responses', {
                             'title': title,
@@ -3936,7 +3936,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             await _fetchCannedResponses();
                             onSaved?.call();
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              scaffoldMessenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Canned response created successfully!'),
                                   backgroundColor: Color(0xFF008069),
@@ -4347,6 +4347,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   }
 
   void _showCreateTemplateDialog(BuildContext context, {VoidCallback? onCreated}) {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController();
     final titleController = TextEditingController();
     final bodyController = TextEditingController();
@@ -4362,8 +4363,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (innerCtx, setDialogState) {
           final String currentTitle = titleController.text;
           final String currentBody = bodyController.text;
           final String currentHeader = headerTextController.text;
@@ -4928,7 +4929,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.pop(innerCtx),
                         child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 10),
@@ -4946,7 +4947,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           final body = bodyController.text.trim();
                           if (name.isEmpty || body.isEmpty) return;
 
-                          Navigator.pop(context);
+                          Navigator.pop(innerCtx);
 
                           try {
                             final res = await ApiClient().post('/whatsapp/templates', {
@@ -4966,7 +4967,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               await _fetchTemplates();
                               onCreated?.call();
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text(isAlreadyApproved
                                         ? 'Template "$name" registered & activated!'
@@ -4977,7 +4978,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               }
                             } else {
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text('Failed to save template: HTTP ${res.statusCode}'),
                                     backgroundColor: Colors.red[700],

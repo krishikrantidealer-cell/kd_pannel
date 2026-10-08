@@ -12,6 +12,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
+import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit.dart';
 
 class NavigationService {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -47,6 +48,9 @@ class NavigationService {
       } catch (_) {}
       try {
         BlocProvider.of<NotificationsCubit>(context, listen: false).reset();
+      } catch (_) {}
+      try {
+        BlocProvider.of<EngagementHubCubit>(context, listen: false).reset();
       } catch (_) {}
     }
 

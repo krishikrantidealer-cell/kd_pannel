@@ -374,10 +374,27 @@ class AnalyticsService extends WidgetsBindingObserver {
     return {'logs': [], 'totalCount': 0, 'nextCursor': null};
   }
 
+  // In-Memory Fast Cache (90s TTL) for Instant UI Transitions
+  final Map<String, _CacheEntry<List<Map<String, dynamic>>>> _funnelCache = {};
+  final Map<String, _CacheEntry<List<Map<String, dynamic>>>> _districtCache = {};
+  static const Duration _cacheTtl = Duration(seconds: 90);
+
   Future<List<Map<String, dynamic>>> fetchFunnelData({
     String days = '30',
     DateTimeRange? customRange,
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = customRange != null
+        ? 'funnel_${customRange.start.toIso8601String()}_${customRange.end.toIso8601String()}'
+        : 'funnel_$days';
+
+    if (!forceRefresh && _funnelCache.containsKey(cacheKey)) {
+      final cached = _funnelCache[cacheKey]!;
+      if (!cached.isExpired(_cacheTtl)) {
+        return cached.data;
+      }
+    }
+
     try {
       String path = '/events/funnel';
       if (customRange != null) {
@@ -399,19 +416,33 @@ class AnalyticsService extends WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+          final list = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          _funnelCache[cacheKey] = _CacheEntry(list);
+          return list;
         }
       }
     } catch (e) {
       debugPrint('[AnalyticsService] Error fetching funnel data: $e');
     }
-    return [];
+    return _funnelCache[cacheKey]?.data ?? [];
   }
 
   Future<List<Map<String, dynamic>>> fetchDistrictAnalytics({
     String days = 'All Time',
     DateTimeRange? customRange,
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = (days == 'Custom Range' && customRange != null)
+        ? 'district_${customRange.start.toIso8601String()}_${customRange.end.toIso8601String()}'
+        : 'district_$days';
+
+    if (!forceRefresh && _districtCache.containsKey(cacheKey)) {
+      final cached = _districtCache[cacheKey]!;
+      if (!cached.isExpired(_cacheTtl)) {
+        return cached.data;
+      }
+    }
+
     try {
       String endpoint = '/events/district-analytics?days=$days';
       if (days == 'Custom Range' && customRange != null) {
@@ -421,13 +452,15 @@ class AnalyticsService extends WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+          final list = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          _districtCache[cacheKey] = _CacheEntry(list);
+          return list;
         }
       }
     } catch (e) {
       debugPrint('[AnalyticsService] Error fetching district analytics: $e');
     }
-    return [];
+    return _districtCache[cacheKey]?.data ?? [];
   }
 
   // --- Persistence ---
@@ -468,11 +501,24 @@ class AnalyticsService extends WidgetsBindingObserver {
     _successCount = 0;
     _failureCount = 0;
     _totalDropped = 0;
+    _funnelCache.clear();
+    _districtCache.clear();
   }
 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _flushTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _funnelCache.clear();
+    _districtCache.clear();
   }
+}
+
+class _CacheEntry<T> {
+  final T data;
+  final DateTime timestamp;
+
+  _CacheEntry(this.data) : timestamp = DateTime.now();
+
+  bool isExpired(Duration ttl) => DateTime.now().difference(timestamp) > ttl;
 }

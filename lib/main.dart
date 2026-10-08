@@ -36,6 +36,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_event.dart';
+import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit.dart';
 
 import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
 
@@ -162,6 +163,9 @@ void main() async {
           create: (context) =>
               NotificationsCubit()..fetchNotifications(isInitial: true),
         ),
+        BlocProvider<EngagementHubCubit>(
+          create: (context) => EngagementHubCubit(),
+        ),
       ],
       child: const MyAppWrapper(),
     ),
@@ -278,11 +282,16 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/orders/details': (context) =>
             const MainLayout(child: OrderDetailsPage()),
         '/products': (context) => const MainLayout(),
+        '/engagement': (context) => const MainLayout(),
         '/marketing': (context) => const MainLayout(),
         '/push-campaigns': (context) => const MainLayout(),
         '/campaigns': (context) => const MainLayout(),
+        '/whatsapp': (context) => const MainLayout(child: WhatsAppCrmPage()),
         '/support': (context) => const MainLayout(child: WhatsAppCrmPage()),
         '/calls': (context) => const MainLayout(child: CallLogsPage()),
+        '/call-recordings': (context) => const MainLayout(child: CallLogsPage()),
+        '/estimates': (context) => const MainLayout(child: EstimateGeneratorPage()),
+        '/coupons': (context) => const MainLayout(child: SalesCouponPage()),
         '/team': (context) => const MainLayout(),
         '/team/profile': (context) =>
             const MainLayout(child: TeamMemberProfilePage()),

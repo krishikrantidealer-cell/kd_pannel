@@ -220,3 +220,82 @@ class _LivePulsingBadgeState extends State<LivePulsingBadge>
     );
   }
 }
+
+class EventMetricCards extends StatelessWidget {
+  final int liveUsers;
+  final int abandonedCarts;
+  final int failedPayments;
+  final int highPriorityCount;
+  final String selectedFilter;
+  final ValueChanged<String>? onFilterChanged;
+
+  const EventMetricCards({
+    super.key,
+    required this.liveUsers,
+    required this.abandonedCarts,
+    required this.failedPayments,
+    required this.highPriorityCount,
+    this.selectedFilter = 'All',
+    this.onFilterChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final bool isDesktop = width >= 900;
+        final double cardWidth = isDesktop
+            ? ((width - 48) / 4).clamp(160.0, 320.0)
+            : ((width - 16) / 2).clamp(140.0, 240.0);
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            InteractiveMetricCard(
+              title: 'Live Users',
+              value: '$liveUsers',
+              subtitle: 'Active in last 15m',
+              icon: Icons.sensors_rounded,
+              color: const Color(0xFF10B981),
+              width: cardWidth,
+              isSelected: selectedFilter == 'Live',
+              onTap: () => onFilterChanged?.call('Live'),
+            ),
+            InteractiveMetricCard(
+              title: 'Abandoned Carts',
+              value: '$abandonedCarts',
+              subtitle: 'Pending recovery',
+              icon: Icons.shopping_cart_checkout_rounded,
+              color: const Color(0xFFF59E0B),
+              width: cardWidth,
+              isSelected: selectedFilter == 'Cart',
+              onTap: () => onFilterChanged?.call('Cart'),
+            ),
+            InteractiveMetricCard(
+              title: 'Payment Dropoffs',
+              value: '$failedPayments',
+              subtitle: 'Failed / Cancelled',
+              icon: Icons.payment_rounded,
+              color: const Color(0xFFEF4444),
+              width: cardWidth,
+              isSelected: selectedFilter == 'Payment',
+              onTap: () => onFilterChanged?.call('Payment'),
+            ),
+            InteractiveMetricCard(
+              title: 'Priority Leads',
+              value: '$highPriorityCount',
+              subtitle: 'Ready for follow-up',
+              icon: Icons.star_rounded,
+              color: const Color(0xFF8B5CF6),
+              width: cardWidth,
+              isSelected: selectedFilter == 'Priority',
+              onTap: () => onFilterChanged?.call('Priority'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

@@ -32,7 +32,7 @@ class ApiClient {
   // Global Backend Cold-Start Detector
   final ValueNotifier<bool> isBackendWakingUp = ValueNotifier<bool>(false);
 
-  // Memory Cache for instant UI response
+  // Pre-warmed Memory Cache for instant UI response (preloaded on login / products bloc)
   List<Map<String, dynamic>>? cachedProducts;
   List<Map<String, dynamic>>? cachedCollections;
   List<dynamic>? cachedCategories;

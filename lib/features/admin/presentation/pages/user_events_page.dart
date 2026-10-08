@@ -18,6 +18,11 @@ import 'package:kd_pannel/features/marketing/presentation/widgets/agri_heatmap_w
 import 'package:kd_pannel/features/marketing/presentation/widgets/live_customer_pulse_widget.dart';
 import 'package:kd_pannel/core/services/pincode_service.dart';
 import 'package:kd_pannel/core/utils/formatters.dart';
+import 'package:kd_pannel/features/marketing/core/telemetry_user_lookup.dart';
+import 'package:kd_pannel/features/marketing/core/telemetry_event_batcher.dart';
+import 'package:kd_pannel/features/marketing/presentation/views/telemetry_overview_view.dart';
+import 'package:kd_pannel/features/marketing/presentation/views/district_heatmap_view.dart';
+import 'package:kd_pannel/features/marketing/presentation/views/retention_cohorts_view.dart';
 import 'package:kd_pannel/features/shared/widgets/events/event_metric_cards.dart';
 import 'package:kd_pannel/features/shared/widgets/events/events_helper.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_card.dart';
@@ -60,7 +65,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
   bool _isLoadingEvents = false;
   bool _isBackgroundLoading = false;
   bool _isLoadingRealTime = false;
-  bool _isFallbackMode = false;
   String? _nextCursor;
   bool _isLoadingMore = false;
   int _globalHighPriorityCount = 0;
@@ -72,7 +76,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
   final Set<String> _mergedUserIds = {};
   Map<String, String> _nameToId = {};
   List<Map<String, dynamic>> _realTimeUsers = [];
-  Timer? _realTimeTimer;
   Timer? _eventsRefreshDebounce;
   Timer? _searchDebounce;
   StreamSubscription? _presenceSubscription;
@@ -88,6 +91,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   final Set<String> _onlineUserKeys = {};
   final Set<String> _loadingUserEvents = {};
 
+  final TelemetryUserLookup _userLookup = TelemetryUserLookup();
   final Map<String, List<Map<String, dynamic>>> _perUserEventsCache = {};
   Future<List<Map<String, dynamic>>>? _funnelDataFuture;
   Future<List<Map<String, dynamic>>>? _districtDataFuture;
@@ -121,7 +125,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
   void initState() {
     super.initState();
     PincodeService().init();
-    _scrollController.addListener(_onScroll);
     _funnelDataFuture = AnalyticsService().fetchFunnelData(
       days: _selectedAnalyticsTimeRange,
     );
@@ -129,19 +132,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       days: _selectedAnalyticsTimeRange,
     );
     _loadEvents();
-    _startRealTimePoll();
+    _loadRealTimeUsers();
     _listenToLivePresence();
-  }
-
-  void _onScroll() {
-    if (!AuthService().isSales &&
-        _scrollController.hasClients &&
-        _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 350 &&
-        !_isLoadingMore &&
-        _nextCursor != null) {
-      _loadMoreEvents();
-    }
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {
@@ -242,6 +234,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
       ...dealersState.salesAgents,
       ...leadsState.salesAgents,
     ];
+
+    _userLookup.buildIndex(
+      rawDealers: dealersState.allRawUsers,
+      rawLeads: leadsState.allRawUsers,
+      salesAgents: allSalesAgents,
+    );
 
     for (final a in allSalesAgents) {
       final fn = (a['firstName'] ?? '').toString().trim().toLowerCase();
@@ -1213,13 +1211,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
     });
   }
 
-  void _startRealTimePoll() {
-    _realTimeTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
-      _loadRealTimeUsers();
-    });
-    _loadRealTimeUsers();
-  }
-
   Future<void> _loadRealTimeUsers() async {
     if (_isLoadingRealTime) return;
     _isLoadingRealTime = true;
@@ -1308,166 +1299,20 @@ class _UserEventsPageState extends State<UserEventsPage> {
     final String cleanPhone = (displayPhone ?? '').trim();
     final String cleanName = (userName ?? '').trim();
 
-    final String phoneDigits = (cleanPhone.isNotEmpty ? cleanPhone : cleanRaw)
-        .replaceAll(RegExp(r'\D'), '');
-    final String phoneLast10 = phoneDigits.length >= 10
-        ? phoneDigits.substring(phoneDigits.length - 10)
-        : '';
-
-    bool isMatch(Map<String, dynamic> u) {
-      final uid = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
-      if (cleanRaw.isNotEmpty && uid == cleanRaw.toLowerCase()) return true;
-
-      final uPhone = (u['phoneNumber'] ?? u['phone'] ?? '').toString();
-      final uCleanP = uPhone.replaceAll(RegExp(r'\D'), '');
-      final uP10 = uCleanP.length >= 10
-          ? uCleanP.substring(uCleanP.length - 10)
-          : '';
-      if (phoneLast10.isNotEmpty && uP10.isNotEmpty && phoneLast10 == uP10)
-        return true;
-
-      final uEmail = (u['email'] ?? '').toString().toLowerCase().trim();
-      if (cleanRaw.contains('@') &&
-          uEmail.isNotEmpty &&
-          cleanRaw.toLowerCase() == uEmail)
-        return true;
-
-      if (cleanName.isNotEmpty && !isGenericProfileName(cleanName)) {
-        final fName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-            .trim()
-            .toLowerCase();
-        final sName = (u['shopName'] ?? '').toString().trim().toLowerCase();
-        if (fName.isNotEmpty && fName == cleanName.toLowerCase()) return true;
-        if (sName.isNotEmpty && sName == cleanName.toLowerCase()) return true;
-      }
-      return false;
-    }
-
-    final dealersState = _dealersStateSafe;
-    final leadsState = _leadsStateSafe;
-    final List<Map<String, dynamic>> allSalesAgents = [
-      if (dealersState != null) ...dealersState.salesAgents,
-      if (leadsState != null) ...leadsState.salesAgents,
-    ];
-    final matchedSalesAgent = allSalesAgents.firstWhere(
-      isMatch,
-      orElse: () => <String, dynamic>{},
+    _buildUserLookupIndexes();
+    final identity = _userLookup.resolve(
+      cleanRaw,
+      fallbackName: cleanName.isNotEmpty ? cleanName : null,
+      fallbackPhone: cleanPhone.isNotEmpty ? cleanPhone : null,
+      userDetails: userDetails,
     );
-    if (matchedSalesAgent.isNotEmpty) {
-      final fName =
-          '${matchedSalesAgent['firstName'] ?? ''} ${matchedSalesAgent['lastName'] ?? ''}'
-              .trim();
-      final sName = (matchedSalesAgent['name'] ?? '').toString().trim();
-      final p = (matchedSalesAgent['phoneNumber'] ??
-              matchedSalesAgent['phone'] ??
-              '')
-          .toString()
-          .trim();
-      final id = (matchedSalesAgent['_id'] ??
-              matchedSalesAgent['id'] ??
-              cleanRaw)
-          .toString();
-      String name = fName.isNotEmpty
-          ? fName
-          : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Sales Agent'));
-      return {
-        'name': name,
-        'phone': p.isNotEmpty ? p : cleanPhone,
-        'id': id,
-        'userDetails': matchedSalesAgent,
-        'userType': 'Sales',
-      };
-    }
-
-    if (dealersState != null) {
-      final matchedDealer = dealersState.allRawUsers.firstWhere(
-        isMatch,
-        orElse: () => <String, dynamic>{},
-      );
-      if (matchedDealer.isNotEmpty) {
-        final fName =
-            '${matchedDealer['firstName'] ?? ''} ${matchedDealer['lastName'] ?? ''}'
-                .trim();
-        final sName = (matchedDealer['shopName'] ?? '').toString().trim();
-        final p = (matchedDealer['phoneNumber'] ?? matchedDealer['phone'] ?? '')
-            .toString()
-            .trim();
-        final id = (matchedDealer['_id'] ?? matchedDealer['id'] ?? cleanRaw)
-            .toString();
-        String name = fName.isNotEmpty
-            ? fName
-            : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Customer'));
-        return {
-          'name': name,
-          'phone': p.isNotEmpty ? p : cleanPhone,
-          'id': id,
-          'userDetails': matchedDealer,
-          'userType': 'Dealer',
-        };
-      }
-    }
-
-    if (leadsState != null) {
-      final matchedLead = leadsState.allRawUsers.firstWhere(
-        isMatch,
-        orElse: () => <String, dynamic>{},
-      );
-      if (matchedLead.isNotEmpty) {
-        final fName =
-            '${matchedLead['firstName'] ?? ''} ${matchedLead['lastName'] ?? ''}'
-                .trim();
-        final sName = (matchedLead['shopName'] ?? '').toString().trim();
-        final p = (matchedLead['phoneNumber'] ?? matchedLead['phone'] ?? '')
-            .toString()
-            .trim();
-        final id = (matchedLead['_id'] ?? matchedLead['id'] ?? cleanRaw)
-            .toString();
-        String name = fName.isNotEmpty
-            ? fName
-            : (sName.isNotEmpty ? sName : (p.isNotEmpty ? p : 'Customer'));
-        return {
-          'name': name,
-          'phone': p.isNotEmpty ? p : cleanPhone,
-          'id': id,
-          'userDetails': matchedLead,
-          'userType': 'Lead',
-        };
-      }
-    }
-
-    // Fallback if not found in CRM
-    String name = cleanName;
-    if (name.isEmpty || isGenericProfileName(name)) {
-      if (userDetails != null) {
-        final fName =
-            '${userDetails['firstName'] ?? ''} ${userDetails['lastName'] ?? ''}'
-                .trim();
-        final sName = (userDetails['shopName'] ?? '').toString().trim();
-        if (fName.isNotEmpty)
-          name = fName;
-        else if (sName.isNotEmpty)
-          name = sName;
-      }
-    }
-    if (name.isEmpty || isGenericProfileName(name)) {
-      if (cleanPhone.isNotEmpty)
-        name = cleanPhone;
-      else if (phoneDigits.length >= 10)
-        name = phoneDigits;
-      else if (cleanRaw.isNotEmpty && !isGenericProfileName(cleanRaw))
-        name = cleanRaw;
-      else
-        name = 'Customer';
-    }
 
     return {
-      'name': name,
-      'phone': cleanPhone.isNotEmpty
-          ? cleanPhone
-          : (phoneDigits.length >= 10 ? phoneDigits : ''),
-      'id': cleanRaw,
-      'userDetails': userDetails,
-      'userType': 'Customer',
+      'name': identity.displayName,
+      'phone': identity.phoneNumber,
+      'id': identity.id,
+      'userDetails': identity.rawDetails ?? userDetails,
+      'userType': identity.userType,
     };
   }
 
@@ -1622,7 +1467,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (!silent && _eventsLogs.isEmpty) {
       setState(() {
         _isLoading = true;
-        _isFallbackMode = false;
       });
     } else {
       setState(() {});
@@ -1676,7 +1520,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
         _eventsLogs = {};
         _processedEventIds.clear();
         _nameToId = {};
-        _isFallbackMode = false;
         _nextCursor = null;
       }
     } catch (e) {
@@ -1684,13 +1527,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       if (!isBackground) {
         _eventsLogs = {};
         _processedEventIds.clear();
-        _isFallbackMode = true;
-      }
-    }
-
-    if (_eventsLogs.isEmpty || AuthService().isSales) {
-      if (flatEvents.isEmpty) {
-        _isFallbackMode = true;
       }
     }
 
@@ -1796,7 +1632,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   @override
   void dispose() {
-    _realTimeTimer?.cancel();
     _eventsRefreshDebounce?.cancel();
     _rebuildDebounce?.cancel();
     _searchDebounce?.cancel();
@@ -2287,321 +2122,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
     },
   ];
 
-  static final Map<String, List<Map<String, dynamic>>> _mockEventsLogs = {
-    'login_success': [
-      {
-        'user': 'Vijay D. (King Agro)',
-        'time': 'Just now',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'IP: 157.45.12.8 • Method: OTP Verification',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'otp',
-          'phone': '+91 98765 43210',
-          'device_fingerprint': 'dev_samsung_s23_9fa1',
-          'location': 'Indore, Madhya Pradesh',
-        },
-      },
-      {
-        'user': 'Rajesh Kumar',
-        'time': '4 mins ago',
-        'device': 'Chrome 122 (Windows 11)',
-        'details': 'IP: 103.88.22.45 • Method: Google Auth',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'google_sso',
-          'email': 'rajesh.k@krishidealer.com',
-          'device_fingerprint': 'dev_win_chrome_e3f2',
-          'location': 'Bhopal, Madhya Pradesh',
-        },
-      },
-      {
-        'user': 'Suresh Patil',
-        'time': '12 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'IP: 223.187.9.11 • Method: Password',
-        'payload': {
-          'action': 'login_verify',
-          'status': 'success',
-          'method': 'credentials',
-          'username': 'suresh_patel_agro',
-          'device_fingerprint': 'dev_iphone15_22b4',
-          'location': 'Ujjain, Madhya Pradesh',
-        },
-      },
-    ],
-    'profile_view': [
-      {
-        'user': 'Gupta Seeds',
-        'time': '1 min ago',
-        'device': 'Android 13 (Realme 9)',
-        'details': 'Visited: KYC & Documents page',
-        'payload': {
-          'action': 'profile_view',
-          'section': 'kyc_verification',
-          'view_duration_sec': 42,
-          'documents_uploaded': ['gst_cert.pdf', 'pan_card.jpg'],
-        },
-      },
-      {
-        'user': 'Shiva Enterprises',
-        'time': '8 mins ago',
-        'device': 'Chrome 122 (macOS 14)',
-        'details': 'Visited: Account Settings',
-        'payload': {
-          'action': 'profile_view',
-          'section': 'settings_billing',
-          'view_duration_sec': 15,
-        },
-      },
-    ],
-    'product_search': [
-      {
-        'user': 'King Agro',
-        'time': '2 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Searched: \"High flow drip nozzle\" • 12 results',
-        'payload': {
-          'action': 'search',
-          'query': 'High flow drip nozzle',
-          'category': 'Irrigation',
-          'results_count': 12,
-          'applied_filters': {'sort': 'price_asc', 'stock': 'in_stock_only'},
-        },
-      },
-      {
-        'user': 'Patel Agro',
-        'time': '15 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Searched: \"NPK 19-19-19 Fertilizer\" • 4 results',
-        'payload': {
-          'action': 'search',
-          'query': 'NPK 19-19-19 Fertilizer',
-          'category': 'Fertilizers',
-          'results_count': 4,
-          'applied_filters': {},
-        },
-      },
-    ],
-    'add_to_cart': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Added: 3 items to cart • Value: ₹48,000',
-        'payload': {
-          'action': 'cart_add',
-          'items': [
-            {
-              'product_id': 'prod_pump_5hp',
-              'product_name': 'Water Pump 5HP',
-              'variant_id': 'var_pump_5hp_single',
-              'variant_name': 'Single Phase',
-              'quantity': 2,
-              'price': 11250.00,
-            },
-            {
-              'product_id': 'prod_pump_5hp',
-              'product_name': 'Water Pump 5HP',
-              'variant_id': 'var_pump_5hp_three',
-              'variant_name': 'Three Phase',
-              'quantity': 1,
-              'price': 13500.00,
-            },
-            {
-              'product_id': 'prod_npk_19',
-              'product_name': 'NPK Fertilizer 19-19-19',
-              'variant_id': 'var_npk_50kg',
-              'variant_name': '50kg Bag',
-              'quantity': 10,
-              'price': 1200.00,
-            },
-          ],
-          'cart_total_after': 48000.00,
-        },
-      },
-      {
-        'user': 'King Agro',
-        'time': '18 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Added: 2 items to cart • Value: ₹21,000',
-        'payload': {
-          'action': 'cart_add',
-          'items': [
-            {
-              'product_id': 'prod_drip_kit_standard',
-              'product_name': 'Drip Irrigation Kit Standard',
-              'variant_id': 'var_drip_1acre',
-              'variant_name': '1 Acre',
-              'quantity': 5,
-              'price': 2400.00,
-            },
-            {
-              'product_id': 'prod_drip_kit_standard',
-              'product_name': 'Drip Irrigation Kit Standard',
-              'variant_id': 'var_drip_2acre',
-              'variant_name': '2 Acre',
-              'quantity': 2,
-              'price': 4500.00,
-            },
-          ],
-          'cart_total_after': 21000.00,
-        },
-      },
-    ],
-    'checkout_started': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Items: 1 • Cart Subtotal: ₹22,500',
-        'payload': {
-          'action': 'checkout_start',
-          'items_count': 1,
-          'subtotal': 22500.00,
-          'tax': 1125.00,
-          'shipping': 0.00,
-          'grand_total': 23625.00,
-          'selected_address_id': 'addr_patel_indore_01',
-        },
-      },
-    ],
-    'apply_coupon': [
-      {
-        'user': 'Patel Agro',
-        'time': '5 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Code: \"MONSOON10\" • Discount: ₹2,250 (10%)',
-        'payload': {
-          'action': 'coupon_apply',
-          'coupon_code': 'MONSOON10',
-          'valid': true,
-          'discount_type': 'percentage',
-          'discount_value': 10,
-          'discount_amount': 2250.00,
-        },
-      },
-    ],
-    'payment_initiated': [
-      {
-        'user': 'Patel Agro',
-        'time': '4 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'Gateway: Razorpay UPI • Amount: ₹21,375',
-        'payload': {
-          'action': 'payment_init',
-          'order_id': 'ord_patel_9827a',
-          'amount': 21375.00,
-          'gateway': 'razorpay',
-          'method': 'upi',
-          'currency': 'INR',
-        },
-      },
-      {
-        'user': 'King Agro',
-        'time': '20 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Gateway: Razorpay Cards • Amount: ₹27,000',
-        'payload': {
-          'action': 'payment_init',
-          'order_id': 'ord_king_1182c',
-          'amount': 27000.00,
-          'gateway': 'razorpay',
-          'method': 'card',
-          'currency': 'INR',
-        },
-      },
-    ],
-    'payment_failed': [
-      {
-        'user': 'King Agro',
-        'time': '19 mins ago',
-        'device': 'Android 14 (Samsung S23)',
-        'details': 'Error: Authentication Timeout • Code: FAIL_504',
-        'payload': {
-          'action': 'payment_callback',
-          'status': 'failed',
-          'order_id': 'ord_king_1182c',
-          'amount': 27000.00,
-          'transaction_id': 'txn_king_fa8912',
-          'error_code': 'FAIL_504',
-          'error_message': '3D Secure Authentication timed out by issuer bank',
-        },
-      },
-    ],
-    'payment_success': [
-      {
-        'user': 'Patel Agro',
-        'time': '3 mins ago',
-        'device': 'iOS 17.2 (iPhone 15)',
-        'details': 'TXN ID: txn_patel_su9281 • Amount Paid: ₹21,375',
-        'payload': {
-          'action': 'payment_callback',
-          'status': 'success',
-          'order_id': 'ord_patel_9827a',
-          'amount': 21375.00,
-          'transaction_id': 'txn_patel_su9281',
-          'invoice_number': 'INV-2026-KD8827',
-          'payment_completed_at': '2026-06-04T10:58:02Z',
-        },
-      },
-    ],
-  };
-
-  Widget _buildFallbackBanner() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEF3C7), // Light amber
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFBBF24)), // Amber border
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Offline Activity Cache Mode',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: const Color(0xFF92400E),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Server activity database unreachable. Displaying saved local customer actions.',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: const Color(0xFFB45309),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: _loadEvents,
-            child: Text(
-              'Retry',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: const Color(0xFFD97706),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFilterDropdown({
     required String label,
     required String value,
@@ -2758,6 +2278,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(
           AuthService().isSales
               ? 'Live Buyer Intent & Active Shoppers'
@@ -2809,10 +2330,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     ),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        if (_isFallbackMode) _buildFallbackBanner(),
                         _buildAnalyticsTabsBar(),
                         const SizedBox(height: 16),
-                        _buildActiveAnalyticsView(),
+                        RepaintBoundary(child: _buildActiveAnalyticsView()),
                         if (_activeAnalyticsTab == 0) ...[
                           const SizedBox(height: 20),
                           _buildUsersListHeader(isDesktop, filtered.length),
@@ -2856,53 +2376,55 @@ class _UserEventsPageState extends State<UserEventsPage> {
                                 );
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
-                                  child: UserCard(
-                                    key: cardKey,
-                                    name: userName,
-                                    userType: _getUserType(userName),
-                                    assignedAgent: _getAssignedAgent(userName),
-                                    isOnline: isOnline,
-                                    isHighPriority: isHighPriority,
-                                    priorityReason: priorityReason,
-                                    groupedEvents: grouped,
-                                    isSelected: isSelected,
-                                    selectedEventType: _selectedEventType,
-                                    eventTypes: _eventTypes,
-                                    isLoadingEvents: _loadingUserEvents
-                                        .contains(userName),
-                                    onCategorySelected: (catId) {
-                                      setState(() {
-                                        _selectedUser = userName;
-                                        _selectedEventType = catId;
-                                      });
-                                    },
-                                    onTap: () {
-                                      setState(() {
-                                        if (_selectedUser == userName) {
-                                          _selectedUser = null;
-                                          _selectedEventType = null;
-                                        } else {
+                                  child: RepaintBoundary(
+                                    child: UserCard(
+                                      key: cardKey,
+                                      name: userName,
+                                      userType: _getUserType(userName),
+                                      assignedAgent: _getAssignedAgent(userName),
+                                      isOnline: isOnline,
+                                      isHighPriority: isHighPriority,
+                                      priorityReason: priorityReason,
+                                      groupedEvents: grouped,
+                                      isSelected: isSelected,
+                                      selectedEventType: _selectedEventType,
+                                      eventTypes: _eventTypes,
+                                      isLoadingEvents: _loadingUserEvents
+                                          .contains(userName),
+                                      onCategorySelected: (catId) {
+                                        setState(() {
                                           _selectedUser = userName;
-                                          if (_selectedEventCategory != 'All' &&
-                                              grouped.containsKey(
-                                                _selectedEventCategory,
-                                              )) {
-                                            _selectedEventType =
-                                                _selectedEventCategory;
-                                          } else if (grouped.isNotEmpty) {
-                                            _selectedEventType =
-                                                grouped.keys.first;
-                                          } else {
+                                          _selectedEventType = catId;
+                                        });
+                                      },
+                                      onTap: () {
+                                        setState(() {
+                                          if (_selectedUser == userName) {
+                                            _selectedUser = null;
                                             _selectedEventType = null;
+                                          } else {
+                                            _selectedUser = userName;
+                                            if (_selectedEventCategory != 'All' &&
+                                                grouped.containsKey(
+                                                  _selectedEventCategory,
+                                                )) {
+                                              _selectedEventType =
+                                                  _selectedEventCategory;
+                                            } else if (grouped.isNotEmpty) {
+                                              _selectedEventType =
+                                                  grouped.keys.first;
+                                            } else {
+                                              _selectedEventType = null;
+                                            }
+                                            _fetchEventsForUser(userName);
                                           }
-                                          _fetchEventsForUser(userName);
-                                        }
-                                      });
-                                    },
-                                    onViewProfile: (name) => navigateToProfile(
-                                      context,
-                                      userId ?? name,
-                                      name: name,
+                                        });
+                                      },
+                                      onViewProfile: (name) => navigateToProfile(
+                                        context,
+                                        userId ?? name,
+                                        name: name,
+                                      ),
                                     ),
                                   ),
                                 );
@@ -2916,51 +2438,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
                         totalUsers,
                         totalPages,
                         currentPage,
-                      ),
-                    ),
-                  if (_activeAnalyticsTab == 0 &&
-                      !AuthService().isSales &&
-                      _nextCursor != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: _isLoadingMore
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppTheme.primaryColor,
-                                    ),
-                                  ),
-                                )
-                              : OutlinedButton.icon(
-                                  onPressed: _loadMoreEvents,
-                                  icon: const Icon(
-                                    Icons.arrow_downward_rounded,
-                                    size: 14,
-                                  ),
-                                  label: Text(
-                                    'Load More Events',
-                                    style: GoogleFonts.outfit(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.primaryColor,
-                                    side: const BorderSide(
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                        ),
                       ),
                     ),
                   const SliverToBoxAdapter(child: SizedBox(height: 40)),
