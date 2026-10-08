@@ -273,6 +273,17 @@ class ApiClient {
     }
   }
 
+  Uri _buildUri(String endpoint) {
+    String clean = endpoint.trim();
+    if (!clean.startsWith('/')) {
+      clean = '/$clean';
+    }
+    if (clean.startsWith('/api/')) {
+      clean = clean.substring(4);
+    }
+    return Uri.parse('$baseUrl$clean');
+  }
+
   final Map<String, Future<http.Response>> _inFlightGetRequests = {};
 
   Future<http.Response> get(String endpoint) async {
@@ -283,7 +294,7 @@ class ApiClient {
     }
 
     final future = _requestWithRetry((timeoutDuration) async {
-      final uri = Uri.parse('$baseUrl$endpoint');
+      final uri = _buildUri(endpoint);
       return await http
           .get(uri, headers: _getHeaders())
           .timeout(timeoutDuration);
@@ -306,7 +317,7 @@ class ApiClient {
   Future<http.Response> post(String endpoint, Map<String, dynamic> body) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {
-      final uri = Uri.parse('$baseUrl$endpoint');
+      final uri = _buildUri(endpoint);
       return await http
           .post(uri, headers: _getHeaders(), body: jsonEncode(body))
           .timeout(timeoutDuration);
@@ -316,7 +327,7 @@ class ApiClient {
   Future<http.Response> put(String endpoint, Map<String, dynamic> body) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {
-      final uri = Uri.parse('$baseUrl$endpoint');
+      final uri = _buildUri(endpoint);
       return await http
           .put(uri, headers: _getHeaders(), body: jsonEncode(body))
           .timeout(timeoutDuration);
@@ -326,7 +337,7 @@ class ApiClient {
   Future<http.Response> patch(String endpoint, [Map<String, dynamic>? body]) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {
-      final uri = Uri.parse('$baseUrl$endpoint');
+      final uri = _buildUri(endpoint);
       return await http
           .patch(uri, headers: _getHeaders(), body: body != null ? jsonEncode(body) : null)
           .timeout(timeoutDuration);
@@ -336,7 +347,7 @@ class ApiClient {
   Future<http.Response> delete(String endpoint) async {
     await _ensureTokensLoaded();
     return await _requestWithRetry((timeoutDuration) async {
-      final uri = Uri.parse('$baseUrl$endpoint');
+      final uri = _buildUri(endpoint);
       return await http
           .delete(uri, headers: _getHeaders())
           .timeout(timeoutDuration);

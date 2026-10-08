@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -103,10 +105,46 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   Timer? _myTypingDebounceTimer;
   bool _isCurrentlyTypingLocally = false;
   dynamic _replyingToMessage;
+  List<dynamic> _activeSlashMatches = [];
+
+  String _interpolateCannedMessage(String template) {
+    if (_selectedConversation == null) return template;
+    final contact = _selectedConversation['contactId'] ?? {};
+    final String customerName = (contact['name'] ?? 'Customer').toString();
+    final String customerPhone = (contact['phone'] ?? '').toString();
+    final String agentName = AuthService().currentUserDisplayName;
+
+    return template
+        .replaceAll(RegExp(r'\{\{\s*name\s*\}\}', caseSensitive: false), customerName)
+        .replaceAll(RegExp(r'\{\{\s*customer_name\s*\}\}', caseSensitive: false), customerName)
+        .replaceAll(RegExp(r'\{\{\s*phone\s*\}\}', caseSensitive: false), customerPhone)
+        .replaceAll(RegExp(r'\{\{\s*agent_name\s*\}\}', caseSensitive: false), agentName)
+        .replaceAll(RegExp(r'\{\{\s*my_name\s*\}\}', caseSensitive: false), agentName);
+  }
 
   void _onMessageTextChanged(String text) {
     final convId = _selectedConversation?['_id']?.toString();
     if (convId == null || convId.isEmpty) return;
+
+    // Detect Slash '/' command for Canned Quick Replies
+    if (text.startsWith('/')) {
+      final query = text.substring(1).toLowerCase();
+      final matches = _cannedResponses.where((c) {
+        final sc = (c['shortcut'] ?? '').toString().toLowerCase().replaceAll('/', '');
+        final title = (c['title'] ?? '').toString().toLowerCase();
+        final msg = (c['message'] ?? '').toString().toLowerCase();
+        return sc.contains(query) || title.contains(query) || msg.contains(query);
+      }).toList();
+      setState(() {
+        _activeSlashMatches = matches;
+      });
+    } else {
+      if (_activeSlashMatches.isNotEmpty) {
+        setState(() {
+          _activeSlashMatches = [];
+        });
+      }
+    }
 
     if (text.trim().isNotEmpty) {
       if (!_isCurrentlyTypingLocally) {
@@ -2591,6 +2629,96 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
             ),
 
+          // ⚡ Slash Command (/) Quick Reply Autocomplete Overlay
+          if (_activeSlashMatches.isNotEmpty)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 190),
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 16,
+                    offset: const Offset(0, -3),
+                  ),
+                ],
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: _activeSlashMatches.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  itemBuilder: (context, index) {
+                    final item = _activeSlashMatches[index];
+                    final shortcut = item['shortcut'] ?? '';
+                    final title = item['title'] ?? 'Quick Reply';
+                    final rawMsg = item['message'] ?? '';
+                    final interpolated = _interpolateCannedMessage(rawMsg);
+
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _messageController.text = interpolated;
+                          _messageController.selection = TextSelection.fromPosition(
+                            TextPosition(offset: _messageController.text.length),
+                          );
+                          _activeSlashMatches = [];
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF008069).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                shortcut,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF008069),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              title,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                interpolated,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
           // Web Input Tray Bar (WhatsApp Web grey)
           Container(
             padding: const EdgeInsets.only(
@@ -3654,218 +3782,403 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   void _showAttachmentDialog(BuildContext context, String mediaType) {
     final TextEditingController urlController = TextEditingController();
     final TextEditingController captionController = TextEditingController();
-    final String label = mediaType == 'Image' ? 'Image URL' : 'Document URL';
+    PlatformFile? selectedFile;
+    bool isUploading = false;
+    int selectedTab = 0; // 0 = From Device, 1 = From URL
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 440,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (innerCtx, setDialogState) {
+          final isImage = mediaType.toLowerCase() == 'image';
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 480,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Dialog Header
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF008069).withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          mediaType == 'Image'
-                              ? Icons.image_rounded
-                              : Icons.insert_drive_file_rounded,
-                          color: const Color(0xFF008069),
-                          size: 20,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isImage ? Icons.image_rounded : Icons.insert_drive_file_rounded,
+                              color: const Color(0xFF008069),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Send WhatsApp $mediaType',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: const Color(0xFF111B21),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Send WhatsApp $mediaType',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: const Color(0xFF111B21),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                        onPressed: isUploading ? null : () => Navigator.pop(dialogCtx),
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: Color(0xFF64748B),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Enter the direct public link of the $mediaType to send to the recipient.',
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  color: const Color(0xFF64748B),
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: urlController,
-                decoration: InputDecoration(
-                  labelText: label,
-                  hintText: mediaType == 'Image'
-                      ? 'https://example.com/image.jpg'
-                      : 'https://example.com/document.pdf',
-                  labelStyle: GoogleFonts.outfit(
-                    color: const Color(0xFF008069),
-                    fontSize: 13,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF008069),
-                      width: 1.8,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  isDense: true,
-                ),
-                style: GoogleFonts.outfit(fontSize: 13.5),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: captionController,
-                decoration: InputDecoration(
-                  labelText: 'Caption (Optional)',
-                  hintText: 'e.g. Please review this file',
-                  labelStyle: GoogleFonts.outfit(
-                    color: const Color(0xFF64748B),
-                    fontSize: 13,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF008069),
-                      width: 1.8,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  isDense: true,
-                ),
-                style: GoogleFonts.outfit(fontSize: 13.5),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFCBD5E1)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
-                      ),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      'Cancel',
-                      style: GoogleFonts.outfit(
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF008069),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 12,
-                      ),
-                    ),
-                    onPressed: () async {
-                      final url = urlController.text.trim();
-                      if (url.isEmpty) return;
-                      final caption = captionController.text.trim();
+                  const SizedBox(height: 14),
 
-                      Navigator.pop(context);
-
-                      try {
-                        if (_selectedConversation == null) return;
-                        final conversationId = _selectedConversation['_id'];
-
-                        final res = await ApiClient().post('/messages/send', {
-                          'conversationId': conversationId,
-                          'type': mediaType,
-                          'content': caption,
-                          'mediaUrl': url,
-                        });
-                        if (res.statusCode == 200) {
-                          _fetchMessages(conversationId);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '$mediaType message sent successfully',
-                                ),
-                                backgroundColor: const Color(0xFF008069),
+                  // Mode Switcher (Device File vs Public Link)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.all(3),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: isUploading ? null : () => setDialogState(() => selectedTab = 0),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: selectedTab == 0 ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: selectedTab == 0
+                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
+                                    : null,
                               ),
-                            );
-                          }
-                        } else {
-                          final body = jsonDecode(res.body);
-                          _showErrorSnackBar(
-                            body['message'] ?? 'Failed to send $mediaType',
-                          );
-                        }
-                      } catch (e) {
-                        debugPrint('[$mediaType Send] Failed: $e');
-                        _showErrorSnackBar(
-                          'Network error: Could not send $mediaType',
-                        );
-                      }
-                    },
-                    child: Text(
-                      'Send $mediaType',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.upload_file_rounded, size: 15, color: selectedTab == 0 ? const Color(0xFF008069) : const Color(0xFF64748B)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Upload from Device',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12.5,
+                                      fontWeight: selectedTab == 0 ? FontWeight.bold : FontWeight.w500,
+                                      color: selectedTab == 0 ? const Color(0xFF008069) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            onTap: isUploading ? null : () => setDialogState(() => selectedTab = 1),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: selectedTab == 1 ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: selectedTab == 1
+                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.link_rounded, size: 15, color: selectedTab == 1 ? const Color(0xFF008069) : const Color(0xFF64748B)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Direct URL',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12.5,
+                                      fontWeight: selectedTab == 1 ? FontWeight.bold : FontWeight.w500,
+                                      color: selectedTab == 1 ? const Color(0xFF008069) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (selectedTab == 0) ...[
+                    // File Picker Box
+                    InkWell(
+                      onTap: isUploading
+                          ? null
+                          : () async {
+                              final allowedExts = isImage
+                                  ? ['jpg', 'jpeg', 'png', 'webp']
+                                  : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
+                              final result = await FilePicker.platform.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: allowedExts,
+                                withData: true,
+                              );
+                              if (result != null && result.files.isNotEmpty) {
+                                setDialogState(() {
+                                  selectedFile = result.files.first;
+                                });
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: selectedFile != null ? const Color(0xFF008069) : const Color(0xFFCBD5E1),
+                            width: selectedFile != null ? 1.5 : 1,
+                          ),
+                        ),
+                        child: selectedFile == null
+                            ? Column(
+                                children: [
+                                  const Icon(Icons.cloud_upload_outlined, size: 36, color: Color(0xFF008069)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    isImage ? 'Click to browse image (PNG, JPG, WebP)' : 'Click to browse document (PDF, DOC, XLS)',
+                                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Max file size: 15MB',
+                                    style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
+                                      color: const Color(0xFF008069),
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          selectedFile!.name,
+                                          style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB · Ready to Send',
+                                          style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF16A34A), fontWeight: FontWeight.w500),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.change_circle_outlined, color: Color(0xFF008069), size: 22),
+                                    tooltip: 'Change File',
+                                    onPressed: isUploading
+                                        ? null
+                                        : () async {
+                                            final allowedExts = isImage
+                                                ? ['jpg', 'jpeg', 'png', 'webp']
+                                                : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
+                                            final result = await FilePicker.platform.pickFiles(
+                                              type: FileType.custom,
+                                              allowedExtensions: allowedExts,
+                                              withData: true,
+                                            );
+                                            if (result != null && result.files.isNotEmpty) {
+                                              setDialogState(() {
+                                                selectedFile = result.files.first;
+                                              });
+                                            }
+                                          },
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Direct URL input field
+                    TextField(
+                      controller: urlController,
+                      enabled: !isUploading,
+                      decoration: InputDecoration(
+                        labelText: isImage ? 'Image URL' : 'Document URL',
+                        hintText: isImage ? 'https://example.com/image.jpg' : 'https://example.com/catalog.pdf',
+                        labelStyle: GoogleFonts.outfit(color: const Color(0xFF008069), fontSize: 13),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      style: GoogleFonts.outfit(fontSize: 13.5),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+                  // Caption Field
+                  TextField(
+                    controller: captionController,
+                    enabled: !isUploading,
+                    decoration: InputDecoration(
+                      labelText: 'Caption (Optional)',
+                      hintText: 'e.g. Please check our latest product catalog',
+                      labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+
+                  const SizedBox(height: 22),
+                  // Action buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        ),
+                        onPressed: isUploading ? null : () => Navigator.pop(dialogCtx),
+                        child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF008069),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        ),
+                        onPressed: (isUploading || (selectedTab == 0 && selectedFile == null) || (selectedTab == 1 && urlController.text.trim().isEmpty))
+                            ? null
+                            : () async {
+                                if (_selectedConversation == null) return;
+                                final conversationId = _selectedConversation['_id'];
+                                final caption = captionController.text.trim();
+
+                                setDialogState(() => isUploading = true);
+
+                                try {
+                                  String finalMediaUrl = '';
+
+                                  if (selectedTab == 0 && selectedFile != null) {
+                                    // Upload bytes to Cloud Storage
+                                    final bytes = selectedFile!.bytes;
+                                    if (bytes == null) throw Exception('Unable to read file bytes');
+
+                                    final request = http.MultipartRequest(
+                                      'POST',
+                                      Uri.parse('${ApiClient().baseUrl}/conversations/media/upload'),
+                                    );
+                                    if (ApiClient().accessToken != null) {
+                                      request.headers['Authorization'] = 'Bearer ${ApiClient().accessToken}';
+                                    }
+                                    request.files.add(
+                                      http.MultipartFile.fromBytes(
+                                        'file',
+                                        bytes,
+                                        filename: selectedFile!.name,
+                                      ),
+                                    );
+
+                                    final streamedRes = await request.send();
+                                    final resBody = await streamedRes.stream.bytesToString();
+                                    final decoded = jsonDecode(resBody);
+
+                                    if (streamedRes.statusCode == 200 && decoded['success'] == true) {
+                                      finalMediaUrl = decoded['data']?['mediaUrl'] ?? decoded['mediaUrl'] ?? '';
+                                    } else {
+                                      throw Exception(decoded['message'] ?? 'Failed to upload media');
+                                    }
+                                  } else {
+                                    finalMediaUrl = urlController.text.trim();
+                                  }
+
+                                  if (finalMediaUrl.isEmpty) throw Exception('Media URL could not be generated');
+
+                                  // Send WhatsApp message
+                                  final sendRes = await ApiClient().post('/messages/send', {
+                                    'conversationId': conversationId,
+                                    'type': mediaType,
+                                    'content': caption,
+                                    'mediaUrl': finalMediaUrl,
+                                  });
+
+                                  if (sendRes.statusCode == 200) {
+                                    _fetchMessages(conversationId);
+                                    Navigator.pop(dialogCtx);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('$mediaType message sent successfully!'),
+                                          backgroundColor: const Color(0xFF008069),
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    final body = jsonDecode(sendRes.body);
+                                    throw Exception(body['message'] ?? 'Failed to send $mediaType');
+                                  }
+                                } catch (err) {
+                                  setDialogState(() => isUploading = false);
+                                  _showErrorSnackBar(err.toString().replaceAll('Exception: ', ''));
+                                }
+                              },
+                        child: isUploading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.send_rounded, size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    selectedTab == 0 ? 'Upload & Send' : 'Send via URL',
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
-    );
   }
 
   Future<void> _updateConversationStatus(String status) async {
@@ -4171,8 +4484,12 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                               label: Text('Insert into Chat', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
                                               onPressed: () {
                                                 Navigator.pop(context);
+                                                final processed = _interpolateCannedMessage(message);
                                                 setState(() {
-                                                  _messageController.text = message;
+                                                  _messageController.text = processed;
+                                                  _messageController.selection = TextSelection.fromPosition(
+                                                    TextPosition(offset: _messageController.text.length),
+                                                  );
                                                 });
                                               },
                                             ),
