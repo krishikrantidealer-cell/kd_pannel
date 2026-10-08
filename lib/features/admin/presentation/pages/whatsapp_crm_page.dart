@@ -3968,11 +3968,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   void _showTemplatesManagerDialog(BuildContext context) {
     String filterScope = 'ALL'; // 'ALL', 'GLOBAL', 'PRIVATE'
     final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    bool isSyncing = false;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (innerCtx, setDialogState) {
           final List<dynamic> filteredTemplates = _approvedTemplates.where((t) {
             final bool isGlob = t['isGlobal'] != false;
             if (filterScope == 'GLOBAL') return isGlob;
@@ -4029,7 +4031,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.pop(innerCtx),
                       ),
                     ],
                   ),
@@ -4055,24 +4057,63 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           }),
                         ],
                       ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF008069),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                        label: Text(
-                          'Create New Template',
-                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          _showCreateTemplateDialog(context, onCreated: () {
-                            setDialogState(() {});
-                          });
-                        },
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF008069)),
+                              foregroundColor: const Color(0xFF008069),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: isSyncing
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF008069)),
+                                  )
+                                : const Icon(Icons.sync_rounded, size: 16),
+                            label: Text(
+                              isSyncing ? 'Syncing...' : 'Sync MyOperator',
+                              style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: isSyncing
+                                ? null
+                                : () async {
+                                    setDialogState(() => isSyncing = true);
+                                    await _fetchTemplates(forceSync: true);
+                                    if (context.mounted) {
+                                      setDialogState(() => isSyncing = false);
+                                      scaffoldMessenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Templates synchronized with MyOperator WABA.'),
+                                          backgroundColor: Color(0xFF008069),
+                                        ),
+                                      );
+                                    }
+                                  },
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF008069),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            ),
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: Text(
+                              'Create New Template',
+                              style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              _showCreateTemplateDialog(context, onCreated: () {
+                                setDialogState(() {});
+                              });
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -4082,7 +4123,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
                   // Template Grid / List
                   Expanded(
-                    child: _isLoadingTemplates
+                    child: isSyncing
                         ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
                         : filteredTemplates.isEmpty
                             ? Center(
@@ -4264,14 +4305,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
                                                   if (confirm == true) {
                                                     try {
+                                                      setDialogState(() {
+                                                        _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
+                                                      });
                                                       final res = await ApiClient().delete('/whatsapp/templates/$templateId');
                                                       if (res.statusCode == 200) {
-                                                        _fetchTemplates();
-                                                        setDialogState(() {
-                                                          _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
-                                                        });
                                                         if (context.mounted) {
-                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                          scaffoldMessenger.showSnackBar(
                                                             SnackBar(
                                                               content: Text('Template "$name" deleted successfully.'),
                                                               backgroundColor: const Color(0xFF1E293B),
