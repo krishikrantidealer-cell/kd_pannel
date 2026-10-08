@@ -3719,6 +3719,14 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   final message = item['message'] ?? '';
                                   final category = item['category'] ?? 'General';
                                   final itemId = item['_id']?.toString();
+                                  final bool isGlobal = item['isGlobal'] == true;
+                                  final creator = item['createdBy'] is Map ? item['createdBy'] as Map<String, dynamic> : null;
+                                  final bool isAdminCreator = creator?['role'] == 'admin' || isGlobal;
+                                  String authorTag = isAdminCreator ? '👑 Team Standard' : '👤 Private Reply';
+                                  if (AuthService().currentUserRole == UserRole.admin && !isAdminCreator && creator != null) {
+                                    final aName = '${creator['firstName'] ?? ''} ${creator['lastName'] ?? ''}'.trim();
+                                    authorTag = '👤 ${aName.isNotEmpty ? aName : (creator['email'] ?? 'Agent')}';
+                                  }
 
                                   return Container(
                                     padding: const EdgeInsets.all(12),
@@ -3761,17 +3769,38 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 ),
                                               ],
                                             ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFCBD5E1)),
-                                              ),
-                                              child: Text(
-                                                category,
-                                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                                              ),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: isAdminCreator ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: isAdminCreator ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
+                                                  ),
+                                                  child: Text(
+                                                    authorTag,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10,
+                                                      color: isAdminCreator ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                                  ),
+                                                  child: Text(
+                                                    category,
+                                                    style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -3798,11 +3827,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 constraints: const BoxConstraints(),
                                                 onPressed: () async {
                                                   try {
-                                                    await ApiClient().delete('/canned-responses/$itemId');
-                                                    _fetchCannedResponses();
-                                                    setDialogState(() {
-                                                      _cannedResponses.removeWhere((c) => c['_id'] == itemId);
-                                                    });
+                                                    final res = await ApiClient().delete('/canned-responses/$itemId');
+                                                    if (res.statusCode == 200) {
+                                                      _fetchCannedResponses();
+                                                      setDialogState(() {
+                                                        _cannedResponses.removeWhere((c) => c['_id'] == itemId);
+                                                      });
+                                                    }
                                                   } catch (_) {}
                                                 },
                                               ),
