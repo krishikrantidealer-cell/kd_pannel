@@ -87,6 +87,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/whatsapp_bg.png
     - assets/images/sign.png
     - assets/images/logo.png
     - assets/images/logo_copy.png

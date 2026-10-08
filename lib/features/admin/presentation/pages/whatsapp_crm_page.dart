@@ -1656,9 +1656,17 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: CustomPaint(
-                      painter: const WhatsAppDoodlePainter(
-                        color: Color(0x0E000000),
+                    child: Opacity(
+                      opacity: 0.45,
+                      child: Image.asset(
+                        'assets/images/whatsapp_bg.png',
+                        repeat: ImageRepeat.repeat,
+                        alignment: Alignment.topLeft,
+                        errorBuilder: (context, error, stackTrace) => const CustomPaint(
+                          painter: WhatsAppDoodlePainter(
+                            color: Color(0x0E000000),
+                          ),
+                        ),
                       ),
                     ),
                   ),
