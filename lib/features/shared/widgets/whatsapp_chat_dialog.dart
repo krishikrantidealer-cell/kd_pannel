@@ -903,9 +903,11 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
     final TextEditingController paramsController = TextEditingController();
     final TextEditingController mediaUrlController = TextEditingController();
 
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(
           'Send WhatsApp Template',
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
@@ -955,7 +957,7 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
           ),
           ElevatedButton(
@@ -974,7 +976,7 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                   : [];
               final mediaUrl = mediaUrlController.text.trim();
 
-              Navigator.pop(context);
+              Navigator.of(dialogCtx).pop();
 
               try {
                 final res = await ApiClient().post('/messages/send', {
@@ -987,13 +989,25 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                 if (res.statusCode == 200) {
                   _fetchMessages();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       const SnackBar(content: Text('Template message sent successfully'), backgroundColor: Color(0xFF008069)),
+                    );
+                  }
+                } else {
+                  final body = jsonDecode(res.body);
+                  if (mounted) {
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(content: Text(body['message'] ?? 'Failed to send template'), backgroundColor: Colors.red),
                     );
                   }
                 }
               } catch (e) {
                 debugPrint('[Template Send] Failed: $e');
+                if (mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('Network error: Could not send template ($e)'), backgroundColor: Colors.red),
+                  );
+                }
               }
             },
             child: Text('Send Template', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
