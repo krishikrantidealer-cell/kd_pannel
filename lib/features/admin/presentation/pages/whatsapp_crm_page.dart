@@ -2965,13 +2965,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     if (_selectedConversation == null) return const SizedBox.shrink();
 
     DateTime? lastIncomingTime;
-    for (int i = _messages.length - 1; i >= 0; i--) {
-      final msg = _messages[i];
-      if (msg['direction'] == 'incoming') {
-        final raw = msg['createdAt'] ?? msg['timestamp'];
-        if (raw != null) {
-          lastIncomingTime = DateTime.tryParse(raw.toString());
-          break;
+    
+    // 1. First check conversation's authoritative lastIncomingMessageAt timestamp
+    final rawConvTime = _selectedConversation['lastIncomingMessageAt'];
+    if (rawConvTime != null) {
+      lastIncomingTime = DateTime.tryParse(rawConvTime.toString());
+    }
+
+    // 2. Fallback: Search in loaded message history
+    if (lastIncomingTime == null) {
+      for (int i = _messages.length - 1; i >= 0; i--) {
+        final msg = _messages[i];
+        if (msg['direction'] == 'incoming') {
+          final raw = msg['createdAt'] ?? msg['timestamp'];
+          if (raw != null) {
+            lastIncomingTime = DateTime.tryParse(raw.toString());
+            break;
+          }
         }
       }
     }
