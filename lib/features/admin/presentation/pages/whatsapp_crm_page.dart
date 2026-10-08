@@ -2192,11 +2192,12 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      );
-                    }(),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }(),
                   ],
                 ),
               ),
