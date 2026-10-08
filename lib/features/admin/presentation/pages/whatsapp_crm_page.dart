@@ -2799,75 +2799,122 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
-                // Plus/Attachment Icon
+                const SizedBox(width: 6),
+                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media)
                 PopupMenuButton<String>(
                   icon: const Icon(
-                    Icons.add_rounded,
+                    Icons.attach_file_rounded,
                     color: Color(0xFF64748B),
-                    size: 24,
+                    size: 22,
                   ),
                   tooltip: 'Attach Media',
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  color: Colors.white,
+                  surfaceTintColor: Colors.white,
                   onSelected: (value) {
-                    _showAttachmentDialog(context, value);
+                    if (value == 'Image' || value == 'Document') {
+                      _showAttachmentDialog(context, value);
+                    } else if (value == 'Canned') {
+                      _showCannedResponsesDialog(context);
+                    } else if (value == 'Template') {
+                      if (_selectedConversation != null) {
+                        _showSendTemplateDialog(context, _selectedConversation['_id']);
+                      }
+                    }
                   },
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'Image',
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.image_rounded,
-                            color: Color(0xFF008069),
-                            size: 18,
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE0F2FE),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.image_rounded,
+                              color: Color(0xFF0284C7),
+                              size: 17,
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Send Image via URL',
-                            style: GoogleFonts.outfit(fontSize: 13),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Photos & Images',
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                'PNG, JPG, WebP upload or URL',
+                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
+                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'Document',
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.insert_drive_file_rounded,
-                            color: Color(0xFF008069),
-                            size: 18,
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEEF2FF),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.description_rounded,
+                              color: Color(0xFF6366F1),
+                              size: 17,
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Send Document via URL',
-                            style: GoogleFonts.outfit(fontSize: 13),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Document & Catalogs',
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                'PDF, DOCX, XLS, CSV files',
+                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
-                // Quick Canned Replies Icon
+                const SizedBox(width: 6),
+                // Quick Canned Replies Icon (Amber / Gold)
                 IconButton(
                   icon: const Icon(
                     Icons.bolt_rounded,
-                    color: Color(0xFF008069),
-                    size: 24,
+                    color: Color(0xFFD97706),
+                    size: 23,
                   ),
                   onPressed: () => _showCannedResponsesDialog(context),
-                  tooltip: 'Quick Canned Replies',
+                  tooltip: '⚡ Quick Canned Replies (/shortcut)',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 8),
-                // Template Icon
+                const SizedBox(width: 6),
+                // Template Icon (Official Meta WABA Emerald)
                 IconButton(
                   icon: const Icon(
                     Icons.quickreply_rounded,
-                    color: Color(0xFF64748B),
-                    size: 23,
+                    color: Color(0xFF008069),
+                    size: 22,
                   ),
                   onPressed: () {
                     if (_selectedConversation != null) {
@@ -2877,11 +2924,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       );
                     }
                   },
-                  tooltip: 'Send Approved Template',
+                  tooltip: '📑 Send Approved WhatsApp Template',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
 
                 Expanded(
                   child: Container(
@@ -3786,18 +3833,20 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     bool isUploading = false;
     int selectedTab = 0; // 0 = From Device, 1 = From URL
 
+    final bool isImage = mediaType.toLowerCase() == 'image';
+    final Color accentColor = isImage ? const Color(0xFF0284C7) : const Color(0xFF6366F1);
+    final Color accentBg = isImage ? const Color(0xFFE0F2FE) : const Color(0xFFEEF2FF);
+
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (innerCtx, setDialogState) {
-          final isImage = mediaType.toLowerCase() == 'image';
-
           return Dialog(
             backgroundColor: Colors.white,
             surfaceTintColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Container(
-              width: 480,
+              width: 500,
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -3810,25 +3859,34 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                              color: accentBg,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              isImage ? Icons.image_rounded : Icons.insert_drive_file_rounded,
-                              color: const Color(0xFF008069),
-                              size: 20,
+                              isImage ? Icons.image_rounded : Icons.description_rounded,
+                              color: accentColor,
+                              size: 22,
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            'Send WhatsApp $mediaType',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: const Color(0xFF111B21),
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isImage ? 'Send Photo / Image' : 'Send Document / File',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: const Color(0xFF111B21),
+                                ),
+                              ),
+                              Text(
+                                isImage ? 'Upload PNG, JPG, WebP from device or URL' : 'Upload PDF, DOCX, XLSX catalogs from device or URL',
+                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -3838,7 +3896,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
 
                   // Mode Switcher (Device File vs Public Link)
                   Container(
@@ -3854,7 +3912,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             onTap: isUploading ? null : () => setDialogState(() => selectedTab = 0),
                             borderRadius: BorderRadius.circular(6),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: selectedTab == 0 ? Colors.white : Colors.transparent,
@@ -3866,14 +3924,14 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.upload_file_rounded, size: 15, color: selectedTab == 0 ? const Color(0xFF008069) : const Color(0xFF64748B)),
+                                  Icon(Icons.upload_file_rounded, size: 16, color: selectedTab == 0 ? accentColor : const Color(0xFF64748B)),
                                   const SizedBox(width: 6),
                                   Text(
-                                    'Upload from Device',
+                                    'Browse Device File',
                                     style: GoogleFonts.outfit(
                                       fontSize: 12.5,
                                       fontWeight: selectedTab == 0 ? FontWeight.bold : FontWeight.w500,
-                                      color: selectedTab == 0 ? const Color(0xFF008069) : const Color(0xFF64748B),
+                                      color: selectedTab == 0 ? accentColor : const Color(0xFF64748B),
                                     ),
                                   ),
                                 ],
@@ -3886,7 +3944,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             onTap: isUploading ? null : () => setDialogState(() => selectedTab = 1),
                             borderRadius: BorderRadius.circular(6),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: selectedTab == 1 ? Colors.white : Colors.transparent,
@@ -3898,14 +3956,14 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.link_rounded, size: 15, color: selectedTab == 1 ? const Color(0xFF008069) : const Color(0xFF64748B)),
+                                  Icon(Icons.link_rounded, size: 16, color: selectedTab == 1 ? accentColor : const Color(0xFF64748B)),
                                   const SizedBox(width: 6),
                                   Text(
-                                    'Direct URL',
+                                    'Paste Direct URL',
                                     style: GoogleFonts.outfit(
                                       fontSize: 12.5,
                                       fontWeight: selectedTab == 1 ? FontWeight.bold : FontWeight.w500,
-                                      color: selectedTab == 1 ? const Color(0xFF008069) : const Color(0xFF64748B),
+                                      color: selectedTab == 1 ? accentColor : const Color(0xFF64748B),
                                     ),
                                   ),
                                 ],
@@ -3941,45 +3999,56 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(18),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: selectedFile != null ? accentBg.withValues(alpha: 0.3) : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: selectedFile != null ? const Color(0xFF008069) : const Color(0xFFCBD5E1),
+                            color: selectedFile != null ? accentColor : const Color(0xFFCBD5E1),
                             width: selectedFile != null ? 1.5 : 1,
                           ),
                         ),
                         child: selectedFile == null
                             ? Column(
                                 children: [
-                                  const Icon(Icons.cloud_upload_outlined, size: 36, color: Color(0xFF008069)),
+                                  Icon(isImage ? Icons.add_photo_alternate_outlined : Icons.upload_file_outlined, size: 40, color: accentColor),
                                   const SizedBox(height: 8),
                                   Text(
-                                    isImage ? 'Click to browse image (PNG, JPG, WebP)' : 'Click to browse document (PDF, DOC, XLS)',
+                                    isImage ? 'Click to select image (PNG, JPG, WebP)' : 'Click to select document (PDF, DOCX, XLS)',
                                     style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Max file size: 15MB',
+                                    'Max file size: 15MB • Uploads securely to Krishi Cloud Storage',
                                     style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
                                   ),
                                 ],
                               )
                             : Row(
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                  if (isImage && selectedFile!.bytes != null)
+                                    ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        selectedFile!.bytes!,
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: accentBg,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
+                                        color: accentColor,
+                                        size: 28,
+                                      ),
                                     ),
-                                    child: Icon(
-                                      isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
-                                      color: const Color(0xFF008069),
-                                      size: 24,
-                                    ),
-                                  ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -3991,16 +4060,32 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB · Ready to Send',
-                                          style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF16A34A), fontWeight: FontWeight.w500),
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFDCFCE7),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB',
+                                                style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF16A34A), fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Ready to dispatch',
+                                              style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.change_circle_outlined, color: Color(0xFF008069), size: 22),
+                                    icon: Icon(Icons.change_circle_outlined, color: accentColor, size: 24),
                                     tooltip: 'Change File',
                                     onPressed: isUploading
                                         ? null
@@ -4030,10 +4115,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       controller: urlController,
                       enabled: !isUploading,
                       decoration: InputDecoration(
-                        labelText: isImage ? 'Image URL' : 'Document URL',
-                        hintText: isImage ? 'https://example.com/image.jpg' : 'https://example.com/catalog.pdf',
-                        labelStyle: GoogleFonts.outfit(color: const Color(0xFF008069), fontSize: 13),
+                        labelText: isImage ? 'Image Direct URL' : 'Document Direct URL',
+                        hintText: isImage ? 'https://storage.googleapis.com/.../photo.jpg' : 'https://example.com/catalog.pdf',
+                        labelStyle: GoogleFonts.outfit(color: accentColor, fontSize: 13),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: accentColor, width: 1.5)),
                         isDense: true,
                       ),
                       style: GoogleFonts.outfit(fontSize: 13.5),
@@ -4047,7 +4133,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     enabled: !isUploading,
                     decoration: InputDecoration(
                       labelText: 'Caption (Optional)',
-                      hintText: 'e.g. Please check our latest product catalog',
+                      hintText: isImage ? 'e.g. Here is the requested product photo' : 'e.g. Please review our latest product catalog',
                       labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       isDense: true,
@@ -4072,7 +4158,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       const SizedBox(width: 12),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF008069),
+                          backgroundColor: accentColor,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -4139,8 +4225,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                     if (mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text('$mediaType message sent successfully!'),
-                                          backgroundColor: const Color(0xFF008069),
+                                          content: Text('$mediaType dispatched successfully!'),
+                                          backgroundColor: accentColor,
                                         ),
                                       );
                                     }
@@ -4162,10 +4248,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.send_rounded, size: 16),
+                                  Icon(isImage ? Icons.image_rounded : Icons.send_rounded, size: 16),
                                   const SizedBox(width: 6),
                                   Text(
-                                    selectedTab == 0 ? 'Upload & Send' : 'Send via URL',
+                                    selectedTab == 0 ? 'Upload & Send' : 'Send Media',
                                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -4245,28 +4331,28 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF008069).withValues(alpha: 0.1),
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFEF3C7),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.bolt_rounded, color: Color(0xFF008069), size: 22),
+                            child: const Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 24),
                           ),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Canned Responses & Quick Replies',
+                                'Quick Canned Replies',
                                 style: GoogleFonts.outfit(
-                                  fontSize: 16,
+                                  fontSize: 16.5,
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF111B21),
                                 ),
                               ),
                               Text(
-                                '1-click insert pre-approved answers & sales scripts',
-                                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                                'Standardized message scripts • Type / in chat to trigger',
+                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
                               ),
                             ],
                           ),
@@ -4289,6 +4375,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                           decoration: BoxDecoration(
                             color: const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           alignment: Alignment.centerLeft,
@@ -4298,7 +4385,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             decoration: InputDecoration(
                               hintText: 'Search by shortcut (/bank) or keyword...',
                               hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
-                              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF64748B)),
+                              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFFD97706)),
                               prefixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                               border: InputBorder.none,
                               isDense: true,
@@ -4309,7 +4396,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF008069),
+                          backgroundColor: const Color(0xFFD97706),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -4335,7 +4422,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   // List of canned messages
                   Expanded(
                     child: _isLoadingCanned
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFFD97706)))
                         : filtered.isEmpty
                             ? Center(
                                 child: Text(
@@ -4366,9 +4453,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   return Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF8FAFC),
+                                      color: const Color(0xFFFFFBEB).withValues(alpha: 0.35),
                                       borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      border: Border.all(color: const Color(0xFFFDE68A)),
                                     ),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4381,15 +4468,16 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFF008069).withValues(alpha: 0.12),
+                                                    color: const Color(0xFFFEF3C7),
                                                     borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: const Color(0xFFFCD34D)),
                                                   ),
                                                   child: Text(
                                                     shortcut,
                                                     style: GoogleFonts.outfit(
                                                       fontSize: 12,
                                                       fontWeight: FontWeight.bold,
-                                                      color: const Color(0xFF008069),
+                                                      color: const Color(0xFFB45309),
                                                     ),
                                                   ),
                                                 ),
@@ -4475,13 +4563,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                             const SizedBox(width: 14),
                                             ElevatedButton.icon(
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFF008069),
+                                                backgroundColor: const Color(0xFFD97706),
                                                 foregroundColor: Colors.white,
                                                 elevation: 0,
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                               ),
-                                              icon: const Icon(Icons.send_rounded, size: 13),
+                                              icon: const Icon(Icons.bolt_rounded, size: 14),
                                               label: Text('Insert into Chat', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
                                               onPressed: () {
                                                 Navigator.pop(context);
@@ -4535,9 +4623,22 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Create Canned Response',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFEF3C7),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'New Canned Response',
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
+                        ),
+                      ],
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
@@ -4550,8 +4651,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   controller: shortcutController,
                   decoration: InputDecoration(
                     labelText: 'Shortcut (e.g. /pricing or /bank)',
-                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF008069), fontWeight: FontWeight.w600),
+                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFFD97706), fontWeight: FontWeight.w600),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFD97706), width: 1.5)),
                     isDense: true,
                   ),
                   style: GoogleFonts.outfit(fontSize: 13.5),
@@ -4588,9 +4690,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   controller: messageController,
                   maxLines: 4,
                   decoration: InputDecoration(
-                    labelText: 'Message Body',
+                    labelText: 'Message Body (Supports {{name}}, {{agent_name}})',
                     hintText: 'Type your standardized reply message here...',
-                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                    labelStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B)),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   style: GoogleFonts.outfit(fontSize: 13.5),
@@ -4606,8 +4708,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     const SizedBox(width: 12),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF008069),
+                        backgroundColor: const Color(0xFFD97706),
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () async {
                         final title = titleController.text.trim();
@@ -4630,7 +4734,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               scaffoldMessenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Canned response created successfully!'),
-                                  backgroundColor: Color(0xFF008069),
+                                  backgroundColor: Color(0xFFD97706),
                                 ),
                               );
                             }
