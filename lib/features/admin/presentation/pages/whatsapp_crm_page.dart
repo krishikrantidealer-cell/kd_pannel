@@ -1651,232 +1651,272 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
           // Message log thread
           Expanded(
-            child: _isLoadingMessages && _messages.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF008069)),
-                  )
-                : () {
-                    final filteredMessages = _messages.where((m) {
-                      final content = (m['content'] ?? '')
-                          .toString()
-                          .toLowerCase();
-                      return content.contains(
-                        _messageSearchQuery.toLowerCase(),
-                      );
-                    }).toList();
+            child: Container(
+              color: const Color(0xFFEFEAE2),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: const WhatsAppDoodlePainter(
+                        color: Color(0x0E000000),
+                      ),
+                    ),
+                  ),
+                  _isLoadingMessages && _messages.isEmpty
+                      ? const Center(
+                          child: CircularProgressIndicator(color: Color(0xFF008069)),
+                        )
+                      : () {
+                          final filteredMessages = _messages.where((m) {
+                            final content = (m['content'] ?? '')
+                                .toString()
+                                .toLowerCase();
+                            return content.contains(
+                              _messageSearchQuery.toLowerCase(),
+                            );
+                          }).toList();
 
-                    if (filteredMessages.isEmpty) {
-                      if (_messageSearchQuery.isNotEmpty) {
-                        return Center(
-                          child: Text(
-                            'No matching messages found',
-                            style: GoogleFonts.outfit(
-                              color: Colors.grey[600],
-                              fontSize: 13,
-                            ),
-                          ),
-                        );
-                      }
-
-                      final contact = _selectedConversation?['contactId'] ?? {};
-                      final String customerName = (contact['name'] ?? 'Customer').toString();
-                      final String customerPhone = (contact['phone'] ?? '').toString();
-                      final List<dynamic> tags = List<dynamic>.from(contact['tags'] ?? []);
-                      final bool isDealer = tags.any((t) =>
-                          t.toString().toLowerCase().contains('dealer') ||
-                          t.toString().toLowerCase().contains('retailer'));
-
-                      return Center(
-                        child: Container(
-                          width: 480,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF008069).withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.mark_chat_unread_rounded,
-                                  size: 32,
-                                  color: Color(0xFF008069),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                customerName,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    customerPhone,
+                          if (filteredMessages.isEmpty) {
+                            if (_messageSearchQuery.isNotEmpty) {
+                              return Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    'No matching messages found',
                                     style: GoogleFonts.outfit(
+                                      color: Colors.grey[600],
                                       fontSize: 13,
-                                      color: const Color(0xFF64748B),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isDealer
-                                          ? const Color(0xFF0284C7).withValues(alpha: 0.12)
-                                          : const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(4),
+                                ),
+                              );
+                            }
+
+                            final contact = _selectedConversation?['contactId'] ?? {};
+                            final String customerName = (contact['name'] ?? 'Customer').toString();
+                            final String customerPhone = (contact['phone'] ?? '').toString();
+                            final List<dynamic> tags = List<dynamic>.from(contact['tags'] ?? []);
+                            final bool isDealer = tags.any((t) =>
+                                t.toString().toLowerCase().contains('dealer') ||
+                                t.toString().toLowerCase().contains('retailer'));
+
+                            return Center(
+                              child: Container(
+                                width: 480,
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.06),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
-                                    child: Text(
-                                      isDealer ? '🏪 Verified Dealer' : '🌱 Assigned Lead',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDealer ? const Color(0xFF0284C7) : const Color(0xFF16A34A),
-                                      ),
-                                    ),
-                                  ),
-                                  if (assignedAgentName != 'Unassigned') ...[
-                                    const SizedBox(width: 8),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF008069).withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: const Color(0xFF008069).withValues(alpha: 0.2), width: 0.6),
+                                        color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.person_outline_rounded, size: 11, color: Color(0xFF008069)),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            assignedAgentName,
+                                      child: const Icon(
+                                        Icons.mark_chat_unread_rounded,
+                                        size: 32,
+                                        color: Color(0xFF008069),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      customerName,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          customerPhone,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            color: const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isDealer
+                                                ? const Color(0xFF0284C7).withValues(alpha: 0.12)
+                                                : const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            isDealer ? '🏪 Verified Dealer' : '🌱 Assigned Lead',
                                             style: GoogleFonts.outfit(
                                               fontSize: 10.5,
                                               fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF008069),
+                                              color: isDealer ? const Color(0xFF0284C7) : const Color(0xFF16A34A),
+                                            ),
+                                          ),
+                                        ),
+                                        if (assignedAgentName != 'Unassigned') ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF008069).withValues(alpha: 0.08),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFF008069).withValues(alpha: 0.2), width: 0.6),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.person_outline_rounded, size: 11, color: Color(0xFF008069)),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  assignedAgentName,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(0xFF008069),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: Text(
+                                        '💬 No prior chat history with this contact. Under Meta WhatsApp policies, choose an Approved Template below to start the conversation.',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: const Color(0xFF475569),
+                                          height: 1.4,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
                                     ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF008069),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      icon: const Icon(Icons.send_rounded, size: 14),
+                                      label: Text('Send WhatsApp Template', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      onPressed: () => _showSendTemplateDialog(context, _selectedConversation['_id']),
+                                    ),
                                   ],
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
                                 ),
-                                child: Text(
-                                  '💬 No prior chat history with this contact. Under Meta WhatsApp policies, choose an Approved Template below to start the conversation.',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFF475569),
-                                    height: 1.4,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF008069),
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                icon: const Icon(Icons.send_rounded, size: 14),
-                                label: Text('Send WhatsApp Template', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                                onPressed: () => _showSendTemplateDialog(context, _selectedConversation['_id']),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SelectionContainer.disabled(
-                      child: ListView.builder(
-                        controller: _messageScrollController,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                        itemCount: filteredMessages.length,
-                        itemBuilder: (context, index) {
-                          final msg = filteredMessages[index];
-                          final isOutgoing = msg['direction'] == 'outgoing';
-                          final type = msg['type'];
-                          final isNote = msg['isNote'] == true;
-
-                          final date = DateTime.parse(
-                            msg['createdAt'],
-                          ).toLocal();
-                          final formattedTime = DateFormat(
-                            'hh:mm a',
-                          ).format(date);
-
-                          BoxDecoration bubbleDecoration;
-                          Color textCol = const Color(0xFF111B21);
-
-                          if (isNote) {
-                            bubbleDecoration = BoxDecoration(
-                              color: const Color(0xFFFFF9E6),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFFFE082),
-                                width: 0.8,
-                              ),
-                            );
-                            textCol = const Color(0xFF5D4037);
-                          } else if (isOutgoing) {
-                            bubbleDecoration = const BoxDecoration(
-                              color: Color(0xFFD9FDD3), // WhatsApp Green Bubble
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(12),
-                                bottomLeft: Radius.circular(12),
-                                bottomRight: Radius.circular(12),
-                                topRight:
-                                    Radius.zero, // Pointy Top-Right corner tail
-                              ),
-                            );
-                          } else {
-                            bubbleDecoration = const BoxDecoration(
-                              color: Colors.white, // WhatsApp White Bubble
-                              borderRadius: BorderRadius.only(
-                                topRight: Radius.circular(12),
-                                bottomLeft: Radius.circular(12),
-                                bottomRight: Radius.circular(12),
-                                topLeft:
-                                    Radius.zero, // Pointy Top-Left corner tail
                               ),
                             );
                           }
+
+                          return SelectionContainer.disabled(
+                            child: ListView.builder(
+                              controller: _messageScrollController,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                              itemCount: filteredMessages.length,
+                              itemBuilder: (context, index) {
+                                final msg = filteredMessages[index];
+                                final isOutgoing = msg['direction'] == 'outgoing';
+                                final type = msg['type'];
+                                final isNote = msg['isNote'] == true;
+
+                                final date = DateTime.parse(
+                                  msg['createdAt'],
+                                ).toLocal();
+                                final formattedTime = DateFormat(
+                                  'hh:mm a',
+                                ).format(date);
+
+                                BoxDecoration bubbleDecoration;
+                                Color textCol = const Color(0xFF111B21);
+
+                                if (isNote) {
+                                  bubbleDecoration = BoxDecoration(
+                                    color: const Color(0xFFFFF9E6),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: const Color(0xFFFFE082),
+                                      width: 0.8,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.04),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  );
+                                  textCol = const Color(0xFF5D4037);
+                                } else if (isOutgoing) {
+                                  bubbleDecoration = BoxDecoration(
+                                    color: const Color(0xFFD9FDD3), // Official WhatsApp light green
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(8),
+                                      bottomLeft: Radius.circular(8),
+                                      bottomRight: Radius.circular(8),
+                                      topRight: Radius.circular(2),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.06),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  );
+                                } else {
+                                  bubbleDecoration = BoxDecoration(
+                                    color: Colors.white, // Official WhatsApp white
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(8),
+                                      bottomLeft: Radius.circular(8),
+                                      bottomRight: Radius.circular(8),
+                                      topLeft: Radius.circular(2),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.06),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  );
+                                }
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 3.0),
@@ -2153,24 +2193,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   ],
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ); // closes SelectionContainer.disabled
-                  }(),
-          ),
+                            );
+                          },
+                        ),
+                      );
+                    }(),
+                  ],
+                ),
+              ),
+            ),
 
           // Message/Note Mode Switcher
           Container(
-            color: Colors.white,
+            color: const Color(0xFFF0F2F5),
             padding: const EdgeInsets.only(top: 8, left: 24, right: 24),
             child: Container(
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: const Color(0xFFE9EDEF),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
               ),
               padding: const EdgeInsets.all(2),
               child: Row(
@@ -2244,7 +2285,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             ),
           ),
 
-          // Web Input Tray Bar (Pure White)
+          // Web Input Tray Bar (WhatsApp Web grey)
           Container(
             padding: const EdgeInsets.only(
               left: 20,
@@ -2253,9 +2294,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               top: 8,
             ),
             decoration: const BoxDecoration(
-              color: Colors.white,
+              color: Color(0xFFF0F2F5),
               border: Border(
-                top: BorderSide(color: Color(0xFFF1F5F9), width: 1),
+                top: BorderSide(color: Color(0xFFE9EDEF), width: 1),
               ),
             ),
             child: Row(
@@ -2582,9 +2623,33 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     );
   }
 
-  // Parse raw JSON messages (button_reply / list_reply) into clean human-readable text
+  // Parse raw JSON messages (button_reply / list_reply) and templates into clean human-readable text
   String _formatCleanMessageText(String raw) {
     if (raw.trim().isEmpty) return '';
+
+    // Handle template markers like "[Template] test_intro" or "test_intro"
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('[Template]') || trimmed == 'test_intro') {
+      final tplName = trimmed.startsWith('[Template]')
+          ? trimmed.replaceFirst('[Template]', '').trim()
+          : trimmed;
+      final contact = _selectedConversation?['contactId'] ?? {};
+      final customerName = (contact['name'] ?? 'Customer').toString();
+
+      final matched = _approvedTemplates.cast<Map<String, dynamic>?>().firstWhere(
+        (t) => (t?['name'] ?? t?['elementName'] ?? '').toString() == tplName,
+        orElse: () => null,
+      );
+      if (matched != null) {
+        String body = (matched['body'] ?? matched['data']?['body'] ?? '').toString();
+        if (body.isNotEmpty) {
+          body = body.replaceAll('{{1}}', customerName);
+          return body;
+        }
+      }
+      return 'Namaste $customerName, welcome to Krishi Kranti!';
+    }
+
     if (raw.trim().startsWith('{')) {
       try {
         final Map<String, dynamic> data = jsonDecode(raw);
@@ -3186,6 +3251,15 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                     final List<String> bodyValues = sortedKeys.map((k) => variableControllers[k]!.text.trim()).toList();
                                     final mediaUrl = mediaUrlController.text.trim();
 
+                                    // Resolve interpolated text
+                                    String resolvedContent = (currentTpl?['body'] ?? currentTpl?['data']?['body'] ?? '').toString();
+                                    for (final entry in variableControllers.entries) {
+                                      resolvedContent = resolvedContent.replaceAll('{{${entry.key}}}', entry.value.text.trim());
+                                    }
+                                    if (resolvedContent.isEmpty) {
+                                      resolvedContent = nameToSend;
+                                    }
+
                                     Navigator.of(dialogCtx).pop();
 
                                     try {
@@ -3195,6 +3269,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                         'templateName': nameToSend,
                                         'languageCode': langToSend,
                                         'bodyValues': bodyValues,
+                                        'content': resolvedContent,
                                         'mediaUrl': mediaUrl.isNotEmpty ? mediaUrl : null,
                                       });
                                       if (res.statusCode == 200) {
@@ -5307,4 +5382,102 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       ),
     );
   }
+}
+
+/// Custom painter for authentic WhatsApp vector doodle chat wallpaper
+class WhatsAppDoodlePainter extends CustomPainter {
+  final Color color;
+  const WhatsAppDoodlePainter({this.color = const Color(0x0A000000)});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final fillPaint = Paint()
+      ..color = color.withValues(alpha: color.a * 0.6)
+      ..style = PaintingStyle.fill;
+
+    const double stepX = 140.0;
+    const double stepY = 140.0;
+
+    for (double y = 20; y < size.height + 40; y += stepY) {
+      for (double x = 20; x < size.width + 40; x += stepX) {
+        final double ox = (y / stepY).floor() % 2 == 1 ? x + 70 : x;
+        _drawDoodleCluster(canvas, ox, y, strokePaint, fillPaint);
+      }
+    }
+  }
+
+  void _drawDoodleCluster(Canvas canvas, double cx, double cy, Paint stroke, Paint fill) {
+    // 1. Speech bubble
+    final bubbleRect = RRect.fromRectAndRadius(Rect.fromLTWH(cx - 30, cy - 25, 22, 15), const Radius.circular(4));
+    canvas.drawRRect(bubbleRect, stroke);
+    final bubbleTail = Path()
+      ..moveTo(cx - 30, cy - 14)
+      ..lineTo(cx - 35, cy - 10)
+      ..lineTo(cx - 27, cy - 10);
+    canvas.drawPath(bubbleTail, stroke);
+
+    // 2. Small Heart
+    final heartPath = Path()
+      ..moveTo(cx + 15, cy - 20)
+      ..cubicTo(cx + 15, cy - 24, cx + 9, cy - 26, cx + 9, cy - 20)
+      ..cubicTo(cx + 9, cy - 15, cx + 15, cy - 11, cx + 15, cy - 9)
+      ..cubicTo(cx + 15, cy - 11, cx + 21, cy - 15, cx + 21, cy - 20)
+      ..cubicTo(cx + 21, cy - 26, cx + 15, cy - 24, cx + 15, cy - 20);
+    canvas.drawPath(heartPath, stroke);
+
+    // 3. Coffee Mug
+    final cupRect = RRect.fromRectAndRadius(Rect.fromLTWH(cx - 24, cy + 12, 14, 13), const Radius.circular(2));
+    canvas.drawRRect(cupRect, stroke);
+    canvas.drawArc(Rect.fromLTWH(cx - 10, cy + 14, 7, 7), -1.5, 3.0, false, stroke);
+
+    // 4. Smiley Face
+    canvas.drawCircle(Offset(cx + 20, cy + 16), 8, stroke);
+    canvas.drawCircle(Offset(cx + 17, cy + 14), 1, fill);
+    canvas.drawCircle(Offset(cx + 23, cy + 14), 1, fill);
+    canvas.drawArc(Rect.fromLTWH(cx + 16, cy + 15, 8, 5), 0.2, 2.7, false, stroke);
+
+    // 5. Star / Sparkle
+    final starPath = Path()
+      ..moveTo(cx - 2, cy - 5)
+      ..lineTo(cx - 2, cy + 5)
+      ..moveTo(cx - 7, cy)
+      ..lineTo(cx + 3, cy);
+    canvas.drawPath(starPath, stroke);
+
+    // 6. Clock
+    canvas.drawCircle(Offset(cx + 35, cy - 2), 7, stroke);
+    final clockHands = Path()
+      ..moveTo(cx + 35, cy - 6)
+      ..lineTo(cx + 35, cy - 2)
+      ..lineTo(cx + 38, cy - 2);
+    canvas.drawPath(clockHands, stroke);
+
+    // 7. Paper plane / Send arrow
+    final plane = Path()
+      ..moveTo(cx - 42, cy + 28)
+      ..lineTo(cx - 30, cy + 22)
+      ..lineTo(cx - 38, cy + 35)
+      ..close();
+    canvas.drawPath(plane, stroke);
+
+    // 8. Music Note
+    final music = Path()
+      ..moveTo(cx + 42, cy + 26)
+      ..lineTo(cx + 42, cy + 18)
+      ..lineTo(cx + 49, cy + 16)
+      ..lineTo(cx + 49, cy + 24);
+    canvas.drawPath(music, stroke);
+    canvas.drawCircle(Offset(cx + 40, cy + 26), 2, fill);
+    canvas.drawCircle(Offset(cx + 47, cy + 24), 2, fill);
+  }
+
+  @override
+  bool shouldRepaint(covariant WhatsAppDoodlePainter oldDelegate) => oldDelegate.color != color;
 }
