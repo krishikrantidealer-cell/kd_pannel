@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/app_theme.dart';
@@ -205,33 +207,6 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
     }
   }
 
-  Future<void> _updateLanguage(String langCode) async {
-    if (_conversation == null) return;
-    final convId = _conversation['_id'];
-    try {
-      final res = await ApiClient().put('/conversations/$convId/language', {
-        'preferredLanguage': langCode,
-      });
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        setState(() {
-          _conversation = body['data'];
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Language updated to ${langCode.toUpperCase()}'),
-              backgroundColor: const Color(0xFF008069),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('[WhatsApp Chat Dialog] Error updating language: $e');
-    }
-  }
-
   String _formatCleanMessageText(String raw) {
     if (raw.trim().isEmpty) return '';
     if (raw.trim().startsWith('{')) {
@@ -286,128 +261,97 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double screenHeight = MediaQuery.of(context).size.height;
-    
     final bool isLargeScreen = screenWidth > 900;
     
     final Widget mainBody = Material(
       color: Colors.transparent,
       child: Container(
-        width: isLargeScreen ? 480 : screenWidth * 0.92,
-      height: isLargeScreen ? screenHeight * 0.90 : screenHeight * 0.80,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE5DDD5), // Classic WhatsApp Chat background beige
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          // WhatsApp Official Deep Green Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: const Color(0xFF008069), // Official WhatsApp Green
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.white24,
-                  radius: 19,
-                  child: Text(
-                    widget.name.isNotEmpty ? widget.name.substring(0, 1).toUpperCase() : '👤',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.white,
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5DDD5), // Classic WhatsApp Chat background beige
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            // WhatsApp Official Deep Green Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: const Color(0xFF008069), // Official WhatsApp Green
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.white24,
+                    radius: 19,
+                    child: Text(
+                      widget.name.isNotEmpty ? widget.name.substring(0, 1).toUpperCase() : '👤',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.name,
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          color: Colors.white,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            '+${widget.phone}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11.5,
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontWeight: FontWeight.w400,
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.name,
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: Colors.white,
                           ),
-                          if (!AuthService().isSales && _conversation != null && _conversation['assignedTo'] != null) ...[
-                            const SizedBox(width: 8),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Row(
+                          children: [
                             Text(
-                              '• Assigned: ${_conversation['assignedTo']['firstName'] ?? ''} ${_conversation['assignedTo']['lastName'] ?? ''}'.trim(),
+                              '+${widget.phone}',
                               style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontWeight: FontWeight.w500,
+                                fontSize: 11.5,
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontWeight: FontWeight.w400,
                               ),
                             ),
+                            if (!AuthService().isSales && _conversation != null && _conversation['assignedTo'] != null) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                '• Assigned: ${_conversation['assignedTo']['firstName'] ?? ''} ${_conversation['assignedTo']['lastName'] ?? ''}'.trim(),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                // 6-Language Switcher Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(6),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      hoverColor: Colors.white24,
+                    ),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  child: DropdownButton<String>(
-                    value: ['en', 'hi', 'ta', 'te', 'mr', 'kn'].contains(_conversation?['contactId']?['preferredLanguage'])
-                        ? _conversation?['contactId']?['preferredLanguage']
-                        : 'en',
-                    style: GoogleFonts.outfit(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
-                    dropdownColor: const Color(0xFF008069),
-                    underline: const SizedBox(),
-                    icon: const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white),
-                    isDense: true,
-                    items: const [
-                      DropdownMenuItem(value: 'en', child: Text('EN (English)')),
-                      DropdownMenuItem(value: 'hi', child: Text('HI (हिन्दी)')),
-                      DropdownMenuItem(value: 'ta', child: Text('TA (தமிழ்)')),
-                      DropdownMenuItem(value: 'te', child: Text('TE (తెలుగు)')),
-                      DropdownMenuItem(value: 'mr', child: Text('MR (मराठी)')),
-                      DropdownMenuItem(value: 'kn', child: Text('KN (ಕನ್ನಡ)')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) _updateLanguage(val);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white12,
-                    hoverColor: Colors.white24,
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // Message Logs Scroll Area with Doodle pattern styling
           Expanded(
@@ -879,23 +823,10 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
           ),
         ],
       ),
-    ),);
+    ),
+  );
 
-    if (isLargeScreen) {
-      // Slides in from the right hand side on Desktop
-      return Stack(
-        children: [
-          Positioned(
-            right: 20,
-            top: 20,
-            bottom: 20,
-            child: mainBody,
-          ),
-        ],
-      );
-    }
-    
-    return Center(child: mainBody);
+  return mainBody;
   }
 
   void _showSendTemplateDialog(BuildContext context, String conversationId) {
@@ -1020,92 +951,311 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
   void _showAttachmentDialog(BuildContext context, String mediaType) {
     final TextEditingController urlController = TextEditingController();
     final TextEditingController captionController = TextEditingController();
-    final String label = mediaType == 'Image' ? 'Image URL' : 'Document URL';
+    PlatformFile? selectedFile;
+    bool isUploading = false;
+    int selectedTab = 0; // 0: Upload File, 1: Enter URL
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Send WhatsApp $mediaType',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter the public URL of the $mediaType you want to send.',
-              style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600]),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isImage = mediaType == 'Image';
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            title: Row(
+              children: [
+                Icon(
+                  isImage ? Icons.image_rounded : Icons.insert_drive_file_rounded,
+                  color: const Color(0xFF008069),
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Send WhatsApp $mediaType',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: urlController,
-              decoration: InputDecoration(
-                labelText: label,
-                hintText: mediaType == 'Image'
-                    ? 'https://example.com/image.jpg'
-                    : 'https://example.com/document.pdf',
-                border: const OutlineInputBorder(),
-                isDense: true,
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Tab selector for Upload vs URL
+                  Container(
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.all(2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => selectedTab = 0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: selectedTab == 0 ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: selectedTab == 0
+                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)]
+                                    : null,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Upload from Device',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: selectedTab == 0 ? const Color(0xFF008069) : Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => selectedTab = 1),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: selectedTab == 1 ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: selectedTab == 1
+                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)]
+                                    : null,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Paste Public URL',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: selectedTab == 1 ? const Color(0xFF008069) : Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (selectedTab == 0) ...[
+                    // File Picker
+                    InkWell(
+                      onTap: isUploading
+                          ? null
+                          : () async {
+                              final result = await FilePicker.pickFiles(
+                                type: isImage ? FileType.image : FileType.custom,
+                                allowedExtensions: isImage ? null : ['pdf', 'doc', 'docx', 'xls', 'xlsx'],
+                                withData: true,
+                              );
+                              if (result != null && result.files.isNotEmpty) {
+                                setDialogState(() {
+                                  selectedFile = result.files.first;
+                                });
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF008069).withValues(alpha: 0.04),
+                          border: Border.all(color: const Color(0xFF008069).withValues(alpha: 0.3), width: 1.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: selectedFile == null
+                            ? Column(
+                                children: [
+                                  Icon(
+                                    isImage ? Icons.cloud_upload_outlined : Icons.upload_file_rounded,
+                                    size: 32,
+                                    color: const Color(0xFF008069),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Click to select ${isImage ? "image" : "document"}',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: const Color(0xFF008069),
+                                    ),
+                                  ),
+                                  Text(
+                                    isImage ? 'JPG, PNG, WEBP (Max 10MB)' : 'PDF, DOC, XLS (Max 25MB)',
+                                    style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  Icon(
+                                    isImage ? Icons.image : Icons.insert_drive_file,
+                                    color: const Color(0xFF008069),
+                                    size: 28,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          selectedFile!.name,
+                                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB',
+                                          style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[600]),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
+                                    onPressed: () => setDialogState(() => selectedFile = null),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ] else ...[
+                    TextField(
+                      controller: urlController,
+                      decoration: InputDecoration(
+                        labelText: isImage ? 'Image URL' : 'Document URL',
+                        hintText: isImage ? 'https://example.com/image.jpg' : 'https://example.com/document.pdf',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      style: GoogleFonts.outfit(fontSize: 13.5),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: captionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Caption (Optional)',
+                      hintText: 'e.g. Please review this catalog.',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.outfit(fontSize: 13.5),
+                  ),
+                ],
               ),
-              style: GoogleFonts.outfit(fontSize: 13.5),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: captionController,
-              decoration: const InputDecoration(
-                labelText: 'Caption (Optional)',
-                hintText: 'e.g. Please check this document.',
-                border: OutlineInputBorder(),
-                isDense: true,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
               ),
-              style: GoogleFonts.outfit(fontSize: 13.5),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF008069),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
-            onPressed: () async {
-              final url = urlController.text.trim();
-              if (url.isEmpty) return;
-              final caption = captionController.text.trim();
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF008069),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: isUploading
+                    ? null
+                    : () async {
+                        if (_conversation == null) return;
+                        final conversationId = _conversation['_id'];
+                        final caption = captionController.text.trim();
 
-              Navigator.pop(context);
+                        setDialogState(() => isUploading = true);
 
-              try {
-                if (_conversation == null) return;
-                final conversationId = _conversation['_id'];
+                        try {
+                          String finalMediaUrl = '';
 
-                final res = await ApiClient().post('/messages/send', {
-                  'conversationId': conversationId,
-                  'type': mediaType,
-                  'content': caption,
-                  'mediaUrl': url,
-                });
-                if (res.statusCode == 200) {
-                  _fetchMessages();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('$mediaType message sent successfully'), backgroundColor: const Color(0xFF008069)),
-                    );
-                  }
-                }
-              } catch (e) {
-                debugPrint('[$mediaType Send] Failed: $e');
-              }
-            },
-            child: Text('Send', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          ),
-        ],
+                          if (selectedTab == 0 && selectedFile != null) {
+                            final bytes = selectedFile!.bytes;
+                            if (bytes == null) throw Exception('Unable to read file bytes');
+
+                            final request = http.MultipartRequest(
+                              'POST',
+                              Uri.parse('${ApiClient().baseUrl}/conversations/media/upload'),
+                            );
+                            if (ApiClient().accessToken != null) {
+                              request.headers['Authorization'] = 'Bearer ${ApiClient().accessToken}';
+                            }
+                            request.files.add(
+                              http.MultipartFile.fromBytes(
+                                'file',
+                                bytes,
+                                filename: selectedFile!.name,
+                              ),
+                            );
+
+                            final streamedRes = await request.send();
+                            final resBody = await streamedRes.stream.bytesToString();
+                            final decoded = jsonDecode(resBody);
+
+                            if (streamedRes.statusCode == 200 && decoded['success'] == true) {
+                              finalMediaUrl = decoded['data']?['mediaUrl'] ?? decoded['mediaUrl'] ?? '';
+                            } else {
+                              throw Exception(decoded['message'] ?? 'Failed to upload media');
+                            }
+                          } else {
+                            finalMediaUrl = urlController.text.trim();
+                          }
+
+                          if (finalMediaUrl.isEmpty) {
+                            throw Exception('Please select a file or provide a URL');
+                          }
+
+                          final res = await ApiClient().post('/messages/send', {
+                            'conversationId': conversationId,
+                            'type': mediaType,
+                            'content': caption,
+                            'mediaUrl': finalMediaUrl,
+                          });
+
+                          if (res.statusCode == 200) {
+                            _fetchMessages();
+                            Navigator.of(dialogCtx).pop();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('$mediaType sent successfully!'),
+                                  backgroundColor: const Color(0xFF008069),
+                                ),
+                              );
+                            }
+                          } else {
+                            final body = jsonDecode(res.body);
+                            throw Exception(body['message'] ?? 'Failed to send $mediaType');
+                          }
+                        } catch (e) {
+                          setDialogState(() => isUploading = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isUploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text('Send', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

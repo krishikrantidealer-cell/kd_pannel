@@ -2670,7 +2670,7 @@ class _LeadRowState extends State<_LeadRow> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: SizedBox(
-            width: 850,
+            width: 520,
             height: 700,
             child: WhatsAppChatDialog(
               phone: cleanPhone,

@@ -2519,7 +2519,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                   child: ClipRRect(
                                                     borderRadius: BorderRadius.circular(16),
                                                     child: SizedBox(
-                                                      width: 850,
+                                                      width: 520,
                                                       height: 700,
                                                       child: WhatsAppChatDialog(
                                                         phone: cleanPhone,
