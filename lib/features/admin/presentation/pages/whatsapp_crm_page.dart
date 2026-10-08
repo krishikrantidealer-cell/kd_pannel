@@ -1918,22 +1918,21 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   );
                                 }
 
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3.0),
-                            child: Align(
-                              alignment: isOutgoing
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: bubbleDecoration,
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width * 0.45,
-                                ),
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 3.0),
+                                  child: Align(
+                                    alignment: isOutgoing
+                                        ? Alignment.centerRight
+                                        : Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: bubbleDecoration,
+                                      constraints: BoxConstraints(
+                                        maxWidth: MediaQuery.of(context).size.width * 0.45,
+                                      ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
@@ -3825,6 +3824,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final titleController = TextEditingController();
     final shortcutController = TextEditingController();
     final messageController = TextEditingController();
+    String category = 'Sales';
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
