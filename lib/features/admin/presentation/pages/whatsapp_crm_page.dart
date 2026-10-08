@@ -102,6 +102,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   final Map<String, Map<String, dynamic>> _activeTypingAgents = {};
   Timer? _myTypingDebounceTimer;
   bool _isCurrentlyTypingLocally = false;
+  dynamic _replyingToMessage;
 
   void _onMessageTextChanged(String text) {
     final convId = _selectedConversation?['_id']?.toString();
@@ -201,6 +202,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           final index = _conversations.indexWhere(
             (c) => c['_id'].toString() == convId,
           );
+
+          final bool isCurrentlySelected = _selectedConversation != null && _selectedConversation['_id'].toString() == convId;
+
+          if (!isCurrentlySelected && isIncoming) {
+            final int prevUnread = (index != -1
+                ? (_conversations[index]['unreadCount'] is int
+                    ? _conversations[index]['unreadCount']
+                    : int.tryParse(_conversations[index]['unreadCount']?.toString() ?? '0') ?? 0)
+                : 0);
+            newConversation['unreadCount'] = prevUnread + 1;
+          } else if (isCurrentlySelected) {
+            newConversation['unreadCount'] = 0;
+          }
 
           if (index != -1) {
             _conversations[index] = newConversation;
@@ -573,11 +587,20 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final content = _messageController.text.trim();
     _messageController.clear();
 
+    final replyPayload = _replyingToMessage != null ? {
+      'messageId': (_replyingToMessage['_id'] ?? _replyingToMessage['myoperatorMessageId'])?.toString(),
+      'senderName': _replyingToMessage['direction'] == 'outgoing' ? 'You' : (_selectedConversation?['contactId']?['name'] ?? 'Lead').toString(),
+      'content': _replyingToMessage['content']?.toString() ?? '',
+    } : null;
+
+    setState(() => _replyingToMessage = null);
+
     try {
       final res = await ApiClient().post('/messages/send', {
         'conversationId': _selectedConversation['_id'],
         'type': 'Text',
         'content': content,
+        if (replyPayload != null) 'replyTo': replyPayload,
       });
 
       if (res.statusCode == 200) {
@@ -702,13 +725,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     setState(() {
       _selectedConversation = conversation;
       _messages = [];
+      _replyingToMessage = null;
+      conversation['unreadCount'] = 0;
     });
     // Fetch chat history
     _fetchMessages(conversation['_id']);
-    // Clear unread count locally
-    setState(() {
-      conversation['unreadCount'] = 0;
-    });
   }
 
   void _scrollToBottom() {
@@ -2326,6 +2347,17 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        InkWell(
+                                          onTap: () => setState(() => _replyingToMessage = msg),
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(right: 4.0),
+                                            child: Icon(
+                                              Icons.reply_rounded,
+                                              size: 13,
+                                              color: Color(0xFF667781),
+                                            ),
+                                          ),
+                                        ),
                                         Text(
                                           formattedTime,
                                           style: GoogleFonts.outfit(
@@ -2464,6 +2496,62 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       color: const Color(0xFF008069),
                       fontStyle: FontStyle.italic,
                     ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (_replyingToMessage != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF0F2F5),
+                border: Border(
+                  top: BorderSide(color: Color(0xFFE9EDEF), width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 3.5,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF008069),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _replyingToMessage['direction'] == 'outgoing'
+                              ? 'Replying to You'
+                              : 'Replying to ${_selectedConversation?['contactId']?['name'] ?? 'Lead'}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF008069),
+                          ),
+                        ),
+                        Text(
+                          _formatCleanMessageText(_replyingToMessage['content'] ?? ''),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11.5,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                    tooltip: 'Cancel Reply',
+                    onPressed: () => setState(() => _replyingToMessage = null),
                   ),
                 ],
               ),
