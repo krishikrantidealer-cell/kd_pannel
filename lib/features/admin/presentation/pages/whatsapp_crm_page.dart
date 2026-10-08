@@ -2257,6 +2257,60 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           ),
                                         ),
                                     ],
+                                    if (msg['replyTo'] != null &&
+                                        (msg['replyTo']['content'] != null ||
+                                         msg['replyTo']['body'] != null)) ...[
+                                      Container(
+                                        margin: const EdgeInsets.only(bottom: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: isOutgoing ? 0.06 : 0.05,
+                                          ),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: const Border(
+                                            left: BorderSide(
+                                              color: Color(0xFF008069),
+                                              width: 3.5,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              (msg['replyTo']['senderName'] ??
+                                               (isOutgoing ? 'Lead' : 'You'))
+                                                  .toString(),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF008069),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              (msg['replyTo']['content'] ??
+                                               msg['replyTo']['body'] ??
+                                               '')
+                                                  .toString(),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11.5,
+                                                color: const Color(0xFF54656F),
+                                                height: 1.2,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     Text(
                                       _formatCleanMessageText(
                                         msg['content'] ?? '',
