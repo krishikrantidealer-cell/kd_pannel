@@ -112,7 +112,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final contact = _selectedConversation['contactId'] ?? {};
     final String customerName = (contact['name'] ?? 'Customer').toString();
     final String customerPhone = (contact['phone'] ?? '').toString();
-    final String agentName = AuthService().currentUserDisplayName;
+    final String agentName = AuthService().currentUserName ?? 'Agent';
 
     return template
         .replaceAll(RegExp(r'\{\{\s*name\s*\}\}', caseSensitive: false), customerName)
@@ -3927,7 +3927,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               final allowedExts = isImage
                                   ? ['jpg', 'jpeg', 'png', 'webp']
                                   : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
-                              final result = await FilePicker.platform.pickFiles(
+                              final result = await FilePicker.pickFiles(
                                 type: FileType.custom,
                                 allowedExtensions: allowedExts,
                                 withData: true,
@@ -4008,7 +4008,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                             final allowedExts = isImage
                                                 ? ['jpg', 'jpeg', 'png', 'webp']
                                                 : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
-                                            final result = await FilePicker.platform.pickFiles(
+                                            final result = await FilePicker.pickFiles(
                                               type: FileType.custom,
                                               allowedExtensions: allowedExts,
                                               withData: true,
@@ -4179,6 +4179,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           );
         },
       ),
+    );
   }
 
   Future<void> _updateConversationStatus(String status) async {
