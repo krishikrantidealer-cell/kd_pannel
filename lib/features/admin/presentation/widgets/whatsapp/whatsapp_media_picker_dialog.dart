@@ -505,7 +505,7 @@ class _WhatsAppMediaPickerDialogState extends State<WhatsAppMediaPickerDialog> {
                               'mediaUrl': finalMediaUrl,
                             });
 
-                            if (sendRes.statusCode == 200) {
+                            if (sendRes.statusCode == 200 || sendRes.statusCode == 201) {
                               TelephonyAudioService().playOutgoingMessageSentTone();
                               if (context.mounted) {
                                 Navigator.pop(context);
