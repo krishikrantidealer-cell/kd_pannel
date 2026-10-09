@@ -10,12 +10,14 @@ import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 class WhatsAppMediaPickerDialog extends StatefulWidget {
   final String conversationId;
   final String mediaType; // 'Image' or 'Document'
+  final PlatformFile? initialFile;
   final VoidCallback? onMediaSent;
 
   const WhatsAppMediaPickerDialog({
     super.key,
     required this.conversationId,
     required this.mediaType,
+    this.initialFile,
     this.onMediaSent,
   });
 
@@ -23,6 +25,7 @@ class WhatsAppMediaPickerDialog extends StatefulWidget {
     BuildContext context, {
     required String conversationId,
     required String mediaType,
+    PlatformFile? initialFile,
     VoidCallback? onMediaSent,
   }) {
     showDialog(
@@ -30,6 +33,7 @@ class WhatsAppMediaPickerDialog extends StatefulWidget {
       builder: (context) => WhatsAppMediaPickerDialog(
         conversationId: conversationId,
         mediaType: mediaType,
+        initialFile: initialFile,
         onMediaSent: onMediaSent,
       ),
     );
@@ -45,6 +49,14 @@ class _WhatsAppMediaPickerDialogState extends State<WhatsAppMediaPickerDialog> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _captionController = TextEditingController();
   bool _isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialFile != null) {
+      _selectedFile = widget.initialFile;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -400,6 +412,20 @@ class _WhatsAppMediaPickerDialogState extends State<WhatsAppMediaPickerDialog> {
                                 mimeType = 'image/webp';
                               } else if (nameLower.endsWith('.pdf')) {
                                 mimeType = 'application/pdf';
+                              } else if (nameLower.endsWith('.csv')) {
+                                mimeType = 'text/csv';
+                              } else if (nameLower.endsWith('.xlsx')) {
+                                mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                              } else if (nameLower.endsWith('.xls')) {
+                                mimeType = 'application/vnd.ms-excel';
+                              } else if (nameLower.endsWith('.docx')) {
+                                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                              } else if (nameLower.endsWith('.doc')) {
+                                mimeType = 'application/msword';
+                              } else if (nameLower.endsWith('.txt')) {
+                                mimeType = 'text/plain';
+                              } else if (nameLower.endsWith('.zip') || nameLower.endsWith('.rar') || nameLower.endsWith('.7z')) {
+                                mimeType = 'application/zip';
                               } else if (nameLower.endsWith('.mp3')) {
                                 mimeType = 'audio/mpeg';
                               } else if (nameLower.endsWith('.ogg')) {
@@ -408,59 +434,61 @@ class _WhatsAppMediaPickerDialogState extends State<WhatsAppMediaPickerDialog> {
                                 mimeType = 'video/mp4';
                               }
 
-                              // Step 1: Attempt direct-to-GCS Presigned Signed URL (Zero-Memory on Cloud Run)
-                              bool directUploadSuccess = false;
+                              // Step 1: Direct authenticated upload to MyOperator WhatsApp Free Media Vault (Zero GCS Storage Cost)
+                              bool uploadSuccess = false;
                               try {
-                                final urlRes = await ApiClient().post('/conversations/media/upload-url', {
-                                  'fileName': _selectedFile!.name,
-                                  'mimeType': mimeType,
-                                });
-                                if (urlRes.statusCode == 200) {
-                                  final urlData = jsonDecode(urlRes.body);
-                                  if (urlData['success'] == true && urlData['data']?['uploadUrl'] != null) {
-                                    final uploadUrl = urlData['data']['uploadUrl'].toString();
-                                    final publicUrl = urlData['data']['mediaUrl'].toString();
+                                final res = await ApiClient().multipartRequest(
+                                  method: 'POST',
+                                  endpoint: '/conversations/media/upload',
+                                  fields: {},
+                                  filesBuilder: () => [
+                                    http.MultipartFile.fromBytes(
+                                      'file',
+                                      bytes,
+                                      filename: _selectedFile!.name,
+                                    ),
+                                  ],
+                                );
 
-                                    final gcsRes = await http.put(
-                                      Uri.parse(uploadUrl),
-                                      headers: {'Content-Type': mimeType},
-                                      body: bytes,
-                                    );
-                                    if (gcsRes.statusCode == 200) {
-                                      finalMediaUrl = publicUrl;
-                                      directUploadSuccess = true;
+                                if (res.statusCode == 200) {
+                                  final decoded = jsonDecode(res.body);
+                                  if (decoded['success'] == true) {
+                                    finalMediaUrl = decoded['data']?['mediaUrl'] ?? decoded['mediaUrl'] ?? '';
+                                    if (finalMediaUrl.isNotEmpty) {
+                                      uploadSuccess = true;
                                     }
                                   }
                                 }
-                              } catch (signedErr) {
-                                debugPrint('[WhatsApp CRM] Direct GCS upload fallback: $signedErr');
+                              } catch (uploadErr) {
+                                debugPrint('[WhatsApp CRM] Direct MyOperator media upload fallback: $uploadErr');
                               }
 
-                              // Step 2: Fallback to backend multipart upload if direct GCS upload didn't succeed
-                              if (!directUploadSuccess) {
-                                final request = http.MultipartRequest(
-                                  'POST',
-                                  Uri.parse('${ApiClient().baseUrl}/conversations/media/upload'),
-                                );
-                                if (ApiClient().accessToken != null) {
-                                  request.headers['Authorization'] = 'Bearer ${ApiClient().accessToken}';
-                                }
-                                request.files.add(
-                                  http.MultipartFile.fromBytes(
-                                    'file',
-                                    bytes,
-                                    filename: _selectedFile!.name,
-                                  ),
-                                );
+                              // Step 2: Fallback to GCS Presigned URL if MyOperator direct upload had an issue
+                              if (!uploadSuccess) {
+                                try {
+                                  final urlRes = await ApiClient().post('/conversations/media/upload-url', {
+                                    'fileName': _selectedFile!.name,
+                                    'mimeType': mimeType,
+                                  });
+                                  if (urlRes.statusCode == 200) {
+                                    final urlData = jsonDecode(urlRes.body);
+                                    if (urlData['success'] == true && urlData['data']?['uploadUrl'] != null) {
+                                      final uploadUrl = urlData['data']['uploadUrl'].toString();
+                                      final publicUrl = urlData['data']['mediaUrl'].toString();
 
-                                final streamedRes = await request.send();
-                                final resBody = await streamedRes.stream.bytesToString();
-                                final decoded = jsonDecode(resBody);
-
-                                if (streamedRes.statusCode == 200 && decoded['success'] == true) {
-                                  finalMediaUrl = decoded['data']?['mediaUrl'] ?? decoded['mediaUrl'] ?? '';
-                                } else {
-                                  throw Exception(decoded['message'] ?? 'Failed to upload media');
+                                      final gcsRes = await http.put(
+                                        Uri.parse(uploadUrl),
+                                        headers: {'Content-Type': mimeType},
+                                        body: bytes,
+                                      );
+                                      if (gcsRes.statusCode == 200) {
+                                        finalMediaUrl = publicUrl;
+                                        uploadSuccess = true;
+                                      }
+                                    }
+                                  }
+                                } catch (gcsErr) {
+                                  debugPrint('[WhatsApp CRM] GCS upload fallback: $gcsErr');
                                 }
                               }
                             } else {

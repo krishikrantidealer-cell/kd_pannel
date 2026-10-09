@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2731,93 +2732,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
             ),
 
-          // Message/Note Mode Switcher
-          Container(
-            color: const Color(0xFFF0F2F5),
-            padding: const EdgeInsets.only(top: 8, left: 24, right: 24),
-            child: Container(
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE9EDEF),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _isNotesMode = false),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: !_isNotesMode
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: !_isNotesMode
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    blurRadius: 2,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'WhatsApp Message',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: !_isNotesMode
-                                ? const Color(0xFF008069)
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _isNotesMode = true),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _isNotesMode
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: _isNotesMode
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    blurRadius: 2,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Internal Note',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: _isNotesMode
-                                ? Colors.amber[800]
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Real-time Agent Typing Collision Indicator
+          // ─── Real-Time Agent Typing Collision Indicator ─────────────────────────
           if (_selectedConversation != null &&
               _activeTypingAgents.containsKey((_selectedConversation!['_id'] ?? '').toString()))
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               decoration: const BoxDecoration(
                 color: Color(0xFFF0FDF4),
                 border: Border(
@@ -2826,16 +2745,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
               child: Row(
                 children: [
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF008069)),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF00A884),
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     '✍️ ${_activeTypingAgents[(_selectedConversation!['_id'] ?? '').toString()]!['agentName']} is typing a response...',
                     style: GoogleFonts.outfit(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: const Color(0xFF008069),
                       fontStyle: FontStyle.italic,
@@ -2845,78 +2767,90 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
             ),
 
+          // ─── Quoted Reply Banner (WhatsApp Web Native Preview) ──────────────────
           if (_replyingToMessage != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: const BoxDecoration(
                 color: Color(0xFFF0F2F5),
                 border: Border(
                   top: BorderSide(color: Color(0xFFE9EDEF), width: 1),
                 ),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 3.5,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF008069),
-                      borderRadius: BorderRadius.circular(2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: const Border(
+                    left: BorderSide(color: Color(0xFF008069), width: 4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _replyingToMessage['direction'] == 'outgoing'
-                              ? 'Replying to You'
-                              : 'Replying to ${_selectedConversation?['contactId']?['name'] ?? 'Lead'}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF008069),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _replyingToMessage['direction'] == 'outgoing'
+                                ? 'You'
+                                : (_selectedConversation?['contactId']?['name'] ?? 'Lead').toString(),
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF008069),
+                            ),
                           ),
-                        ),
-                        Text(
-                          _formatCleanMessageText(_replyingToMessage['content'] ?? ''),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.outfit(
-                            fontSize: 11.5,
-                            color: const Color(0xFF64748B),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatCleanMessageText(_replyingToMessage['content'] ?? ''),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: const Color(0xFF64748B),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
-                    tooltip: 'Cancel Reply',
-                    onPressed: () => setState(() => _replyingToMessage = null),
-                  ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                      tooltip: 'Cancel Reply',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      onPressed: () => setState(() => _replyingToMessage = null),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-          // ⚡ Slash Command (/) Quick Reply Autocomplete Overlay
+          // ─── Slash Command (/) Autocomplete Dropdown ────────────────────────────
           if (_activeSlashMatches.isNotEmpty)
             Container(
               constraints: const BoxConstraints(maxHeight: 190),
-              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 16,
-                    offset: const Offset(0, -3),
+                    offset: const Offset(0, -4),
                   ),
                 ],
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -2991,288 +2925,281 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               ),
             ),
 
-          // Web Input Tray Bar (WhatsApp Web grey)
+          // ─── Real WhatsApp Web Input Footer (~52px Compact) ──────────────────
           Container(
-            padding: const EdgeInsets.only(
-              left: 20,
-              right: 24,
-              bottom: 16,
-              top: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: const BoxDecoration(
               color: Color(0xFFF0F2F5),
               border: Border(
-                top: BorderSide(color: Color(0xFFE9EDEF), width: 1),
+                top: BorderSide(color: Color(0xFFE9EDEF), width: 1.0),
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Smiley Icon
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.insert_emoticon_rounded,
-                    color: Color(0xFF64748B),
-                    size: 24,
+                // 1. Paperclip Attach Button (Direct OS File Attachment)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    child: Tooltip(
+                      message: 'Attach file from computer',
+                      child: InkWell(
+                        onTap: () => _pickAndAttachFileFromSystem(context),
+                        borderRadius: BorderRadius.circular(20),
+                        hoverColor: const Color(0xFFDFE5E7),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          alignment: Alignment.center,
+                          child: Transform.rotate(
+                            angle: -math.pi / 4, // Iconic 45° tilt
+                            child: const Icon(
+                              Icons.attach_file_rounded,
+                              color: Color(0xFF54656F),
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  tooltip: 'Insert Emoji',
-                  onSelected: (emoji) {
-                    final activeController = _isNotesMode
-                        ? _noteController
-                        : _messageController;
-                    final text = activeController.text;
-                    final selection = activeController.selection;
-                    final newText = text.replaceRange(
-                      selection.start >= 0 ? selection.start : text.length,
-                      selection.end >= 0 ? selection.end : text.length,
-                      emoji,
-                    );
-                    activeController.text = newText;
-                    activeController.selection = TextSelection.collapsed(
-                      offset:
-                          (selection.start >= 0
-                              ? selection.start
-                              : text.length) +
-                          emoji.length,
-                    );
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      enabled: false,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children:
-                            [
-                              '👋',
-                              '👍',
-                              '😊',
-                              '🙏',
-                              '✅',
-                              '🛒',
-                              '📞',
-                              '⭐',
-                              '🚚',
-                              '🎉',
-                            ].map((emoji) {
-                              return InkWell(
-                                onTap: () {
-                                  Navigator.pop(context, emoji);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6.0),
-                                  child: Text(
-                                    emoji,
-                                    style: const TextStyle(fontSize: 20),
+                ),
+                const SizedBox(width: 2),
+
+                // 2. Emoji Picker Button (Pixel-perfect aligned with paperclip)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Tooltip(
+                    message: 'Emoji & Reactions',
+                    child: PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      splashRadius: 20,
+                      elevation: 16,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      color: Colors.white,
+                      surfaceTintColor: Colors.white,
+                      offset: const Offset(0, -230),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(shape: BoxShape.circle),
+                        child: const Icon(
+                          Icons.sentiment_satisfied_alt_outlined,
+                          color: Color(0xFF54656F),
+                          size: 24,
+                        ),
+                      ),
+                      onSelected: (emoji) {
+                        final activeController = _isNotesMode ? _noteController : _messageController;
+                        final text = activeController.text;
+                        final selection = activeController.selection;
+                        final newText = text.replaceRange(
+                          selection.start >= 0 ? selection.start : text.length,
+                          selection.end >= 0 ? selection.end : text.length,
+                          emoji,
+                        );
+                        activeController.text = newText;
+                        activeController.selection = TextSelection.collapsed(
+                          offset: (selection.start >= 0 ? selection.start : text.length) + emoji.length,
+                        );
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          enabled: false,
+                          child: Container(
+                            width: 290,
+                            padding: const EdgeInsets.all(6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'QUICK EMOJIS',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                    color: const Color(0xFF64748B),
                                   ),
                                 ),
-                              );
-                            }).toList(),
-                      ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    '👋', '👍', '🙏', '😊', '✅', '🌾', '🌱', '🛒', '📞', '⭐',
+                                    '🚚', '🎉', '🔥', '💯', '🤝', '💼', '📦', '💰', '📍', '🕒',
+                                    '🚜', '🌽', '🍅', '🏷️', '💵', '📋', '❤️', '🙌', '🔔', '💬'
+                                  ].map((emoji) {
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: () => Navigator.pop(context, emoji),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4.0),
+                                        child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(width: 6),
-                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media)
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.attach_file_rounded,
-                    color: Color(0xFF64748B),
-                    size: 22,
                   ),
-                  tooltip: 'Attach Media',
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  color: Colors.white,
-                  surfaceTintColor: Colors.white,
-                  onSelected: (value) {
-                    if (value == 'Image' || value == 'Document') {
-                      _showAttachmentDialog(context, value);
-                    } else if (value == 'Canned') {
-                      _showCannedResponsesDialog(context);
-                    } else if (value == 'Template') {
-                      if (_selectedConversation != null) {
-                        _showSendTemplateDialog(context, _selectedConversation['_id']);
-                      }
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'Image',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE0F2FE),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.image_rounded,
-                              color: Color(0xFF0284C7),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Photos & Images',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'PNG, JPG, WebP upload or URL',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
-                    PopupMenuItem(
-                      value: 'Document',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEEF2FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.description_rounded,
-                              color: Color(0xFF6366F1),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Document & Catalogs',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'PDF, DOCX, XLS, CSV files',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
-                const SizedBox(width: 6),
-                // Quick Canned Replies Icon (Amber / Gold)
-                IconButton(
-                  icon: const Icon(
-                    Icons.bolt_rounded,
-                    color: Color(0xFFD97706),
-                    size: 23,
-                  ),
-                  onPressed: () => _showCannedResponsesDialog(context),
-                  tooltip: '⚡ Quick Canned Replies (/shortcut)',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 6),
-                // Template Icon (Official Meta WABA Emerald)
-                IconButton(
-                  icon: const Icon(
-                    Icons.quickreply_rounded,
-                    color: Color(0xFF008069),
-                    size: 22,
-                  ),
-                  onPressed: () {
-                    if (_selectedConversation != null) {
-                      _showSendTemplateDialog(
-                        context,
-                        _selectedConversation['_id'],
-                      );
-                    }
-                  },
-                  tooltip: '📑 Send Approved WhatsApp Template',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 4),
 
+                // 3. WhatsApp Message Input Box (Clean White Pill / Capsule)
                 Expanded(
                   child: Container(
-                    height: 42,
+                    constraints: const BoxConstraints(minHeight: 40, maxHeight: 110),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
+                      color: _isNotesMode ? const Color(0xFFFFFBEB) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFFE2E8F0),
-                        width: 1,
+                        color: _isNotesMode ? const Color(0xFFFCD34D) : const Color(0xFFE2E8F0),
+                        width: 1.0,
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    alignment: Alignment.centerLeft,
-                    child: _isNotesMode
-                        ? TextField(
-                            controller: _noteController,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13.5,
-                              color: const Color(0xFF5D4037),
-                            ),
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'Add an internal note only agents see...',
-                              hintStyle: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: _isNotesMode
+                              ? CallbackShortcuts(
+                                  bindings: {
+                                    const SingleActivator(LogicalKeyboardKey.enter): () => _addNote(),
+                                  },
+                                  child: TextField(
+                                    controller: _noteController,
+                                    maxLines: 4,
+                                    minLines: 1,
+                                    keyboardType: TextInputType.multiline,
+                                    textInputAction: TextInputAction.send,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      color: const Color(0xFF78350F),
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Add an internal note (only team agents see this)...',
+                                      hintStyle: GoogleFonts.outfit(
+                                        color: const Color(0xFFB45309).withValues(alpha: 0.6),
+                                        fontSize: 13.5,
+                                      ),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    onSubmitted: (_) => _addNote(),
+                                  ),
+                                )
+                              : CallbackShortcuts(
+                                  bindings: {
+                                    const SingleActivator(LogicalKeyboardKey.enter): () => _sendMessage(),
+                                  },
+                                  child: TextField(
+                                    controller: _messageController,
+                                    onChanged: _onMessageTextChanged,
+                                    maxLines: 4,
+                                    minLines: 1,
+                                    keyboardType: TextInputType.multiline,
+                                    textInputAction: TextInputAction.send,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      color: const Color(0xFF111B21),
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Type a message (type / for quick replies)...',
+                                      hintStyle: GoogleFonts.outfit(
+                                        color: const Color(0xFF8696A0),
+                                        fontSize: 13.5,
+                                      ),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    onSubmitted: (_) => _sendMessage(),
+                                  ),
+                                ),
+                        ),
+                        // Mini Note/Message Toggle Switcher Inside Input Box
+                        InkWell(
+                          onTap: () => setState(() => _isNotesMode = !_isNotesMode),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Tooltip(
+                            message: _isNotesMode ? 'Switch to WhatsApp message' : 'Switch to internal note mode',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _isNotesMode ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _isNotesMode ? const Color(0xFFFDE68A) : const Color(0xFFE2E8F0),
+                                ),
                               ),
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                            onSubmitted: (_) => _addNote(),
-                          )
-                        : TextField(
-                            controller: _messageController,
-                            onChanged: _onMessageTextChanged,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13.5,
-                              color: const Color(0xFF111B21),
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Type a message',
-                              hintStyle: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isNotesMode ? Icons.lock_rounded : Icons.chat_bubble_outline_rounded,
+                                    size: 11,
+                                    color: _isNotesMode ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _isNotesMode ? 'Note' : 'Chat',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: _isNotesMode ? const Color(0xFFB45309) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              border: InputBorder.none,
-                              isDense: true,
                             ),
-                            onSubmitted: (_) => _sendMessage(),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
 
-                // Send Button
-                GestureDetector(
-                  onTap: _isNotesMode ? _addNote : _sendMessage,
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: _isNotesMode
-                          ? Colors.amber[700]
-                          : const Color(0xFF00A884),
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.send_rounded,
-                      color: Colors.white,
-                      size: 15,
+                // 4. Action Send Button (WhatsApp Emerald Action Circle)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 1),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _isNotesMode ? _addNote : _sendMessage,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: _isNotesMode ? const Color(0xFFD97706) : const Color(0xFF00A884),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isNotesMode ? const Color(0xFFD97706) : const Color(0xFF00A884)).withValues(alpha: 0.25),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          _isNotesMode ? Icons.lock_outline_rounded : Icons.send_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -3600,6 +3527,37 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       onTemplateSent: () => _fetchMessages(conversationId),
       onRefreshTemplates: () => _fetchTemplates(forceSync: true),
     );
+  }
+
+  Future<void> _pickAndAttachFileFromSystem(BuildContext context) async {
+    if (_selectedConversation == null) return;
+    final convId = _selectedConversation['_id']?.toString() ?? '';
+    if (convId.isEmpty) return;
+
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final ext = (file.extension ?? '').toLowerCase();
+      final isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic'].contains(ext);
+      final mediaType = isImage ? 'Image' : 'Document';
+
+      if (!mounted) return;
+      WhatsAppMediaPickerDialog.show(
+        context,
+        conversationId: convId,
+        mediaType: mediaType,
+        initialFile: file,
+        onMediaSent: () => _fetchMessages(convId),
+      );
+    } catch (e) {
+      debugPrint('[Direct File Picker] Error: $e');
+    }
   }
 
   void _showAttachmentDialog(BuildContext context, String mediaType) {
