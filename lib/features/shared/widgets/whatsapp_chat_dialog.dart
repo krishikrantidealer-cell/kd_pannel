@@ -10,7 +10,7 @@ import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
-import 'package:kd_pannel/features/shared/widgets/media_explorer_dialog.dart';
+import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 
 class WhatsAppChatDialog extends StatefulWidget {
   final String phone;
@@ -72,6 +72,9 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
         final conversationId = newMessage['conversationId']?.toString();
 
         if (_conversation != null && conversationId == _conversation['_id']?.toString()) {
+          if ((newMessage['direction'] ?? '') == 'incoming') {
+            TelephonyAudioService().playIncomingMessageTone();
+          }
           final hasMsg = _messages.any((m) => m['_id']?.toString() == newMessage['_id']?.toString());
           if (!hasMsg) {
             setState(() {
@@ -162,12 +165,15 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
     _messageController.clear();
 
     try {
-      await ApiClient().post('/messages/send', {
+      final res = await ApiClient().post('/messages/send', {
         'conversationId': _conversation['_id'],
         'type': 'Text',
         'content': text,
       });
-      _fetchMessages();
+      if (res.statusCode == 200) {
+        TelephonyAudioService().playOutgoingMessageSentTone();
+        _fetchMessages();
+      }
     } catch (e) {
       debugPrint('[WhatsApp Chat Dialog] Error sending message: $e');
     }
@@ -724,162 +730,31 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                   ],
                 ),
                 const SizedBox(width: 8),
-                // Plus/Attachment Icon (Media & Catalog Explorer)
+                // Plus/Attachment Icon
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.add_rounded, color: Color(0xFF54656F), size: 24),
-                  tooltip: 'Attach Media & Products',
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  color: Colors.white,
-                  surfaceTintColor: Colors.white,
+                  tooltip: 'Attach Media',
                   onSelected: (value) {
-                    if (_conversation == null) return;
-                    final convId = _conversation['_id'].toString();
-
-                    MediaExplorerDialog.show(
-                      context,
-                      conversationId: convId,
-                      initialMediaType: value == 'Explorer' ? 'Catalog' : value,
-                      onMediaSent: () => _fetchMessages(),
-                    );
+                    _showAttachmentDialog(context, value);
                   },
                   itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'Catalog',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFDCFCE7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.storefront_rounded,
-                              color: Color(0xFF16A34A),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Product Catalog Explorer',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'Search & send products directly',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'Image',
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE0F2FE),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.image_rounded,
-                              color: Color(0xFF0284C7),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Photos & Images',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'Upload from device or URL',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
+                          const Icon(Icons.image_rounded, color: Color(0xFF008069), size: 18),
+                          const SizedBox(width: 8),
+                          Text('Send Image via URL', style: GoogleFonts.outfit(fontSize: 13)),
                         ],
                       ),
                     ),
-                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'Document',
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEEF2FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.description_rounded,
-                              color: Color(0xFF6366F1),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Documents & PDF',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'PDF, DOCX, XLS files',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
-                    PopupMenuItem(
-                      value: 'Collateral',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFEF3C7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.collections_bookmark_rounded,
-                              color: Color(0xFFD97706),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Company Collateral & QR',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'Catalogues, payment QRs & certifications',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
+                          const Icon(Icons.insert_drive_file_rounded, color: Color(0xFF008069), size: 18),
+                          const SizedBox(width: 8),
+                          Text('Send Document via URL', style: GoogleFonts.outfit(fontSize: 13)),
                         ],
                       ),
                     ),
@@ -1050,6 +925,7 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                   'mediaUrl': mediaUrl.isNotEmpty ? mediaUrl : null,
                 });
                 if (res.statusCode == 200) {
+                  TelephonyAudioService().playOutgoingMessageSentTone();
                   _fetchMessages();
                   if (mounted) {
                     scaffoldMessenger.showSnackBar(
@@ -1351,6 +1227,7 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                           });
 
                           if (res.statusCode == 200) {
+                            TelephonyAudioService().playOutgoingMessageSentTone();
                             _fetchMessages();
                             Navigator.of(dialogCtx).pop();
                             if (mounted) {

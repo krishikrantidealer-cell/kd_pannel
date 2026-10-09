@@ -16,8 +16,13 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
-import 'package:kd_pannel/features/shared/widgets/media_explorer_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_doodle_painter.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_call_history_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_canned_replies_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_template_picker_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_media_picker_dialog.dart';
 
 class WebCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -65,6 +70,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       TextEditingController();
   Timer? _searchDebounce;
   StreamSubscription? _websocketSubscription;
+  final Set<String> _seenWsMessageIds = {};
 
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
@@ -171,9 +177,60 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   int _totalActiveCount = 0;
   int _totalUnreadCount = 0;
 
+  void _recalculateUnreadCount() {
+    _totalUnreadCount = _conversations.where((c) {
+      final isSelected = _selectedConversation != null &&
+          _selectedConversation!['_id']?.toString() == c['_id']?.toString();
+      if (isSelected) return false;
+      final u = int.tryParse(c['unreadCount']?.toString() ?? '0') ?? 0;
+      return u > 0;
+    }).length;
+  }
+
+  bool _matchesCurrentFilters(dynamic conversation) {
+    if (_selectedStatus != 'all' && _selectedStatus.isNotEmpty) {
+      final status = (conversation['status'] ?? 'open').toString().toLowerCase();
+      if (_selectedStatus == 'open' && status != 'open') return false;
+      if (_selectedStatus != 'open' && status != _selectedStatus) return false;
+    }
+    if (_selectedTab == 'all') return true;
+    if (_selectedTab == 'unread') {
+      final u = int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0;
+      return u > 0;
+    }
+    if (_selectedTab == 'active') {
+      final lastIncoming = conversation['lastIncomingMessageAt'];
+      if (lastIncoming == null) return false;
+      final dt = DateTime.tryParse(lastIncoming.toString());
+      if (dt == null) return false;
+      return DateTime.now().toUtc().difference(dt.toUtc()).inHours < 24;
+    }
+    final contact = conversation['contactId'] ?? {};
+    final tags = List<dynamic>.from(contact['tags'] ?? []);
+    final bool isDealer = tags.any((t) =>
+        t.toString().toLowerCase().contains('dealer') ||
+        t.toString().toLowerCase().contains('retailer')) ||
+        conversation['contactType'] == 'dealer';
+
+    if (_selectedTab == 'dealers') return isDealer;
+    if (_selectedTab == 'leads') return !isDealer;
+    return true;
+  }
+
+  String _normalizePhone(String phone) {
+    String digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('91') && digits.length == 12) {
+      digits = digits.substring(2);
+    } else if (digits.length == 8 && RegExp(r'^[6-9]').hasMatch(digits)) {
+      digits = '91$digits';
+    }
+    return digits;
+  }
+
   @override
   void initState() {
     super.initState();
+    TelephonyAudioService().requestNotificationPermission();
     _fetchConversations();
     _fetchSalesAgents();
     _fetchTemplates();
@@ -187,9 +244,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         final phone = args['phone'] as String?;
         final name = args['name'] as String?;
         if (phone != null && phone.isNotEmpty) {
-          final cleanPhone = phone
-              .replaceAll(RegExp(r'[^0-9]'), '')
-              .replaceFirst(RegExp(r'^91'), '');
+          final cleanPhone = _normalizePhone(phone);
           _searchController.text = cleanPhone;
           _startOrGetConversation(cleanPhone, name: name);
         }
@@ -213,7 +268,74 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     _noteController.dispose();
     _messageSearchController.dispose();
     _messageScrollController.dispose();
+    _sidebarFilterScrollController.dispose();
     super.dispose();
+  }
+
+  void _sortMessages() {
+    _messages.sort((a, b) {
+      final aTime = DateTime.tryParse(a['createdAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+      final bTime = DateTime.tryParse(b['createdAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+      if (aTime != bTime) return aTime.compareTo(bTime);
+      return (a['_id']?.toString() ?? '').compareTo(b['_id']?.toString() ?? '');
+    });
+
+    final deduped = <dynamic>[];
+    for (final msg in _messages) {
+      final id = (msg['_id'] ?? '').toString();
+      final wabaId = (msg['myoperatorMessageId'] ?? msg['wabaMessageId'] ?? '').toString();
+      final isTempMsg = id.startsWith('temp_') || id.startsWith('local_') || id.isEmpty;
+
+      final existingIdx = deduped.indexWhere((ex) {
+        final exId = (ex['_id'] ?? '').toString();
+        final exWabaId = (ex['myoperatorMessageId'] ?? ex['wabaMessageId'] ?? '').toString();
+        final isExTemp = exId.startsWith('temp_') || exId.startsWith('local_') || exId.isEmpty;
+
+        // 1. Exact ID match on database _id
+        if (id.isNotEmpty && exId.isNotEmpty && id == exId) return true;
+
+        // 2. Exact ID match on provider message ID
+        if (wabaId.isNotEmpty && exWabaId.isNotEmpty && wabaId == exWabaId) return true;
+
+        // 3. Only reconcile content/timestamp if one is a temporary optimistic message
+        if (isTempMsg || isExTemp) {
+          final content = (msg['content'] ?? '').toString().trim();
+          final dir = (msg['direction'] ?? '').toString();
+          final ts = DateTime.tryParse(msg['createdAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+
+          final exContent = (ex['content'] ?? '').toString().trim();
+          final exDir = (ex['direction'] ?? '').toString();
+          final exTs = DateTime.tryParse(ex['createdAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+
+          if (dir == exDir && content == exContent && (ts - exTs).abs() < 15000) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (existingIdx == -1) {
+        deduped.add(msg);
+      } else {
+        final ex = deduped[existingIdx];
+        if (msg['sentBy'] != null && ex['sentBy'] == null) {
+          deduped[existingIdx] = msg;
+        } else if (msg['status'] == 'read' && ex['status'] != 'read') {
+          ex['status'] = 'read';
+        } else if (ex['_id']?.toString().startsWith('temp_') == true && !id.startsWith('temp_')) {
+          deduped[existingIdx] = msg;
+        }
+      }
+    }
+    _messages = deduped;
+  }
+
+  void _sortConversations() {
+    _conversations.sort((a, b) {
+      final aTime = DateTime.tryParse(a['lastMessageAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+      final bTime = DateTime.tryParse(b['lastMessageAt']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
+      return bTime.compareTo(aTime);
+    });
   }
 
   // Set up WebSocket to update interface in real-time
@@ -229,9 +351,33 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
         if (newConversation == null || newConversation['_id'] == null) return;
 
+        // Deduplicate WebSocket frames to prevent double-counting
+        final String newMsgId = (newMessage?['_id']?.toString().isNotEmpty == true
+            ? newMessage!['_id'].toString()
+            : (newMessage?['myoperatorMessageId']?.toString().isNotEmpty == true
+                ? newMessage!['myoperatorMessageId'].toString()
+                : (newMessage?['wabaMessageId']?.toString() ?? ''))).trim();
+        if (newMsgId.isNotEmpty) {
+          if (_seenWsMessageIds.contains(newMsgId)) {
+            return;
+          }
+          _seenWsMessageIds.add(newMsgId);
+          if (_seenWsMessageIds.length > 500) {
+            _seenWsMessageIds.remove(_seenWsMessageIds.first);
+          }
+        }
+
         final isIncoming = (newMessage?['direction'] ?? '') == 'incoming';
         if (isIncoming) {
           TelephonyAudioService().playIncomingMessageTone();
+        }
+
+        final contact = newConversation['contactId'] ?? {};
+        final senderName = (contact['name'] ?? contact['phone'] ?? 'WhatsApp User').toString();
+        final textSnippet = (newMessage?['content'] ?? (newMessage?['mediaUrl'] != null ? '[Media Attachment]' : 'New Message')).toString();
+
+        if (isIncoming) {
+          TelephonyAudioService().showDesktopNotification('💬 $senderName', textSnippet);
         }
 
         setState(() {
@@ -243,85 +389,107 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
           final bool isCurrentlySelected = _selectedConversation != null && _selectedConversation['_id'].toString() == convId;
 
+          // Compare timestamps to preserve truly latest message & preview
+          final DateTime? existingTs = index != -1 ? DateTime.tryParse(_conversations[index]['lastMessageAt']?.toString() ?? '') : null;
+          final DateTime? incomingTs = DateTime.tryParse(newConversation['lastMessageAt']?.toString() ?? '');
+          final DateTime? msgTs = DateTime.tryParse(newMessage?['createdAt']?.toString() ?? '');
+
+          final DateTime effectiveMsgTs = msgTs ?? DateTime.now();
+          final bool isMsgNewest = (incomingTs == null || !effectiveMsgTs.isBefore(incomingTs)) &&
+                                   (existingTs == null || !effectiveMsgTs.isBefore(existingTs));
+
+          if (isMsgNewest && newMessage != null) {
+            newConversation['lastMessageAt'] = effectiveMsgTs.toIso8601String();
+            newConversation['lastMessage'] = {
+              'type': newMessage['type'] ?? 'text',
+              'content': newMessage['content'] ?? '',
+              'mediaUrl': newMessage['mediaUrl'],
+            };
+          } else if (existingTs != null && incomingTs != null && existingTs.isAfter(incomingTs)) {
+            newConversation['lastMessageAt'] = _conversations[index]['lastMessageAt'];
+            newConversation['lastMessage'] = _conversations[index]['lastMessage'];
+          } else {
+            newConversation['lastMessageAt'] ??= DateTime.now().toIso8601String();
+            if (newConversation['lastMessage'] == null && newMessage != null) {
+              newConversation['lastMessage'] = {
+                'type': newMessage['type'] ?? 'text',
+                'content': newMessage['content'] ?? '',
+                'mediaUrl': newMessage['mediaUrl'],
+              };
+            }
+          }
+
           if (!isCurrentlySelected && isIncoming) {
             final int prevUnread = (index != -1
-                ? (_conversations[index]['unreadCount'] is int
-                    ? _conversations[index]['unreadCount']
-                    : int.tryParse(_conversations[index]['unreadCount']?.toString() ?? '0') ?? 0)
+                ? (int.tryParse(_conversations[index]['unreadCount']?.toString() ?? '0') ?? 0)
                 : 0);
-            newConversation['unreadCount'] = prevUnread + 1;
-            if (prevUnread == 0) {
-              _totalUnreadCount = _totalUnreadCount + 1;
-            }
+            final int backendUnread = int.tryParse(newConversation['unreadCount']?.toString() ?? '0') ?? 0;
+            final int nextUnread = backendUnread > prevUnread ? backendUnread : (prevUnread + 1);
+            newConversation['unreadCount'] = nextUnread;
           } else if (isCurrentlySelected) {
             newConversation['unreadCount'] = 0;
             // Instantly clear unread count on backend DB when viewing active thread
-            ApiClient().put('/api/conversations/$convId/read', {}).catchError((_) => null);
+            ApiClient().put('/conversations/$convId/read', {}).catchError((e) {
+              debugPrint('[WhatsApp CRM] Error marking conversation as read: $e');
+              return http.Response('{}', 500);
+            });
           }
 
           if (index != -1) {
-            _conversations[index] = newConversation;
-          } else {
+            if (_matchesCurrentFilters(newConversation)) {
+              _conversations[index] = newConversation;
+            } else {
+              _conversations.removeAt(index);
+            }
+          } else if (_matchesCurrentFilters(newConversation)) {
+            _totalAllCount = _totalAllCount + 1;
             _conversations.insert(0, newConversation);
           }
-
-          // Sort conversations by last message timestamp with safety
-          _conversations.sort((a, b) {
-            final dateA = a['lastMessageAt'] != null
-                ? DateTime.tryParse(a['lastMessageAt'].toString())
-                : null;
-            final dateB = b['lastMessageAt'] != null
-                ? DateTime.tryParse(b['lastMessageAt'].toString())
-                : null;
-            if (dateA == null) return 1;
-            if (dateB == null) return -1;
-            return dateB.compareTo(dateA);
-          });
+          _recalculateUnreadCount();
+          _sortConversations();
 
           // 2. If the new message is in the currently selected conversation, append it
-          if (_selectedConversation != null &&
-              _selectedConversation['_id'].toString() == convId) {
+          if (isCurrentlySelected && newMessage != null) {
             final String msgId = newMessage['_id']?.toString() ?? '';
-            final hasMsg = _messages.any((m) => m['_id'].toString() == msgId);
-            if (!hasMsg) {
-              _messages.add(newMessage);
-              _scrollToBottom();
-            }
-          } else if (isIncoming && mounted) {
-            // Show toast if from another contact
-            final contact = newConversation['contactId'] ?? {};
-            final senderName = contact['name'] ?? contact['phone'] ?? 'Lead';
-            final textSnippet = newMessage['content'] ?? (newMessage['mediaUrl'] != null ? '[Media Attachment]' : 'New Message');
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '💬 $senderName: $textSnippet',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-                action: SnackBarAction(
-                  label: 'Open',
-                  textColor: Colors.white,
-                  onPressed: () => _selectConversation(newConversation),
-                ),
-                backgroundColor: const Color(0xFF008069),
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+            final String wabaId = newMessage['myoperatorMessageId']?.toString() ?? '';
+            final idx = _messages.indexWhere((m) =>
+              (msgId.isNotEmpty && m['_id']?.toString() == msgId) ||
+              (wabaId.isNotEmpty && m['myoperatorMessageId']?.toString() == wabaId)
             );
+            if (idx == -1) {
+              _messages.add(newMessage);
+            } else {
+              _messages[idx] = newMessage;
+            }
+            _sortMessages();
+            _scrollToBottom();
           }
         });
+      } else if (type == 'CONVERSATION_READ' && data != null) {
+        final convId = data['conversationId']?.toString();
+        if (convId != null) {
+          setState(() {
+            final idx = _conversations.indexWhere((c) => c['_id']?.toString() == convId);
+            if (idx != -1) {
+              _conversations[idx]['unreadCount'] = 0;
+            }
+            if (_selectedConversation?['_id']?.toString() == convId) {
+              _selectedConversation!['unreadCount'] = 0;
+            }
+            _recalculateUnreadCount();
+          });
+        }
+      } else if (type == 'CONVERSATION_UNREAD' && data != null) {
+        final convId = data['conversationId']?.toString();
+        if (convId != null) {
+          setState(() {
+            final idx = _conversations.indexWhere((c) => c['_id']?.toString() == convId);
+            if (idx != -1) {
+              _conversations[idx]['unreadCount'] = 1;
+            }
+            _recalculateUnreadCount();
+          });
+        }
       } else if (type == 'MESSAGE_STATUS_UPDATED') {
         final conversationId = data['conversationId'];
         final messageId = data['messageId'];
@@ -460,10 +628,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               if (leadsC > 0 || search.isEmpty) _totalLeadsCount = leadsC;
               if (dealersC > 0 || search.isEmpty) _totalDealersCount = dealersC;
               if (activeC > 0 || search.isEmpty) _totalActiveCount = activeC;
-              if (unreadC > 0 || search.isEmpty) _totalUnreadCount = unreadC;
+              if (search.isEmpty) _totalUnreadCount = unreadC;
             } else if (page == 1 && search.isEmpty) {
               _totalAllCount = _conversations.length;
             }
+
+            if (_selectedConversation != null) {
+              final selId = _selectedConversation!['_id']?.toString();
+              final idx = _conversations.indexWhere((c) => c['_id']?.toString() == selId);
+              if (idx != -1) {
+                _conversations[idx]['unreadCount'] = 0;
+              }
+            }
+            _recalculateUnreadCount();
           });
 
           // Auto-select first conversation if search returned elements and nothing is selected
@@ -490,6 +667,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       final res = await ApiClient().post('/conversations/sync-roster', {});
       if (res.statusCode == 200) {
         await _fetchConversations();
+        if (_selectedConversation?['_id'] != null) {
+          await _fetchMessages(_selectedConversation!['_id'].toString());
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -600,7 +780,43 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               _messages = List<dynamic>.from(body['data'] ?? []);
             } else {
               final newMessages = List<dynamic>.from(body['data'] ?? []);
-              _messages.insertAll(0, newMessages);
+              for (final m in newMessages) {
+                final id = m['_id']?.toString();
+                if (!_messages.any((ex) => ex['_id']?.toString() == id)) {
+                  _messages.add(m);
+                }
+              }
+              // Viewport Virtualization: Keep active in-memory list bounded to latest 100 messages
+              if (_messages.length > 100) {
+                _messages = _messages.sublist(_messages.length - 100);
+              }
+            }
+            _sortMessages();
+
+            // Synchronize conversation tile preview and timestamp with the true latest message
+            if (_messages.isNotEmpty) {
+              final latest = _messages.last;
+              final convIdx = _conversations.indexWhere((c) => c['_id']?.toString() == conversationId);
+              if (convIdx != -1) {
+                _conversations[convIdx]['unreadCount'] = 0;
+                _conversations[convIdx]['lastMessage'] = {
+                  'type': latest['type'] ?? 'text',
+                  'content': latest['content'] ?? '',
+                  'mediaUrl': latest['mediaUrl'],
+                };
+                _conversations[convIdx]['lastMessageAt'] = latest['createdAt'];
+              }
+              if (_selectedConversation != null && _selectedConversation!['_id']?.toString() == conversationId) {
+                _selectedConversation!['unreadCount'] = 0;
+                _selectedConversation!['lastMessage'] = {
+                  'type': latest['type'] ?? 'text',
+                  'content': latest['content'] ?? '',
+                  'mediaUrl': latest['mediaUrl'],
+                };
+                _selectedConversation!['lastMessageAt'] = latest['createdAt'];
+              }
+              _recalculateUnreadCount();
+              _sortConversations();
             }
           });
           if (page == 1) {
@@ -632,8 +848,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     final replyPayload = _replyingToMessage != null ? {
       'messageId': (_replyingToMessage['_id'] ?? _replyingToMessage['myoperatorMessageId'])?.toString(),
+      'myoperatorMessageId': _replyingToMessage['myoperatorMessageId']?.toString(),
       'senderName': _replyingToMessage['direction'] == 'outgoing' ? 'You' : (_selectedConversation?['contactId']?['name'] ?? 'Lead').toString(),
       'content': _replyingToMessage['content']?.toString() ?? '',
+      'mediaUrl': _replyingToMessage['mediaUrl']?.toString(),
     } : null;
 
     setState(() => _replyingToMessage = null);
@@ -649,20 +867,55 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
+          TelephonyAudioService().playOutgoingMessageSentTone();
+          final sentMsg = body['data'];
           setState(() {
-            _messages.add(body['data']);
+            final String msgId = sentMsg['_id']?.toString() ?? '';
+            final String wabaId = sentMsg['myoperatorMessageId']?.toString() ?? '';
+            final idx = _messages.indexWhere((m) =>
+              (msgId.isNotEmpty && m['_id']?.toString() == msgId) ||
+              (wabaId.isNotEmpty && m['myoperatorMessageId']?.toString() == wabaId)
+            );
+            if (idx == -1) {
+              _messages.add(sentMsg);
+            } else {
+              _messages[idx] = sentMsg;
+            }
+            _sortMessages();
             _scrollToBottom();
+
+            final currentId = _selectedConversation?['_id']?.toString();
+            if (currentId != null) {
+              final nowIso = DateTime.now().toIso8601String();
+              _selectedConversation['lastMessage'] = {
+                'type': 'text',
+                'content': content,
+              };
+              _selectedConversation['lastMessageAt'] = nowIso;
+              final idx = _conversations.indexWhere((c) => c['_id']?.toString() == currentId);
+              if (idx != -1) {
+                _conversations.removeAt(idx);
+              }
+              _conversations.insert(0, _selectedConversation);
+            }
           });
         } else {
+          _messageController.text = content;
           _showErrorSnackBar(body['message'] ?? 'Failed to send message');
         }
       } else {
-        final body = jsonDecode(res.body);
-        _showErrorSnackBar(
-          body['message'] ?? 'Failed to send message (Server Error)',
-        );
+        _messageController.text = content;
+        try {
+          final body = jsonDecode(res.body);
+          _showErrorSnackBar(
+            body['message'] ?? 'Failed to send message (Server Error ${res.statusCode})',
+          );
+        } catch (_) {
+          _showErrorSnackBar('Failed to send message (Server Error ${res.statusCode})');
+        }
       }
     } catch (e) {
+      _messageController.text = content;
       debugPrint('[WhatsApp CRM] Error sending message: $e');
       _showErrorSnackBar('Network error: Could not send message');
     }
@@ -760,46 +1013,59 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
 
   void _selectConversation(dynamic conversation) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     if (_isCurrentlyTypingLocally && _selectedConversation?['_id'] != null) {
       _isCurrentlyTypingLocally = false;
       _myTypingDebounceTimer?.cancel();
       WebSocketService().sendTypingStop(_selectedConversation!['_id'].toString());
     }
+    final convId = conversation['_id']?.toString();
     setState(() {
       _selectedConversation = conversation;
       _messages = [];
       _replyingToMessage = null;
-      final int prevUnread = (conversation['unreadCount'] is int
-          ? conversation['unreadCount']
-          : int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0);
-      if (prevUnread > 0) {
-        _totalUnreadCount = (_totalUnreadCount - 1).clamp(0, 999999);
-      }
       conversation['unreadCount'] = 0;
+      if (convId != null) {
+        final idx = _conversations.indexWhere((c) => c['_id']?.toString() == convId);
+        if (idx != -1) {
+          _conversations[idx]['unreadCount'] = 0;
+        }
+      }
+      _recalculateUnreadCount();
     });
+    if (convId != null) {
+      ApiClient().put('/conversations/$convId/read', {}).catchError((e) {
+        debugPrint('[WhatsApp CRM] Error marking conversation as read on select: $e');
+        return http.Response('{}', 500);
+      });
+    }
     // Fetch chat history
-    _fetchMessages(conversation['_id']);
+    _fetchMessages(conversation['_id']?.toString() ?? '');
   }
 
   Future<void> _markConversationAsUnread(dynamic conversation) async {
     final convId = conversation['_id']?.toString();
     if (convId == null) return;
     setState(() {
-      final int prevUnread = (conversation['unreadCount'] is int
-          ? conversation['unreadCount']
-          : int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0);
-      if (prevUnread == 0) {
-        _totalUnreadCount += 1;
-      }
       conversation['unreadCount'] = 1;
+      final idx = _conversations.indexWhere((c) => c['_id']?.toString() == convId);
+      if (idx != -1) {
+        _conversations[idx]['unreadCount'] = 1;
+      }
       if (_selectedConversation?['_id']?.toString() == convId) {
         _selectedConversation = null;
         _messages = [];
       }
+      _recalculateUnreadCount();
     });
     try {
-      await ApiClient().put('/api/conversations/$convId/unread', {});
-    } catch (_) {}
+      final res = await ApiClient().put('/conversations/$convId/unread', {});
+      if (res.statusCode != 200) {
+        debugPrint('[WhatsApp CRM] Mark as unread returned ${res.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[WhatsApp CRM] Error marking conversation as unread: $e');
+    }
   }
 
   void _scrollToBottom() {
@@ -1123,17 +1389,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     final conv = _conversations[index];
                     final contact = conv['contactId'] ?? {};
                     final lastMsg = conv['lastMessage'] ?? {};
+                    final convIdStr = (conv['_id'] ?? '').toString();
                     final isSelected =
                         _selectedConversation != null &&
-                        _selectedConversation['_id'] == conv['_id'];
-                    final unreadCount = conv['unreadCount'] ?? 0;
+                        _selectedConversation!['_id']?.toString() == convIdStr;
+                    final int rawUnread = conv['unreadCount'] is int
+                        ? conv['unreadCount'] as int
+                        : (int.tryParse(conv['unreadCount']?.toString() ?? '0') ?? 0);
+                    final int unreadCount = isSelected ? 0 : rawUnread;
 
                     String formattedTime = '';
                     if (conv['lastMessageAt'] != null) {
-                      final date = DateTime.parse(
-                        conv['lastMessageAt'],
-                      ).toLocal();
-                      formattedTime = DateFormat('hh:mm a').format(date);
+                      try {
+                        final date = DateTime.parse(
+                          conv['lastMessageAt'].toString(),
+                        ).toLocal();
+                        formattedTime = DateFormat('hh:mm a').format(date);
+                      } catch (_) {}
                     }
 
                     final String name = (contact['name'] ?? 'WhatsApp User').toString();
@@ -1305,7 +1577,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           style: GoogleFonts.outfit(
                                             fontSize: 10,
                                             color: unreadCount > 0
-                                                ? const Color(0xFF25D366)
+                                                ? const Color(0xFF00A884)
                                                 : const Color(0xFF667781),
                                             fontWeight: unreadCount > 0
                                                 ? FontWeight.bold
@@ -1369,7 +1641,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                             ),
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFF25D366),
+                                              color: const Color(0xFF00A884),
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
@@ -1635,7 +1907,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             ),
                             const SizedBox(height: 1),
                             Text(
-                              '+${contact['phone'] ?? ''}',
+                              '+91 ${_normalizePhone(contact['phone']?.toString() ?? '')}',
                               style: GoogleFonts.outfit(
                                 fontSize: 11.5,
                                 color: const Color(0xFF667781),
@@ -2800,71 +3072,30 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   ],
                 ),
                 const SizedBox(width: 6),
-                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media Explorer)
+                // Plus/Attachment Icon (WhatsApp Paperclip / Attach Media)
                 PopupMenuButton<String>(
                   icon: const Icon(
                     Icons.attach_file_rounded,
                     color: Color(0xFF64748B),
                     size: 22,
                   ),
-                  tooltip: 'Attach Media & Explorer',
+                  tooltip: 'Attach Media',
                   elevation: 8,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   color: Colors.white,
                   surfaceTintColor: Colors.white,
                   onSelected: (value) {
-                    if (_selectedConversation == null) return;
-                    final convId = _selectedConversation['_id'].toString();
-
-                    if (value == 'Image' || value == 'Document' || value == 'Catalog' || value == 'Collateral' || value == 'Explorer') {
-                      MediaExplorerDialog.show(
-                        context,
-                        conversationId: convId,
-                        initialMediaType: value == 'Explorer' ? 'Catalog' : value,
-                        onMediaSent: () => _fetchMessages(convId),
-                      );
+                    if (value == 'Image' || value == 'Document') {
+                      _showAttachmentDialog(context, value);
                     } else if (value == 'Canned') {
                       _showCannedResponsesDialog(context);
                     } else if (value == 'Template') {
-                      _showSendTemplateDialog(context, convId);
+                      if (_selectedConversation != null) {
+                        _showSendTemplateDialog(context, _selectedConversation['_id']);
+                      }
                     }
                   },
                   itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'Catalog',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFDCFCE7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.storefront_rounded,
-                              color: Color(0xFF16A34A),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Product Catalog Explorer',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'Search & send products directly (Interakt style)',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'Image',
                       child: Row(
@@ -2891,7 +3122,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                 style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
                               ),
                               Text(
-                                'Upload from device or public URL',
+                                'PNG, JPG, WebP upload or URL',
                                 style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
                               ),
                             ],
@@ -2922,46 +3153,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Documents & PDF',
+                                'Document & Catalogs',
                                 style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
                               ),
                               Text(
                                 'PDF, DOCX, XLS, CSV files',
-                                style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
-                    PopupMenuItem(
-                      value: 'Collateral',
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFEF3C7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.collections_bookmark_rounded,
-                              color: Color(0xFFD97706),
-                              size: 17,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Company Collateral & QR',
-                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                              ),
-                              Text(
-                                'Catalogues, payment QRs & certifications',
                                 style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
                               ),
                             ],
@@ -3089,17 +3285,18 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   }
 
   Widget _buildMessageStatusIcon(String status) {
-    if (status == 'failed') {
+    final s = status.toLowerCase().trim();
+    if (s == 'failed' || s == 'undelivered' || s == 'error') {
       return const Icon(Icons.error_outline, size: 12, color: Colors.redAccent);
     }
-    if (status == 'sent') {
-      return const Icon(Icons.check, size: 12, color: Color(0xFF8696A0));
+    if (s == 'read' || s == 'seen') {
+      return const Icon(Icons.done_all, size: 12, color: Color(0xFF53BDEB)); // WhatsApp Blue Tick
     }
-    if (status == 'delivered') {
-      return const Icon(Icons.done_all, size: 12, color: Color(0xFF8696A0));
+    if (s == 'delivered') {
+      return const Icon(Icons.done_all, size: 12, color: Color(0xFF8696A0)); // WhatsApp Double Grey Tick
     }
-    if (status == 'read') {
-      return const Icon(Icons.done_all, size: 12, color: Color(0xFF53BDEB));
+    if (s == 'sent') {
+      return const Icon(Icons.check, size: 12, color: Color(0xFF8696A0)); // WhatsApp Single Grey Tick
     }
     return const Icon(Icons.check, size: 12, color: Color(0xFF8696A0));
   }
@@ -3393,954 +3590,28 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     final contact = _selectedConversation?['contactId'] ?? {};
     final customerName = (contact['name'] ?? 'Customer').toString();
 
-    // Find initial selected template - default to initialTemplateName or first approved template if available
-    Map<String, dynamic>? selectedTemplate;
-    if (_approvedTemplates.isNotEmpty) {
-      if (initialTemplateName != null && initialTemplateName.isNotEmpty) {
-        selectedTemplate = _approvedTemplates.firstWhere(
-          (t) => (t['name'] ?? t['elementName'] ?? '').toString() == initialTemplateName,
-          orElse: () => _approvedTemplates.first as Map<String, dynamic>,
-        ) as Map<String, dynamic>?;
-      } else {
-        selectedTemplate = _approvedTemplates.firstWhere(
-          (t) => (t['status'] ?? 'APPROVED').toString().toUpperCase() == 'APPROVED',
-          orElse: () => _approvedTemplates.first as Map<String, dynamic>,
-        ) as Map<String, dynamic>?;
-      }
-    }
-
-    final TextEditingController mediaUrlController = TextEditingController();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        Map<String, dynamic>? currentTpl = selectedTemplate;
-        // Keep controllers for dynamic variables
-        Map<int, TextEditingController> variableControllers = {};
-
-        void initVariableControllers(Map<String, dynamic>? tpl) {
-          variableControllers.clear();
-          if (tpl == null) return;
-          final bodyText = (tpl['body'] ?? tpl['data']?['body'] ?? '').toString();
-          final matches = RegExp(r'\{\{(\d+)\}\}').allMatches(bodyText);
-          final Set<int> varIndices = {};
-          for (final m in matches) {
-            final idx = int.tryParse(m.group(1) ?? '1') ?? 1;
-            varIndices.add(idx);
-          }
-          final sorted = varIndices.toList()..sort();
-          for (final idx in sorted) {
-            if (idx == 1) {
-              variableControllers[idx] = TextEditingController(text: initialParam ?? customerName);
-            } else {
-              variableControllers[idx] = TextEditingController();
-            }
-          }
-        }
-
-        initVariableControllers(currentTpl);
-
-        return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
-            final bool hasTemplates = _approvedTemplates.isNotEmpty;
-            final tplName = (currentTpl?['name'] ?? currentTpl?['elementName'] ?? '').toString();
-            final tplBody = (currentTpl?['body'] ?? currentTpl?['data']?['body'] ?? '').toString();
-            final tplCategory = (currentTpl?['category'] ?? 'UTILITY').toString();
-            final tplLanguage = (currentTpl?['language'] ?? currentTpl?['languageCode'] ?? 'en').toString();
-            final tplFooter = (currentTpl?['footer'] ?? '').toString();
-            final tplHeader = (currentTpl?['headerText'] ?? '').toString();
-            final headerType = (currentTpl?['headerType'] ?? 'NONE').toString().toUpperCase();
-            final tplStatus = (currentTpl?['status'] ?? 'APPROVED').toString().toUpperCase();
-            final bool isApproved = tplStatus == 'APPROVED';
-            final bool isRejected = tplStatus.contains('REJECT') || tplStatus.contains('FAIL');
-            final bool isPending = !isApproved && !isRejected;
-
-            return Dialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Container(
-                width: 540,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF008069).withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.quickreply_rounded,
-                                color: Color(0xFF008069),
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Send WhatsApp Template',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: const Color(0xFF111B21),
-                              ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                          onPressed: () => Navigator.pop(dialogCtx),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Choose an official Meta-approved template to message outside the 24-hour window.',
-                      style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B)),
-                    ),
-                    const SizedBox(height: 18),
-
-                    if (!hasTemplates) ...[
-                      // Empty state
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.assignment_late_outlined, size: 44, color: Color(0xFF94A3B8)),
-                            const SizedBox(height: 10),
-                            Text(
-                              'No Templates in Workspace',
-                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14.5, color: const Color(0xFF1E293B)),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Sync approved templates from your MyOperator dashboard in Templates Manager.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF008069),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              icon: const Icon(Icons.add_rounded, size: 16),
-                              label: Text('Open Templates Manager', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                Navigator.pop(dialogCtx);
-                                _showTemplatesManagerDialog(context);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ] else ...[
-                      // Template Picker Dropdown Header
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Select WhatsApp Template:', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(6),
-                            onTap: () {
-                              Navigator.pop(dialogCtx);
-                              _showTemplatesManagerDialog(context);
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.settings_outlined, size: 13, color: Color(0xFF64748B)),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'Manage',
-                                    style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: tplName.isNotEmpty ? tplName : null,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF008069), width: 1.6)),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        items: _approvedTemplates.map<DropdownMenuItem<String>>((t) {
-                          final name = (t['name'] ?? t['elementName'] ?? '').toString();
-                          final cat = (t['category'] ?? 'UTILITY').toString();
-                          final l = (t['language'] ?? t['languageCode'] ?? 'en').toString();
-                          final st = (t['status'] ?? 'APPROVED').toString().toUpperCase();
-                          final bool itemAppr = st == 'APPROVED';
-                          final bool itemRej = st.contains('REJECT') || st.contains('FAIL');
-
-                          Color badgeBg = const Color(0xFFE8F5E9);
-                          Color badgeText = const Color(0xFF2E7D32);
-                          String badgeLabel = '🟢 Approved';
-
-                          if (itemRej) {
-                            badgeBg = const Color(0xFFFFEBEE);
-                            badgeText = const Color(0xFFC62828);
-                            badgeLabel = '❌ Rejected';
-                          } else if (!itemAppr) {
-                            badgeBg = const Color(0xFFFFF8E1);
-                            badgeText = const Color(0xFFF57F17);
-                            badgeLabel = '⏳ In Review';
-                          }
-
-                          return DropdownMenuItem<String>(
-                            value: name,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  itemAppr ? Icons.check_circle_outline_rounded : (itemRej ? Icons.cancel_outlined : Icons.hourglass_top_rounded),
-                                  size: 15,
-                                  color: badgeText,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(4)),
-                                  child: Text(badgeLabel, style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: badgeText)),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(4)),
-                                  child: Text('$cat • $l', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            final matched = _approvedTemplates.firstWhere(
-                              (t) => (t['name'] ?? t['elementName'] ?? '').toString() == val,
-                              orElse: () => _approvedTemplates.first,
-                            );
-                            setDialogState(() {
-                              currentTpl = matched as Map<String, dynamic>?;
-                              initVariableControllers(currentTpl);
-                            });
-                          }
-                        },
-                      ),
-
-                      // Status Warning Notice (for Pending or Rejected templates)
-                      if (!isApproved) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isRejected ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isRejected ? const Color(0xFFFECACA) : const Color(0xFFFDE68A),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isRejected ? Icons.error_outline_rounded : Icons.hourglass_empty_rounded,
-                                size: 18,
-                                color: isRejected ? const Color(0xFFDC2626) : const Color(0xFFD97706),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  isRejected
-                                      ? 'This template was rejected by Meta policy and cannot be sent.'
-                                      : 'Template is marked In Review. If it is already created in MyOperator, click "Activate" to unlock.',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: isRejected ? const Color(0xFF991B1B) : const Color(0xFF92400E),
-                                  ),
-                                ),
-                              ),
-                              if (isPending && currentTpl?['_id'] != null) ...[
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF008069),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  ),
-                                  onPressed: () async {
-                                    final tplId = currentTpl?['_id']?.toString();
-                                    if (tplId != null) {
-                                      final res = await ApiClient().patch('/whatsapp/templates/$tplId', {'status': 'APPROVED'});
-                                      if (res.statusCode == 200) {
-                                        setDialogState(() {
-                                          currentTpl?['status'] = 'APPROVED';
-                                        });
-                                      }
-                                    }
-                                  },
-                                  child: Text('Activate & Send', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-
-                      // Live Message Preview Box
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE7FCE8),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFA7F3D0)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.visibility_rounded, size: 13, color: Color(0xFF047857)),
-                                const SizedBox(width: 4),
-                                Text('Live Template Preview', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF047857))),
-                              ],
-                            ),
-                            if (tplHeader.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Text(tplHeader, style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF111B21))),
-                            ],
-                            const SizedBox(height: 4),
-                            Text(
-                              tplBody.isNotEmpty ? tplBody : '(Empty Body)',
-                              style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF1E293B), height: 1.35),
-                            ),
-                            if (tplFooter.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Text(tplFooter, style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontStyle: FontStyle.italic)),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Dynamic Variable Input Fields
-                      if (variableControllers.isNotEmpty) ...[
-                        Text('Fill Template Variables:', style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF334155))),
-                        const SizedBox(height: 8),
-                        ...variableControllers.entries.map((entry) {
-                          final varIdx = entry.key;
-                          final ctrl = entry.value;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: TextField(
-                              controller: ctrl,
-                              decoration: InputDecoration(
-                                labelText: 'Variable {{$varIdx}} ${varIdx == 1 ? "(Customer Name)" : ""}',
-                                labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF008069)),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF008069), width: 1.5)),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              ),
-                              style: GoogleFonts.outfit(fontSize: 13),
-                            ),
-                          );
-                        }),
-                      ],
-
-                      if (headerType == 'IMAGE' || headerType == 'DOCUMENT') ...[
-                        TextField(
-                          controller: mediaUrlController,
-                          decoration: InputDecoration(
-                            labelText: 'Header Media URL ($headerType)',
-                            hintText: 'https://example.com/catalog.pdf',
-                            labelStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          ),
-                          style: GoogleFonts.outfit(fontSize: 13),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ],
-
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          ),
-                          onPressed: () => Navigator.pop(dialogCtx),
-                          child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-                        ),
-                        if (hasTemplates) ...[
-                          const SizedBox(width: 10),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isApproved ? const Color(0xFF008069) : const Color(0xFF94A3B8),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                            ),
-                            icon: Icon(isApproved ? Icons.send_rounded : Icons.lock_outline_rounded, size: 14),
-                            label: Text(
-                              isApproved
-                                  ? 'Send Template'
-                                  : (isRejected ? 'Template Rejected' : 'Awaiting Meta Approval'),
-                              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: isApproved
-                                ? () async {
-                                    final nameToSend = (currentTpl?['name'] ?? currentTpl?['elementName'] ?? '').toString();
-                                    final langToSend = (currentTpl?['language'] ?? 'en').toString();
-                                    if (nameToSend.isEmpty) return;
-
-                                    final sortedKeys = variableControllers.keys.toList()..sort();
-                                    final List<String> bodyValues = sortedKeys.map((k) => variableControllers[k]!.text.trim()).toList();
-                                    final mediaUrl = mediaUrlController.text.trim();
-
-                                    // Resolve interpolated text
-                                    String resolvedContent = (currentTpl?['body'] ?? currentTpl?['data']?['body'] ?? '').toString();
-                                    for (final entry in variableControllers.entries) {
-                                      resolvedContent = resolvedContent.replaceAll('{{${entry.key}}}', entry.value.text.trim());
-                                    }
-                                    if (resolvedContent.isEmpty) {
-                                      resolvedContent = nameToSend;
-                                    }
-
-                                    Navigator.of(dialogCtx).pop();
-
-                                    try {
-                                      final res = await ApiClient().post('/messages/send', {
-                                        'conversationId': conversationId,
-                                        'type': 'Template',
-                                        'templateName': nameToSend,
-                                        'languageCode': langToSend,
-                                        'bodyValues': bodyValues,
-                                        'content': resolvedContent,
-                                        'mediaUrl': mediaUrl.isNotEmpty ? mediaUrl : null,
-                                      });
-                                      if (res.statusCode == 200) {
-                                        _fetchMessages(conversationId);
-                                        if (mounted) {
-                                          scaffoldMessenger.showSnackBar(
-                                            SnackBar(
-                                              content: Text('Template "$nameToSend" dispatched via MyOperator WABA!'),
-                                              backgroundColor: const Color(0xFF008069),
-                                            ),
-                                          );
-                                        }
-                                      } else {
-                                        final body = jsonDecode(res.body);
-                                        if (mounted) {
-                                          _showErrorSnackBar(body['message'] ?? 'Failed to send template');
-                                        }
-                                      }
-                                    } catch (e) {
-                                      debugPrint('[Template Send] Failed: $e');
-                                      if (mounted) {
-                                        _showErrorSnackBar('Network error: Could not send template ($e)');
-                                      }
-                                    }
-                                  }
-                                : null,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+    WhatsAppTemplatePickerDialog.show(
+      context,
+      conversationId: conversationId,
+      customerName: customerName,
+      approvedTemplates: _approvedTemplates,
+      initialTemplateName: initialTemplateName,
+      initialParam: initialParam,
+      onTemplateSent: () => _fetchMessages(conversationId),
+      onRefreshTemplates: () => _fetchTemplates(forceSync: true),
     );
   }
 
   void _showAttachmentDialog(BuildContext context, String mediaType) {
-    final TextEditingController urlController = TextEditingController();
-    final TextEditingController captionController = TextEditingController();
-    PlatformFile? selectedFile;
-    bool isUploading = false;
-    int selectedTab = 0; // 0 = From Device, 1 = From URL
+    if (_selectedConversation == null) return;
+    final convId = _selectedConversation['_id']?.toString() ?? '';
+    if (convId.isEmpty) return;
 
-    final bool isImage = mediaType.toLowerCase() == 'image';
-    final Color accentColor = isImage ? const Color(0xFF0284C7) : const Color(0xFF6366F1);
-    final Color accentBg = isImage ? const Color(0xFFE0F2FE) : const Color(0xFFEEF2FF);
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (innerCtx, setDialogState) {
-          return Dialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 500,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Dialog Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: accentBg,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isImage ? Icons.image_rounded : Icons.description_rounded,
-                              color: accentColor,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isImage ? 'Send Photo / Image' : 'Send Document / File',
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: const Color(0xFF111B21),
-                                ),
-                              ),
-                              Text(
-                                isImage ? 'Upload PNG, JPG, WebP from device or URL' : 'Upload PDF, DOCX, XLSX catalogs from device or URL',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                        onPressed: isUploading ? null : () => Navigator.pop(dialogCtx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Mode Switcher (Device File vs Public Link)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.all(3),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: isUploading ? null : () => setDialogState(() => selectedTab = 0),
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: selectedTab == 0 ? Colors.white : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: selectedTab == 0
-                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
-                                    : null,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.upload_file_rounded, size: 16, color: selectedTab == 0 ? accentColor : const Color(0xFF64748B)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Browse Device File',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12.5,
-                                      fontWeight: selectedTab == 0 ? FontWeight.bold : FontWeight.w500,
-                                      color: selectedTab == 0 ? accentColor : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: isUploading ? null : () => setDialogState(() => selectedTab = 1),
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: selectedTab == 1 ? Colors.white : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: selectedTab == 1
-                                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
-                                    : null,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.link_rounded, size: 16, color: selectedTab == 1 ? accentColor : const Color(0xFF64748B)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Paste Direct URL',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12.5,
-                                      fontWeight: selectedTab == 1 ? FontWeight.bold : FontWeight.w500,
-                                      color: selectedTab == 1 ? accentColor : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  if (selectedTab == 0) ...[
-                    // File Picker Box
-                    InkWell(
-                      onTap: isUploading
-                          ? null
-                          : () async {
-                              final allowedExts = isImage
-                                  ? ['jpg', 'jpeg', 'png', 'webp']
-                                  : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
-                              final result = await FilePicker.pickFiles(
-                                type: FileType.custom,
-                                allowedExtensions: allowedExts,
-                                withData: true,
-                              );
-                              if (result != null && result.files.isNotEmpty) {
-                                setDialogState(() {
-                                  selectedFile = result.files.first;
-                                });
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: selectedFile != null ? accentBg.withValues(alpha: 0.3) : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: selectedFile != null ? accentColor : const Color(0xFFCBD5E1),
-                            width: selectedFile != null ? 1.5 : 1,
-                          ),
-                        ),
-                        child: selectedFile == null
-                            ? Column(
-                                children: [
-                                  Icon(isImage ? Icons.add_photo_alternate_outlined : Icons.upload_file_outlined, size: 40, color: accentColor),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    isImage ? 'Click to select image (PNG, JPG, WebP)' : 'Click to select document (PDF, DOCX, XLS)',
-                                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Max file size: 15MB • Uploads securely to Krishi Cloud Storage',
-                                    style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                children: [
-                                  if (isImage && selectedFile!.bytes != null)
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.memory(
-                                        selectedFile!.bytes!,
-                                        width: 60,
-                                        height: 60,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  else
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: accentBg,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Icon(
-                                        isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
-                                        color: accentColor,
-                                        size: 28,
-                                      ),
-                                    ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          selectedFile!.name,
-                                          style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Row(
-                                          children: [
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFDCFCE7),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB',
-                                                style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF16A34A), fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'Ready to dispatch',
-                                              style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(Icons.change_circle_outlined, color: accentColor, size: 24),
-                                    tooltip: 'Change File',
-                                    onPressed: isUploading
-                                        ? null
-                                        : () async {
-                                            final allowedExts = isImage
-                                                ? ['jpg', 'jpeg', 'png', 'webp']
-                                                : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'];
-                                            final result = await FilePicker.pickFiles(
-                                              type: FileType.custom,
-                                              allowedExtensions: allowedExts,
-                                              withData: true,
-                                            );
-                                            if (result != null && result.files.isNotEmpty) {
-                                              setDialogState(() {
-                                                selectedFile = result.files.first;
-                                              });
-                                            }
-                                          },
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ] else ...[
-                    // Direct URL input field
-                    TextField(
-                      controller: urlController,
-                      enabled: !isUploading,
-                      decoration: InputDecoration(
-                        labelText: isImage ? 'Image Direct URL' : 'Document Direct URL',
-                        hintText: isImage ? 'https://storage.googleapis.com/.../photo.jpg' : 'https://example.com/catalog.pdf',
-                        labelStyle: GoogleFonts.outfit(color: accentColor, fontSize: 13),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: accentColor, width: 1.5)),
-                        isDense: true,
-                      ),
-                      style: GoogleFonts.outfit(fontSize: 13.5),
-                    ),
-                  ],
-
-                  const SizedBox(height: 14),
-                  // Caption Field
-                  TextField(
-                    controller: captionController,
-                    enabled: !isUploading,
-                    decoration: InputDecoration(
-                      labelText: 'Caption (Optional)',
-                      hintText: isImage ? 'e.g. Here is the requested product photo' : 'e.g. Please review our latest product catalog',
-                      labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      isDense: true,
-                    ),
-                    style: GoogleFonts.outfit(fontSize: 13.5),
-                  ),
-
-                  const SizedBox(height: 22),
-                  // Action buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFFCBD5E1)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        ),
-                        onPressed: isUploading ? null : () => Navigator.pop(dialogCtx),
-                        child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accentColor,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                        ),
-                        onPressed: (isUploading || (selectedTab == 0 && selectedFile == null) || (selectedTab == 1 && urlController.text.trim().isEmpty))
-                            ? null
-                            : () async {
-                                if (_selectedConversation == null) return;
-                                final conversationId = _selectedConversation['_id'];
-                                final caption = captionController.text.trim();
-
-                                setDialogState(() => isUploading = true);
-
-                                try {
-                                  String finalMediaUrl = '';
-
-                                  if (selectedTab == 0 && selectedFile != null) {
-                                    // Upload bytes to Cloud Storage
-                                    final bytes = selectedFile!.bytes;
-                                    if (bytes == null) throw Exception('Unable to read file bytes');
-
-                                    final request = http.MultipartRequest(
-                                      'POST',
-                                      Uri.parse('${ApiClient().baseUrl}/conversations/media/upload'),
-                                    );
-                                    if (ApiClient().accessToken != null) {
-                                      request.headers['Authorization'] = 'Bearer ${ApiClient().accessToken}';
-                                    }
-                                    request.files.add(
-                                      http.MultipartFile.fromBytes(
-                                        'file',
-                                        bytes,
-                                        filename: selectedFile!.name,
-                                      ),
-                                    );
-
-                                    final streamedRes = await request.send();
-                                    final resBody = await streamedRes.stream.bytesToString();
-                                    final decoded = jsonDecode(resBody);
-
-                                    if (streamedRes.statusCode == 200 && decoded['success'] == true) {
-                                      finalMediaUrl = decoded['data']?['mediaUrl'] ?? decoded['mediaUrl'] ?? '';
-                                    } else {
-                                      throw Exception(decoded['message'] ?? 'Failed to upload media');
-                                    }
-                                  } else {
-                                    finalMediaUrl = urlController.text.trim();
-                                  }
-
-                                  if (finalMediaUrl.isEmpty) throw Exception('Media URL could not be generated');
-
-                                  // Send WhatsApp message
-                                  final sendRes = await ApiClient().post('/messages/send', {
-                                    'conversationId': conversationId,
-                                    'type': mediaType,
-                                    'content': caption,
-                                    'mediaUrl': finalMediaUrl,
-                                  });
-
-                                  if (sendRes.statusCode == 200) {
-                                    _fetchMessages(conversationId);
-                                    Navigator.pop(dialogCtx);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('$mediaType dispatched successfully!'),
-                                          backgroundColor: accentColor,
-                                        ),
-                                      );
-                                    }
-                                  } else {
-                                    final body = jsonDecode(sendRes.body);
-                                    throw Exception(body['message'] ?? 'Failed to send $mediaType');
-                                  }
-                                } catch (err) {
-                                  setDialogState(() => isUploading = false);
-                                  _showErrorSnackBar(err.toString().replaceAll('Exception: ', ''));
-                                }
-                              },
-                        child: isUploading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(isImage ? Icons.image_rounded : Icons.send_rounded, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    selectedTab == 0 ? 'Upload & Send' : 'Send Media',
-                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    WhatsAppMediaPickerDialog.show(
+      context,
+      conversationId: convId,
+      mediaType: mediaType,
+      onMediaSent: () => _fetchMessages(convId),
     );
   }
 
@@ -4376,1286 +3647,48 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // ══════════════════════════════════════════════════════════════════════════
 
   void _showCannedResponsesDialog(BuildContext context) {
-    String searchQuery = '';
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final filtered = _cannedResponses.where((c) {
-            final title = (c['title'] ?? '').toString().toLowerCase();
-            final shortcut = (c['shortcut'] ?? '').toString().toLowerCase();
-            final msg = (c['message'] ?? '').toString().toLowerCase();
-            final q = searchQuery.toLowerCase();
-            return title.contains(q) || shortcut.contains(q) || msg.contains(q);
-          }).toList();
-
-          return Dialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 580,
-              height: 600,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFEF3C7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 24),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Quick Canned Replies',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 16.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF111B21),
-                                ),
-                              ),
-                              Text(
-                                'Standardized message scripts • Type / in chat to trigger',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Search & Add Bar
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.centerLeft,
-                          child: TextField(
-                            onChanged: (val) => setDialogState(() => searchQuery = val),
-                            style: GoogleFonts.outfit(fontSize: 13),
-                            decoration: InputDecoration(
-                              hintText: 'Search by shortcut (/bank) or keyword...',
-                              hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
-                              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFFD97706)),
-                              prefixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD97706),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                        label: Text(
-                          'New Canned Reply',
-                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          _showCreateCannedResponseDialog(context, onSaved: () {
-                            setDialogState(() {});
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  const SizedBox(height: 12),
-
-                  // List of canned messages
-                  Expanded(
-                    child: _isLoadingCanned
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFFD97706)))
-                        : filtered.isEmpty
-                            ? Center(
-                                child: Text(
-                                  searchQuery.isEmpty ? 'No canned responses yet. Click "+ New Canned Reply" to add one.' : 'No canned replies match "$searchQuery"',
-                                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
-                            : ListView.separated(
-                                itemCount: filtered.length,
-                                separatorBuilder: (context, idx) => const Divider(height: 12, color: Color(0xFFF1F5F9)),
-                                itemBuilder: (context, idx) {
-                                  final item = filtered[idx];
-                                  final shortcut = item['shortcut'] ?? '';
-                                  final title = item['title'] ?? 'Quick Reply';
-                                  final message = item['message'] ?? '';
-                                  final category = item['category'] ?? 'General';
-                                  final itemId = item['_id']?.toString();
-                                  final bool isGlobal = item['isGlobal'] == true;
-                                  final creator = item['createdBy'] is Map ? item['createdBy'] as Map<String, dynamic> : null;
-                                  final bool isAdminCreator = creator?['role'] == 'admin' || isGlobal;
-                                  String authorTag = isAdminCreator ? '👑 Team Standard' : '👤 Private Reply';
-                                  if (AuthService().currentUserRole == UserRole.admin && !isAdminCreator && creator != null) {
-                                    final aName = '${creator['firstName'] ?? ''} ${creator['lastName'] ?? ''}'.trim();
-                                    authorTag = '👤 ${aName.isNotEmpty ? aName : (creator['email'] ?? 'Agent')}';
-                                  }
-
-                                  return Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFFBEB).withValues(alpha: 0.35),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFFDE68A)),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFFEF3C7),
-                                                    borderRadius: BorderRadius.circular(6),
-                                                    border: Border.all(color: const Color(0xFFFCD34D)),
-                                                  ),
-                                                  child: Text(
-                                                    shortcut,
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: const Color(0xFFB45309),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  title,
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 13.5,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: const Color(0xFF1E293B),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: isAdminCreator ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    border: Border.all(color: isAdminCreator ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
-                                                  ),
-                                                  child: Text(
-                                                    authorTag,
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 10,
-                                                      color: isAdminCreator ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                                                  ),
-                                                  child: Text(
-                                                    category,
-                                                    style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          message,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 12.5,
-                                            color: const Color(0xFF334155),
-                                            height: 1.35,
-                                          ),
-                                          maxLines: 4,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          children: [
-                                            if (itemId != null)
-                                              IconButton(
-                                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-                                                tooltip: 'Delete Canned Reply',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                                onPressed: () async {
-                                                  try {
-                                                    final res = await ApiClient().delete('/canned-responses/$itemId');
-                                                    if (res.statusCode == 200) {
-                                                      _fetchCannedResponses();
-                                                      setDialogState(() {
-                                                        _cannedResponses.removeWhere((c) => c['_id'] == itemId);
-                                                      });
-                                                    }
-                                                  } catch (_) {}
-                                                },
-                                              ),
-                                            const SizedBox(width: 14),
-                                            ElevatedButton.icon(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFFD97706),
-                                                foregroundColor: Colors.white,
-                                                elevation: 0,
-                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                              ),
-                                              icon: const Icon(Icons.bolt_rounded, size: 14),
-                                              label: Text('Insert into Chat', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                                              onPressed: () {
-                                                Navigator.pop(context);
-                                                final processed = _interpolateCannedMessage(message);
-                                                setState(() {
-                                                  _messageController.text = processed;
-                                                  _messageController.selection = TextSelection.fromPosition(
-                                                    TextPosition(offset: _messageController.text.length),
-                                                  );
-                                                });
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                  ),
-                ],
-              ),
-            ),
+    WhatsAppCannedRepliesDialog.show(
+      context,
+      cannedResponses: _cannedResponses,
+      onSelectMessage: (msg) {
+        final processed = _interpolateCannedMessage(msg);
+        setState(() {
+          _messageController.text = processed;
+          _messageController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _messageController.text.length),
           );
-        },
-      ),
+        });
+      },
+      onRefresh: _fetchCannedResponses,
     );
   }
 
   void _showCreateCannedResponseDialog(BuildContext context, {VoidCallback? onSaved}) {
-    final titleController = TextEditingController();
-    final shortcutController = TextEditingController();
-    final messageController = TextEditingController();
-    String category = 'Sales';
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (innerCtx, setDialogState) => Dialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            width: 480,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFEF3C7),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'New Canned Response',
-                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF111B21)),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(innerCtx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: shortcutController,
-                  decoration: InputDecoration(
-                    labelText: 'Shortcut (e.g. /pricing or /bank)',
-                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFFD97706), fontWeight: FontWeight.w600),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFD97706), width: 1.5)),
-                    isDense: true,
-                  ),
-                  style: GoogleFonts.outfit(fontSize: 13.5),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Title / Label (e.g. Bank Account Details)',
-                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    isDense: true,
-                  ),
-                  style: GoogleFonts.outfit(fontSize: 13.5),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: InputDecoration(
-                    labelText: 'Category',
-                    labelStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    isDense: true,
-                  ),
-                  items: ['General', 'Sales', 'Support', 'Logistics', 'Finance']
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c, style: GoogleFonts.outfit(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => category = val);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: messageController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    labelText: 'Message Body (Supports {{name}}, {{agent_name}})',
-                    hintText: 'Type your standardized reply message here...',
-                    labelStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  style: GoogleFonts.outfit(fontSize: 13.5),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () => Navigator.pop(innerCtx),
-                      child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD97706),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        final shortcut = shortcutController.text.trim();
-                        final msg = messageController.text.trim();
-                        if (title.isEmpty || shortcut.isEmpty || msg.isEmpty) return;
-
-                        Navigator.pop(innerCtx);
-                        try {
-                          final res = await ApiClient().post('/canned-responses', {
-                            'title': title,
-                            'shortcut': shortcut,
-                            'message': msg,
-                            'category': category,
-                          });
-                          if (res.statusCode == 200) {
-                            await _fetchCannedResponses();
-                            onSaved?.call();
-                            if (mounted) {
-                              scaffoldMessenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Canned response created successfully!'),
-                                  backgroundColor: Color(0xFFD97706),
-                                ),
-                              );
-                            }
-                          }
-                        } catch (e) {
-                          debugPrint('[Create Canned Response] Error: $e');
-                        }
-                      },
-                      child: Text('Save Canned Reply', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    WhatsAppCannedRepliesDialog.show(
+      context,
+      cannedResponses: _cannedResponses,
+      onSelectMessage: (_) {},
+      onRefresh: () {
+        _fetchCannedResponses();
+        onSaved?.call();
+      },
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // 📋 WHATSAPP TEMPLATES & META APPROVAL MANAGEMENT MODAL
-  // ══════════════════════════════════════════════════════════════════════════
 
   void _showTemplatesManagerDialog(BuildContext context) {
-    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    bool isSyncing = false;
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (innerCtx, setDialogState) {
-          final List<dynamic> filteredTemplates = _approvedTemplates;
-
-          return Dialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 780,
-              height: 680,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF008069).withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.assignment_outlined, color: Color(0xFF008069), size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'WhatsApp Business Templates',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF111B21),
-                                ),
-                              ),
-                              Text(
-                                'Meta approved WhatsApp templates synced from MyOperator',
-                                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                        onPressed: () => Navigator.pop(innerCtx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Filter & Action Bar
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Approved Templates (${_approvedTemplates.length})',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF475569),
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF008069),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        icon: isSyncing
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.sync_rounded, size: 16),
-                        label: Text(
-                          isSyncing ? 'Syncing...' : 'Sync MyOperator',
-                          style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: isSyncing
-                            ? null
-                            : () async {
-                                setDialogState(() => isSyncing = true);
-                                await _fetchTemplates(forceSync: true);
-                                if (context.mounted) {
-                                  setDialogState(() => isSyncing = false);
-                                  scaffoldMessenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Templates synchronized with MyOperator WABA.'),
-                                      backgroundColor: Color(0xFF008069),
-                                    ),
-                                  );
-                                }
-                              },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  const SizedBox(height: 12),
-
-                  // Template Grid / List
-                  Expanded(
-                    child: isSyncing
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
-                        : filteredTemplates.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.description_outlined, size: 44, color: Color(0xFF94A3B8)),
-                                      const SizedBox(height: 10),
-                                      Text(
-                                        'No approved templates found.',
-                                        style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Create approved templates in your MyOperator Dashboard,\nthen click "Sync MyOperator" above to load them here.',
-                                        textAlign: TextAlign.center,
-                                        style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B), height: 1.4),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : ListView.separated(
-                                itemCount: filteredTemplates.length,
-                                separatorBuilder: (context, idx) => const SizedBox(height: 12),
-                                itemBuilder: (context, idx) {
-                                  final t = filteredTemplates[idx];
-                                  final name = (t['name'] ?? t['elementName'] ?? 'template').toString();
-                                  final title = (t['title'] ?? '').toString();
-                                  final category = (t['category'] ?? 'UTILITY').toString();
-                                  final language = (t['language'] ?? 'en').toString();
-                                  final body = (t['body'] ?? t['data']?['body'] ?? (t['components'] is List ? (t['components'] as List).firstWhere((c) => c['type'] == 'BODY', orElse: () => {})['text'] : null) ?? name).toString();
-                                  final status = (t['status'] ?? 'APPROVED').toString().toUpperCase();
-                                  final footer = (t['footer'] ?? '').toString();
-                                  final templateId = t['_id']?.toString();
-
-                                  Color statusColor = const Color(0xFF008069);
-                                  String statusText = '🟢 Approved';
-                                  if (status.contains('PENDING')) {
-                                    statusColor = Colors.orange[800]!;
-                                    statusText = '⏳ In Review (Meta)';
-                                  } else if (status.contains('REJECT')) {
-                                    statusColor = Colors.red[700]!;
-                                    statusText = '❌ Rejected';
-                                  }
-
-                                  return Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF8FAFC),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Wrap(
-                                                crossAxisAlignment: WrapCrossAlignment.center,
-                                                spacing: 8,
-                                                runSpacing: 4,
-                                                children: [
-                                                  Text(
-                                                    title.isNotEmpty ? title : name,
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: const Color(0xFF0F172A),
-                                                    ),
-                                                  ),
-                                                  if (title.isNotEmpty)
-                                                    Text(
-                                                      '($name)',
-                                                      style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
-                                                    ),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0xFFE2E8F0),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      '$category • $language',
-                                                      style: GoogleFonts.outfit(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: statusColor.withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                statusText,
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: statusColor,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          body,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 13,
-                                            color: const Color(0xFF334155),
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                        if (footer.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'Footer: $footer',
-                                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
-                                          ),
-                                        ],
-                                        const SizedBox(height: 10),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          children: [
-                                            if (isAdmin && templateId != null)
-                                              IconButton(
-                                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-                                                tooltip: 'Delete Template',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                                onPressed: () async {
-                                                  final bool? confirm = await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (confirmCtx) => AlertDialog(
-                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                      title: Text('Delete WhatsApp Template?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-                                                      content: Text(
-                                                        'Are you sure you want to delete "$name"? This will remove it from Meta & MyOperator WABA registry.',
-                                                        style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF475569)),
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () => Navigator.pop(confirmCtx, false),
-                                                          child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
-                                                        ),
-                                                        ElevatedButton(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor: const Color(0xFFDC2626),
-                                                            foregroundColor: Colors.white,
-                                                            elevation: 0,
-                                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                          ),
-                                                          onPressed: () => Navigator.pop(confirmCtx, true),
-                                                          child: Text('Delete', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-
-                                                  if (confirm == true) {
-                                                    try {
-                                                      setDialogState(() {
-                                                        _approvedTemplates.removeWhere((tpl) => tpl['_id'] == templateId);
-                                                      });
-                                                      final res = await ApiClient().delete('/whatsapp/templates/$templateId');
-                                                      if (res.statusCode == 200) {
-                                                        if (context.mounted) {
-                                                          scaffoldMessenger.showSnackBar(
-                                                            SnackBar(
-                                                              content: Text('Template "$name" deleted successfully.'),
-                                                              backgroundColor: const Color(0xFF1E293B),
-                                                            ),
-                                                          );
-                                                        }
-                                                      }
-                                                    } catch (e) {
-                                                      debugPrint('[Delete Template] Error: $e');
-                                                    }
-                                                  }
-                                                },
-                                              ),
-                                            if (status.contains('APPROV') && _selectedConversation != null) ...[
-                                              const SizedBox(width: 12),
-                                              ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: const Color(0xFF008069),
-                                                  foregroundColor: Colors.white,
-                                                  elevation: 0,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                                ),
-                                                icon: const Icon(Icons.send_rounded, size: 13),
-                                                label: Text('Send to Contact', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                onPressed: () {
-                                                  Navigator.pop(context);
-                                                  _showSendTemplateDialog(
-                                                    context,
-                                                    _selectedConversation['_id'],
-                                                    initialTemplateName: name,
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    WhatsAppTemplatePickerDialog.showManager(
+      context,
+      approvedTemplates: _approvedTemplates,
+      selectedConversationId: _selectedConversation?['_id']?.toString(),
+      onRefreshTemplates: () => _fetchTemplates(forceSync: true),
     );
   }
 
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // 📞 CUSTOMER TELEPHONY TIMELINE & MYOPERATOR RECORDING VAULT MODAL
-  // ══════════════════════════════════════════════════════════════════════════
   void _showCustomerCallHistoryDrawer(BuildContext context, String rawPhone, String customerName) {
-    final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-    if (cleanPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No phone number available for $customerName', style: GoogleFonts.outfit()),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    List<dynamic> customerCalls = [];
-    bool isLoading = true;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          if (isLoading) {
-            ApiClient().get('/calls/logs?search=$cleanPhone&customerPhone=$cleanPhone&limit=50').then((res) {
-              if (res.statusCode == 200) {
-                final body = jsonDecode(res.body);
-                final List<dynamic> logs = body['data'] is List
-                    ? (body['data'] as List)
-                    : (body['data']?['callLogs'] ?? []);
-                if (context.mounted) {
-                  setDlgState(() {
-                    customerCalls = List<dynamic>.from(logs);
-                    isLoading = false;
-                  });
-                }
-              } else {
-                if (context.mounted) {
-                  setDlgState(() => isLoading = false);
-                }
-              }
-            }).catchError((_) {
-              if (context.mounted) {
-                setDlgState(() => isLoading = false);
-              }
-            });
-          }
-
-          return Dialog(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 620,
-              height: 580,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Header ──
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF008069).withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF008069), size: 18),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    customerName.isNotEmpty ? customerName : 'Customer',
-                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: const Color(0xFF0F172A)),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Text(
-                                      '+91 $cleanPhone',
-                                      style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                'Call History & Recordings Timeline',
-                                style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          if (!isLoading && customerCalls.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              margin: const EdgeInsets.only(right: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFA7F3D0)),
-                              ),
-                              child: Text(
-                                '${customerCalls.length} calls',
-                                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF065F46)),
-                              ),
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  const SizedBox(height: 10),
-
-                  // ── Call Log List ──
-                  Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069), strokeWidth: 2.5))
-                        : customerCalls.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.phone_disabled_rounded, size: 40, color: Colors.grey.shade300),
-                                    const SizedBox(height: 8),
-                                    Text('No call records found for this contact', style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B))),
-                                  ],
-                                ),
-                              )
-                            : ListView.separated(
-                                itemCount: customerCalls.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                                itemBuilder: (ctx, i) {
-                                  final call = customerCalls[i];
-                                  final status = (call['status'] ?? 'initiated').toString().toLowerCase();
-                                  final duration = int.tryParse((call['durationSeconds'] ?? 0).toString()) ?? 0;
-                                  final mins = duration ~/ 60;
-                                  final secs = duration % 60;
-                                  final durText = duration > 0 ? '${mins}m ${secs}s' : '0s';
-                                  final isOutbound = (call['direction'] ?? call['type'] ?? 'outbound').toString().toLowerCase() == 'outbound';
-                                  final bool isSuccessful = status == 'answered' || status == 'completed';
-                                  final bool isMissed = status == 'missed' || status == 'failed' || status == 'no-answer' || status == 'rejected';
-
-                                  final agent = call['agentId'];
-                                  final agentName = agent is Map
-                                      ? '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim()
-                                      : (call['agentName'] ?? 'Agent').toString();
-                                  final rawDate = call['createdAt'];
-                                  final dateText = rawDate != null
-                                      ? DateFormat('dd MMM, hh:mm a').format(DateTime.tryParse(rawDate.toString())?.toLocal() ?? DateTime.now())
-                                      : '';
-                                  final userDisp = (call['userDisposition'] ?? call['disposition'] ?? '').toString().trim();
-                                  final notes = (call['notes'] ?? '').toString().trim();
-                                  final rawRecordingUrl = (call['recordingUrl'] ?? '').toString().trim();
-                                  final hasRecording = rawRecordingUrl.isNotEmpty;
-
-                                  final Color iconBg = isMissed
-                                      ? const Color(0xFFFFF1F2)
-                                      : isOutbound
-                                          ? const Color(0xFFECFDF5)
-                                          : const Color(0xFFEFF6FF);
-                                  final Color iconColor = isMissed
-                                      ? const Color(0xFFE11D48)
-                                      : isOutbound
-                                          ? const Color(0xFF059669)
-                                          : const Color(0xFF2563EB);
-
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // ── Direction / Status Icon ──
-                                        Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: BoxDecoration(
-                                            color: iconBg,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            isMissed
-                                                ? Icons.phone_missed_rounded
-                                                : isOutbound
-                                                    ? Icons.call_made_rounded
-                                                    : Icons.call_received_rounded,
-                                            size: 16,
-                                            color: iconColor,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-
-                                        // ── Call Details ──
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    isOutbound ? 'Outbound' : 'Inbound',
-                                                    style: GoogleFonts.outfit(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 12.5,
-                                                      color: const Color(0xFF1E293B),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: isSuccessful
-                                                          ? const Color(0xFFDCFCE7)
-                                                          : isMissed
-                                                              ? const Color(0xFFFEE2E2)
-                                                              : const Color(0xFFF1F5F9),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      status.toUpperCase(),
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: isSuccessful
-                                                            ? const Color(0xFF15803D)
-                                                            : isMissed
-                                                                ? const Color(0xFFB91C1C)
-                                                                : const Color(0xFF64748B),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const Spacer(),
-                                                  Text(
-                                                    dateText,
-                                                    style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8)),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 3),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    '⏱ $durText',
-                                                    style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  Text(
-                                                    '👤 $agentName',
-                                                    style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
-                                                  ),
-                                                  if (userDisp.isNotEmpty || notes.isNotEmpty) ...[
-                                                    const SizedBox(width: 8),
-                                                    Flexible(
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                        decoration: BoxDecoration(
-                                                          color: const Color(0xFFFFFBEB),
-                                                          borderRadius: BorderRadius.circular(4),
-                                                          border: Border.all(color: const Color(0xFFFDE68A)),
-                                                        ),
-                                                        child: Text(
-                                                          '📝 ${userDisp.isNotEmpty ? userDisp : notes}',
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF92400E), fontWeight: FontWeight.w500),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-
-                                        // ── Action Button ──
-                                        InkWell(
-                                          borderRadius: BorderRadius.circular(6),
-                                          onTap: () async {
-                                            String recordingUrl = rawRecordingUrl;
-                                            final logId = call['_id']?.toString() ?? call['callId']?.toString() ?? '';
-
-                                            if (!recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://') && logId.isNotEmpty) {
-                                              try {
-                                                final res = await ApiClient().get('/calls/recordings/$logId/url');
-                                                if (res.statusCode == 200) {
-                                                  final body = jsonDecode(res.body);
-                                                  if (body['success'] == true && body['data']?['recordingUrl'] != null) {
-                                                    recordingUrl = body['data']['recordingUrl'].toString();
-                                                  }
-                                                }
-                                              } catch (_) {}
-                                            }
-
-                                            String targetUrl = 'https://myoperator.com/app/call-logs';
-                                            if (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://')) {
-                                              targetUrl = recordingUrl;
-                                            } else if (cleanPhone.isNotEmpty) {
-                                              targetUrl = 'https://myoperator.com/app/call-logs?search=$cleanPhone';
-                                            }
-
-                                            final uri = Uri.parse(targetUrl);
-                                            if (await canLaunchUrl(uri)) {
-                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                            }
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                            decoration: BoxDecoration(
-                                              color: hasRecording ? const Color(0xFF008069).withValues(alpha: 0.08) : const Color(0xFFF8FAFC),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(
-                                                color: hasRecording ? const Color(0xFF008069).withValues(alpha: 0.25) : const Color(0xFFE2E8F0),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  hasRecording ? Icons.play_arrow_rounded : Icons.open_in_new_rounded,
-                                                  size: 14,
-                                                  color: hasRecording ? const Color(0xFF008069) : const Color(0xFF64748B),
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  hasRecording ? 'Play' : 'Logs',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: hasRecording ? const Color(0xFF008069) : const Color(0xFF64748B),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    WhatsAppCallHistoryDialog.show(
+      context,
+      rawPhone: rawPhone,
+      customerName: customerName,
     );
   }
-}
-
-/// Custom painter for authentic WhatsApp vector doodle chat wallpaper
-class WhatsAppDoodlePainter extends CustomPainter {
-  final Color color;
-  const WhatsAppDoodlePainter({this.color = const Color(0x0A000000)});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final strokePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final fillPaint = Paint()
-      ..color = color.withValues(alpha: color.a * 0.6)
-      ..style = PaintingStyle.fill;
-
-    const double stepX = 140.0;
-    const double stepY = 140.0;
-
-    for (double y = 20; y < size.height + 40; y += stepY) {
-      for (double x = 20; x < size.width + 40; x += stepX) {
-        final double ox = (y / stepY).floor() % 2 == 1 ? x + 70 : x;
-        _drawDoodleCluster(canvas, ox, y, strokePaint, fillPaint);
-      }
-    }
-  }
-
-  void _drawDoodleCluster(Canvas canvas, double cx, double cy, Paint stroke, Paint fill) {
-    // 1. Speech bubble
-    final bubbleRect = RRect.fromRectAndRadius(Rect.fromLTWH(cx - 30, cy - 25, 22, 15), const Radius.circular(4));
-    canvas.drawRRect(bubbleRect, stroke);
-    final bubbleTail = Path()
-      ..moveTo(cx - 30, cy - 14)
-      ..lineTo(cx - 35, cy - 10)
-      ..lineTo(cx - 27, cy - 10);
-    canvas.drawPath(bubbleTail, stroke);
-
-    // 2. Small Heart
-    final heartPath = Path()
-      ..moveTo(cx + 15, cy - 20)
-      ..cubicTo(cx + 15, cy - 24, cx + 9, cy - 26, cx + 9, cy - 20)
-      ..cubicTo(cx + 9, cy - 15, cx + 15, cy - 11, cx + 15, cy - 9)
-      ..cubicTo(cx + 15, cy - 11, cx + 21, cy - 15, cx + 21, cy - 20)
-      ..cubicTo(cx + 21, cy - 26, cx + 15, cy - 24, cx + 15, cy - 20);
-    canvas.drawPath(heartPath, stroke);
-
-    // 3. Coffee Mug
-    final cupRect = RRect.fromRectAndRadius(Rect.fromLTWH(cx - 24, cy + 12, 14, 13), const Radius.circular(2));
-    canvas.drawRRect(cupRect, stroke);
-    canvas.drawArc(Rect.fromLTWH(cx - 10, cy + 14, 7, 7), -1.5, 3.0, false, stroke);
-
-    // 4. Smiley Face
-    canvas.drawCircle(Offset(cx + 20, cy + 16), 8, stroke);
-    canvas.drawCircle(Offset(cx + 17, cy + 14), 1, fill);
-    canvas.drawCircle(Offset(cx + 23, cy + 14), 1, fill);
-    canvas.drawArc(Rect.fromLTWH(cx + 16, cy + 15, 8, 5), 0.2, 2.7, false, stroke);
-
-    // 5. Star / Sparkle
-    final starPath = Path()
-      ..moveTo(cx - 2, cy - 5)
-      ..lineTo(cx - 2, cy + 5)
-      ..moveTo(cx - 7, cy)
-      ..lineTo(cx + 3, cy);
-    canvas.drawPath(starPath, stroke);
-
-    // 6. Clock
-    canvas.drawCircle(Offset(cx + 35, cy - 2), 7, stroke);
-    final clockHands = Path()
-      ..moveTo(cx + 35, cy - 6)
-      ..lineTo(cx + 35, cy - 2)
-      ..lineTo(cx + 38, cy - 2);
-    canvas.drawPath(clockHands, stroke);
-
-    // 7. Paper plane / Send arrow
-    final plane = Path()
-      ..moveTo(cx - 42, cy + 28)
-      ..lineTo(cx - 30, cy + 22)
-      ..lineTo(cx - 38, cy + 35)
-      ..close();
-    canvas.drawPath(plane, stroke);
-
-    // 8. Music Note
-    final music = Path()
-      ..moveTo(cx + 42, cy + 26)
-      ..lineTo(cx + 42, cy + 18)
-      ..lineTo(cx + 49, cy + 16)
-      ..lineTo(cx + 49, cy + 24);
-    canvas.drawPath(music, stroke);
-    canvas.drawCircle(Offset(cx + 40, cy + 26), 2, fill);
-    canvas.drawCircle(Offset(cx + 47, cy + 24), 2, fill);
-  }
-
-  @override
-  bool shouldRepaint(covariant WhatsAppDoodlePainter oldDelegate) => oldDelegate.color != color;
 }

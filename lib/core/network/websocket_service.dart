@@ -91,14 +91,18 @@ class WebSocketService {
       return;
     }
 
+    final token = ApiClient().accessToken;
+    if (token == null || token.isEmpty) {
+      _isConnecting = false;
+      return;
+    }
+
     _isConnecting = true;
     final baseApiUrl = ApiClient().baseUrl;
     final cleanUrl = baseApiUrl.replaceAll('/api', '');
     final wsProtocol = cleanUrl.startsWith('https') ? 'wss' : 'ws';
     final wsHost = cleanUrl.replaceFirst(RegExp(r'https?://'), '');
-    final token = ApiClient().accessToken;
-    final tokenParam = (token != null && token.isNotEmpty) ? '&token=$token' : '';
-    final wsUri = Uri.parse('$wsProtocol://$wsHost/?userId=$userId$tokenParam');
+    final wsUri = Uri.parse('$wsProtocol://$wsHost/?userId=$userId&token=$token');
 
     // debugPrint('[WS] Connecting to $wsUri');
 
@@ -159,6 +163,14 @@ class WebSocketService {
     };
 
     _send(presenceData);
+  }
+
+  void refreshAuthToken(String newToken) {
+    if (_isConnected) {
+      _send({'type': 'AUTH_REFRESH', 'token': newToken});
+    } else {
+      connect();
+    }
   }
 
   void _send(Map<String, dynamic> data) {
