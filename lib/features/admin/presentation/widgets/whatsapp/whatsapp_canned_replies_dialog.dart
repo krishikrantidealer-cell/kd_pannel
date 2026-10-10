@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 
@@ -37,6 +38,7 @@ class WhatsAppCannedRepliesDialog extends StatefulWidget {
 }
 
 class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialog> {
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   late List<dynamic> _localResponses;
 
@@ -44,6 +46,12 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
   void initState() {
     super.initState();
     _localResponses = List<dynamic>.from(widget.cannedResponses);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _showCreateDialog() {
@@ -266,30 +274,68 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
             ),
             const SizedBox(height: 16),
 
-            // Search & Add Bar
+            // Search & Add Bar (Order Screen Style)
             Row(
               children: [
                 Expanded(
                   child: Container(
-                    height: 38,
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderColor),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    alignment: Alignment.centerLeft,
-                    child: TextField(
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      style: GoogleFonts.outfit(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Search by shortcut (/bank) or keyword...',
-                        hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
-                        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFFD97706)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.search_rounded,
+                          size: 20,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Search by shortcut (/pricing) or text...',
+                              hintStyle: GoogleFonts.outfit(
+                                fontSize: 14,
+                                color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                        if (_searchQuery.isNotEmpty)
+                          InkWell(
+                            onTap: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4.0),
+                              child: Icon(Icons.close_rounded, size: 16, color: AppTheme.textSecondary),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -299,13 +345,13 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
                     backgroundColor: const Color(0xFFD97706),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
-                  icon: const Icon(Icons.add_rounded, size: 16),
+                  icon: const Icon(Icons.add_rounded, size: 18),
                   label: Text(
                     'New Canned Reply',
-                    style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                   onPressed: _showCreateDialog,
                 ),
