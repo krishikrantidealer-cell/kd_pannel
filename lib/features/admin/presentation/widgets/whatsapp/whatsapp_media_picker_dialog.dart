@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 
@@ -446,6 +447,7 @@ class _WhatsAppMediaPickerDialogState extends State<WhatsAppMediaPickerDialog> {
                                       'file',
                                       bytes,
                                       filename: _selectedFile!.name,
+                                      contentType: MediaType.parse(mimeType),
                                     ),
                                   ],
                                 );
