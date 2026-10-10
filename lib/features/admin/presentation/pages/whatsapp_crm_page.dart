@@ -2627,57 +2627,86 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                     ],
                                     if (msg['replyTo'] != null &&
                                         (msg['replyTo']['content'] != null ||
-                                         msg['replyTo']['body'] != null)) ...[
-                                      Container(
-                                        margin: const EdgeInsets.only(bottom: 6),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withValues(
-                                            alpha: isOutgoing ? 0.06 : 0.05,
+                                         msg['replyTo']['body'] != null ||
+                                         msg['replyTo']['mediaUrl'] != null)) ...[
+                                      () {
+                                        final replyMediaUrl = (msg['replyTo']['mediaUrl'] ?? '').toString().trim();
+                                        final rawReplyText = (msg['replyTo']['content'] ?? msg['replyTo']['body'] ?? '').toString();
+                                        final cleanReplyText = _formatCleanMessageText(rawReplyText);
+                                        final isImageReply = replyMediaUrl.isNotEmpty && (replyMediaUrl.contains('.jpg') || replyMediaUrl.contains('.jpeg') || replyMediaUrl.contains('.png') || replyMediaUrl.contains('.webp'));
+                                        final isDocReply = replyMediaUrl.isNotEmpty && !isImageReply;
+                                        final displayReplyContent = cleanReplyText.isNotEmpty
+                                            ? cleanReplyText
+                                            : (isImageReply ? '📷 Photo' : (isDocReply ? '📄 Document' : ''));
+
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 6),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
                                           ),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: const Border(
-                                            left: BorderSide(
-                                              color: Color(0xFF008069),
-                                              width: 3.5,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(
+                                              alpha: isOutgoing ? 0.06 : 0.05,
                                             ),
-                                          ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              (msg['replyTo']['senderName'] ??
-                                               (isOutgoing ? 'Lead' : 'You'))
-                                                  .toString(),
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: const Color(0xFF008069),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: const Border(
+                                              left: BorderSide(
+                                                color: Color(0xFF008069),
+                                                width: 3.5,
                                               ),
                                             ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              (msg['replyTo']['content'] ??
-                                               msg['replyTo']['body'] ??
-                                               '')
-                                                  .toString(),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 11.5,
-                                                color: const Color(0xFF54656F),
-                                                height: 1.2,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (isImageReply) ...[
+                                                ClipRRect(
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  child: Image.network(
+                                                    replyMediaUrl,
+                                                    width: 32,
+                                                    height: 32,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, size: 20, color: Color(0xFF008069)),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                              ] else if (isDocReply) ...[
+                                                const Icon(Icons.description_rounded, size: 22, color: Color(0xFF008069)),
+                                                const SizedBox(width: 6),
+                                              ],
+                                              Flexible(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      (msg['replyTo']['senderName'] ?? (isOutgoing ? 'Lead' : 'You')).toString(),
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: const Color(0xFF008069),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      displayReplyContent,
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11.5,
+                                                        color: const Color(0xFF54656F),
+                                                        height: 1.2,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                            ],
+                                          ),
+                                        );
+                                      }(),
                                     ],
                                     if (_formatCleanMessageText(msg['content'] ?? '').isNotEmpty)
                                       Text(
@@ -2798,6 +2827,33 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                 ),
                 child: Row(
                   children: [
+                    () {
+                      final mediaUrl = (_replyingToMessage['mediaUrl'] ?? '').toString();
+                      final isImg = mediaUrl.isNotEmpty && (mediaUrl.contains('.jpg') || mediaUrl.contains('.jpeg') || mediaUrl.contains('.png') || mediaUrl.contains('.webp'));
+                      final isDoc = mediaUrl.isNotEmpty && !isImg;
+                      if (isImg) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              mediaUrl,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, size: 24, color: Color(0xFF008069)),
+                            ),
+                          ),
+                        );
+                      }
+                      if (isDoc) {
+                        return const Padding(
+                          padding: EdgeInsets.only(right: 8.0),
+                          child: Icon(Icons.description_rounded, size: 24, color: Color(0xFF008069)),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }(),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2814,15 +2870,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            _formatCleanMessageText(_replyingToMessage['content'] ?? ''),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
+                          () {
+                            final raw = (_replyingToMessage['content'] ?? '').toString();
+                            final cleaned = _formatCleanMessageText(raw);
+                            final mediaUrl = (_replyingToMessage['mediaUrl'] ?? '').toString();
+                            final isImg = mediaUrl.isNotEmpty && (mediaUrl.contains('.jpg') || mediaUrl.contains('.jpeg') || mediaUrl.contains('.png') || mediaUrl.contains('.webp'));
+                            final snippet = cleaned.isNotEmpty
+                                ? cleaned
+                                : (isImg ? '📷 Photo' : (mediaUrl.isNotEmpty ? '📄 Document' : 'Message'));
+
+                            return Text(
+                              snippet,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                              ),
+                            );
+                          }(),
                         ],
                       ),
                     ),
