@@ -90,13 +90,17 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is Dealer) {
+    final Dealer? resolvedDealer = args is Dealer
+        ? args
+        : (args is Map ? Dealer.fromMap(Map<String, dynamic>.from(args)) : null);
+
+    if (resolvedDealer != null) {
       if (_dealer == null ||
-          _dealer?.id != args.id ||
-          _dealer?.phone != args.phone) {
-        _dealer = args;
-        _agentId = args.agentId;
-        _agentName = args.agent;
+          _dealer?.id != resolvedDealer.id ||
+          _dealer?.phone != resolvedDealer.phone) {
+        _dealer = resolvedDealer;
+        _agentId = resolvedDealer.agentId;
+        _agentName = resolvedDealer.agent;
         _isCacheLoaded = true;
         _saveDealerToCache(_dealer!);
 
@@ -121,9 +125,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         AnalyticsService().logEvent(
           'profile_view',
           properties: {
-            'dealerId': args.id ?? '',
-            'dealerName': args.name,
-            'details': 'Viewed dealer profile for ${args.name}',
+            'dealerId': resolvedDealer.id ?? '',
+            'dealerName': resolvedDealer.name,
+            'details': 'Viewed dealer profile for ${resolvedDealer.name}',
           },
         );
 

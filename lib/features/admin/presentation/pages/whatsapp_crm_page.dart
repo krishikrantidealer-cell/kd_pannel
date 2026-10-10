@@ -24,6 +24,7 @@ import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_canned_replies_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_template_picker_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_media_picker_dialog.dart';
+import 'package:kd_pannel/features/shared/widgets/events/events_helper.dart';
 
 class WebCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -1881,45 +1882,137 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   )
                 : Row(
                     children: [
-                      CircleAvatar(
-                        backgroundColor: avatarColor.withValues(alpha: 0.15),
-                        radius: 19,
-                        child: Text(
-                          name.isNotEmpty
-                              ? name.substring(0, 1).toUpperCase()
-                              : '👤',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.5,
-                            color: avatarColor,
+                      // Clickable Customer Profile Header
+                      InkWell(
+                        onTap: () {
+                          final phone = (contact['phone'] ?? '').toString();
+                          final cName = (contact['name'] ?? name).toString();
+                          if (phone.isNotEmpty || cName.isNotEmpty) {
+                            navigateToProfile(
+                              context,
+                              phone,
+                              phone: phone,
+                              name: cName,
+                              userDetails: contact is Map<String, dynamic>
+                                  ? contact
+                                  : Map<String, dynamic>.from(contact as Map),
+                            );
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        hoverColor: const Color(0xFFF1F5F9),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: avatarColor.withValues(alpha: 0.15),
+                                radius: 19,
+                                child: Text(
+                                  name.isNotEmpty
+                                      ? name.substring(0, 1).toUpperCase()
+                                      : '👤',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.5,
+                                    color: avatarColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14.5,
+                                          color: const Color(0xFF111B21),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      // Dynamic Lead vs Dealer Profile Tag
+                                      Builder(
+                                        builder: (_) {
+                                          final tags = List<dynamic>.from(contact['tags'] ?? []);
+                                          final bool isDealer = tags.any((t) =>
+                                              t.toString().toLowerCase().contains('dealer') ||
+                                              t.toString().toLowerCase().contains('retailer')) ||
+                                              _selectedConversation?['contactType'] == 'dealer' ||
+                                              contact['userType'] == 'dealer' ||
+                                              contact['kycStatus']?.toString().toLowerCase() == 'verified';
+
+                                          final badgeBg = isDealer
+                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+                                              : const Color(0xFF10B981).withValues(alpha: 0.12);
+                                          final badgeColor = isDealer
+                                              ? const Color(0xFFD97706)
+                                              : const Color(0xFF059669);
+                                          final badgeBorder = isDealer
+                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                                              : const Color(0xFF10B981).withValues(alpha: 0.3);
+
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: badgeBg,
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: badgeBorder, width: 0.8),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  isDealer ? Icons.storefront_rounded : Icons.person_rounded,
+                                                  size: 11,
+                                                  color: badgeColor,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  isDealer ? 'Dealer' : 'Lead',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: badgeColor,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Tooltip(
+                                        message: 'Click to open profile',
+                                        child: Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 13,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    '+91 ${_normalizePhone(contact['phone']?.toString() ?? '')}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFF667781),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14.5,
-                                color: const Color(0xFF111B21),
-                              ),
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              '+91 ${_normalizePhone(contact['phone']?.toString() ?? '')}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11.5,
-                                color: const Color(0xFF667781),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const Spacer(),
 
                       // Clean Assigned Sales Agent Chip
                       Container(
