@@ -59,6 +59,8 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
     final shortcutController = TextEditingController();
     final messageController = TextEditingController();
     String category = 'Sales';
+    bool isSaving = false;
+    String? localError;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
@@ -101,6 +103,22 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
                     ),
                   ],
                 ),
+                if (localError != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Text(
+                      localError!,
+                      style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFFDC2626), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: shortcutController,
@@ -132,7 +150,7 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     isDense: true,
                   ),
-                  items: ['Sales', 'Pricing', 'Bank Details', 'Support', 'Order Status', 'Greeting']
+                  items: ['Sales', 'Pricing', 'Bank Details', 'Support', 'Order Status', 'Greeting', 'General', 'Logistics', 'Finance']
                       .map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: GoogleFonts.outfit(fontSize: 13))))
                       .toList(),
                   onChanged: (val) {
@@ -161,7 +179,7 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
                         side: const BorderSide(color: Color(0xFFCBD5E1)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: () => Navigator.pop(innerCtx),
+                      onPressed: isSaving ? null : () => Navigator.pop(innerCtx),
                       child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
                     ),
                     const SizedBox(width: 12),
@@ -172,34 +190,76 @@ class _WhatsAppCannedRepliesDialogState extends State<WhatsAppCannedRepliesDialo
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        final shortcut = shortcutController.text.trim();
-                        final msg = messageController.text.trim();
-                        if (title.isEmpty || shortcut.isEmpty || msg.isEmpty) return;
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final title = titleController.text.trim();
+                              String shortcut = shortcutController.text.trim();
+                              final msg = messageController.text.trim();
+                              if (title.isEmpty || shortcut.isEmpty || msg.isEmpty) {
+                                setDialogState(() => localError = 'Please fill in Title, Shortcut, and Message Body.');
+                                return;
+                              }
+                              if (!shortcut.startsWith('/')) {
+                                shortcut = '/$shortcut';
+                              }
 
-                        Navigator.pop(innerCtx);
-                        try {
-                          final res = await ApiClient().post('/canned-responses', {
-                            'title': title,
-                            'shortcut': shortcut,
-                            'message': msg,
-                            'category': category,
-                          });
-                          if (res.statusCode == 200 || res.statusCode == 201) {
-                            widget.onRefresh?.call();
-                            scaffoldMessenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Canned response created successfully!'),
-                                backgroundColor: Color(0xFFD97706),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          debugPrint('[Create Canned Response] Error: $e');
-                        }
-                      },
-                      child: Text('Save Canned Reply', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                              setDialogState(() {
+                                isSaving = true;
+                                localError = null;
+                              });
+
+                              try {
+                                final res = await ApiClient().post('/canned-responses', {
+                                  'title': title,
+                                  'shortcut': shortcut,
+                                  'message': msg,
+                                  'category': category,
+                                });
+
+                                Map<String, dynamic> body = {};
+                                try {
+                                  body = jsonDecode(res.body);
+                                } catch (_) {}
+
+                                if (res.statusCode == 200 || res.statusCode == 201) {
+                                  final newObj = body['data'];
+                                  if (newObj != null && mounted) {
+                                    setState(() {
+                                      _localResponses.removeWhere((c) => (c['shortcut'] ?? '').toString().toLowerCase() == shortcut.toLowerCase());
+                                      _localResponses.insert(0, newObj);
+                                    });
+                                  }
+                                  widget.onRefresh?.call();
+                                  Navigator.pop(innerCtx);
+                                  scaffoldMessenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Canned response created successfully!'),
+                                      backgroundColor: Color(0xFF008069),
+                                    ),
+                                  );
+                                } else {
+                                  final errMsg = body['message'] ?? 'Failed to create canned response (${res.statusCode})';
+                                  setDialogState(() {
+                                    isSaving = false;
+                                    localError = errMsg.toString();
+                                  });
+                                }
+                              } catch (e) {
+                                debugPrint('[Create Canned Response] Error: $e');
+                                setDialogState(() {
+                                  isSaving = false;
+                                  localError = 'Connection error: $e';
+                                });
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text('Save Canned Reply', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
