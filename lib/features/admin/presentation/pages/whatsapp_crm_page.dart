@@ -1611,14 +1611,15 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 );
                                               }
 
+                                              final cleanLast = _formatCleanMessageText(lastText);
+                                              final displaySnippet = hasNoMessages
+                                                  ? '✨ Ready for Outreach'
+                                                  : (cleanLast.isNotEmpty
+                                                      ? cleanLast
+                                                      : (lastMedia.isNotEmpty ? '📷 Media Attachment' : ''));
+
                                               return Text(
-                                                hasNoMessages
-                                                    ? '✨ Ready for Outreach'
-                                                    : _formatCleanMessageText(
-                                                        lastText.isNotEmpty
-                                                            ? lastText
-                                                            : 'Media Attachment',
-                                                      ),
+                                                displaySnippet,
                                                 style: GoogleFonts.outfit(
                                                   fontSize: 11.5,
                                                   fontStyle: hasNoMessages ? FontStyle.italic : FontStyle.normal,
@@ -2677,16 +2678,18 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                         ),
                                       ),
                                     ],
-                                    Text(
-                                      _formatCleanMessageText(
-                                        msg['content'] ?? '',
+                                    final cleanText = _formatCleanMessageText(
+                                      msg['content'] ?? '',
+                                    );
+                                    if (cleanText.isNotEmpty)
+                                      Text(
+                                        cleanText,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: textCol,
+                                          height: 1.25,
+                                        ),
                                       ),
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 13,
-                                        color: textCol,
-                                        height: 1.25,
-                                      ),
-                                    ),
                                     const SizedBox(height: 3),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -3311,10 +3314,16 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     // Handle template markers like "[Template] test_intro" or "test_intro"
     final trimmed = raw.trim();
+    if (trimmed == '[Template] undefined' || trimmed == '[Template] null' || trimmed == '[Template]') {
+      return '';
+    }
     if (trimmed.startsWith('[Template]') || trimmed == 'test_intro') {
       final tplName = trimmed.startsWith('[Template]')
           ? trimmed.replaceFirst('[Template]', '').trim()
           : trimmed;
+      if (tplName.isEmpty || tplName == 'undefined' || tplName == 'null') {
+        return '';
+      }
       final contact = _selectedConversation?['contactId'] ?? {};
       final customerName = (contact['name'] ?? 'Customer').toString();
 
@@ -3329,7 +3338,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           return body;
         }
       }
-      return 'Namaste $customerName, welcome to Krishi Kranti!';
+      return '';
     }
 
     if (raw.trim().startsWith('{')) {
