@@ -1436,7 +1436,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     }
 
                     final String lastText = (lastMsg['content'] ?? '').toString().trim();
-                    final bool hasNoMessages = lastText.isEmpty && lastMsg['type'] == null;
+                    final String lastMedia = (lastMsg['mediaUrl'] ?? '').toString().trim();
+                    final bool hasNoMessages = lastText.isEmpty && lastMedia.isEmpty && lastMsg['type'] == null;
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(
@@ -2678,12 +2679,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                         ),
                                       ),
                                     ],
-                                    final cleanText = _formatCleanMessageText(
-                                      msg['content'] ?? '',
-                                    );
-                                    if (cleanText.isNotEmpty)
+                                    if (_formatCleanMessageText(msg['content'] ?? '').isNotEmpty)
                                       Text(
-                                        cleanText,
+                                        _formatCleanMessageText(
+                                          msg['content'] ?? '',
+                                        ),
                                         style: GoogleFonts.outfit(
                                           fontSize: 13,
                                           color: textCol,
