@@ -739,13 +739,16 @@ class _WhatsAppTemplatePickerDialogState extends State<WhatsAppTemplatePickerDia
                             try {
                               final payload = {
                                 'conversationId': widget.conversationId,
+                                'type': 'template',
                                 'templateName': rawTemplateName,
                                 'language': tplLanguage.isNotEmpty ? tplLanguage : 'en',
+                                'languageCode': tplLanguage.isNotEmpty ? tplLanguage : 'en',
+                                if (paramsList.isNotEmpty) 'bodyValues': paramsList,
                                 if (paramsList.isNotEmpty) 'templateParams': paramsList,
                                 if (mediaUrl.isNotEmpty) 'mediaUrl': mediaUrl,
                               };
 
-                              final res = await ApiClient().post('/messages/send-template', payload);
+                              final res = await ApiClient().post('/messages/send', payload);
                               if (res.statusCode == 200 || res.statusCode == 201) {
                                 TelephonyAudioService().playOutgoingMessageSentTone();
                                 if (context.mounted) {
