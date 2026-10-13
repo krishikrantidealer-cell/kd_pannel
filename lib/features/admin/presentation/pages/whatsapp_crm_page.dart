@@ -437,6 +437,17 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             });
           }
 
+          if (isIncoming && newMessage != null) {
+            newConversation['lastIncomingMessageAt'] = newMessage['createdAt'] ?? DateTime.now().toIso8601String();
+          }
+
+          if (isCurrentlySelected) {
+            _selectedConversation = Map<String, dynamic>.from(newConversation);
+            if (isIncoming && newMessage != null) {
+              _selectedConversation!['lastIncomingMessageAt'] = newMessage['createdAt'] ?? DateTime.now().toIso8601String();
+            }
+          }
+
           if (index != -1) {
             if (_matchesCurrentFilters(newConversation)) {
               _conversations[index] = newConversation;
@@ -640,6 +651,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               final idx = _conversations.indexWhere((c) => c['_id']?.toString() == selId);
               if (idx != -1) {
                 _conversations[idx]['unreadCount'] = 0;
+                _selectedConversation = _conversations[idx];
               }
             }
             _recalculateUnreadCount();
@@ -799,6 +811,18 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             if (_messages.isNotEmpty) {
               final latest = _messages.last;
               final convIdx = _conversations.indexWhere((c) => c['_id']?.toString() == conversationId);
+
+              DateTime? latestIncomingTs;
+              for (int i = _messages.length - 1; i >= 0; i--) {
+                if (_messages[i]['direction'] == 'incoming') {
+                  final raw = _messages[i]['createdAt'] ?? _messages[i]['timestamp'];
+                  if (raw != null) {
+                    latestIncomingTs = DateTime.tryParse(raw.toString());
+                    break;
+                  }
+                }
+              }
+
               if (convIdx != -1) {
                 _conversations[convIdx]['unreadCount'] = 0;
                 _conversations[convIdx]['lastMessage'] = {
@@ -807,6 +831,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   'mediaUrl': latest['mediaUrl'],
                 };
                 _conversations[convIdx]['lastMessageAt'] = latest['createdAt'];
+                if (latestIncomingTs != null) {
+                  _conversations[convIdx]['lastIncomingMessageAt'] = latestIncomingTs.toIso8601String();
+                }
               }
               if (_selectedConversation != null && _selectedConversation!['_id']?.toString() == conversationId) {
                 _selectedConversation!['unreadCount'] = 0;
@@ -816,6 +843,9 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   'mediaUrl': latest['mediaUrl'],
                 };
                 _selectedConversation!['lastMessageAt'] = latest['createdAt'];
+                if (latestIncomingTs != null) {
+                  _selectedConversation!['lastIncomingMessageAt'] = latestIncomingTs.toIso8601String();
+                }
               }
               _recalculateUnreadCount();
               _sortConversations();
@@ -1415,6 +1445,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
                     // Determine Lead vs Dealer from tags
                     final List<dynamic> tags = List<dynamic>.from(contact['tags'] ?? []);
+                    final bool isTileDeleted = contact['isDeleted'] == true ||
+                        conv['isDeleted'] == true ||
+                        contact['status']?.toString().toLowerCase() == 'deleted' ||
+                        conv['status']?.toString().toLowerCase() == 'deleted' ||
+                        tags.any((t) => t.toString().toLowerCase().contains('deleted'));
                     final bool isDealer = tags.any((t) =>
                         t.toString().toLowerCase().contains('dealer') ||
                         t.toString().toLowerCase().contains('retailer'));
@@ -1463,20 +1498,22 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                             children: [
                               // Circle initials with dynamic colors
                               CircleAvatar(
-                                backgroundColor: avatarColor.withValues(
-                                  alpha: 0.15,
-                                ),
+                                backgroundColor: isTileDeleted
+                                    ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                    : avatarColor.withValues(alpha: 0.15),
                                 radius: 20,
-                                child: Text(
-                                  name.isNotEmpty
-                                      ? name.substring(0, 1).toUpperCase()
-                                      : '👤',
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: avatarColor,
-                                  ),
-                                ),
+                                child: isTileDeleted
+                                    ? const Icon(Icons.person_off_rounded, size: 18, color: Color(0xFFDC2626))
+                                    : Text(
+                                        name.isNotEmpty
+                                            ? name.substring(0, 1).toUpperCase()
+                                            : '👤',
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: avatarColor,
+                                        ),
+                                      ),
                               ),
                               const SizedBox(width: 12),
 
@@ -1504,28 +1541,50 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 ),
                                               ),
                                               const SizedBox(width: 5),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 5,
-                                                  vertical: 1.5,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: isDealer
-                                                      ? const Color(0xFF0284C7).withValues(alpha: 0.12)
-                                                      : const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  isDealer ? '🏪 Dealer' : '🌱 Lead',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 9.5,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isDealer
-                                                        ? const Color(0xFF0284C7)
-                                                        : const Color(0xFF16A34A),
+                                              if (isTileDeleted) ...[
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 1.5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFFEE2E2),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFFCA5A5), width: 0.6),
+                                                  ),
+                                                  child: Text(
+                                                    'Deleted',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFFDC2626),
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
+                                              ] else ...[
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 1.5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isDealer
+                                                        ? const Color(0xFF0284C7).withValues(alpha: 0.12)
+                                                        : const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    isDealer ? '🏪 Dealer' : '🌱 Lead',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isDealer
+                                                          ? const Color(0xFF0284C7)
+                                                          : const Color(0xFF16A34A),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                               if (assignedAgentName.isNotEmpty) ...[
                                                 const SizedBox(width: 4),
                                                 Container(
@@ -1804,6 +1863,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     final String name = contact['name'] ?? 'WhatsApp User';
     final Color avatarColor = _getAvatarColor(name);
+    final bool isUserDeleted = contact['isDeleted'] == true ||
+        _selectedConversation?['isDeleted'] == true ||
+        contact['status']?.toString().toLowerCase() == 'deleted' ||
+        _selectedConversation?['status']?.toString().toLowerCase() == 'deleted' ||
+        (contact['tags'] is List && (contact['tags'] as List).any((t) => t.toString().toLowerCase().contains('deleted')));
 
     return Container(
       color: const Color(0xFFFAFAFC), // Modern clean off-white background
@@ -1882,129 +1946,209 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   )
                 : Row(
                     children: [
-                      // Clickable Customer Profile Header
-                      InkWell(
-                        onTap: () {
-                          final phone = (contact['phone'] ?? '').toString();
-                          final cName = (contact['name'] ?? name).toString();
-                          if (phone.isNotEmpty || cName.isNotEmpty) {
-                            navigateToProfile(
-                              context,
-                              phone,
-                              phone: phone,
-                              name: cName,
-                              userDetails: contact is Map<String, dynamic>
-                                  ? contact
-                                  : Map<String, dynamic>.from(contact as Map),
-                            );
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        hoverColor: const Color(0xFFF1F5F9),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: avatarColor.withValues(alpha: 0.15),
-                                radius: 19,
-                                child: Text(
-                                  name.isNotEmpty
-                                      ? name.substring(0, 1).toUpperCase()
-                                      : '👤',
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14.5,
-                                    color: avatarColor,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                          // Clickable Customer Profile Header (Disabled when deleted)
+                          InkWell(
+                            onTap: isUserDeleted
+                                ? null
+                                : () {
+                                    final phone = (contact['phone'] ?? '').toString();
+                                    final cName = (contact['name'] ?? name).toString();
+                                    if (phone.isNotEmpty || cName.isNotEmpty) {
+                                      navigateToProfile(
+                                        context,
+                                        phone,
+                                        phone: phone,
+                                        name: cName,
+                                        userDetails: contact is Map<String, dynamic>
+                                            ? contact
+                                            : Map<String, dynamic>.from(contact as Map),
+                                      );
+                                    }
+                                  },
+                            borderRadius: BorderRadius.circular(10),
+                            hoverColor: isUserDeleted ? Colors.transparent : const Color(0xFFF1F5F9),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  CircleAvatar(
+                                    backgroundColor: isUserDeleted
+                                        ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                        : avatarColor.withValues(alpha: 0.15),
+                                    radius: 19,
+                                    child: isUserDeleted
+                                        ? const Icon(Icons.person_off_rounded, size: 18, color: Color(0xFFDC2626))
+                                        : Text(
+                                            name.isNotEmpty
+                                                ? name.substring(0, 1).toUpperCase()
+                                                : '👤',
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14.5,
+                                              color: avatarColor,
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14.5,
+                                              color: const Color(0xFF111B21),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          if (isUserDeleted) ...[
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEE2E2),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: const Color(0xFFFCA5A5), width: 0.8),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.delete_outline_rounded,
+                                                    size: 11,
+                                                    color: Color(0xFFDC2626),
+                                                  ),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                    'Deleted',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFFDC2626),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            // Dynamic Lead vs Dealer Profile Tag
+                                            Builder(
+                                              builder: (_) {
+                                                final tags = List<dynamic>.from(contact['tags'] ?? []);
+                                                final bool isDealer = tags.any((t) =>
+                                                    t.toString().toLowerCase().contains('dealer') ||
+                                                    t.toString().toLowerCase().contains('retailer')) ||
+                                                    _selectedConversation?['contactType'] == 'dealer' ||
+                                                    contact['userType'] == 'dealer' ||
+                                                    contact['kycStatus']?.toString().toLowerCase() == 'verified';
+
+                                                final badgeBg = isDealer
+                                                    ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+                                                    : const Color(0xFF10B981).withValues(alpha: 0.12);
+                                                final badgeColor = isDealer
+                                                    ? const Color(0xFFD97706)
+                                                    : const Color(0xFF059669);
+                                                final badgeBorder = isDealer
+                                                    ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                                                    : const Color(0xFF10B981).withValues(alpha: 0.3);
+
+                                                return Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: badgeBg,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: badgeBorder, width: 0.8),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        isDealer ? Icons.storefront_rounded : Icons.person_rounded,
+                                                        size: 11,
+                                                        color: badgeColor,
+                                                      ),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        isDealer ? 'Dealer' : 'Lead',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: badgeColor,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Tooltip(
+                                              message: 'Click to open profile',
+                                              child: Icon(
+                                                Icons.open_in_new_rounded,
+                                                size: 13,
+                                                color: Color(0xFF94A3B8),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                  const SizedBox(height: 1),
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        name,
+                                        '+91 ${_normalizePhone(contact['phone']?.toString() ?? '')}',
                                         style: GoogleFonts.outfit(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14.5,
-                                          color: const Color(0xFF111B21),
+                                          fontSize: 11.5,
+                                          color: const Color(0xFF667781),
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      // Dynamic Lead vs Dealer Profile Tag
-                                      Builder(
-                                        builder: (_) {
-                                          final tags = List<dynamic>.from(contact['tags'] ?? []);
-                                          final bool isDealer = tags.any((t) =>
-                                              t.toString().toLowerCase().contains('dealer') ||
-                                              t.toString().toLowerCase().contains('retailer')) ||
-                                              _selectedConversation?['contactType'] == 'dealer' ||
-                                              contact['userType'] == 'dealer' ||
-                                              contact['kycStatus']?.toString().toLowerCase() == 'verified';
-
-                                          final badgeBg = isDealer
-                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
-                                              : const Color(0xFF10B981).withValues(alpha: 0.12);
-                                          final badgeColor = isDealer
-                                              ? const Color(0xFFD97706)
-                                              : const Color(0xFF059669);
-                                          final badgeBorder = isDealer
-                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
-                                              : const Color(0xFF10B981).withValues(alpha: 0.3);
-
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: badgeBg,
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: badgeBorder, width: 0.8),
+                                      const SizedBox(width: 8),
+                                      () {
+                                        DateTime? incomingTime;
+                                        final rawConv = _selectedConversation?['lastIncomingMessageAt'];
+                                        if (rawConv != null) incomingTime = DateTime.tryParse(rawConv.toString());
+                                        for (int i = _messages.length - 1; i >= 0; i--) {
+                                          if (_messages[i]['direction'] == 'incoming') {
+                                            final raw = _messages[i]['createdAt'] ?? _messages[i]['timestamp'];
+                                            if (raw != null) {
+                                              final t = DateTime.tryParse(raw.toString());
+                                              if (t != null && (incomingTime == null || t.isAfter(incomingTime))) {
+                                                incomingTime = t;
+                                              }
+                                              break;
+                                            }
+                                          }
+                                        }
+                                        final bool isOpen = incomingTime != null && DateTime.now().difference(incomingTime.toLocal()).inHours < 24;
+                                        if (!isOpen) return const SizedBox.shrink();
+                                        final rem = const Duration(hours: 24) - DateTime.now().difference(incomingTime.toLocal());
+                                        final remH = rem.inHours;
+                                        final remM = rem.inMinutes % 60;
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE8F5E9),
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: const Color(0xFFA5D6A7), width: 0.8),
+                                          ),
+                                          child: Text(
+                                            '🟢 24h Active (${remH}h ${remM}m)',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF1B5E20),
                                             ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  isDealer ? Icons.storefront_rounded : Icons.person_rounded,
-                                                  size: 11,
-                                                  color: badgeColor,
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  isDealer ? 'Dealer' : 'Lead',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: badgeColor,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Tooltip(
-                                        message: 'Click to open profile',
-                                        child: Icon(
-                                          Icons.open_in_new_rounded,
-                                          size: 13,
-                                          color: Color(0xFF94A3B8),
-                                        ),
-                                      ),
+                                          ),
+                                        );
+                                      }(),
                                     ],
-                                  ),
-                                  const SizedBox(height: 1),
-                                  Text(
-                                    '+91 ${_normalizePhone(contact['phone']?.toString() ?? '')}',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 11.5,
-                                      color: const Color(0xFF667781),
-                                      fontWeight: FontWeight.w500,
-                                    ),
                                   ),
                                 ],
                               ),
@@ -3129,92 +3273,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 2),
-
-                // 2. Emoji Picker Button (Pixel-perfect aligned with paperclip)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Tooltip(
-                    message: 'Emoji & Reactions',
-                    child: PopupMenuButton<String>(
-                      padding: EdgeInsets.zero,
-                      splashRadius: 20,
-                      elevation: 16,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      color: Colors.white,
-                      surfaceTintColor: Colors.white,
-                      offset: const Offset(0, -230),
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        alignment: Alignment.center,
-                        decoration: const BoxDecoration(shape: BoxShape.circle),
-                        child: const Icon(
-                          Icons.sentiment_satisfied_alt_outlined,
-                          color: Color(0xFF54656F),
-                          size: 24,
-                        ),
-                      ),
-                      onSelected: (emoji) {
-                        final activeController = _isNotesMode ? _noteController : _messageController;
-                        final text = activeController.text;
-                        final selection = activeController.selection;
-                        final newText = text.replaceRange(
-                          selection.start >= 0 ? selection.start : text.length,
-                          selection.end >= 0 ? selection.end : text.length,
-                          emoji,
-                        );
-                        activeController.text = newText;
-                        activeController.selection = TextSelection.collapsed(
-                          offset: (selection.start >= 0 ? selection.start : text.length) + emoji.length,
-                        );
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          enabled: false,
-                          child: Container(
-                            width: 290,
-                            padding: const EdgeInsets.all(6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'QUICK EMOJIS',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    '👋', '👍', '🙏', '😊', '✅', '🌾', '🌱', '🛒', '📞', '⭐',
-                                    '🚚', '🎉', '🔥', '💯', '🤝', '💼', '📦', '💰', '📍', '🕒',
-                                    '🚜', '🌽', '🍅', '🏷️', '💵', '📋', '❤️', '🙌', '🔔', '💬'
-                                  ].map((emoji) {
-                                    return InkWell(
-                                      borderRadius: BorderRadius.circular(8),
-                                      onTap: () => Navigator.pop(context, emoji),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4.0),
-                                        child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 const SizedBox(width: 4),
 
                 // 3. WhatsApp Message Input Box (Clean White Pill / Capsule)
@@ -3557,20 +3615,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     DateTime? lastIncomingTime;
     
-    // 1. First check conversation's authoritative lastIncomingMessageAt timestamp
+    // 1. Check conversation's authoritative lastIncomingMessageAt timestamp
     final rawConvTime = _selectedConversation['lastIncomingMessageAt'];
     if (rawConvTime != null) {
       lastIncomingTime = DateTime.tryParse(rawConvTime.toString());
     }
 
-    // 2. Fallback: Search in loaded message history
-    if (lastIncomingTime == null) {
-      for (int i = _messages.length - 1; i >= 0; i--) {
-        final msg = _messages[i];
-        if (msg['direction'] == 'incoming') {
-          final raw = msg['createdAt'] ?? msg['timestamp'];
-          if (raw != null) {
-            lastIncomingTime = DateTime.tryParse(raw.toString());
+    // 2. Always check loaded message history to ensure the latest incoming message is accounted for
+    for (int i = _messages.length - 1; i >= 0; i--) {
+      final msg = _messages[i];
+      if (msg['direction'] == 'incoming') {
+        final raw = msg['createdAt'] ?? msg['timestamp'];
+        if (raw != null) {
+          final msgTime = DateTime.tryParse(raw.toString());
+          if (msgTime != null) {
+            if (lastIncomingTime == null || msgTime.isAfter(lastIncomingTime)) {
+              lastIncomingTime = msgTime;
+            }
             break;
           }
         }
@@ -3578,54 +3639,16 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     }
 
     final bool isWindowOpen;
-    final int remainingHours;
-    final int remainingMinutes;
-
     if (lastIncomingTime == null) {
       isWindowOpen = false;
-      remainingHours = 0;
-      remainingMinutes = 0;
     } else {
       final elapsed = DateTime.now().difference(lastIncomingTime.toLocal());
-      if (elapsed.inHours < 24) {
-        isWindowOpen = true;
-        final rem = const Duration(hours: 24) - elapsed;
-        remainingHours = rem.inHours;
-        remainingMinutes = rem.inMinutes % 60;
-      } else {
-        isWindowOpen = false;
-        remainingHours = 0;
-        remainingMinutes = 0;
-      }
+      isWindowOpen = elapsed.inHours < 24;
     }
 
+    // 🕒 When the customer has replied within 24h, the 24-hour alert goes away automatically!
     if (isWindowOpen) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE8F5E9),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFA5D6A7), width: 1.0),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 14),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '🟢 24h Meta Service Window Active (${remainingHours}h ${remainingMinutes}m remaining) · Free-form messages allowed',
-                style: GoogleFonts.outfit(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1B5E20),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return Container(
