@@ -278,6 +278,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/dealers': (context) => const MainLayout(),
         '/dealers/profile': (context) =>
             const MainLayout(child: DealerProfilePage()),
+        '/customers': (context) => const MainLayout(),
         '/orders': (context) => const MainLayout(),
         '/orders/details': (context) =>
             const MainLayout(child: OrderDetailsPage()),

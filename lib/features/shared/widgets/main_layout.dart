@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dealer_management_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/customers_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/leads_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
@@ -51,14 +52,15 @@ class _MainLayoutState extends State<MainLayout> {
         case 2: return const OrdersPage();
         case 3: return const LeadsPage();
         case 4: return const DealerManagementPage();
-        case 5: return const SalesCouponPage();
-        case 6: return const TeamManagementPage();
-        case 7: return EngagementHubPage(initialTab: _engagementSubTab);
-        case 8: return const WhatsAppCrmPage();
-        case 9: return const CallLogsPage();
-        case 10: return const EstimateGeneratorPage();
-        case 11: return const AlertsPage();
-        case 12: return const TrashPage();
+        case 5: return const CustomersPage();
+        case 6: return const SalesCouponPage();
+        case 7: return const TeamManagementPage();
+        case 8: return EngagementHubPage(initialTab: _engagementSubTab);
+        case 9: return const WhatsAppCrmPage();
+        case 10: return const CallLogsPage();
+        case 11: return const EstimateGeneratorPage();
+        case 12: return const AlertsPage();
+        case 13: return const TrashPage();
         default: return const DashboardPage();
       }
     } else {
@@ -115,29 +117,31 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 3;
         } else if (routeName == '/dealers' || routeName.startsWith('/dealers/')) {
           _currentIdx = 4;
-        } else if (routeName == '/sales/coupons' || routeName == '/coupons') {
+        } else if (routeName == '/customers' || routeName.startsWith('/customers/')) {
           _currentIdx = 5;
-        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
+        } else if (routeName == '/sales/coupons' || routeName == '/coupons') {
           _currentIdx = 6;
-        } else if (routeName == '/marketing' || routeName == '/engagement') {
+        } else if (routeName == '/team' || routeName.startsWith('/team/')) {
           _currentIdx = 7;
+        } else if (routeName == '/marketing' || routeName == '/engagement') {
+          _currentIdx = 8;
           _engagementSubTab = 0;
         } else if (routeName == '/push-campaigns' || routeName == '/campaigns') {
-          _currentIdx = 7;
+          _currentIdx = 8;
           _engagementSubTab = 1;
         } else if (routeName == '/logs' || routeName == '/admin/logs') {
-          _currentIdx = 7;
+          _currentIdx = 8;
           _engagementSubTab = 2;
         } else if (routeName == '/support' || routeName == '/whatsapp') {
-          _currentIdx = 8;
-        } else if (routeName == '/calls' || routeName == '/call-recordings') {
           _currentIdx = 9;
-        } else if (routeName == '/sales/estimates' || routeName == '/estimates') {
+        } else if (routeName == '/calls' || routeName == '/call-recordings') {
           _currentIdx = 10;
-        } else if (routeName == '/alerts') {
+        } else if (routeName == '/sales/estimates' || routeName == '/estimates') {
           _currentIdx = 11;
-        } else if (routeName == '/trash') {
+        } else if (routeName == '/alerts') {
           _currentIdx = 12;
+        } else if (routeName == '/trash') {
+          _currentIdx = 13;
         } else {
           _currentIdx = 0;
         }
@@ -185,14 +189,15 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 2) route = '/orders';
       if (index == 3) route = '/leads';
       if (index == 4) route = '/dealers';
-      if (index == 5) route = '/sales/coupons';
-      if (index == 6) route = '/team';
-      if (index == 7) route = '/marketing';
-      if (index == 8) route = '/support';
-      if (index == 9) route = '/calls';
-      if (index == 10) route = '/sales/estimates';
-      if (index == 11) route = '/alerts';
-      if (index == 12) route = '/trash';
+      if (index == 5) route = '/customers';
+      if (index == 6) route = '/sales/coupons';
+      if (index == 7) route = '/team';
+      if (index == 8) route = '/marketing';
+      if (index == 9) route = '/support';
+      if (index == 10) route = '/calls';
+      if (index == 11) route = '/sales/estimates';
+      if (index == 12) route = '/alerts';
+      if (index == 13) route = '/trash';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/products';

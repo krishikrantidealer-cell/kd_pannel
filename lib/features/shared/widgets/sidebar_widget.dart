@@ -41,14 +41,15 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.shopping_bag_rounded, 'title': 'Orders', 'index': 2},
     {'icon': Icons.campaign_rounded, 'title': 'Leads', 'index': 3},
     {'icon': Icons.storefront_rounded, 'title': 'Dealers', 'index': 4},
-    {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 5},
-    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 6},
-    {'icon': Icons.rocket_launch_rounded, 'title': 'Marketing & Engagement', 'index': 7},
-    {'icon': Icons.chat_rounded, 'title': 'WhatsApp CRM', 'index': 8},
-    {'icon': Icons.phone_in_talk_rounded, 'title': 'Call Recordings', 'index': 9},
-    {'icon': Icons.description_rounded, 'title': 'Estimates', 'index': 10},
-    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 11},
-    {'icon': Icons.delete_sweep_rounded, 'title': 'Trash Bin', 'index': 12},
+    {'icon': Icons.group_rounded, 'title': 'Customers', 'index': 5},
+    {'icon': Icons.price_change_rounded, 'title': 'Price Coupons', 'index': 6},
+    {'icon': Icons.people_alt_rounded, 'title': 'Team Management', 'index': 7},
+    {'icon': Icons.rocket_launch_rounded, 'title': 'Marketing & Engagement', 'index': 8},
+    {'icon': Icons.chat_rounded, 'title': 'WhatsApp CRM', 'index': 9},
+    {'icon': Icons.phone_in_talk_rounded, 'title': 'Call Recordings', 'index': 10},
+    {'icon': Icons.description_rounded, 'title': 'Estimates', 'index': 11},
+    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 12},
+    {'icon': Icons.delete_sweep_rounded, 'title': 'Trash Bin', 'index': 13},
   ];
 
   static const List<Map<String, dynamic>> _salesMenuItems = [

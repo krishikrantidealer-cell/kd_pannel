@@ -45,7 +45,56 @@ class _CallLogsPageState extends State<CallLogsPage> {
     super.dispose();
   }
 
-  void _exportToCsv(List<dynamic> logs) async {
+  DateTime _parseLogDate(dynamic log) {
+    if (log is! Map) return DateTime.fromMillisecondsSinceEpoch(0);
+    final createdAt = log['createdAt'];
+    if (createdAt != null) {
+      if (createdAt is DateTime) return createdAt;
+      final numVal = num.tryParse(createdAt.toString());
+      if (numVal != null && numVal > 0) {
+        final ms = numVal > 1e11 ? numVal.toInt() : (numVal * 1000).toInt();
+        return DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+      final parsed = DateTime.tryParse(createdAt.toString());
+      if (parsed != null) return parsed;
+    }
+    final metadata = log['metadata'];
+    if (metadata is Map) {
+      final startTime = metadata['start_time'] ?? metadata['started_at'] ?? metadata['created_at'] ?? metadata['date_time'];
+      if (startTime != null) {
+        final numVal = num.tryParse(startTime.toString());
+        if (numVal != null && numVal > 0) {
+          final ms = numVal > 1e11 ? numVal.toInt() : (numVal * 1000).toInt();
+          return DateTime.fromMillisecondsSinceEpoch(ms);
+        }
+        final parsed = DateTime.tryParse(startTime.toString());
+        if (parsed != null) return parsed;
+      }
+    }
+    final updatedAt = log['updatedAt'];
+    if (updatedAt != null) {
+      final parsed = DateTime.tryParse(updatedAt.toString());
+      if (parsed != null) return parsed;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  List<dynamic> _sortLogsDescending(List<dynamic> rawLogs) {
+    final sorted = List<dynamic>.from(rawLogs);
+    sorted.sort((a, b) {
+      final dateA = _parseLogDate(a);
+      final dateB = _parseLogDate(b);
+      final comp = dateB.compareTo(dateA); // Newest first (descending)
+      if (comp != 0) return comp;
+      final idA = (a is Map ? (a['_id'] ?? a['callId'] ?? '') : '').toString();
+      final idB = (b is Map ? (b['_id'] ?? b['callId'] ?? '') : '').toString();
+      return idB.compareTo(idA);
+    });
+    return sorted;
+  }
+
+  void _exportToCsv(List<dynamic> rawLogs) async {
+    final logs = _sortLogsDescending(rawLogs);
     if (logs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No call logs available to export')),
@@ -116,39 +165,88 @@ class _CallLogsPageState extends State<CallLogsPage> {
   void _openMyOperatorRecording(dynamic log) async {
     String recordingUrl = (log['recordingUrl'] ?? '').toString().trim();
     final logId = log['_id']?.toString() ?? log['callId']?.toString() ?? '';
-    final phone = (log['customerPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    final status = (log['status'] ?? '').toString().toLowerCase();
 
-    if (!recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://') && logId.isNotEmpty) {
+    // Missed or unanswered calls don't have voice audio recordings
+    if (recordingUrl.isEmpty && (status == 'missed' || status == 'failed' || status == 'rejected' || status == 'cancelled')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No recording is available for missed or unanswered calls.'),
+            backgroundColor: Color(0xFFE11D48),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    // If recordingUrl is not an S3 direct CDN link, resolve via backend
+    final isDirectPlayableLink = recordingUrl.contains('amazonaws.com') || recordingUrl.contains('s3.') || recordingUrl.endsWith('.mp3');
+
+    if (!isDirectPlayableLink && logId.isNotEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 10),
+                Text('Fetching direct audio recording...'),
+              ],
+            ),
+            duration: Duration(seconds: 2),
+            backgroundColor: Color(0xFF0F172A),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
       try {
         final res = await ApiClient().get('/calls/recordings/$logId/url');
         if (res.statusCode == 200) {
           final body = jsonDecode(res.body);
           if (body['success'] == true && body['data']?['recordingUrl'] != null) {
-            recordingUrl = body['data']['recordingUrl'].toString();
+            final fetched = body['data']['recordingUrl'].toString();
+            if (fetched.contains('amazonaws.com') || fetched.contains('s3.') || fetched.endsWith('.mp3')) {
+              recordingUrl = fetched;
+              if (log is Map) {
+                log['recordingUrl'] = recordingUrl;
+              }
+            }
           }
         }
       } catch (_) {}
     }
 
-    String targetUrl = 'https://myoperator.com/app/call-logs';
-    if (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://')) {
-      targetUrl = recordingUrl;
-    } else if (phone.isNotEmpty) {
-      targetUrl = 'https://myoperator.com/app/call-logs?search=$phone';
-    }
+    final isValidStream = recordingUrl.contains('amazonaws.com') || recordingUrl.contains('s3.') || recordingUrl.endsWith('.mp3');
 
-    try {
-      final uri = Uri.parse(targetUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+    if (isValidStream && (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://'))) {
+      try {
+        final uri = Uri.parse(recordingUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (kIsWeb) {
+          web.window.open(recordingUrl, '_blank');
+        }
+      } catch (_) {
         if (kIsWeb) {
-          web.window.open(targetUrl, '_blank');
+          web.window.open(recordingUrl, '_blank');
         }
       }
-    } catch (_) {
-      if (kIsWeb) {
-        web.window.open(targetUrl, '_blank');
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recording is still processing on MyOperator switch. Please check back shortly.'),
+            backgroundColor: Color(0xFF64748B),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -1080,59 +1178,60 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                 ),
                               )
                             else
-                              ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: state.callLogs.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                                itemBuilder: (context, index) {
-                                  final log = state.callLogs[index];
-                                  final String dirStr = (log['direction'] ?? log['type'] ?? 'outbound').toString().toLowerCase();
-                                  final bool isOutbound = dirStr == 'outbound' || dirStr == 'out' || dirStr == '2' || dirStr == 'obd' || dirStr == 'click2call';
-                                  final rawStatus = (log['status'] ?? 'initiated').toString().toLowerCase();
-                                  final String customerPhone = (log['customerPhone'] ?? 'Unknown').toString();
-                                  final contact = log['contactId'] is Map ? log['contactId'] : null;
-                                  final String contactName = (contact?['name'] ?? '').toString().trim();
-                                  final agent = log['agentId'] is Map ? log['agentId'] : {};
-                                  final String agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
-                                  final String recordingUrl = log['recordingUrl'] ?? '';
-                                  final int seconds = int.tryParse(log['durationSeconds']?.toString() ?? '0') ?? 0;
-                                  final String userDisposition = log['userDisposition'] ?? '';
-                                  final String notesText = (log['notes'] ?? log['followUpNote'] ?? '').toString().trim();
+                              Builder(
+                                builder: (context) {
+                                  final sortedLogs = _sortLogsDescending(state.callLogs);
+                                  return ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: sortedLogs.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                    itemBuilder: (context, index) {
+                                      final log = sortedLogs[index];
+                                      final String dirStr = (log['direction'] ?? log['type'] ?? 'outbound').toString().toLowerCase();
+                                      final bool isOutbound = dirStr == 'outbound' || dirStr == 'out' || dirStr == '2' || dirStr == 'obd' || dirStr == 'click2call';
+                                      final rawStatus = (log['status'] ?? 'initiated').toString().toLowerCase();
+                                      final String customerPhone = (log['customerPhone'] ?? 'Unknown').toString();
+                                      final contact = log['contactId'] is Map ? log['contactId'] : null;
+                                      final String contactName = (contact?['name'] ?? '').toString().trim();
+                                      final agent = log['agentId'] is Map ? log['agentId'] : {};
+                                      final String agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+                                      final String recordingUrl = log['recordingUrl'] ?? '';
+                                      final int seconds = int.tryParse(log['durationSeconds']?.toString() ?? '0') ?? 0;
+                                      final String userDisposition = log['userDisposition'] ?? '';
+                                      final String notesText = (log['notes'] ?? log['followUpNote'] ?? '').toString().trim();
 
-                                  Color statusBg = const Color(0xFFECFDF5);
-                                  Color statusFg = const Color(0xFF047857);
-                                  String statusLabel = 'ANSWERED';
+                                      Color statusBg = const Color(0xFFECFDF5);
+                                      Color statusFg = const Color(0xFF047857);
+                                      String statusLabel = 'ANSWERED';
 
-                                  if (rawStatus == 'missed') {
-                                    statusBg = const Color(0xFFFEF2F2);
-                                    statusFg = const Color(0xFFDC2626);
-                                    statusLabel = 'MISSED';
-                                  } else if (rawStatus == 'busy') {
-                                    statusBg = const Color(0xFFFFFBEB);
-                                    statusFg = const Color(0xFFD97706);
-                                    statusLabel = 'BUSY';
-                                  } else if (rawStatus == 'no-answer') {
-                                    statusBg = const Color(0xFFFFEDD5);
-                                    statusFg = const Color(0xFFEA580C);
-                                    statusLabel = 'NO ANSWER';
-                                  } else if (rawStatus == 'failed') {
-                                    statusBg = const Color(0xFFFEF2F2);
-                                    statusFg = const Color(0xFFDC2626);
-                                    statusLabel = 'FAILED';
-                                  } else if (rawStatus != 'answered') {
-                                    statusBg = const Color(0xFFF1F5F9);
-                                    statusFg = const Color(0xFF475569);
-                                    statusLabel = rawStatus.toUpperCase();
-                                  }
+                                      if (rawStatus == 'missed') {
+                                        statusBg = const Color(0xFFFEF2F2);
+                                        statusFg = const Color(0xFFDC2626);
+                                        statusLabel = 'MISSED';
+                                      } else if (rawStatus == 'busy') {
+                                        statusBg = const Color(0xFFFFFBEB);
+                                        statusFg = const Color(0xFFD97706);
+                                        statusLabel = 'BUSY';
+                                      } else if (rawStatus == 'no-answer') {
+                                        statusBg = const Color(0xFFFFEDD5);
+                                        statusFg = const Color(0xFFEA580C);
+                                        statusLabel = 'NO ANSWER';
+                                      } else if (rawStatus == 'failed') {
+                                        statusBg = const Color(0xFFFEF2F2);
+                                        statusFg = const Color(0xFFDC2626);
+                                        statusLabel = 'FAILED';
+                                      } else if (rawStatus != 'answered') {
+                                        statusBg = const Color(0xFFF1F5F9);
+                                        statusFg = const Color(0xFF475569);
+                                        statusLabel = rawStatus.toUpperCase();
+                                      }
 
-                                  String formattedDate = '';
-                                  if (log['createdAt'] != null) {
-                                    final date = DateTime.tryParse(log['createdAt'].toString())?.toLocal();
-                                    if (date != null) {
-                                      formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(date);
-                                    }
-                                  }
+                                      String formattedDate = '';
+                                      final logDate = _parseLogDate(log);
+                                      if (logDate.millisecondsSinceEpoch > 0) {
+                                        formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(logDate.toLocal());
+                                      }
 
                                   final displayName = contactName.isNotEmpty ? contactName : 'Customer (+$customerPhone)';
                                   final initials = _getInitials(displayName);
@@ -1441,7 +1540,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                              const SizedBox(width: 8),
 
                                              // MyOperator Recording Button
-                                             if (recordingUrl.isNotEmpty || rawStatus == 'answered' || seconds > 0)
+                                             if (recordingUrl.isNotEmpty || (rawStatus == 'answered' && seconds > 0))
                                                Tooltip(
                                                  message: 'Open call recording in MyOperator portal',
                                                  child: Material(
@@ -1543,7 +1642,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                      ),
                                    );
                                  },
-                               ),
+                               );
+                             },
+                           ),
                             // Modern Pagination Footer
                             if (state.totalPages > 1 || state.totalCount > 0) ...[
                               const Divider(height: 1, color: Color(0xFFE2E8F0)),

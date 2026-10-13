@@ -23,7 +23,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/create_lead_dialog.dart';
 
 import '../../../../core/services/analytics_service.dart';
 
@@ -218,6 +218,18 @@ class _LeadsPageState extends State<LeadsPage> {
         ),
       );
     }
+  }
+
+  void _openCreateLeadDialog(BuildContext context, LeadsState state) {
+    CreateLeadDialog.show(
+      context,
+      salesAgents: state.salesAgents,
+      isSubmitting: state.status == LeadsStatus.submitting,
+      onSubmit: (leadData) {
+        Navigator.of(context).pop();
+        context.read<LeadsBloc>().add(CreateLeadEvent(leadData));
+      },
+    );
   }
 
   StreamSubscription? _wsSubscription;
@@ -1038,7 +1050,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                             ),
                                             const SizedBox(height: 12),
                                           ],
-                                          Row(
+                                            Row(
                                             children: [
                                               Expanded(
                                                 child: SelectionContainer.disabled(
@@ -1048,6 +1060,25 @@ class _LeadsPageState extends State<LeadsPage> {
                                                   ),
                                                 ),
                                               ),
+                                              if (AuthService().isAdmin ||
+                                                  AuthService().hasLeadPermission('create')) ...[
+                                                const SizedBox(width: 8),
+                                                SelectionContainer.disabled(
+                                                  child: Container(
+                                                    height: 38,
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.primaryColor,
+                                                      borderRadius: BorderRadius.circular(10),
+                                                    ),
+                                                    child: IconButton(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                                      onPressed: () => _openCreateLeadDialog(context, state),
+                                                      icon: const Icon(Icons.person_add_rounded, size: 18, color: Colors.white),
+                                                      tooltip: 'Create Lead',
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                               const SizedBox(width: 8),
                                               SelectionContainer.disabled(
                                                 child: Container(
@@ -1135,6 +1166,35 @@ class _LeadsPageState extends State<LeadsPage> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
+                                              if (AuthService().isAdmin ||
+                                                  AuthService().hasLeadPermission('create')) ...[
+                                                SelectionContainer.disabled(
+                                                  child: ElevatedButton.icon(
+                                                    onPressed: () => _openCreateLeadDialog(context, state),
+                                                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                                                    label: Text(
+                                                      'Create Lead',
+                                                      style: GoogleFonts.outfit(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppTheme.primaryColor,
+                                                      foregroundColor: Colors.white,
+                                                      elevation: 0,
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 12,
+                                                      ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                              ],
                                               SelectionContainer.disabled(
                                                 child: TextButton.icon(
                                                   onPressed: _downloadSampleCSV,

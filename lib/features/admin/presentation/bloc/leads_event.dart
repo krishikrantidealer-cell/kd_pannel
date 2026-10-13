@@ -219,3 +219,11 @@ class ToggleAnalyticsViewModeEvent extends LeadsEvent {
   List<Object?> get props => [mode];
 }
 
+class CreateLeadEvent extends LeadsEvent {
+  final Map<String, dynamic> leadData;
+  const CreateLeadEvent(this.leadData);
+
+  @override
+  List<Object?> get props => [leadData];
+}
+

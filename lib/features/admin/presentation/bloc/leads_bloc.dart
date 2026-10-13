@@ -31,6 +31,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<FetchLeadDetailsEvent>(_onFetchLeadDetails);
     on<FetchLeadEventsEvent>(_onFetchLeadEvents);
     on<ImportLeadsEvent>(_onImportLeads);
+    on<CreateLeadEvent>(_onCreateLead);
     on<FetchDailyLeadStatsEvent>(_onFetchDailyLeadStats);
     on<ToggleAnalyticsViewModeEvent>(_onToggleAnalyticsViewMode);
 
@@ -77,6 +78,31 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           status: LeadsStatus.success,
           actionSuccessMessage:
               data['message'] ?? 'Leads imported successfully',
+        ),
+      );
+      add(const FetchLeadsDataEvent(forceRefresh: true));
+    } catch (e) {
+      String userMessage = e.toString().replaceAll('Exception: ', '');
+      emit(
+        state.copyWithKeepMessages(
+          status: LeadsStatus.failure,
+          errorMessage: userMessage,
+        ),
+      );
+    }
+  }
+
+  Future<void> _onCreateLead(
+    CreateLeadEvent event,
+    Emitter<LeadsState> emit,
+  ) async {
+    emit(state.copyWith(status: LeadsStatus.submitting));
+    try {
+      final data = await _userRepo.createLead(leadData: event.leadData);
+      emit(
+        state.copyWith(
+          status: LeadsStatus.success,
+          actionSuccessMessage: data['message'] ?? 'Lead created successfully',
         ),
       );
       add(const FetchLeadsDataEvent(forceRefresh: true));

@@ -61,6 +61,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
   String _selectedStatus = 'all'; // all, closed, snoozed
   String _selectedTab = 'all'; // all, active, leads, dealers, unread
+  String? _selectedAgentId; // null or 'all' = all agents, 'unassigned' = unassigned chats, or ObjectId
   bool _isSyncingRoster = false;
   int _conversationsPage = 1;
   int _conversationsTotalPages = 1;
@@ -195,6 +196,37 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       if (_selectedStatus == 'open' && status != 'open') return false;
       if (_selectedStatus != 'open' && status != _selectedStatus) return false;
     }
+
+    // Role / Admin Agent Filter Check
+    if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
+      final convAssigned = conversation['assignedTo'];
+      String? convAgentId;
+      if (convAssigned is Map) {
+        convAgentId = convAssigned['_id']?.toString();
+      } else if (convAssigned != null) {
+        convAgentId = convAssigned.toString();
+      }
+
+      final contact = conversation['contactId'] is Map ? conversation['contactId'] : null;
+      final contactAssigned = contact?['assignedTo'];
+      String? contactAgentId;
+      if (contactAssigned is Map) {
+        contactAgentId = contactAssigned['_id']?.toString();
+      } else if (contactAssigned != null) {
+        contactAgentId = contactAssigned.toString();
+      }
+
+      final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
+          ? convAgentId
+          : contactAgentId;
+
+      if (_selectedAgentId == 'unassigned') {
+        if (effectiveAgentId != null && effectiveAgentId.isNotEmpty) return false;
+      } else {
+        if (effectiveAgentId != _selectedAgentId) return false;
+      }
+    }
+
     if (_selectedTab == 'all') return true;
     if (_selectedTab == 'unread') {
       final u = int.tryParse(conversation['unreadCount']?.toString() ?? '0') ?? 0;
@@ -615,8 +647,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     );
 
     try {
-      final endpoint =
+      String endpoint =
           '/conversations?status=$_selectedStatus&tab=$_selectedTab&search=$search&page=$page&limit=500';
+      if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
+        endpoint += '&agentId=$_selectedAgentId';
+      }
       final res = await ApiClient().get(endpoint);
 
       if (res.statusCode == 200) {
@@ -1335,6 +1370,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (AuthService().currentUserRole == UserRole.admin) ...[
+                _buildAdminAgentFilter(),
+                const SizedBox(height: 6),
+              ],
               // Row 1: Primary Audience Segmentation
               Row(
                 children: [
@@ -1815,6 +1854,153 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAdminAgentFilter() {
+    final bool isFiltered = _selectedAgentId != null &&
+        _selectedAgentId!.isNotEmpty &&
+        _selectedAgentId != 'all';
+
+    // Verify current selection is still in dropdown items, else fallback to 'all'
+    String currentValue = 'all';
+    if (_selectedAgentId == 'unassigned') {
+      currentValue = 'unassigned';
+    } else if (isFiltered && _salesAgents.any((a) => a['_id']?.toString() == _selectedAgentId)) {
+      currentValue = _selectedAgentId!;
+    }
+
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: isFiltered ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isFiltered ? const Color(0xFF008069) : const Color(0xFFE2E8F0),
+          width: isFiltered ? 1.2 : 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isFiltered ? Icons.filter_alt_rounded : Icons.support_agent_rounded,
+            size: 15,
+            color: isFiltered ? const Color(0xFF008069) : const Color(0xFF64748B),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: currentValue,
+                isDense: true,
+                isExpanded: true,
+                icon: const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 18,
+                  color: Color(0xFF64748B),
+                ),
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  fontWeight: isFiltered ? FontWeight.w600 : FontWeight.w500,
+                  color: isFiltered ? const Color(0xFF008069) : const Color(0xFF334155),
+                ),
+                items: [
+                  DropdownMenuItem<String>(
+                    value: 'all',
+                    child: Text(
+                      'All Sales Agents (${_salesAgents.length})',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'unassigned',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.person_off_outlined, size: 13, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Unassigned Chats',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFDC2626),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  ..._salesAgents.map((agent) {
+                    final String id = agent['_id']?.toString() ?? '';
+                    final fn = (agent['firstName'] ?? '').toString();
+                    final ln = (agent['lastName'] ?? '').toString();
+                    final name = '$fn $ln'.trim();
+                    final phone = (agent['phoneNumber'] ?? '').toString();
+                    final displayName = name.isNotEmpty ? name : phone;
+                    return DropdownMenuItem<String>(
+                      value: id,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: _getAvatarColor(name),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              phone.isNotEmpty && name.isNotEmpty
+                                  ? '$displayName ($phone)'
+                                  : displayName,
+                              style: GoogleFonts.outfit(fontSize: 11.5),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                onChanged: (val) {
+                  setState(() {
+                    _selectedAgentId = (val == null || val == 'all') ? null : val;
+                    _selectedConversation = null;
+                  });
+                  _fetchConversations();
+                },
+              ),
+            ),
+          ),
+          if (isFiltered)
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedAgentId = null;
+                  _selectedConversation = null;
+                });
+                _fetchConversations();
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

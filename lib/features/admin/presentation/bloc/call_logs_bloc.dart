@@ -248,20 +248,21 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
           final List<dynamic> logs = body['data'] ?? [];
-          final int total = body['pagination']?['total'] ?? logs.length;
+          final sortedLogs = _sortCallLogs(logs);
+          final int total = body['pagination']?['total'] ?? sortedLogs.length;
           final int totalPages = body['pagination']?['pages'] ?? 1;
 
           final metrics = body['metrics'] ?? {};
           final int totalCalls = metrics['totalCalls'] ?? total;
-          final int inbound = metrics['inboundCount'] ?? logs.where((l) => l['type'] == 'inbound').length;
-          final int outbound = metrics['outboundCount'] ?? logs.where((l) => l['type'] == 'outbound').length;
-          final int missed = metrics['missedCount'] ?? logs.where((l) => l['status'] == 'missed').length;
+          final int inbound = metrics['inboundCount'] ?? sortedLogs.where((l) => l['type'] == 'inbound').length;
+          final int outbound = metrics['outboundCount'] ?? sortedLogs.where((l) => l['type'] == 'outbound').length;
+          final int missed = metrics['missedCount'] ?? sortedLogs.where((l) => l['status'] == 'missed').length;
           final int totalSecs = metrics['totalSeconds'] ?? 0;
           final List<dynamic> leaderboard = metrics['leaderboard'] ?? [];
 
           emit(state.copyWith(
             status: CallLogsStatus.loaded,
-            callLogs: logs,
+            callLogs: sortedLogs,
             salesAgents: agents,
             totalCount: total,
             totalPages: totalPages,
@@ -413,6 +414,54 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     }
   }
 
+  DateTime _parseCallLogDate(dynamic log) {
+    if (log is! Map) return DateTime.fromMillisecondsSinceEpoch(0);
+    final createdAt = log['createdAt'];
+    if (createdAt != null) {
+      if (createdAt is DateTime) return createdAt;
+      final numVal = num.tryParse(createdAt.toString());
+      if (numVal != null && numVal > 0) {
+        final ms = numVal > 1e11 ? numVal.toInt() : (numVal * 1000).toInt();
+        return DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+      final parsed = DateTime.tryParse(createdAt.toString());
+      if (parsed != null) return parsed;
+    }
+    final metadata = log['metadata'];
+    if (metadata is Map) {
+      final startTime = metadata['start_time'] ?? metadata['started_at'] ?? metadata['created_at'] ?? metadata['date_time'];
+      if (startTime != null) {
+        final numVal = num.tryParse(startTime.toString());
+        if (numVal != null && numVal > 0) {
+          final ms = numVal > 1e11 ? numVal.toInt() : (numVal * 1000).toInt();
+          return DateTime.fromMillisecondsSinceEpoch(ms);
+        }
+        final parsed = DateTime.tryParse(startTime.toString());
+        if (parsed != null) return parsed;
+      }
+    }
+    final updatedAt = log['updatedAt'];
+    if (updatedAt != null) {
+      final parsed = DateTime.tryParse(updatedAt.toString());
+      if (parsed != null) return parsed;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  List<dynamic> _sortCallLogs(List<dynamic> logs) {
+    final sorted = List<dynamic>.from(logs);
+    sorted.sort((a, b) {
+      final dateA = _parseCallLogDate(a);
+      final dateB = _parseCallLogDate(b);
+      final comp = dateB.compareTo(dateA); // Newest first (descending)
+      if (comp != 0) return comp;
+      final idA = (a is Map ? (a['_id'] ?? a['callId'] ?? '') : '').toString();
+      final idB = (b is Map ? (b['_id'] ?? b['callId'] ?? '') : '').toString();
+      return idB.compareTo(idA);
+    });
+    return sorted;
+  }
+
   Timer? _wsDebounceFetchTimer;
 
   void _onWebSocketCallUpdate(
@@ -440,14 +489,16 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     if (index != -1) {
       currentLogs[index] = updatedLog;
     } else {
-      currentLogs.insert(0, updatedLog);
+      currentLogs.add(updatedLog);
     }
 
+    final sortedLogs = _sortCallLogs(currentLogs);
+
     // Recompute fast live metrics from current state
-    final totalCalls = currentLogs.length > state.totalCalls ? currentLogs.length : state.totalCalls;
-    final inbound = currentLogs.where((l) => (l['direction'] ?? l['type']) == 'inbound').length;
-    final outbound = currentLogs.where((l) => (l['direction'] ?? l['type']) == 'outbound').length;
-    final missed = currentLogs.where((l) {
+    final totalCalls = sortedLogs.length > state.totalCalls ? sortedLogs.length : state.totalCalls;
+    final inbound = sortedLogs.where((l) => (l['direction'] ?? l['type']) == 'inbound').length;
+    final outbound = sortedLogs.where((l) => (l['direction'] ?? l['type']) == 'outbound').length;
+    final missed = sortedLogs.where((l) {
       final s = (l['status'] ?? '').toString().toLowerCase();
       return s == 'missed' || s == 'no-answer';
     }).length;
@@ -547,7 +598,7 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     if (isThisActiveCall && isAnswered && !state.isCallActive) {
       TelephonyAudioService().stopDialingTone();
       emit(state.copyWith(
-        callLogs: currentLogs,
+        callLogs: sortedLogs,
         totalCalls: totalCalls,
         inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
         outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,
@@ -570,7 +621,7 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
       final effectivePhone = customerPhone.isNotEmpty ? customerPhone : state.activeCustomerPhone;
 
       emit(state.copyWith(
-        callLogs: currentLogs,
+        callLogs: sortedLogs,
         totalCalls: totalCalls,
         inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
         outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,
@@ -584,7 +635,7 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
       ));
     } else {
       emit(state.copyWith(
-        callLogs: currentLogs,
+        callLogs: sortedLogs,
         totalCalls: totalCalls,
         inboundCount: inbound > state.inboundCount ? inbound : state.inboundCount,
         outboundCount: outbound > state.outboundCount ? outbound : state.outboundCount,

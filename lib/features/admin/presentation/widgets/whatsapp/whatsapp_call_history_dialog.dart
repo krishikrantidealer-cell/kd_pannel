@@ -348,28 +348,41 @@ class _WhatsAppCallHistoryDialogState extends State<WhatsAppCallHistoryDialog> {
                                       String recordingUrl = rawRecordingUrl;
                                       final logId = call['_id']?.toString() ?? call['callId']?.toString() ?? '';
 
-                                      if (!recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://') && logId.isNotEmpty) {
+                                      final isDirectPlayableLink = recordingUrl.contains('amazonaws.com') || recordingUrl.contains('s3.') || recordingUrl.endsWith('.mp3');
+
+                                      if (!isDirectPlayableLink && logId.isNotEmpty) {
                                         try {
-                                          final res = await ApiClient().get('/calls/recordings/$logId/url');
+                                          final res = await ApiClient().get('/calls/recordings//url');
                                           if (res.statusCode == 200) {
                                             final body = jsonDecode(res.body);
                                             if (body['success'] == true && body['data']?['recordingUrl'] != null) {
-                                              recordingUrl = body['data']['recordingUrl'].toString();
+                                              final fetched = body['data']['recordingUrl'].toString();
+                                              if (fetched.contains('amazonaws.com') || fetched.contains('s3.') || fetched.endsWith('.mp3')) {
+                                                recordingUrl = fetched;
+                                                if (call is Map) {
+                                                  call['recordingUrl'] = recordingUrl;
+                                                }
+                                              }
                                             }
                                           }
                                         } catch (_) {}
                                       }
 
-                                      String targetUrl = 'https://myoperator.com/app/call-logs';
-                                      if (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://')) {
-                                        targetUrl = recordingUrl;
-                                      } else if (cleanPhone.isNotEmpty) {
-                                        targetUrl = 'https://myoperator.com/app/call-logs?search=$cleanPhone';
-                                      }
+                                      final isValidStream = recordingUrl.contains('amazonaws.com') || recordingUrl.contains('s3.') || recordingUrl.endsWith('.mp3');
 
-                                      final uri = Uri.parse(targetUrl);
-                                      if (await canLaunchUrl(uri)) {
-                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                      if (isValidStream && (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://'))) {
+                                        final uri = Uri.parse(recordingUrl);
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Recording is still processing on MyOperator switch. Please check back shortly.'),
+                                            backgroundColor: Color(0xFF64748B),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
                                       }
                                     },
                                     child: Container(

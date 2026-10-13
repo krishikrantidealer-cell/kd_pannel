@@ -204,6 +204,22 @@ class UserRepository {
     throw Exception(data['message'] ?? 'Failed to create dealer: ${res.statusCode}');
   }
 
+  /// Create a new Lead
+  Future<Map<String, dynamic>> createLead({
+    required Map<String, dynamic> leadData,
+  }) async {
+    final res = await _apiClient.post('/users/lead', leadData);
+    final data = jsonDecode(res.body);
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      if (data['success'] == true) {
+        invalidateCache();
+        return data;
+      }
+      throw Exception(data['message'] ?? 'Failed to create lead');
+    }
+    throw Exception(data['message'] ?? 'Failed to create lead: ${res.statusCode}');
+  }
+
   /// Assign agent to user
   Future<void> assignAgent(String userId, String? agentId) async {
     final res = await _apiClient.put('/users/$userId/assign-agent', {
@@ -460,6 +476,68 @@ class UserRepository {
       return true;
     }
     throw Exception(data['message'] ?? 'Failed to permanently delete user');
+  }
+
+  /// Fetch all customers for the Customer Directory (active + deleted)
+  Future<Map<String, dynamic>> fetchCustomerDirectoryUsers({
+    int page = 1,
+    int limit = 25,
+    String search = '',
+    String isDeleted = 'all', // 'all', 'false' (active), 'true' (deleted)
+    String assignedAgent = 'all', // 'all', 'unassigned', 'assigned', or specific agent ID
+    String kycStatus = 'all', // 'all', 'verified', 'not_verified'
+    String startDate = '',
+    String endDate = '',
+  }) async {
+    final queryParams = <String>[
+      'role=user',
+      'page=$page',
+      'limit=$limit',
+      'includeDeleted=true',
+    ];
+
+    if (isDeleted == 'false') {
+      queryParams.add('isDeleted=false');
+    } else if (isDeleted == 'true') {
+      queryParams.add('trash=true');
+    } else {
+      queryParams.add('trash=all');
+    }
+
+    if (assignedAgent.isNotEmpty && assignedAgent != 'all') {
+      queryParams.add('assignedAgent=${Uri.encodeComponent(assignedAgent)}');
+    }
+
+    if (kycStatus.isNotEmpty && kycStatus != 'all') {
+      queryParams.add('kycStatus=${Uri.encodeComponent(kycStatus)}');
+    }
+
+    if (search.trim().isNotEmpty) {
+      queryParams.add('search=${Uri.encodeComponent(search.trim())}');
+    }
+
+    if (startDate.isNotEmpty && endDate.isNotEmpty) {
+      queryParams.add('startDate=$startDate');
+      queryParams.add('endDate=$endDate');
+    }
+
+    final url = '/users?${queryParams.join('&')}';
+    final res = await _apiClient.get(url);
+    final data = jsonDecode(res.body);
+    if (res.statusCode == 200 && data['success'] == true) {
+      return data;
+    }
+    throw Exception(data['message'] ?? 'Failed to load customer directory (${res.statusCode})');
+  }
+
+  /// Fetch overall stats for the Customer Directory
+  Future<Map<String, dynamic>> fetchCustomerDirectoryStats() async {
+    final res = await _apiClient.get('/users/customer-directory-stats');
+    final data = jsonDecode(res.body);
+    if (res.statusCode == 200 && data['success'] == true) {
+      return Map<String, dynamic>.from(data['stats'] ?? {});
+    }
+    throw Exception(data['message'] ?? 'Failed to load customer directory stats');
   }
 
   /// Invalidate cache and broadcast update to all active blocs
