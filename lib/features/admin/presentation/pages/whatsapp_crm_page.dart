@@ -2839,6 +2839,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           const SizedBox(width: 3),
                                           _buildMessageStatusIcon(
                                             msg['status'] ?? 'sent',
+                                            msg['error']?.toString() ?? msg['errorMessage']?.toString() ?? msg['failureReason']?.toString(),
                                           ),
                                         ],
                                       ],
@@ -3373,10 +3374,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     );
   }
 
-  Widget _buildMessageStatusIcon(String status) {
+  Widget _buildMessageStatusIcon(String status, [String? errorDetail]) {
     final s = status.toLowerCase().trim();
     if (s == 'failed' || s == 'undelivered' || s == 'error') {
-      return const Icon(Icons.error_outline, size: 12, color: Colors.redAccent);
+      final tip = errorDetail != null && errorDetail.isNotEmpty
+          ? 'Failed: $errorDetail'
+          : 'Delivery Failed (Meta Error 131049: Customer has reached Meta\'s Marketing message limit. Switch to a UTILITY template or wait for customer to reply).';
+      return Tooltip(
+        message: tip,
+        preferBelow: false,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        textStyle: GoogleFonts.outfit(color: Colors.white, fontSize: 11),
+        child: const Icon(Icons.error_outline, size: 12, color: Colors.redAccent),
+      );
     }
     if (s == 'read' || s == 'seen') {
       return const Icon(Icons.done_all, size: 12, color: Color(0xFF53BDEB)); // WhatsApp Blue Tick
