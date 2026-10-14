@@ -342,6 +342,8 @@ class _CallLogsPageState extends State<CallLogsPage> {
         ],
       ),
     );
+  }
+
   Widget _buildExportInfoRow(String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
