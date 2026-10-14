@@ -3027,55 +3027,111 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                             ),
                                           ),
                                         );
+                                      } else if ((type == 'document' || type == 'file') && rawMedia.isEmpty) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 6.0),
+                                          child: Container(
+                                            height: 52,
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.04),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                const SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Color(0xFF008069),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Document downloading...',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: const Color(0xFF54656F),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
                                       } else if (rawMedia.isNotEmpty) {
+                                        final cleanFileName = rawMedia.split('/').last.split('?').first;
+                                        final lowerName = cleanFileName.toLowerCase();
+                                        final isPdf = lowerName.endsWith('.pdf');
+                                        final isSheet = lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.csv');
+                                        final isWord = lowerName.endsWith('.doc') || lowerName.endsWith('.docx');
+                                        final docIcon = isPdf
+                                            ? Icons.picture_as_pdf_rounded
+                                            : (isSheet ? Icons.table_chart_rounded : (isWord ? Icons.article_rounded : Icons.description_rounded));
+                                        final docColor = isPdf
+                                            ? const Color(0xFFE11D48)
+                                            : (isSheet ? const Color(0xFF059669) : (isWord ? const Color(0xFF2563EB) : const Color(0xFF008069)));
+
                                         return Padding(
                                           padding: const EdgeInsets.only(bottom: 6.0),
                                           child: InkWell(
-                                            borderRadius: BorderRadius.circular(6),
+                                            borderRadius: BorderRadius.circular(8),
                                             onTap: () async {
-                                              final url = Uri.tryParse(rawMedia);
-                                              if (url != null && await canLaunchUrl(url)) {
-                                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                                              final uri = Uri.tryParse(rawMedia);
+                                              if (uri != null) {
+                                                await launchUrl(uri, mode: LaunchMode.externalApplication);
                                               }
                                             },
                                             child: Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withValues(alpha: 0.05),
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                                                color: Colors.black.withValues(alpha: 0.04),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: docColor.withValues(alpha: 0.2)),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(Icons.description_rounded, color: Color(0xFF008069), size: 20),
+                                                  Container(
+                                                    padding: const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: docColor.withValues(alpha: 0.1),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Icon(docIcon, color: docColor, size: 20),
+                                                  ),
                                                   const SizedBox(width: 8),
                                                   Flexible(
                                                     child: Column(
                                                       crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
                                                         Text(
-                                                          'Attachment (Tap to view)',
+                                                          cleanFileName.isNotEmpty ? cleanFileName : 'Document',
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
                                                           style: GoogleFonts.outfit(
                                                             fontSize: 12,
-                                                            color: const Color(0xFF008069),
+                                                            color: const Color(0xFF1E293B),
                                                             fontWeight: FontWeight.w600,
                                                           ),
                                                         ),
                                                         Text(
-                                                          rawMedia.split('/').last.split('?').first,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
+                                                          'Tap to view / download',
                                                           style: GoogleFonts.outfit(
-                                                            fontSize: 10,
-                                                            color: Colors.grey[700],
+                                                            fontSize: 10.5,
+                                                            color: docColor,
+                                                            fontWeight: FontWeight.w500,
                                                           ),
                                                         ),
                                                       ],
                                                     ),
                                                   ),
                                                   const SizedBox(width: 6),
-                                                  const Icon(Icons.open_in_new_rounded, color: Color(0xFF008069), size: 15),
+                                                  Icon(Icons.open_in_new_rounded, color: docColor, size: 15),
                                                 ],
                                               ),
                                             ),
@@ -3176,6 +3232,15 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           fontSize: 13,
                                           color: textCol,
                                           height: 1.25,
+                                        ),
+                                      )
+                                    else if ((msg['mediaUrl'] ?? '').toString().trim().isEmpty && type != 'image' && type != 'document' && type != 'file')
+                                      Text(
+                                        '[Message unavailable]',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                          color: textCol.withValues(alpha: 0.6),
                                         ),
                                       ),
                                     const SizedBox(height: 3),
