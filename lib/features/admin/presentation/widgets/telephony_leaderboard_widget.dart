@@ -550,16 +550,35 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
                   ),
                 ),
 
-                // 6. Shift Window (First & Last Call)
+                // 6. Shift Window (First & Last Call) — stacked to avoid horizontal overflow
                 DataCell(
-                  Row(
+                  Column(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.schedule_rounded, size: 13, color: Color(0xFF64748B)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$firstCall - $lastCall',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 11, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.play_arrow_rounded, size: 12, color: Color(0xFF16A34A)),
+                          const SizedBox(width: 3),
+                          Text(
+                            firstCall,
+                            style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: const Color(0xFF334155), fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.stop_rounded, size: 12, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 3),
+                          Text(
+                            lastCall,
+                            style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: const Color(0xFF334155), fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
                     ],
                   ),
