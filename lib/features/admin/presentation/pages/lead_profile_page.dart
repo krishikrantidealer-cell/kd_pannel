@@ -2896,8 +2896,8 @@ class _FlatHeaderSection extends StatelessWidget {
         : 'L';
 
     final Widget avatar = Container(
-      width: 64,
-      height: 64,
+      width: isMobile ? 48 : 56,
+      height: isMobile ? 48 : 56,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [AppTheme.accentColor, AppTheme.accentColor.withOpacity(0.8)],
@@ -2908,8 +2908,8 @@ class _FlatHeaderSection extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: AppTheme.accentColor.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -2917,7 +2917,7 @@ class _FlatHeaderSection extends StatelessWidget {
         child: Text(
           initial,
           style: GoogleFonts.outfit(
-            fontSize: 26,
+            fontSize: isMobile ? 20 : 24,
             fontWeight: FontWeight.w900,
             color: Colors.white,
           ),
@@ -2927,169 +2927,139 @@ class _FlatHeaderSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: AppTheme.softShadow,
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            // 1. BANNER COVER BACKGROUND WITH AURORA GRADIENTS
-            Container(
-              height: isMobile ? 100 : 130,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: kycStatus.toLowerCase() == 'verified'
-                      ? [const Color(0xFF065F46), const Color(0xFF10B981)]
-                      : kycStatus.toLowerCase() == 'rejected'
-                      ? [const Color(0xFF991B1B), const Color(0xFFEF4444)]
-                      : [const Color(0xFFB45309), const Color(0xFFF59E0B)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            // Floating Decorative Bubbles
-            Positioned(
-              right: -20,
-              top: -20,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.08),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 110,
-              top: -40,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.05),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 140,
-              bottom: -15,
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.04),
-                ),
-              ),
-            ),
-
-            // 2. CONTENT OVERLAY
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                isMobile ? 16 : 24,
-                isMobile ? 68 : 98,
-                isMobile ? 16 : 24,
-                isMobile ? 16 : 24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: avatar,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      lead['name'] ?? '',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: isMobile ? 18 : 22,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF111827),
-                                      ),
-                                    ),
+                              Flexible(
+                                child: Text(
+                                  lead['name'] ?? '',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: const Color(0xFF111827),
                                   ),
-                                  if (kycStatus.toLowerCase() ==
-                                      'verified') ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(
-                                      Icons.verified_rounded,
-                                      color: Color(0xFF298E4D),
-                                      size: 18,
-                                    ),
-                                  ],
-                                ],
+                                ),
                               ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  _buildStatusBadge(
-                                    'KYC: ${kycStatus.toUpperCase()}',
-                                    statusColor,
-                                  ),
-                                  if (lead['source'] != null &&
-                                      lead['source'].toString().isNotEmpty)
-                                    _buildStatusBadge(
-                                      'SOURCE: ${lead['source'].toString().toUpperCase()}',
-                                      const Color(0xFF3B82F6),
-                                    ),
-                                ],
-                              ),
-                              if (!isMobile) ...[
-                                const SizedBox(height: 12),
-                                _buildContactRow(locationText, isMobile),
+                              if (kycStatus.toLowerCase() == 'verified') ...[
+                                const SizedBox(width: 6),
+                                const Icon(
+                                  Icons.verified_rounded,
+                                  color: Color(0xFF298E4D),
+                                  size: 18,
+                                ),
                               ],
                             ],
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              _buildStatusBadge(
+                                'KYC: ${kycStatus.toUpperCase()}',
+                                statusColor,
+                              ),
+                              if (lead['source'] != null &&
+                                  lead['source'].toString().isNotEmpty)
+                                _buildStatusBadge(
+                                  'SOURCE: ${lead['source'].toString().toUpperCase()}',
+                                  const Color(0xFF3B82F6),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildContactRow(locationText, isMobile),
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                const SizedBox(height: 14),
+                _buildActionButtons(context, isMobile, isTablet),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                avatar,
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              lead['name'] ?? '',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF111827),
+                              ),
+                            ),
+                          ),
+                          if (kycStatus.toLowerCase() == 'verified') ...[
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.verified_rounded,
+                              color: Color(0xFF298E4D),
+                              size: 18,
+                            ),
+                          ],
+                          const SizedBox(width: 10),
+                          _buildStatusBadge(
+                            'KYC: ${kycStatus.toUpperCase()}',
+                            statusColor,
+                          ),
+                          if (lead['source'] != null &&
+                              lead['source'].toString().isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            _buildStatusBadge(
+                              'SOURCE: ${lead['source'].toString().toUpperCase()}',
+                              const Color(0xFF3B82F6),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildContactRow(locationText, isMobile),
                     ],
                   ),
-                  if (isMobile) ...[
-                    const SizedBox(height: 16),
-                    _buildContactRow(locationText, isMobile),
-                  ],
-                  const SizedBox(height: 16),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  const SizedBox(height: 16),
-                  _buildActionButtons(context, isMobile, isTablet),
-                ],
-              ),
+                ),
+                const SizedBox(width: 20),
+                _buildActionButtons(context, isMobile, isTablet),
+              ],
             ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -3289,41 +3259,6 @@ class _ActionButton extends StatefulWidget {
 class _ActionButtonState extends State<_ActionButton> {
   bool isHovered = false;
 
-  Widget _buildMiniStat(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.outfit(
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              color: color.withOpacity(0.8),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
@@ -3337,15 +3272,15 @@ class _ActionButtonState extends State<_ActionButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: isMobile ? 48 : 44,
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 22),
+          height: isMobile ? 38 : 36,
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14),
           decoration: BoxDecoration(
             color: isDisabled
                 ? (widget.isSolid ? const Color(0xFFE5E7EB) : Colors.white)
                 : widget.isSolid
                 ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
                 : (isHovered ? widget.color.withOpacity(0.08) : Colors.white),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: widget.isSolid
                 ? null
                 : Border.all(
@@ -3358,8 +3293,8 @@ class _ActionButtonState extends State<_ActionButton> {
                 ? [
                     BoxShadow(
                       color: widget.color.withOpacity(0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
                   ]
                 : null,
@@ -3371,25 +3306,25 @@ class _ActionButtonState extends State<_ActionButton> {
               widget.icon is IconData
                   ? Icon(
                       widget.icon as IconData,
-                      size: isMobile ? 18 : 19,
+                      size: isMobile ? 16 : 17,
                       color: isDisabled
                           ? const Color(0xFF9CA3AF)
                           : (widget.isSolid ? Colors.white : widget.color),
                     )
                   : FaIcon(
                       widget.icon,
-                      size: isMobile ? 18 : 19,
+                      size: isMobile ? 16 : 17,
                       color: isDisabled
                           ? const Color(0xFF9CA3AF)
                           : (widget.isSolid ? Colors.white : widget.color),
                     ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   widget.label,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: isMobile ? 13 : 14,
+                    fontSize: isMobile ? 12 : 13,
                     fontWeight: FontWeight.w700,
                     color: isDisabled
                         ? const Color(0xFF9CA3AF)
