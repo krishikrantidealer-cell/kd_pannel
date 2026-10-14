@@ -412,7 +412,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             padding: EdgeInsets.symmetric(
                               horizontal: screenPadding.left,
                             ),
-                            child: _buildFilterControls(isMobile, state, filtered),
+                            child: _buildFilterControls(isMobile, state),
                           ),
                           const SizedBox(height: 16),
 
@@ -763,7 +763,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildFilterControls(bool isMobile, OrdersState state, List<OrderModel> ordersToExport) {
+  Widget _buildFilterControls(bool isMobile, OrdersState state) {
     final List<String> orderStatusOptions = [
       'All Statuses',
       'Pending',
@@ -874,8 +874,6 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildExportButton(ordersToExport),
         ],
       );
     }
@@ -920,7 +918,6 @@ class _OrdersPageState extends State<OrdersPage> {
               );
             }, width: 130),
             const Spacer(),
-            _buildExportButton(ordersToExport),
           ],
         ),
       ],
