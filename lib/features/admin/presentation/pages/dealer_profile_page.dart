@@ -1784,14 +1784,13 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     String? assignedAgentName;
     final agentId = dealer.agentId;
     if (agentId != null && agentId.isNotEmpty) {
-      final match = salesAgents.firstWhere(
-        (a) => (a['_id'] ?? a['id'])?.toString() == agentId,
-        orElse: () => null,
-      );
-      if (match != null) {
-        assignedAgentName =
-            '${match['firstName'] ?? ''} ${match['lastName'] ?? ''}'.trim();
-        if (assignedAgentName.isEmpty) assignedAgentName = match['name']?.toString();
+      for (final a in salesAgents) {
+        if (a is Map && (a['_id'] ?? a['id'])?.toString() == agentId) {
+          assignedAgentName =
+              '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
+          if (assignedAgentName.isEmpty) assignedAgentName = a['name']?.toString();
+          break;
+        }
       }
     }
     if ((assignedAgentName == null || assignedAgentName.isEmpty) &&

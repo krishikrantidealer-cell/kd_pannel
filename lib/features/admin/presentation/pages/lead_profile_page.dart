@@ -2065,13 +2065,13 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         }
       } else {
         final agentIdStr = assignedAgent.toString();
-        final match = salesAgents.firstWhere(
-          (a) => (a['_id'] ?? a['id'])?.toString() == agentIdStr,
-          orElse: () => null,
-        );
-        if (match != null) {
-          assignedAgentName =
-              '${match['firstName'] ?? ''} ${match['lastName'] ?? ''}'.trim();
+        for (final a in salesAgents) {
+          if (a is Map && (a['_id'] ?? a['id'])?.toString() == agentIdStr) {
+            assignedAgentName =
+                '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
+            if (assignedAgentName.isEmpty) assignedAgentName = a['name']?.toString();
+            break;
+          }
         }
       }
     }
