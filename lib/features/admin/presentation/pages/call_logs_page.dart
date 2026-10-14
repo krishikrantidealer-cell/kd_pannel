@@ -342,6 +342,151 @@ class _CallLogsPageState extends State<CallLogsPage> {
         ],
       ),
     );
+  Widget _buildExportInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 105,
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+          ),
+        ),
+        const Text(': ', style: TextStyle(color: Color(0xFF94A3B8))),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmExportReport(BuildContext context, {required String reportType}) {
+    final isShiftSummary = reportType == 'agent_summary';
+    final state = context.read<CallLogsBloc>().state;
+    final timeframeDisplay = state.selectedTimeframe.isNotEmpty
+        ? state.selectedTimeframe
+        : _getRangeDisplay(state);
+
+    String agentDisplay = 'All Active Sales Agents';
+    if (state.selectedAgentId != null && state.selectedAgentId!.isNotEmpty && state.selectedAgentId != 'all') {
+      final match = state.salesAgents.firstWhere(
+        (a) => (a['_id']?.toString() == state.selectedAgentId || a['companyId']?.toString() == state.selectedAgentId),
+        orElse: () => null,
+      );
+      if (match != null && match is Map) {
+        agentDisplay = match['name'] ?? match['firstName'] ?? 'Selected Agent';
+      }
+    } else if (state.salesAgents.isNotEmpty) {
+      agentDisplay = 'All Sales Agents (${state.salesAgents.length})';
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF008069).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF008069).withValues(alpha: 0.2)),
+              ),
+              child: const Icon(Icons.file_download_outlined, color: Color(0xFF008069), size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isShiftSummary ? 'Export Shift Performance Report' : 'Export Call Detail Records (CDR)',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17, color: const Color(0xFF0F172A)),
+                  ),
+                  Text(
+                    'Generate and download formatted CSV report',
+                    style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _buildExportInfoRow('Report Type', isShiftSummary ? 'Agent Shift Performance Matrix' : 'Call Detail Records (CDR)'),
+                    const SizedBox(height: 8),
+                    _buildExportInfoRow('Timeframe', timeframeDisplay),
+                    const SizedBox(height: 8),
+                    _buildExportInfoRow('Agents Scope', agentDisplay),
+                    const SizedBox(height: 8),
+                    _buildExportInfoRow('File Format', 'CSV (Excel & Google Sheets Compatible)'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                isShiftSummary
+                    ? 'Includes total dials, connect rates, talk time, average handle time (AHT), shift window (start/end), and unique leads reached per agent.'
+                    : 'Exports full call records with audio recording links, customer phone numbers, call disposition, ACW notes, and durations.',
+                style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF64748B), height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _exportFromBackend(reportType: reportType);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF008069),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: Text(
+              'Download CSV',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _exportFromBackend({required String reportType}) async {
@@ -1358,9 +1503,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                         PopupMenuButton<String>(
                           onSelected: (val) {
                             if (val == 'agent_summary') {
-                              _exportFromBackend(reportType: 'agent_summary');
+                              _confirmExportReport(context, reportType: 'agent_summary');
                             } else if (val == 'all_calls') {
-                              _exportFromBackend(reportType: 'all_calls');
+                              _confirmExportReport(context, reportType: 'all_calls');
                             }
                           },
                           tooltip: 'Export Reports',
@@ -1503,7 +1648,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                             page: 1,
                           ));
                         },
-                        onExportSummary: () => _exportFromBackend(reportType: 'agent_summary'),
+                        onExportSummary: () => _confirmExportReport(context, reportType: 'agent_summary'),
                       ),
                       const SizedBox(height: 20),
 

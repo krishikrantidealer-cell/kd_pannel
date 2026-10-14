@@ -266,13 +266,14 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
                   ),
                   const SizedBox(width: 10),
                   if (widget.onExportSummary != null)
-                    OutlinedButton.icon(
+                    ElevatedButton.icon(
                       onPressed: widget.onExportSummary,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF008069),
-                        side: const BorderSide(color: Color(0xFF008069)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF008069),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        minimumSize: const Size(0, 32),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       icon: const Icon(Icons.file_download_outlined, size: 14),
