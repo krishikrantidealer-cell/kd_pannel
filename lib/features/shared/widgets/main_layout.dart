@@ -1,5 +1,4 @@
 import "package:kd_pannel/features/admin/presentation/pages/engagement_hub_page.dart";
-import "package:kd_pannel/features/admin/presentation/pages/push_campaigns_page.dart";
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
@@ -11,14 +10,12 @@ import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/products_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/call_logs_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_customer_events_page.dart';
 import 'sidebar_widget.dart';
 import 'global_telephony_acw_listener.dart';
@@ -72,8 +69,8 @@ class _MainLayoutState extends State<MainLayout> {
         case 4: return const DealerManagementPage();
         case 5: return const SalesCouponPage();
         case 6: return const SalesCustomerEventsPage();
-        case 7: return const WhatsAppCrmPage();
-        case 8: return const CallLogsPage();
+        case 7: return AuthService().hasMyOperatorAccess ? const WhatsAppCrmPage() : const SalesDashboardPage();
+        case 8: return AuthService().hasMyOperatorAccess ? const CallLogsPage() : const SalesDashboardPage();
         case 9: return const EstimateGeneratorPage();
         case 10: return const AlertsPage();
         default: return const SalesDashboardPage();
@@ -161,9 +158,9 @@ class _MainLayoutState extends State<MainLayout> {
         } else if (routeName == '/marketing' || routeName == '/customer' || routeName == '/events') {
           _currentIdx = 6;
         } else if (routeName == '/support' || routeName == '/whatsapp') {
-          _currentIdx = 7;
+          _currentIdx = AuthService().hasMyOperatorAccess ? 7 : 0;
         } else if (routeName == '/calls' || routeName == '/call-recordings') {
-          _currentIdx = 8;
+          _currentIdx = AuthService().hasMyOperatorAccess ? 8 : 0;
         } else if (routeName == '/sales/estimates' || routeName == '/estimates') {
           _currentIdx = 9;
         } else if (routeName == '/alerts') {
@@ -206,8 +203,8 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 4) route = '/dealers';
       if (index == 5) route = '/sales/coupons';
       if (index == 6) route = '/marketing';
-      if (index == 7) route = '/support';
-      if (index == 8) route = '/calls';
+      if (index == 7) route = AuthService().hasMyOperatorAccess ? '/support' : '/dashboard';
+      if (index == 8) route = AuthService().hasMyOperatorAccess ? '/calls' : '/dashboard';
       if (index == 9) route = '/sales/estimates';
       if (index == 10) route = '/alerts';
     }

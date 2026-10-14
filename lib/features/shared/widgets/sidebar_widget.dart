@@ -74,9 +74,16 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   Widget build(BuildContext context) {
     final unreadCount = context.watch<NotificationsCubit>().state.unreadCount;
     final role = AuthService().currentUserRole ?? UserRole.admin;
+    final hasMyOperator = AuthService().hasMyOperatorAccess;
     final menuItems = role == UserRole.admin
         ? _adminMenuItems
-        : _salesMenuItems;
+        : _salesMenuItems.where((item) {
+            final title = item['title'] as String?;
+            if (title == 'WhatsApp CRM' || title == 'Call History') {
+              return hasMyOperator;
+            }
+            return true;
+          }).toList();
 
     const double collapsedWidth = 72.0;
     const double expandedWidth = 250.0;
