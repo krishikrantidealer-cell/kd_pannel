@@ -11,7 +11,6 @@ class CustomerTimelineWidget extends StatefulWidget {
   final String? userId;
   final String? customerName;
   final VoidCallback? onTriggerCall;
-  final VoidCallback? onOpenWhatsApp;
 
   const CustomerTimelineWidget({
     super.key,
@@ -19,7 +18,6 @@ class CustomerTimelineWidget extends StatefulWidget {
     this.userId,
     this.customerName,
     this.onTriggerCall,
-    this.onOpenWhatsApp,
   });
 
   @override
@@ -185,19 +183,6 @@ class _CustomerTimelineWidgetState extends State<CustomerTimelineWidget> {
                         ),
                         icon: const Icon(Icons.call_rounded, size: 15),
                         label: Text('1-Click Call', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                    const SizedBox(width: 8),
-                    if (widget.onOpenWhatsApp != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onOpenWhatsApp,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF008069),
-                          side: const BorderSide(color: Color(0xFF008069)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        icon: const Icon(Icons.chat_rounded, size: 15),
-                        label: Text('WhatsApp CRM', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                     const SizedBox(width: 8),
                     IconButton(

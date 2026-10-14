@@ -14,7 +14,6 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
-import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
@@ -2033,6 +2032,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         'label': 'Overview',
         'key': 'overview',
       },
+      {
+        'icon': Icons.timeline_rounded,
+        'label': 'Timeline (360°)',
+        'key': 'timeline',
+      },
       if (!isSales)
         {
           'icon': Icons.analytics_outlined,
@@ -2640,6 +2644,13 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                           ),
                                         ],
                                       )
+                                    : currentTabKey == 'timeline'
+                                    ? CustomerTimelineWidget(
+                                        key: const ValueKey('timeline'),
+                                        phone: activeLead['phone'] ?? activeLead['phoneNumber'],
+                                        userId: leadId,
+                                        customerName: activeLead['name'],
+                                      )
                                     : currentTabKey == 'activities'
                                     ? Column(
                                         key: const ValueKey('activities'),
@@ -2730,36 +2741,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                     },
                                               ),
                                             ),
-                                          const SizedBox(height: 24),
-                                          CustomerTimelineWidget(
-                                            phone: activeLead['phone'] ?? activeLead['phoneNumber'],
-                                            userId: leadId,
-                                            customerName: activeLead['name'],
-                                            onOpenWhatsApp: () {
-                                              final phone = activeLead['phone'] ?? activeLead['phoneNumber'] ?? '';
-                                              var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-                                              if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.substring(2);
-                                              showDialog(
-                                                context: context,
-                                                barrierDismissible: true,
-                                                builder: (ctx) => Dialog(
-                                                  backgroundColor: Colors.transparent,
-                                                  insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                                                  child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(16),
-                                                    child: SizedBox(
-                                                      width: 520,
-                                                      height: 700,
-                                                      child: WhatsAppChatDialog(
-                                                        phone: cleanPhone,
-                                                        name: activeLead['name'] ?? 'Lead',
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
                                         ],
                                       ),
                               ),
@@ -3165,22 +3146,6 @@ class _FlatHeaderSection extends StatelessWidget {
             isSolid: true,
             onTap: onEdit,
           ),
-        // _ActionButton(
-        //   icon: FontAwesomeIcons.whatsapp,
-        //   label: 'WhatsApp',
-        //   color: const Color(0xFF25D366),
-        //   isSolid: true,
-        //   onTap: () {
-        //     final cleanPhone = lead['phone']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
-        //     showDialog(
-        //       context: context,
-        //       builder: (context) => WhatsAppChatDialog(
-        //         phone: cleanPhone,
-        //         name: lead['name'] ?? 'Lead',
-        //       ),
-        //     );
-        //   },
-        // ),
         if (AuthService().isAdmin ||
             AuthService().hasLeadPermission('reassign'))
           _ActionButton(
@@ -3370,42 +3335,6 @@ class _LeadInformationCard extends StatelessWidget {
       context,
       customerPhone: cleanPhone,
       customerName: lead['name'],
-    );
-  }
-
-  Future<void> _openWhatsApp(String phone, BuildContext context) async {
-    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-
-    AnalyticsService().logEvent(
-      'agent_whatsapp_lead',
-      properties: {
-        'leadId': lead['id'] ?? lead['_id'],
-        'leadName': lead['name'],
-        'details': 'Opened WhatsApp CRM chat with lead: ${lead['name']}',
-      },
-    );
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 850,
-            height: 700,
-            child: WhatsAppChatDialog(
-              phone: cleanPhone,
-              name: lead['name'] ?? 'Lead',
-            ),
-          ),
-        ),
-      ),
     );
   }
 

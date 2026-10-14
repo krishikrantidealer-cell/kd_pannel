@@ -16,10 +16,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/orders_page.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
-import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_activity_audit_tab.dart';
-import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -2492,48 +2490,6 @@ class _DealerHeroCard extends StatelessWidget {
             isSolid: true,
             onTap: onReassign,
           ),
-        TelephonyCallButton(
-          customerPhone: dealer.phone,
-          customerName: dealer.name,
-          variant: TelephonyButtonVariant.filled,
-          color: const Color(0xFF2E7D32),
-        ),
-        _ActionButton(
-          icon: FontAwesomeIcons.whatsapp,
-          label: 'WhatsApp',
-          color: const Color(0xFF25D366),
-          isSolid: true,
-          onTap: () {
-            AnalyticsService().logEvent(
-              'agent_whatsapp_dealer',
-              properties: {
-                'dealerId': dealer.id,
-                'dealerName': dealer.name,
-                'details': 'Opened WhatsApp CRM for dealer: ${dealer.name}',
-              },
-            );
-            final cleanPhone = dealer.phone.replaceAll(RegExp(r'[^0-9]'), '');
-            showDialog(
-              context: context,
-              barrierDismissible: true,
-              builder: (ctx) => Dialog(
-                backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: SizedBox(
-                    width: 520,
-                    height: 700,
-                    child: WhatsAppChatDialog(
-                      phone: cleanPhone,
-                      name: dealer.name,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
         _ActionButton(
           icon: dealer.isBlocked
               ? Icons.lock_open_outlined
