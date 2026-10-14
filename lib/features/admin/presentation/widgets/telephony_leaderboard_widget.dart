@@ -363,61 +363,85 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 900),
+        constraints: const BoxConstraints(minWidth: 1050),
         child: DataTable(
           headingRowHeight: 40,
           dataRowMinHeight: 48,
           dataRowMaxHeight: 52,
           horizontalMargin: 20,
-          columnSpacing: 24,
+          columnSpacing: 20,
           headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
           columns: [
             DataColumn(
-              label: Text(
-                'SALES AGENT',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 150,
+                child: Text(
+                  'SALES AGENT',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'DIALS (OBD / IN)',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 130,
+                child: Text(
+                  'DIALS (OBD / IN)',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'CONNECT RATE',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 120,
+                child: Text(
+                  'CONNECT RATE',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'TALK TIME',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 80,
+                child: Text(
+                  'TALK TIME',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'AVG DURATION (AHT)',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 120,
+                child: Text(
+                  'AVG DURATION (AHT)',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'SHIFT WINDOW',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 95,
+                child: Text(
+                  'SHIFT WINDOW',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'LEADS REACHED',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 105,
+                child: Text(
+                  'LEADS REACHED',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
             DataColumn(
-              label: Text(
-                'ACTION',
-                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+              label: SizedBox(
+                width: 95,
+                child: Text(
+                  'ACTION',
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                ),
               ),
             ),
           ],
@@ -601,25 +625,32 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
 
                 // 8. Action (1-Click Filter)
                 DataCell(
-                  TextButton.icon(
-                    onPressed: () {
-                      if (widget.onAgentSelected != null) {
-                        widget.onAgentSelected!(isSelected ? null : agentId);
-                      }
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      backgroundColor: isSelected ? const Color(0xFF008069) : const Color(0xFFF1F5F9),
-                      foregroundColor: isSelected ? Colors.white : const Color(0xFF334155),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                    icon: Icon(
-                      isSelected ? Icons.check_circle_rounded : Icons.filter_alt_outlined,
-                      size: 13,
-                    ),
-                    label: Text(
-                      isSelected ? 'Filtered' : 'Filter Calls',
-                      style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
+                  SizedBox(
+                    width: 95,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          if (widget.onAgentSelected != null) {
+                            widget.onAgentSelected!(isSelected ? null : agentId);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          backgroundColor: isSelected ? const Color(0xFF008069) : const Color(0xFFF1F5F9),
+                          foregroundColor: isSelected ? Colors.white : const Color(0xFF334155),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: Icon(
+                          isSelected ? Icons.check_circle_rounded : Icons.filter_alt_outlined,
+                          size: 13,
+                        ),
+                        label: Text(
+                          isSelected ? 'Filtered' : 'Filter Calls',
+                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                 ),
