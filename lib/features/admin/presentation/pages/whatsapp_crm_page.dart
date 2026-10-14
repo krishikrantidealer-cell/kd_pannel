@@ -48,6 +48,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   List<dynamic> _conversations = [];
   List<dynamic> _messages = [];
   List<dynamic> _salesAgents = [];
+  Map<String, dynamic> _allSalesAgentsMap = {};
   dynamic _selectedConversation;
   bool _isLoadingConversations = false;
   bool _isLoadingMessages = false;
@@ -751,13 +752,23 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // API Call: Fetch support/sales agents list for manual assignment and filtering
   Future<void> _fetchSalesAgents() async {
     try {
-      final res = await ApiClient().get('/users?role=sales&hasMyOperator=true');
+      final res = await ApiClient().get('/users?role=sales');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
           final List<dynamic> rawList = body['data'] ?? body['users'] ?? [];
-          // Ensure ONLY sales agents that have a valid MyOperator account are shown
+
+          final Map<String, dynamic> agentsMap = {};
+          for (final a in rawList) {
+            final id = a['_id']?.toString();
+            if (id != null && id.isNotEmpty) {
+              agentsMap[id] = a;
+            }
+          }
+
+          // Ensure ONLY sales agents that have active MyOperator capability are shown in filter
           final myoperatorAgents = rawList.where((a) {
+            if (a['myoperator'] == true) return true;
             final cfg = a['myoperatorConfig'];
             if (cfg is Map) {
               final cid = (cfg['companyId'] ?? '').toString().trim();
@@ -770,6 +781,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           }).toList();
 
           setState(() {
+            _allSalesAgentsMap = agentsMap;
             _salesAgents = myoperatorAgents;
           });
         }
@@ -777,6 +789,30 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     } catch (e) {
       debugPrint('[WhatsApp CRM] Error fetching sales agents: $e');
     }
+  }
+
+  String _getAssignedAgentName(dynamic conv) {
+    if (conv == null) return 'Unassigned';
+    final assignedTo = conv['assignedTo'] ?? (conv['contactId'] is Map ? conv['contactId']['assignedTo'] : null);
+    if (assignedTo is Map) {
+      final fn = (assignedTo['firstName'] ?? '').toString();
+      final ln = (assignedTo['lastName'] ?? '').toString();
+      final full = '$fn $ln'.trim();
+      if (full.isNotEmpty) return full;
+    } else if (assignedTo != null && assignedTo.toString().isNotEmpty) {
+      final id = assignedTo.toString();
+      final agent = _allSalesAgentsMap[id] ?? _salesAgents.firstWhere(
+        (a) => a['_id']?.toString() == id,
+        orElse: () => null,
+      );
+      if (agent != null) {
+        final fn = (agent['firstName'] ?? '').toString();
+        final ln = (agent['lastName'] ?? '').toString();
+        final full = '$fn $ln'.trim();
+        if (full.isNotEmpty) return full;
+      }
+    }
+    return 'Unassigned';
   }
 
   // API Call: Fetch approved WhatsApp templates from MyOperator WABA
@@ -1553,22 +1589,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                         t.toString().toLowerCase().contains('dealer') ||
                         t.toString().toLowerCase().contains('retailer'));
 
-                    final assignedTo = conv['assignedTo'];
-                    String assignedAgentName = '';
-                    if (assignedTo is Map) {
-                      final fn = (assignedTo['firstName'] ?? '').toString();
-                      final ln = (assignedTo['lastName'] ?? '').toString();
-                      final full = '$fn $ln'.trim();
-                      if (full.isNotEmpty) assignedAgentName = full;
-                    } else if (assignedTo is String && assignedTo.isNotEmpty) {
-                      final agent = _salesAgents.firstWhere((a) => a['_id'] == assignedTo, orElse: () => null);
-                      if (agent != null) {
-                        final fn = (agent['firstName'] ?? '').toString();
-                        final ln = (agent['lastName'] ?? '').toString();
-                        final full = '$fn $ln'.trim();
-                        if (full.isNotEmpty) assignedAgentName = full;
-                      }
-                    }
+                    final String assignedAgentName = _getAssignedAgentName(conv);
 
                     final String lastText = (lastMsg['content'] ?? '').toString().trim();
                     final String lastMedia = (lastMsg['mediaUrl'] ?? '').toString().trim();
@@ -2080,44 +2101,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // Right Chat Console
   Widget _buildChatConsole() {
     final contact = _selectedConversation['contactId'] ?? {};
-    final assignedTo = _selectedConversation['assignedTo'] ?? contact['assignedTo'];
-    final role = AuthService().currentUserRole;
-
-    String? assignedId;
-    String assignedAgentName = '';
-
-    if (assignedTo is Map) {
-      assignedId = assignedTo['_id']?.toString();
-      final fn = (assignedTo['firstName'] ?? '').toString();
-      final ln = (assignedTo['lastName'] ?? '').toString();
-      final full = '$fn $ln'.trim();
-      if (full.isNotEmpty) assignedAgentName = full;
-    } else if (assignedTo is String && assignedTo.isNotEmpty) {
-      assignedId = assignedTo;
-      final agent = _salesAgents.firstWhere(
-        (a) => a['_id']?.toString() == assignedId,
-        orElse: () => null,
-      );
-      if (agent != null) {
-        final fn = (agent['firstName'] ?? '').toString();
-        final ln = (agent['lastName'] ?? '').toString();
-        final full = '$fn $ln'.trim();
-        if (full.isNotEmpty) assignedAgentName = full;
-      }
-    }
-    if (assignedAgentName.isEmpty && assignedId != null && assignedId.isNotEmpty) {
-      final agent = _salesAgents.firstWhere(
-        (a) => a['_id']?.toString() == assignedId,
-        orElse: () => null,
-      );
-      if (agent != null) {
-        final fn = (agent['firstName'] ?? '').toString();
-        final ln = (agent['lastName'] ?? '').toString();
-        final full = '$fn $ln'.trim();
-        if (full.isNotEmpty) assignedAgentName = full;
-      }
-    }
-    if (assignedAgentName.isEmpty) assignedAgentName = 'Unassigned';
+    final assignedAgentName = _getAssignedAgentName(_selectedConversation);
 
     final String name = contact['name'] ?? 'WhatsApp User';
     final Color avatarColor = _getAvatarColor(name);
