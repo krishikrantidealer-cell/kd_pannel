@@ -116,3 +116,25 @@ class ClearCallLogsMessageEvent extends CallLogsEvent {
   const ClearCallLogsMessageEvent();
 }
 
+class FetchFollowUpsEvent extends CallLogsEvent {
+  final String bucket; // 'all', 'overdue', 'today', 'upcoming'
+  final String? agentId;
+
+  const FetchFollowUpsEvent({
+    this.bucket = 'all',
+    this.agentId,
+  });
+
+  @override
+  List<Object?> get props => [bucket, agentId];
+}
+
+class CompleteFollowUpEvent extends CallLogsEvent {
+  final String callLogId;
+
+  const CompleteFollowUpEvent(this.callLogId);
+
+  @override
+  List<Object?> get props => [callLogId];
+}
+

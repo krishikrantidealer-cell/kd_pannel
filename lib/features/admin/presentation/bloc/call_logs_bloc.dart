@@ -24,6 +24,8 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     on<BulkDeleteCallLogsEvent>(_onBulkDeleteCallLogs);
     on<ClearAllCallLogsEvent>(_onClearAllCallLogs);
     on<ClearCallLogsMessageEvent>(_onClearMessages);
+    on<FetchFollowUpsEvent>(_onFetchFollowUps);
+    on<CompleteFollowUpEvent>(_onCompleteFollowUp);
 
     _initWebSocket();
   }
@@ -292,6 +294,7 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
             answerRatePercent: answerRate,
             leaderboard: leaderboard,
           ));
+          add(FetchFollowUpsEvent(agentId: event.agentId));
           return;
         }
       }
@@ -416,6 +419,7 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
           successMessage: 'Call disposition saved and synced to customer timeline',
         ));
         add(FetchCallLogsEvent(page: state.page, type: state.selectedType, status: state.selectedStatus, agentId: state.selectedAgentId));
+        add(FetchFollowUpsEvent(agentId: state.selectedAgentId));
       } else {
         final body = jsonDecode(res.body);
         emit(state.copyWith(
@@ -752,5 +756,64 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     Emitter<CallLogsState> emit,
   ) {
     emit(state.copyWith(clearError: true, clearSuccess: true));
+  }
+
+  Future<void> _onFetchFollowUps(
+    FetchFollowUpsEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    emit(state.copyWith(isLoadingFollowUps: true, selectedFollowUpBucket: event.bucket));
+    try {
+      String endpoint = '/calls/follow-ups?bucket=${event.bucket}';
+      if (event.agentId != null && event.agentId!.isNotEmpty && event.agentId != 'all') {
+        endpoint += '&agentId=${event.agentId}';
+      }
+      final res = await ApiClient().get(endpoint);
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        if (body['success'] == true) {
+          final summaryRaw = body['summary'] ?? {};
+          final summary = <String, int>{
+            'overdue': (summaryRaw['overdue'] is num) ? (summaryRaw['overdue'] as num).toInt() : 0,
+            'today': (summaryRaw['today'] is num) ? (summaryRaw['today'] as num).toInt() : 0,
+            'upcoming': (summaryRaw['upcoming'] is num) ? (summaryRaw['upcoming'] as num).toInt() : 0,
+            'totalPending': (summaryRaw['totalPending'] is num) ? (summaryRaw['totalPending'] as num).toInt() : 0,
+          };
+          final items = (body['items'] as List<dynamic>?) ?? [];
+          emit(state.copyWith(
+            isLoadingFollowUps: false,
+            followUpsSummary: summary,
+            followUpItems: items,
+          ));
+          return;
+        }
+      }
+      emit(state.copyWith(isLoadingFollowUps: false));
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Fetch followups error: $e');
+      emit(state.copyWith(isLoadingFollowUps: false));
+    }
+  }
+
+  Future<void> _onCompleteFollowUp(
+    CompleteFollowUpEvent event,
+    Emitter<CallLogsState> emit,
+  ) async {
+    try {
+      final res = await ApiClient().patch('/calls/follow-ups/${event.callLogId}/complete', {});
+      if (res.statusCode == 200) {
+        emit(state.copyWith(
+          successMessage: 'Follow-up callback marked as completed',
+        ));
+        add(FetchFollowUpsEvent(bucket: state.selectedFollowUpBucket, agentId: state.selectedAgentId));
+        add(FetchCallLogsEvent(page: state.page, type: state.selectedType, status: state.selectedStatus, agentId: state.selectedAgentId));
+      } else {
+        final body = jsonDecode(res.body);
+        emit(state.copyWith(errorMessage: body['message'] ?? 'Failed to complete follow-up'));
+      }
+    } catch (e) {
+      debugPrint('[CallLogsBloc] Complete follow-up error: $e');
+      emit(state.copyWith(errorMessage: 'Network error completing follow-up'));
+    }
   }
 }

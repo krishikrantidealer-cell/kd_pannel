@@ -18,6 +18,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart'
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_state.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/call_disposition_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/telephony_leaderboard_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/follow_ups_attention_banner.dart';
 
 class CallLogsPage extends StatefulWidget {
   const CallLogsPage({super.key});
@@ -36,6 +37,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CallLogsBloc>().add(const FetchCallLogsEvent(page: 1, timeframe: 'Today'));
+      context.read<CallLogsBloc>().add(const FetchFollowUpsEvent());
     });
   }
 
@@ -1139,42 +1141,8 @@ class _CallLogsPageState extends State<CallLogsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Scheduled Follow-ups Alert Ribbon
-                      Builder(
-                        builder: (context) {
-                          final pendingFollowUps = state.callLogs.where((l) => l['followUpDate'] != null).toList();
-                          if (pendingFollowUps.isEmpty) return const SizedBox.shrink();
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 20),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFFDE68A)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFD97706).withValues(alpha: 0.08),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.alarm_on_rounded, color: Color(0xFFD97706), size: 20),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    '${pendingFollowUps.length} Scheduled Follow-up callback(s) pending in this view. Check ACW notes and re-connect with leads.',
-                                    style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                      // Scheduled Follow-ups Attention Banner (Live Executive Queue & 1-Click Dialer)
+                      const FollowUpsAttentionBanner(),
 
                       // Telephony Leaderboard & KPI Summary Ribbon (with 1-click agent filter)
                       TelephonyLeaderboardWidget(

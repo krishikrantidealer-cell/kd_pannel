@@ -39,6 +39,12 @@ class CallLogsState extends Equatable {
   final String? errorMessage;
   final String? successMessage;
 
+  // Follow-up Tracking
+  final Map<String, int> followUpsSummary;
+  final List<dynamic> followUpItems;
+  final bool isLoadingFollowUps;
+  final String selectedFollowUpBucket;
+
   const CallLogsState({
     this.status = CallLogsStatus.initial,
     this.callLogs = const [],
@@ -71,6 +77,10 @@ class CallLogsState extends Equatable {
     this.endDate,
     this.errorMessage,
     this.successMessage,
+    this.followUpsSummary = const {'overdue': 0, 'today': 0, 'upcoming': 0, 'total': 0},
+    this.followUpItems = const [],
+    this.isLoadingFollowUps = false,
+    this.selectedFollowUpBucket = 'all',
   });
 
   CallLogsState copyWith({
@@ -111,6 +121,10 @@ class CallLogsState extends Equatable {
     bool clearError = false,
     String? successMessage,
     bool clearSuccess = false,
+    Map<String, int>? followUpsSummary,
+    List<dynamic>? followUpItems,
+    bool? isLoadingFollowUps,
+    String? selectedFollowUpBucket,
   }) {
     return CallLogsState(
       status: status ?? this.status,
@@ -144,6 +158,10 @@ class CallLogsState extends Equatable {
       endDate: clearEndDate ? null : (endDate ?? this.endDate),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
+      followUpsSummary: followUpsSummary ?? this.followUpsSummary,
+      followUpItems: followUpItems ?? this.followUpItems,
+      isLoadingFollowUps: isLoadingFollowUps ?? this.isLoadingFollowUps,
+      selectedFollowUpBucket: selectedFollowUpBucket ?? this.selectedFollowUpBucket,
     );
   }
 
@@ -180,5 +198,9 @@ class CallLogsState extends Equatable {
         endDate,
         errorMessage,
         successMessage,
+        followUpsSummary,
+        followUpItems,
+        isLoadingFollowUps,
+        selectedFollowUpBucket,
       ];
 }
