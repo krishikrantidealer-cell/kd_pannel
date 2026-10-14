@@ -622,9 +622,9 @@ class _FollowUpsQueueModalState extends State<_FollowUpsQueueModal> {
                         : () {
                             context.read<CallLogsBloc>().add(
                               TriggerOutboundCallEvent(
-                                customerPhone: customerPhone,
+                                customerPhone,
                                 customerName: customerName,
-                                callMode: 'call',
+                                callMode: 'click2call',
                               ),
                             );
                             Navigator.of(context).pop();
