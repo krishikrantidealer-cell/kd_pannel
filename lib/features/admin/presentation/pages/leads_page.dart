@@ -22,7 +22,6 @@ import 'package:kd_pannel/features/admin/presentation/widgets/leads/leads_inspec
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
-import 'package:kd_pannel/features/shared/widgets/whatsapp_chat_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/create_lead_dialog.dart';
 
 import '../../../../core/services/analytics_service.dart';
@@ -2704,42 +2703,6 @@ class _LeadRowState extends State<_LeadRow> {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
     return parts[0][0].toUpperCase();
-  }
-
-  void _launchWhatsApp(String phone, String name) {
-    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-
-    AnalyticsService().logEvent(
-      'agent_whatsapp_lead',
-      properties: {
-        'leadName': name,
-        'phone': cleanPhone,
-        'details': 'Opened MyOperator WhatsApp CRM dialog for lead: $name',
-      },
-    );
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 520,
-            height: 700,
-            child: WhatsAppChatDialog(
-              phone: cleanPhone,
-              name: name,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   void _launchCall(String phone, String name) {
