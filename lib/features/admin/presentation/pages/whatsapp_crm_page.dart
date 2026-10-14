@@ -385,17 +385,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
         if (newConversation == null || newConversation['_id'] == null) return;
 
-        // Deduplicate WebSocket frames to prevent double-counting
+        // Deduplicate WebSocket frames to prevent double-counting while allowing media updates
         final String newMsgId = (newMessage?['_id']?.toString().isNotEmpty == true
             ? newMessage!['_id'].toString()
             : (newMessage?['myoperatorMessageId']?.toString().isNotEmpty == true
                 ? newMessage!['myoperatorMessageId'].toString()
                 : (newMessage?['wabaMessageId']?.toString() ?? ''))).trim();
+        final String mediaUrl = (newMessage?['mediaUrl'] ?? '').toString().trim();
+        final String dedupKey = '$newMsgId:$mediaUrl';
         if (newMsgId.isNotEmpty) {
-          if (_seenWsMessageIds.contains(newMsgId)) {
+          if (_seenWsMessageIds.contains(dedupKey)) {
             return;
           }
-          _seenWsMessageIds.add(newMsgId);
+          _seenWsMessageIds.add(dedupKey);
           if (_seenWsMessageIds.length > 500) {
             _seenWsMessageIds.remove(_seenWsMessageIds.first);
           }
@@ -1726,11 +1728,14 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                               }
 
                                               final cleanLast = _formatCleanMessageText(lastText);
+                                              final String lastType = (lastMsg['type'] ?? '').toString().toLowerCase();
                                               final displaySnippet = hasNoMessages
                                                   ? '✨ Ready for Outreach'
                                                   : (cleanLast.isNotEmpty
                                                       ? cleanLast
-                                                      : (lastMedia.isNotEmpty ? '📷 Media Attachment' : ''));
+                                                      : (lastType == 'image' || lastMedia.contains('.jpg') || lastMedia.contains('.png') || lastMedia.contains('.jpeg') || lastMedia.contains('.webp')
+                                                          ? '📷 Photo'
+                                                          : (lastMedia.isNotEmpty ? '📄 Attachment' : '')));
 
                                               return Text(
                                                 displaySnippet,
@@ -2913,164 +2918,172 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                           ),
                                         ),
                                       ),
-                                    if (msg['mediaUrl'] != null &&
-                                        msg['mediaUrl']
-                                            .toString()
-                                            .trim()
-                                            .isNotEmpty) ...[
-                                      if (msg['mediaUrl']
-                                              .toString()
-                                              .toLowerCase()
-                                              .contains('.png') ||
-                                          msg['mediaUrl']
-                                              .toString()
-                                              .toLowerCase()
-                                              .contains('.jpg') ||
-                                          msg['mediaUrl']
-                                              .toString()
-                                              .toLowerCase()
-                                              .contains('.jpeg') ||
-                                          msg['mediaUrl']
-                                              .toString()
-                                              .toLowerCase()
-                                              .contains('.webp') ||
-                                          type == 'image')
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 6.0,
-                                          ),
+                                    () {
+                                      final rawMedia = (msg['mediaUrl'] ?? '').toString().trim();
+                                      final isImageMsg = type == 'image' ||
+                                          rawMedia.toLowerCase().contains('.png') ||
+                                          rawMedia.toLowerCase().contains('.jpg') ||
+                                          rawMedia.toLowerCase().contains('.jpeg') ||
+                                          rawMedia.toLowerCase().contains('.webp');
+
+                                      if (isImageMsg && rawMedia.isNotEmpty) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 6.0),
                                           child: InkWell(
-                                            onTap: () async {
-                                              final url = Uri.tryParse(
-                                                msg['mediaUrl'].toString(),
-                                              );
-                                              if (url != null &&
-                                                  await canLaunchUrl(url)) {
-                                                await launchUrl(
-                                                  url,
-                                                  mode: LaunchMode
-                                                      .externalApplication,
-                                                );
-                                              }
-                                            },
+                                            onTap: () => _showImageLightbox(context, rawMedia),
+                                            borderRadius: BorderRadius.circular(6),
                                             child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
+                                              borderRadius: BorderRadius.circular(6),
                                               child: Image.network(
-                                                msg['mediaUrl'],
+                                                _resolveMediaUrl(rawMedia),
                                                 fit: BoxFit.cover,
-                                                height: 180,
+                                                height: 200,
                                                 width: double.infinity,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) => const SizedBox(),
+                                                loadingBuilder: (context, child, loadingProgress) {
+                                                  if (loadingProgress == null) return child;
+                                                  return Container(
+                                                    height: 160,
+                                                    width: double.infinity,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withValues(alpha: 0.04),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: const Center(
+                                                      child: SizedBox(
+                                                        width: 22,
+                                                        height: 22,
+                                                        child: CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: Color(0xFF008069),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                errorBuilder: (context, error, stackTrace) {
+                                                  return Container(
+                                                    height: 100,
+                                                    width: double.infinity,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withValues(alpha: 0.04),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                                                    ),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    child: Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      children: [
+                                                        const Icon(Icons.image_outlined, size: 24, color: Color(0xFF008069)),
+                                                        const SizedBox(height: 4),
+                                                        Text(
+                                                          'Photo (Tap to view / open)',
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: const Color(0xFF008069),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                             ),
                                           ),
-                                        )
-                                      else
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 6.0,
-                                          ),
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(
-                                              6,
+                                        );
+                                      } else if (isImageMsg && rawMedia.isEmpty) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 6.0),
+                                          child: Container(
+                                            height: 52,
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.04),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
                                             ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                const SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Color(0xFF008069),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Photo downloading...',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: const Color(0xFF54656F),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      } else if (rawMedia.isNotEmpty) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 6.0),
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(6),
                                             onTap: () async {
-                                              final url = Uri.tryParse(
-                                                msg['mediaUrl'].toString(),
-                                              );
-                                              if (url != null &&
-                                                  await canLaunchUrl(url)) {
-                                                await launchUrl(
-                                                  url,
-                                                  mode: LaunchMode
-                                                      .externalApplication,
-                                                );
+                                              final url = Uri.tryParse(rawMedia);
+                                              if (url != null && await canLaunchUrl(url)) {
+                                                await launchUrl(url, mode: LaunchMode.externalApplication);
                                               }
                                             },
                                             child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 8,
-                                                  ),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.05,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                border: Border.all(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.08),
-                                                ),
+                                                color: Colors.black.withValues(alpha: 0.05),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(
-                                                    Icons.description_rounded,
-                                                    color: Color(0xFF008069),
-                                                    size: 20,
-                                                  ),
+                                                  const Icon(Icons.description_rounded, color: Color(0xFF008069), size: 20),
                                                   const SizedBox(width: 8),
                                                   Flexible(
                                                     child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
                                                         Text(
                                                           'Attachment (Tap to view)',
-                                                          style:
-                                                              GoogleFonts.outfit(
-                                                                fontSize: 12,
-                                                                color:
-                                                                    const Color(
-                                                                      0xFF008069,
-                                                                    ),
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 12,
+                                                            color: const Color(0xFF008069),
+                                                            fontWeight: FontWeight.w600,
+                                                          ),
                                                         ),
                                                         Text(
-                                                          msg['mediaUrl']
-                                                              .toString()
-                                                              .split('/')
-                                                              .last
-                                                              .split('?')
-                                                              .first,
+                                                          rawMedia.split('/').last.split('?').first,
                                                           maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style:
-                                                              GoogleFonts.outfit(
-                                                                fontSize: 10,
-                                                                color: Colors
-                                                                    .grey[700],
-                                                              ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: GoogleFonts.outfit(
+                                                            fontSize: 10,
+                                                            color: Colors.grey[700],
+                                                          ),
                                                         ),
                                                       ],
                                                     ),
                                                   ),
                                                   const SizedBox(width: 6),
-                                                  const Icon(
-                                                    Icons.open_in_new_rounded,
-                                                    color: Color(0xFF008069),
-                                                    size: 15,
-                                                  ),
+                                                  const Icon(Icons.open_in_new_rounded, color: Color(0xFF008069), size: 15),
                                                 ],
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
+                                        );
+                                      }
+                                      return const SizedBox.shrink();
+                                    }(),
                                     if (msg['replyTo'] != null &&
                                         (msg['replyTo']['content'] != null ||
                                          msg['replyTo']['body'] != null ||
@@ -3110,7 +3123,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                                 ClipRRect(
                                                   borderRadius: BorderRadius.circular(4),
                                                   child: Image.network(
-                                                    replyMediaUrl,
+                                                    _resolveMediaUrl(replyMediaUrl),
                                                     width: 32,
                                                     height: 32,
                                                     fit: BoxFit.cover,
@@ -3816,6 +3829,112 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       } catch (_) {}
     }
     return raw;
+  }
+
+  /// Resolve media URL through backend proxy if necessary to bypass web CORS restrictions
+  String _resolveMediaUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return '';
+    final trimmed = rawUrl.trim();
+    if (trimmed.contains('s3.amazonaws.com') ||
+        trimmed.contains('myop-chat-prod') ||
+        trimmed.contains('myoperator')) {
+      final base = ApiClient().baseUrl;
+      return '$base/conversations/media-proxy?url=${Uri.encodeComponent(trimmed)}';
+    }
+    return trimmed;
+  }
+
+  /// Interactive zoomable lightbox preview for chat images
+  void _showImageLightbox(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  _resolveMediaUrl(imageUrl),
+                  fit: BoxFit.contain,
+                  loadingBuilder: (_, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      padding: const EdgeInsets.all(40),
+                      color: Colors.white10,
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF008069),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.broken_image_rounded, size: 36, color: Colors.grey),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Preview unavailable. Tap below to open directly.',
+                          style: GoogleFonts.outfit(fontSize: 14),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.tryParse(imageUrl);
+                            if (uri != null && await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                          label: const Text('Open in Browser'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  IconButton(
+                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                    icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
+                    tooltip: 'Open in new tab',
+                    onPressed: () async {
+                      final uri = Uri.tryParse(imageUrl);
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // 🕒 Meta 24-Hour Messaging Window Real-Time Indicator & Guard
