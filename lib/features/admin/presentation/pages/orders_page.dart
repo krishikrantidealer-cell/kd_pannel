@@ -13,6 +13,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'package:intl/intl.dart';
+import 'package:kd_pannel/util/export_helper.dart';
 import 'dart:async';
 
 export 'package:kd_pannel/features/admin/data/models/order_model.dart';
@@ -34,6 +36,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String? _hoveredOrderId;
   StreamSubscription? _ordersWsSubscription;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -118,6 +121,146 @@ class _OrdersPageState extends State<OrdersPage> {
           matchesPaymentMethod &&
           matchesOrderSource;
     }).toList();
+  }
+
+  void _exportOrdersToCSV(List<OrderModel> ordersToExport) async {
+    if (_isExporting || ordersToExport.isEmpty) return;
+
+    setState(() => _isExporting = true);
+
+    final headers = [
+      'Order ID',
+      'Placed At',
+      'Customer Name',
+      'Shop Name',
+      'Phone Number',
+      'Customer Type',
+      'Order Status',
+      'Payment Status',
+      'Payment Method',
+      'Total Amount (₹)',
+      'Advance Amount (₹)',
+      'Remaining Amount (₹)',
+      'Discount (₹)',
+      'Coupon Code',
+      'Items Count',
+      'Products Summary',
+      'City / Tehsil',
+      'Village / Area',
+      'State',
+      'Pincode',
+      'Courier Name',
+      'AWB Number',
+      'Courier Status',
+      'Assigned Agent',
+      'Source',
+    ];
+
+    final buffer = StringBuffer();
+    buffer.writeln(
+      headers.map((h) => '"${h.replaceAll('"', '""')}"').join(','),
+    );
+
+    for (final order in ordersToExport) {
+      final itemsSummary = order.items.map((i) => '${i.title} (${i.quantity}x)').join('; ');
+      final placedDate = DateFormat('yyyy-MM-dd HH:mm').format(order.placedAt.toLocal());
+
+      final row = [
+        order.orderId,
+        placedDate,
+        order.customerName,
+        order.shopName ?? '',
+        order.customerPhone,
+        order.customerRole,
+        order.orderStatus,
+        order.paymentStatus,
+        order.paymentMethod,
+        order.totalAmount.toStringAsFixed(2),
+        order.advanceAmount.toStringAsFixed(2),
+        order.remainingAmount.toStringAsFixed(2),
+        order.discountAmount.toStringAsFixed(2),
+        order.couponCode ?? '',
+        order.items.length.toString(),
+        itemsSummary,
+        order.shippingAddress.cityTehsil,
+        order.shippingAddress.villageArea,
+        order.shippingAddress.state ?? '',
+        order.shippingAddress.pincode,
+        order.courierName ?? '',
+        order.awbNumber ?? '',
+        order.courierStatus ?? '',
+        order.assignedAgent ?? '',
+        order.source ?? (order.isPanelOrder ? 'Panel' : 'App'),
+      ];
+
+      buffer.writeln(
+        row.map((val) => '"${val.toString().replaceAll('"', '""')}"').join(','),
+      );
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (mounted) {
+      final fileName = 'orders_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.csv';
+      downloadCsv(buffer.toString(), fileName);
+
+      setState(() => _isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF008069),
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              const Icon(Icons.download_done_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '${ordersToExport.length} orders exported successfully to CSV!',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildExportButton(List<OrderModel> ordersToExport) {
+    return ElevatedButton.icon(
+      onPressed: _isExporting || ordersToExport.isEmpty
+          ? null
+          : () => _exportOrdersToCSV(ordersToExport),
+      icon: _isExporting
+          ? const SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Icon(Icons.file_download_outlined, size: 17),
+      label: Text(
+        _isExporting ? 'Exporting...' : 'Export Orders (${ordersToExport.length})',
+        style: GoogleFonts.outfit(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF008069),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0xFF008069).withValues(alpha: 0.5),
+        disabledForegroundColor: Colors.white70,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
   }
 
   // --- WIDGET BUILDER ---
@@ -250,7 +393,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               padding: EdgeInsets.symmetric(
                                 horizontal: screenPadding.left,
                               ),
-                              child: _buildHeader(),
+                              child: _buildHeader(filtered),
                             ),
                             const SizedBox(height: 24),
                           ],
@@ -269,7 +412,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             padding: EdgeInsets.symmetric(
                               horizontal: screenPadding.left,
                             ),
-                            child: _buildFilterControls(isMobile, state),
+                            child: _buildFilterControls(isMobile, state, filtered),
                           ),
                           const SizedBox(height: 16),
 
@@ -301,6 +444,12 @@ class _OrdersPageState extends State<OrdersPage> {
                         color: AppTheme.textPrimary,
                       ),
                     ),
+                    actions: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: _buildExportButton(filtered),
+                      ),
+                    ],
                     backgroundColor: Colors.white,
                     foregroundColor: AppTheme.textPrimary,
                     elevation: 0,
@@ -321,26 +470,62 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(List<OrderModel> ordersToExport) {
+    final bool isMobile = Responsive.isMobile(context);
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Order Management',
+            style: GoogleFonts.outfit(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildExportButton(ordersToExport),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'Order Management',
-          style: GoogleFonts.outfit(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Order Management',
+                style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Track sales activity, fulfill packages, manage shipping partners, and issue order updates',
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-          ),
-        ),
+        const SizedBox(width: 14),
+        _buildExportButton(ordersToExport),
       ],
     );
   }
@@ -578,7 +763,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildFilterControls(bool isMobile, OrdersState state) {
+  Widget _buildFilterControls(bool isMobile, OrdersState state, List<OrderModel> ordersToExport) {
     final List<String> orderStatusOptions = [
       'All Statuses',
       'Pending',
@@ -689,6 +874,8 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _buildExportButton(ordersToExport),
         ],
       );
     }
@@ -733,6 +920,7 @@ class _OrdersPageState extends State<OrdersPage> {
               );
             }, width: 130),
             const Spacer(),
+            _buildExportButton(ordersToExport),
           ],
         ),
       ],
