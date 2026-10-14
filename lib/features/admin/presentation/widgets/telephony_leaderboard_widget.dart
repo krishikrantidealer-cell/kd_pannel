@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -360,18 +361,28 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
 
   // ── Industrial Full Daily Shift Matrix Table ─────────────────────────────
   Widget _buildShiftMatrixTable() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 1050),
-        child: DataTable(
-          headingRowHeight: 40,
-          dataRowMinHeight: 48,
-          dataRowMaxHeight: 52,
-          horizontalMargin: 20,
-          columnSpacing: 20,
-          headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-          columns: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double availableWidth = constraints.maxWidth;
+        // Total base content width: (150 + 130 + 120 + 80 + 120 + 95 + 105 + 95) = 895 + 40 (margins) = 935
+        const double baseContentWidth = 935.0;
+        final double dynamicSpacing = availableWidth > baseContentWidth
+            ? ((availableWidth - baseContentWidth) / 7.0).clamp(20.0, 140.0)
+            : 20.0;
+        final double tableMinWidth = math.max(availableWidth, baseContentWidth + (20.0 * 7.0));
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: tableMinWidth),
+            child: DataTable(
+              headingRowHeight: 40,
+              dataRowMinHeight: 48,
+              dataRowMaxHeight: 52,
+              horizontalMargin: 20,
+              columnSpacing: dynamicSpacing,
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+              columns: [
             DataColumn(
               label: SizedBox(
                 width: 150,
@@ -659,6 +670,8 @@ class _TelephonyLeaderboardWidgetState extends State<TelephonyLeaderboardWidget>
           }).toList(),
         ),
       ),
+    );
+      },
     );
   }
 
