@@ -1474,51 +1474,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                     children: [
                       // 1. BACK HEADER
                       _buildBreadcrumbs(context, isMobile, currentDealer.name),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
-                      // 2. HEADER SECTION
-                      _DealerHeroCard(
-                        dealer: currentDealer,
-                        salesAgents: salesAgents,
-                        onToggleBlock: _toggleBlockDealer,
-                        onEdit: _editDealer,
-                        onDelete: _deleteDealer,
-                        onReassign: _showReassignDealerDialog,
-                        onCreateOrder: () async {
-                          AnalyticsService().logEvent(
-                            'initiate_order_creation',
-                            properties: {
-                              'dealerId': currentDealer.id,
-                              'dealerName': currentDealer.name,
-                              'details':
-                                  'Started creating a new order for ${currentDealer.name}',
-                            },
-                          );
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CreateOrderPage(dealer: currentDealer),
-                            ),
-                          );
-                          if (result == true && mounted) {
-                            if (currentDealer.id != null) {
-                              context.read<DealersBloc>().add(
-                                FetchDealerDetailsEvent(currentDealer.id!),
-                              );
-                              context.read<DealersBloc>().add(
-                                FetchDealerOrdersEvent(currentDealer.id!),
-                              );
-                            }
-                            context.read<OrdersBloc>().add(
-                              const FetchOrdersEvent(),
-                            );
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 24),
-
-                      // 3. TAB CONTENT & RIGHT SIDEBAR
+                      // 2. TAB CONTENT & RIGHT SIDEBAR
                       Builder(
                         builder: (context) {
                           final tabs = _getProfileTabs();
@@ -1537,6 +1495,46 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
+                                        _DealerHeroCard(
+                                          dealer: currentDealer,
+                                          salesAgents: salesAgents,
+                                          onToggleBlock: _toggleBlockDealer,
+                                          onEdit: _editDealer,
+                                          onDelete: _deleteDealer,
+                                          onReassign: _showReassignDealerDialog,
+                                          onCreateOrder: () async {
+                                            AnalyticsService().logEvent(
+                                              'initiate_order_creation',
+                                              properties: {
+                                                'dealerId': currentDealer.id,
+                                                'dealerName': currentDealer.name,
+                                                'details':
+                                                    'Started creating a new order for ${currentDealer.name}',
+                                              },
+                                            );
+                                            final result = await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    CreateOrderPage(dealer: currentDealer),
+                                              ),
+                                            );
+                                            if (result == true && mounted) {
+                                              if (currentDealer.id != null) {
+                                                context.read<DealersBloc>().add(
+                                                  FetchDealerDetailsEvent(currentDealer.id!),
+                                                );
+                                                context.read<DealersBloc>().add(
+                                                  FetchDealerOrdersEvent(currentDealer.id!),
+                                                );
+                                              }
+                                              context.read<OrdersBloc>().add(
+                                                const FetchOrdersEvent(),
+                                              );
+                                            }
+                                          },
+                                        ),
+                                        const SizedBox(height: 24),
                                         _StatsCardsSection(
                                           dealer: currentDealer,
                                           orders: orders,

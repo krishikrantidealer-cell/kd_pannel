@@ -2556,22 +2556,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
 
-                        // 1. Flat Header section
-                        _FlatHeaderSection(
-                          lead: activeLead,
-                          isSales: AuthService().isSales,
-                          onConvertDealer: _showConvertDealerDialog,
-                          onRejectKyc: _showRejectDialog,
-                          onToggleBlock: _toggleBlockLead,
-                          onEdit: _editLead,
-                          onDelete: _deleteLead,
-                          onReassign: _showReassignLeadDialog,
-                        ),
-                        const SizedBox(height: 28),
-
-                        // 2. TAB CONTENT & RIGHT SIDEBAR
+                        // TAB CONTENT & RIGHT SIDEBAR
                         Builder(
                           builder: (context) {
                             final tabs = _getProfileTabs();
@@ -2590,6 +2577,17 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
+                                          _FlatHeaderSection(
+                                            lead: activeLead,
+                                            isSales: AuthService().isSales,
+                                            onConvertDealer: _showConvertDealerDialog,
+                                            onRejectKyc: _showRejectDialog,
+                                            onToggleBlock: _toggleBlockLead,
+                                            onEdit: _editLead,
+                                            onDelete: _deleteLead,
+                                            onReassign: _showReassignLeadDialog,
+                                          ),
+                                          const SizedBox(height: 24),
                                           LayoutBuilder(
                                             builder: (context, constraints) {
                                               if (constraints.maxWidth >= 720) {
