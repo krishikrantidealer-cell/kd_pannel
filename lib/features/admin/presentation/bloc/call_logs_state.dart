@@ -24,12 +24,17 @@ class CallLogsState extends Equatable {
   final int outboundCount;
   final int missedCount;
   final int totalTalkTimeSeconds;
+  final int uniqueCustomersCount;
+  final num answerRatePercent;
   final List<dynamic> leaderboard;
 
   final String selectedType;
   final String selectedStatus;
   final String? selectedAgentId;
   final String searchQuery;
+  final String selectedTimeframe;
+  final String? startDate;
+  final String? endDate;
 
   final String? errorMessage;
   final String? successMessage;
@@ -54,11 +59,16 @@ class CallLogsState extends Equatable {
     this.outboundCount = 0,
     this.missedCount = 0,
     this.totalTalkTimeSeconds = 0,
+    this.uniqueCustomersCount = 0,
+    this.answerRatePercent = 0,
     this.leaderboard = const [],
     this.selectedType = 'all',
     this.selectedStatus = 'all',
     this.selectedAgentId,
     this.searchQuery = '',
+    this.selectedTimeframe = 'Today',
+    this.startDate,
+    this.endDate,
     this.errorMessage,
     this.successMessage,
   });
@@ -84,12 +94,19 @@ class CallLogsState extends Equatable {
     int? outboundCount,
     int? missedCount,
     int? totalTalkTimeSeconds,
+    int? uniqueCustomersCount,
+    num? answerRatePercent,
     List<dynamic>? leaderboard,
     String? selectedType,
     String? selectedStatus,
     String? selectedAgentId,
     bool clearSelectedAgent = false,
     String? searchQuery,
+    String? selectedTimeframe,
+    String? startDate,
+    bool clearStartDate = false,
+    String? endDate,
+    bool clearEndDate = false,
     String? errorMessage,
     bool clearError = false,
     String? successMessage,
@@ -115,11 +132,16 @@ class CallLogsState extends Equatable {
       outboundCount: outboundCount ?? this.outboundCount,
       missedCount: missedCount ?? this.missedCount,
       totalTalkTimeSeconds: totalTalkTimeSeconds ?? this.totalTalkTimeSeconds,
+      uniqueCustomersCount: uniqueCustomersCount ?? this.uniqueCustomersCount,
+      answerRatePercent: answerRatePercent ?? this.answerRatePercent,
       leaderboard: leaderboard ?? this.leaderboard,
       selectedType: selectedType ?? this.selectedType,
       selectedStatus: selectedStatus ?? this.selectedStatus,
       selectedAgentId: clearSelectedAgent ? null : (selectedAgentId ?? this.selectedAgentId),
       searchQuery: searchQuery ?? this.searchQuery,
+      selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
+      startDate: clearStartDate ? null : (startDate ?? this.startDate),
+      endDate: clearEndDate ? null : (endDate ?? this.endDate),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
     );
@@ -146,11 +168,16 @@ class CallLogsState extends Equatable {
         outboundCount,
         missedCount,
         totalTalkTimeSeconds,
+        uniqueCustomersCount,
+        answerRatePercent,
         leaderboard,
         selectedType,
         selectedStatus,
         selectedAgentId,
         searchQuery,
+        selectedTimeframe,
+        startDate,
+        endDate,
         errorMessage,
         successMessage,
       ];

@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:web/web.dart' as web;
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
@@ -34,7 +35,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CallLogsBloc>().add(const FetchCallLogsEvent(page: 1));
+      context.read<CallLogsBloc>().add(const FetchCallLogsEvent(page: 1, timeframe: 'Today'));
     });
   }
 
@@ -157,6 +158,286 @@ class _CallLogsPageState extends State<CallLogsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to export CSV: $e')),
+        );
+      }
+    }
+  }
+
+  String _getRangeDisplay(CallLogsState state) {
+    if (state.startDate != null && state.endDate != null) {
+      final start = DateTime.tryParse(state.startDate!);
+      final end = DateTime.tryParse(state.endDate!);
+      if (start != null && end != null) {
+        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (start.year == end.year && start.month == end.month && start.day == end.day) {
+          return '${start.day} ${months[start.month - 1]}';
+        }
+        return '${start.day} ${months[start.month - 1]} - ${end.day} ${months[end.month - 1]}';
+      }
+    }
+    if (state.selectedTimeframe.isNotEmpty) {
+      return state.selectedTimeframe;
+    }
+    return 'Today';
+  }
+
+  void _showSyncfusionDatePicker(CallLogsState state) {
+    PickerDateRange? initialRange;
+    if (state.startDate != null && state.endDate != null) {
+      final s = DateTime.tryParse(state.startDate!);
+      final e = DateTime.tryParse(state.endDate!);
+      if (s != null && e != null) {
+        initialRange = PickerDateRange(s, e);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Select Custom Date Range',
+          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+        ),
+        content: SizedBox(
+          height: 380,
+          width: 340,
+          child: SfDateRangePicker(
+            backgroundColor: Colors.white,
+            selectionMode: DateRangePickerSelectionMode.range,
+            showActionButtons: true,
+            confirmText: 'Apply Range',
+            cancelText: 'Cancel',
+            selectionShape: DateRangePickerSelectionShape.rectangle,
+            rangeSelectionColor: const Color(0xFF008069).withValues(alpha: 0.12),
+            startRangeSelectionColor: const Color(0xFF008069),
+            endRangeSelectionColor: const Color(0xFF008069),
+            todayHighlightColor: const Color(0xFF008069),
+            initialSelectedRange: initialRange,
+            onSubmit: (Object? val) {
+              if (val is PickerDateRange && val.startDate != null) {
+                final start = val.startDate!;
+                final end = val.endDate ?? val.startDate!;
+                final startStr = DateFormat('yyyy-MM-dd').format(start);
+                final endStr = DateFormat('yyyy-MM-dd').format(end);
+
+                context.read<CallLogsBloc>().add(
+                  FetchCallLogsEvent(
+                    startDate: startStr,
+                    endDate: endStr,
+                    timeframe: '',
+                    type: state.selectedType,
+                    status: state.selectedStatus,
+                    agentId: state.selectedAgentId,
+                    search: state.searchQuery,
+                    page: 1,
+                  ),
+                );
+                Navigator.pop(dialogCtx);
+              }
+            },
+            onCancel: () => Navigator.pop(dialogCtx),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeframeRow(bool isMobile, CallLogsState state, List<String> options) {
+    return Container(
+      height: 42,
+      width: isMobile ? null : 180,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => _showSyncfusionDatePicker(state),
+            child: const MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Icon(
+                Icons.calendar_month_outlined,
+                size: 18,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 1,
+            height: 18,
+            color: AppTheme.borderColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: null,
+                isExpanded: true,
+                isDense: true,
+                padding: EdgeInsets.zero,
+                hint: Text(
+                  _getRangeDisplay(state),
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: AppTheme.textSecondary,
+                ),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    context.read<CallLogsBloc>().add(
+                      FetchCallLogsEvent(
+                        timeframe: newValue,
+                        startDate: null,
+                        endDate: null,
+                        type: state.selectedType,
+                        status: state.selectedStatus,
+                        agentId: state.selectedAgentId,
+                        search: state.searchQuery,
+                        page: 1,
+                      ),
+                    );
+                  }
+                },
+                items: options
+                    .map<DropdownMenuItem<String>>(
+                      (String value) => DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(
+                          value,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportFromBackend({required String reportType}) async {
+    final state = context.read<CallLogsBloc>().state;
+    final queryParams = <String, String>{
+      'reportType': reportType,
+    };
+    if (state.selectedTimeframe.isNotEmpty) {
+      queryParams['timeframe'] = state.selectedTimeframe;
+    }
+    if (state.startDate != null && state.startDate!.isNotEmpty) {
+      queryParams['startDate'] = state.startDate!;
+    }
+    if (state.endDate != null && state.endDate!.isNotEmpty) {
+      queryParams['endDate'] = state.endDate!;
+    }
+    if (state.selectedType != 'all') {
+      queryParams['type'] = state.selectedType;
+    }
+    if (state.selectedStatus != 'all') {
+      queryParams['status'] = state.selectedStatus;
+    }
+    if (state.selectedAgentId != null && state.selectedAgentId!.isNotEmpty && state.selectedAgentId != 'all') {
+      queryParams['agentId'] = state.selectedAgentId!;
+    }
+    if (state.searchQuery.isNotEmpty) {
+      queryParams['search'] = state.searchQuery;
+    }
+
+    final uri = Uri(path: '/calls/logs/export', queryParameters: queryParams);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              const SizedBox(width: 10),
+              Text('Generating ${reportType == 'agent_summary' ? 'Agent Shift Summary' : 'Call Detail Records'} CSV...'),
+            ],
+          ),
+          duration: const Duration(seconds: 3),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    try {
+      final res = await ApiClient().get(uri.toString());
+      if (res.statusCode == 200 && res.body.isNotEmpty) {
+        final filename = reportType == 'agent_summary'
+            ? 'agent_shift_summary_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv'
+            : 'call_records_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+
+        if (kIsWeb) {
+          final blob = web.Blob([res.body.toJS].toJS, web.BlobPropertyBag(type: 'text/csv;charset=utf-8'));
+          final url = web.URL.createObjectURL(blob);
+          final anchor = web.HTMLAnchorElement()
+            ..href = url
+            ..download = filename;
+          web.document.body?.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          web.URL.revokeObjectURL(url);
+        } else {
+          final bytes = utf8.encode(res.body);
+          final base64Csv = base64Encode(bytes);
+          final launchUri = Uri.parse('data:text/csv;base64,$base64Csv');
+          if (await canLaunchUrl(launchUri)) {
+            await launchUrl(launchUri);
+          }
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${reportType == 'agent_summary' ? 'Agent Shift Summary' : 'Call Records'} CSV downloaded successfully!'),
+              backgroundColor: const Color(0xFF008069),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to export CSV: $e'),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -737,18 +1018,112 @@ class _CallLogsPageState extends State<CallLogsPage> {
                           ),
                           const SizedBox(width: 10),
                         ],
-                        OutlinedButton.icon(
-                          onPressed: () => _exportToCsv(state.callLogs),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF008069),
-                            side: const BorderSide(color: Color(0xFF008069)),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          icon: const Icon(Icons.file_download_outlined, size: 16),
-                          label: Text(
-                            'Export CSV',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                        PopupMenuButton<String>(
+                          onSelected: (val) {
+                            if (val == 'agent_summary') {
+                              _exportFromBackend(reportType: 'agent_summary');
+                            } else if (val == 'all_calls') {
+                              _exportFromBackend(reportType: 'all_calls');
+                            }
+                          },
+                          tooltip: 'Export Reports',
+                          color: Colors.white,
+                          elevation: 6,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          itemBuilder: (context) => [
+                            PopupMenuItem<String>(
+                              value: 'agent_summary',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF008069).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(Icons.analytics_outlined, size: 16, color: Color(0xFF008069)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Agent Shift Summary (CSV)',
+                                          style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                        ),
+                                        Text(
+                                          'Dials, Talk Time, AHT, Shift Window & Connect %',
+                                          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem<String>(
+                              value: 'all_calls',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(Icons.table_rows_outlined, size: 16, color: Color(0xFF3B82F6)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Full Call Records CDR (CSV)',
+                                          style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                        ),
+                                        Text(
+                                          'All call logs with recording links, status & notes',
+                                          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          child: Container(
+                            height: 38,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF008069),
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF008069).withValues(alpha: 0.2),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.file_download_outlined, size: 16, color: Colors.white),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Export Report',
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.white),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -808,6 +1183,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                         outboundCount: state.outboundCount,
                         missedCount: state.missedCount,
                         totalTalkTimeSeconds: state.totalTalkTimeSeconds,
+                        uniqueCustomersCount: state.uniqueCustomersCount,
+                        answerRatePercent: state.answerRatePercent,
+                        timeframe: state.selectedTimeframe.isNotEmpty ? state.selectedTimeframe : _getRangeDisplay(state),
                         leaderboard: state.leaderboard,
                         selectedAgentId: state.selectedAgentId,
                         onAgentSelected: (agentId) {
@@ -816,8 +1194,13 @@ class _CallLogsPageState extends State<CallLogsPage> {
                             type: state.selectedType,
                             status: state.selectedStatus,
                             search: state.searchQuery,
+                            timeframe: state.selectedTimeframe,
+                            startDate: state.startDate,
+                            endDate: state.endDate,
+                            page: 1,
                           ));
                         },
+                        onExportSummary: () => _exportFromBackend(reportType: 'agent_summary'),
                       ),
                       const SizedBox(height: 20),
 
@@ -861,6 +1244,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                           status: state.selectedStatus,
                                           agentId: state.selectedAgentId,
                                           search: state.searchQuery,
+                                          timeframe: state.selectedTimeframe,
+                                          startDate: state.startDate,
+                                          endDate: state.endDate,
                                         )),
                                       ),
                                       const SizedBox(width: 6),
@@ -874,6 +1260,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                           status: state.selectedStatus,
                                           agentId: state.selectedAgentId,
                                           search: state.searchQuery,
+                                          timeframe: state.selectedTimeframe,
+                                          startDate: state.startDate,
+                                          endDate: state.endDate,
                                         )),
                                       ),
                                       const SizedBox(width: 6),
@@ -887,6 +1276,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                           status: state.selectedStatus,
                                           agentId: state.selectedAgentId,
                                           search: state.searchQuery,
+                                          timeframe: state.selectedTimeframe,
+                                          startDate: state.startDate,
+                                          endDate: state.endDate,
                                         )),
                                       ),
                                     ],
@@ -1045,6 +1437,10 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                type: state.selectedType,
                                                agentId: state.selectedAgentId,
                                                search: state.searchQuery,
+                                               timeframe: state.selectedTimeframe,
+                                               startDate: state.startDate,
+                                               endDate: state.endDate,
+                                               page: 1,
                                              ));
                                            }
                                          },
@@ -1137,6 +1533,10 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                type: state.selectedType,
                                                status: state.selectedStatus,
                                                search: state.searchQuery,
+                                               timeframe: state.selectedTimeframe,
+                                               startDate: state.startDate,
+                                               endDate: state.endDate,
+                                               page: 1,
                                              ));
                                            },
                                          ),
@@ -1144,7 +1544,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                      ),
                                    ],
                                   // Reset Filter Button
-                                  if (state.selectedType != 'all' || state.selectedStatus != 'all' || state.selectedAgentId != null || state.searchQuery.isNotEmpty) ...[
+                                  if (state.selectedType != 'all' || state.selectedStatus != 'all' || state.selectedAgentId != null || state.searchQuery.isNotEmpty || state.selectedTimeframe != 'Today' || state.startDate != null) ...[
                                     const SizedBox(width: 8),
                                     Container(
                                       height: 42,
@@ -1176,6 +1576,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                           status: 'all',
                                           agentId: null,
                                           search: '',
+                                          timeframe: 'Today',
                                         ));
                                       },
                                     ),
@@ -1740,6 +2141,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                     status: state.selectedStatus,
                                                     agentId: state.selectedAgentId,
                                                     search: state.searchQuery,
+                                                    timeframe: state.selectedTimeframe,
+                                                    startDate: state.startDate,
+                                                    endDate: state.endDate,
                                                   ));
                                                 }
                                               : null,
@@ -1778,6 +2182,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                     status: state.selectedStatus,
                                                     agentId: state.selectedAgentId,
                                                     search: state.searchQuery,
+                                                    timeframe: state.selectedTimeframe,
+                                                    startDate: state.startDate,
+                                                    endDate: state.endDate,
                                                   ));
                                                 }
                                               : null,

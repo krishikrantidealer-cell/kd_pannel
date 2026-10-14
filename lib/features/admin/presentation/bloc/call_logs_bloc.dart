@@ -140,6 +140,11 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
       selectedAgentId: event.agentId,
       clearSelectedAgent: event.agentId == null,
       searchQuery: event.search,
+      selectedTimeframe: event.timeframe,
+      startDate: event.startDate,
+      clearStartDate: event.startDate == null,
+      endDate: event.endDate,
+      clearEndDate: event.endDate == null,
     ));
 
     try {
@@ -220,8 +225,17 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
       if (event.status != 'all') {
         endpoint += '&status=${event.status}';
       }
-      if (event.agentId != null && event.agentId!.isNotEmpty) {
+      if (event.agentId != null && event.agentId!.isNotEmpty && event.agentId != 'all') {
         endpoint += '&agentId=${event.agentId}';
+      }
+      if (event.timeframe.isNotEmpty) {
+        endpoint += '&timeframe=${Uri.encodeComponent(event.timeframe)}';
+      }
+      if (event.startDate != null && event.startDate!.isNotEmpty) {
+        endpoint += '&startDate=${Uri.encodeComponent(event.startDate!)}';
+      }
+      if (event.endDate != null && event.endDate!.isNotEmpty) {
+        endpoint += '&endDate=${Uri.encodeComponent(event.endDate!)}';
       }
 
       // Concurrently fetch call logs and agent registry in parallel
@@ -258,6 +272,8 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
           final int outbound = metrics['outboundCount'] ?? sortedLogs.where((l) => l['type'] == 'outbound').length;
           final int missed = metrics['missedCount'] ?? sortedLogs.where((l) => l['status'] == 'missed').length;
           final int totalSecs = metrics['totalSeconds'] ?? 0;
+          final int uniqueCustomers = metrics['uniqueCustomersCount'] ?? 0;
+          final num answerRate = metrics['answerRatePercent'] ?? 0;
           final List<dynamic> leaderboard = metrics['leaderboard'] ?? [];
 
           emit(state.copyWith(
@@ -272,6 +288,8 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
             outboundCount: outbound,
             missedCount: missed,
             totalTalkTimeSeconds: totalSecs,
+            uniqueCustomersCount: uniqueCustomers,
+            answerRatePercent: answerRate,
             leaderboard: leaderboard,
           ));
           return;

@@ -13,6 +13,9 @@ class FetchCallLogsEvent extends CallLogsEvent {
   final String status;
   final String? agentId;
   final String search;
+  final String timeframe;
+  final String? startDate;
+  final String? endDate;
 
   const FetchCallLogsEvent({
     this.page = 1,
@@ -20,10 +23,13 @@ class FetchCallLogsEvent extends CallLogsEvent {
     this.status = 'all',
     this.agentId,
     this.search = '',
+    this.timeframe = 'Today',
+    this.startDate,
+    this.endDate,
   });
 
   @override
-  List<Object?> get props => [page, type, status, agentId, search];
+  List<Object?> get props => [page, type, status, agentId, search, timeframe, startDate, endDate];
 }
 
 class TriggerOutboundCallEvent extends CallLogsEvent {
