@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/repositories/user_repository.dart';
@@ -116,7 +117,7 @@ class _CustomersPageState extends State<CustomersPage> {
 
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
       if (mounted) {
         setState(() {
           _searchQuery = query;
@@ -133,6 +134,7 @@ class _CustomersPageState extends State<CustomersPage> {
       _selectedStatus = 'all';
       _selectedAssignment = 'all';
       _selectedKycStatus = 'all';
+      _limit = 25;
     });
     _fetchCustomers(page: 1);
   }
@@ -157,6 +159,67 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
+  Future<void> _launchCall(String rawPhone) async {
+    final clean = _cleanPhone(rawPhone).replaceAll(RegExp(r'[^0-9+]'), '');
+    if (clean.isEmpty) return;
+    final uri = Uri.parse('tel:$clean');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _launchWhatsApp(String rawPhone) async {
+    String clean = _cleanPhone(rawPhone).replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.length == 10) clean = '91$clean';
+    if (clean.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$clean');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _reassignAgent(String userId, String? agentId) async {
+    try {
+      await UserRepository().assignAgent(userId, agentId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Agent assignment updated successfully'),
+          backgroundColor: Color(0xFF16A34A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _fetchStats();
+      _fetchCustomers(page: _currentPage);
+      if (_selectedCustomer != null && _selectedCustomer!['_id'] == userId) {
+        setState(() {
+          if (agentId == null) {
+            _selectedCustomer!['assignedAgent'] = null;
+          } else {
+            final agent = _salesAgents.firstWhere(
+              (a) => a['agentId'] == agentId,
+              orElse: () => {'firstName': 'Agent', 'lastName': ''},
+            );
+            _selectedCustomer!['assignedAgent'] = {
+              '_id': agentId,
+              'firstName': agent['agentName'] ?? agent['firstName'] ?? 'Agent',
+              'phoneNumber': agent['phoneNumber'] ?? '',
+            };
+          }
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to assign agent: $e'),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (AuthService().isSales) {
@@ -168,8 +231,8 @@ class _CustomersPageState extends State<CustomersPage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.lock_rounded, size: 40, color: Color(0xFF94A3B8)),
@@ -211,58 +274,60 @@ class _CustomersPageState extends State<CustomersPage> {
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  // 1. Page Header
+                  // 1. Compact Header
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(
-                        isDesktop ? 24 : 16,
-                        20,
-                        isDesktop ? 24 : 16,
-                        12,
+                        isDesktop ? 20 : 14,
+                        14,
+                        isDesktop ? 20 : 14,
+                        8,
                       ),
-                      child: _buildHeader(isDesktop),
+                      child: _buildCompactHeader(isDesktop),
                     ),
                   ),
 
-                  // 2. Metrics KPI Summary Cards
+                  // 2. High-Density Metrics KPI Ribbon
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 24 : 16,
+                        horizontal: isDesktop ? 20 : 14,
+                        vertical: 4,
+                      ),
+                      child: _buildCompactMetricCards(isDesktop),
+                    ),
+                  ),
+
+                  // 3. Consolidated Single-Line Search & Filters Bar
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isDesktop ? 20 : 14,
                         vertical: 8,
                       ),
-                      child: _buildMetricCards(isDesktop),
+                      child: _buildCompactFiltersBar(isDesktop),
                     ),
                   ),
 
-                  // 3. Search & Filters Bar
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 24 : 16,
-                        vertical: 12,
-                      ),
-                      child: _buildFiltersBar(isDesktop),
-                    ),
-                  ),
-
-                  // 4. Content (Table or Cards)
+                  // 4. Compact Customer Table / Cards
                   SliverPadding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: isDesktop ? 24 : 16,
-                      vertical: 6,
+                      horizontal: isDesktop ? 20 : 14,
+                      vertical: 4,
                     ),
                     sliver: _buildContentSliver(isDesktop),
                   ),
 
-                  // 5. Pagination Bar
+                  // 5. Compact Pagination Bar
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 24 : 16,
-                        vertical: 20,
+                      padding: EdgeInsets.fromLTRB(
+                        isDesktop ? 20 : 14,
+                        10,
+                        isDesktop ? 20 : 14,
+                        18,
                       ),
-                      child: _buildPaginationBar(isDesktop),
+                      child: _buildCompactPaginationBar(isDesktop),
                     ),
                   ),
                 ],
@@ -278,41 +343,68 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
-  Widget _buildHeader(bool isDesktop) {
+  // -------------------------------------------------------------
+  // 1. Compact Header
+  // -------------------------------------------------------------
+  Widget _buildCompactHeader(bool isDesktop) {
+    final total = _stats['total'] ?? 0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: AppTheme.primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
-            Icons.group_rounded,
+            Icons.people_alt_rounded,
             color: AppTheme.primaryColor,
-            size: 26,
+            size: 20,
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Customers Directory',
-                style: GoogleFonts.outfit(
-                  fontSize: isDesktop ? 24 : 20,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0F172A),
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Customer Directory',
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Text(
+                      '${NumberFormat.decimalPattern().format(total)} Users',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1D4ED8),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
               Text(
-                'Comprehensive database of all users • Active & deleted records • Sales agent assignment inspection',
+                'Comprehensive directory • KYC verification • Sales agent mapping',
                 style: GoogleFonts.outfit(
-                  fontSize: 13,
+                  fontSize: 11.5,
                   color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -321,51 +413,73 @@ class _CustomersPageState extends State<CustomersPage> {
           ),
         ),
         const SizedBox(width: 10),
-        IconButton(
-          tooltip: 'Refresh Directory',
-          onPressed: () {
+        InkWell(
+          onTap: () {
             _fetchStats();
             _fetchCustomers(page: _currentPage);
           },
-          icon: const Icon(Icons.refresh_rounded, color: Color(0xFF475569)),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFF475569)),
+                if (isDesktop) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    'Refresh',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF475569),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildMetricCards(bool isDesktop) {
+  // -------------------------------------------------------------
+  // 2. High-Density Metrics KPI Ribbon
+  // -------------------------------------------------------------
+  Widget _buildCompactMetricCards(bool isDesktop) {
     final total = _stats['total'] ?? 0;
     final active = _stats['active'] ?? 0;
     final deleted = _stats['deleted'] ?? 0;
     final unassigned = _stats['unassigned'] ?? 0;
     final dealers = _stats['verifiedDealers'] ?? 0;
 
-    final cards = [
-      _MetricCardItem(
+    final items = [
+      _CompactKpiItem(
         label: 'Total Users',
-        value: NumberFormat.compact().format(total),
-        fullValue: '$total users in DB',
-        icon: Icons.people_alt_rounded,
+        value: total,
+        icon: Icons.groups_rounded,
         color: const Color(0xFF2563EB),
         bgColor: const Color(0xFFEFF6FF),
-        isActive: _selectedStatus == 'all' && _selectedAssignment == 'all',
+        isActive: _selectedStatus == 'all' && _selectedAssignment == 'all' && _selectedKycStatus == 'all',
         onTap: () {
           setState(() {
             _selectedStatus = 'all';
             _selectedAssignment = 'all';
+            _selectedKycStatus = 'all';
           });
           _fetchCustomers(page: 1);
         },
       ),
-      _MetricCardItem(
+      _CompactKpiItem(
         label: 'Active Accounts',
-        value: NumberFormat.compact().format(active),
-        fullValue: '$active active users',
+        value: active,
         icon: Icons.check_circle_rounded,
         color: const Color(0xFF16A34A),
         bgColor: const Color(0xFFF0FDF4),
@@ -375,11 +489,10 @@ class _CustomersPageState extends State<CustomersPage> {
           _fetchCustomers(page: 1);
         },
       ),
-      _MetricCardItem(
+      _CompactKpiItem(
         label: 'Deleted Accounts',
-        value: NumberFormat.compact().format(deleted),
-        fullValue: '$deleted deleted users',
-        icon: Icons.delete_sweep_rounded,
+        value: deleted,
+        icon: Icons.delete_outline_rounded,
         color: const Color(0xFFDC2626),
         bgColor: const Color(0xFFFEF2F2),
         isActive: _selectedStatus == 'true',
@@ -388,24 +501,21 @@ class _CustomersPageState extends State<CustomersPage> {
           _fetchCustomers(page: 1);
         },
       ),
-      _MetricCardItem(
+      _CompactKpiItem(
         label: 'Unassigned',
-        value: NumberFormat.compact().format(unassigned),
-        fullValue: '$unassigned unassigned users',
+        value: unassigned,
         icon: Icons.person_off_rounded,
         color: const Color(0xFFD97706),
         bgColor: const Color(0xFFFFFBEB),
-        isAlert: unassigned > 0,
         isActive: _selectedAssignment == 'unassigned',
         onTap: () {
           setState(() => _selectedAssignment = 'unassigned');
           _fetchCustomers(page: 1);
         },
       ),
-      _MetricCardItem(
+      _CompactKpiItem(
         label: 'Verified Dealers',
-        value: NumberFormat.compact().format(dealers),
-        fullValue: '$dealers KYC verified',
+        value: dealers,
         icon: Icons.verified_user_rounded,
         color: const Color(0xFF7C3AED),
         bgColor: const Color(0xFFF5F3FF),
@@ -419,231 +529,359 @@ class _CustomersPageState extends State<CustomersPage> {
 
     if (isDesktop) {
       return Row(
-        children: cards.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: c))).toList(),
+        children: items
+            .map((item) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: item,
+                  ),
+                ))
+            .toList(),
       );
     } else {
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         child: Row(
-          children: cards.map((c) => SizedBox(width: 170, child: Padding(padding: const EdgeInsets.only(right: 10), child: c))).toList(),
+          children: items
+              .map((item) => Container(
+                    width: 155,
+                    margin: const EdgeInsets.only(right: 8),
+                    child: item,
+                  ))
+              .toList(),
         ),
       );
     }
   }
 
-  Widget _buildFiltersBar(bool isDesktop) {
+  // -------------------------------------------------------------
+  // 3. Consolidated Single-Line Search & Filters Bar
+  // -------------------------------------------------------------
+  Widget _buildCompactFiltersBar(bool isDesktop) {
+    final hasActiveFilters = _selectedStatus != 'all' ||
+        _selectedAssignment != 'all' ||
+        _selectedKycStatus != 'all' ||
+        _searchQuery.isNotEmpty;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: Search & Reset
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Search by Name, Phone, Shop Name, Email, City, Pincode...',
-                    hintStyle: GoogleFonts.outfit(
-                      color: const Color(0xFF94A3B8),
-                      fontSize: 14,
-                    ),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 22),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 20),
-                            onPressed: () {
-                              _searchController.clear();
-                              _onSearchChanged('');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      child: isDesktop
+          ? Row(
+              children: [
+                // 1. Compact Search Field
+                Expanded(
+                  flex: 3,
+                  child: _buildSearchInput(),
+                ),
+                const SizedBox(width: 8),
+
+                // 2. Status Dropdown
+                _buildCompactDropdown(
+                  label: 'Status',
+                  icon: Icons.shield_rounded,
+                  value: _selectedStatus,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                    DropdownMenuItem(value: 'false', child: Text('🟢 Active')),
+                    DropdownMenuItem(value: 'true', child: Text('🔴 Deleted')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedStatus = val);
+                      _fetchCustomers(page: 1);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // 3. Assigned Agent Dropdown
+                _buildCompactDropdown(
+                  label: 'Agent',
+                  icon: Icons.support_agent_rounded,
+                  value: _selectedAssignment,
+                  items: [
+                    const DropdownMenuItem(value: 'all', child: Text('All Agents')),
+                    const DropdownMenuItem(value: 'unassigned', child: Text('⚠️ Unassigned')),
+                    const DropdownMenuItem(value: 'assigned', child: Text('✅ Assigned')),
+                    ..._salesAgents.map((agent) {
+                      final name = agent['agentName'] ?? 'Agent';
+                      final count = agent['total'] ?? 0;
+                      return DropdownMenuItem(
+                        value: agent['agentId'],
+                        child: Text('$name ($count)'),
+                      );
+                    }),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedAssignment = val);
+                      _fetchCustomers(page: 1);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // 4. KYC / Account Type Dropdown
+                _buildCompactDropdown(
+                  label: 'Type',
+                  icon: Icons.verified_user_rounded,
+                  value: _selectedKycStatus,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Types')),
+                    DropdownMenuItem(value: 'not_verified', child: Text('🟣 Leads')),
+                    DropdownMenuItem(value: 'verified', child: Text('🔵 Dealers')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedKycStatus = val);
+                      _fetchCustomers(page: 1);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // 5. Per-page limit selector
+                _buildCompactDropdown(
+                  label: 'Show',
+                  icon: Icons.table_rows_rounded,
+                  value: _limit.toString(),
+                  items: const [
+                    DropdownMenuItem(value: '25', child: Text('25 / page')),
+                    DropdownMenuItem(value: '50', child: Text('50 / page')),
+                    DropdownMenuItem(value: '100', child: Text('100 / page')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _limit = int.parse(val));
+                      _fetchCustomers(page: 1);
+                    }
+                  },
+                ),
+
+                // 6. Reset Filters Button
+                if (hasActiveFilters) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: _resetFilters,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.filter_alt_off_rounded, size: 14, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Reset',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _resetFilters,
-                icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
-                label: Text(
-                  isDesktop ? 'Reset Filters' : 'Reset',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF64748B),
-                  side: const BorderSide(color: Color(0xFFCBD5E1)),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isDesktop ? 16 : 12,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // Row 2: Filter Selectors (Status, Assignment, KYC Status)
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              // 1. Account Deletion Status
-              _buildFilterDropdown(
-                label: 'Status',
-                icon: Icons.shield_rounded,
-                value: _selectedStatus,
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All (Active + Deleted)')),
-                  DropdownMenuItem(value: 'false', child: Text('🟢 Active Only')),
-                  DropdownMenuItem(value: 'true', child: Text('🔴 Deleted Only')),
                 ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedStatus = val);
-                    _fetchCustomers(page: 1);
-                  }
-                },
-              ),
-
-              // 2. Sales Agent Assignment
-              _buildFilterDropdown(
-                label: 'Assigned Agent',
-                icon: Icons.support_agent_rounded,
-                value: _selectedAssignment,
-                items: [
-                  const DropdownMenuItem(value: 'all', child: Text('All Assignments')),
-                  const DropdownMenuItem(value: 'unassigned', child: Text('⚠️ Unassigned Only')),
-                  const DropdownMenuItem(value: 'assigned', child: Text('✅ Assigned (Any)')),
-                  ..._salesAgents.map((agent) {
-                    final name = agent['agentName'] ?? 'Agent';
-                    final count = agent['total'] ?? 0;
-                    return DropdownMenuItem(
-                      value: agent['agentId'],
-                      child: Text('$name ($count)'),
-                    );
-                  }),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedAssignment = val);
-                    _fetchCustomers(page: 1);
-                  }
-                },
-              ),
-
-              // 3. User Type / KYC
-              _buildFilterDropdown(
-                label: 'Account Type',
-                icon: Icons.verified_user_rounded,
-                value: _selectedKycStatus,
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All Types')),
-                  DropdownMenuItem(value: 'not_verified', child: Text('🟣 Leads (Pending KYC)')),
-                  DropdownMenuItem(value: 'verified', child: Text('🔵 Verified Dealers')),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedKycStatus = val);
-                    _fetchCustomers(page: 1);
-                  }
-                },
-              ),
-
-              // Active filter indicator badge
-              if (_selectedStatus != 'all' || _selectedAssignment != 'all' || _selectedKycStatus != 'all' || _searchQuery.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.filter_list_rounded, size: 14, color: AppTheme.primaryColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Filtered View (${NumberFormat.compact().format(_totalCount)} found)',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryColor,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSearchInput(),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildCompactDropdown(
+                      label: 'Status',
+                      icon: Icons.shield_rounded,
+                      value: _selectedStatus,
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                        DropdownMenuItem(value: 'false', child: Text('🟢 Active')),
+                        DropdownMenuItem(value: 'true', child: Text('🔴 Deleted')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedStatus = val);
+                          _fetchCustomers(page: 1);
+                        }
+                      },
+                    ),
+                    _buildCompactDropdown(
+                      label: 'Agent',
+                      icon: Icons.support_agent_rounded,
+                      value: _selectedAssignment,
+                      items: [
+                        const DropdownMenuItem(value: 'all', child: Text('All Agents')),
+                        const DropdownMenuItem(value: 'unassigned', child: Text('⚠️ Unassigned')),
+                        const DropdownMenuItem(value: 'assigned', child: Text('✅ Assigned')),
+                        ..._salesAgents.map((agent) {
+                          final name = agent['agentName'] ?? 'Agent';
+                          final count = agent['total'] ?? 0;
+                          return DropdownMenuItem(
+                            value: agent['agentId'],
+                            child: Text('$name ($count)'),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedAssignment = val);
+                          _fetchCustomers(page: 1);
+                        }
+                      },
+                    ),
+                    _buildCompactDropdown(
+                      label: 'Type',
+                      icon: Icons.verified_user_rounded,
+                      value: _selectedKycStatus,
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All Types')),
+                        DropdownMenuItem(value: 'not_verified', child: Text('🟣 Leads')),
+                        DropdownMenuItem(value: 'verified', child: Text('🔵 Dealers')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedKycStatus = val);
+                          _fetchCustomers(page: 1);
+                        }
+                      },
+                    ),
+                    if (hasActiveFilters)
+                      InkWell(
+                        onTap: _resetFilters,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.filter_alt_off_rounded, size: 14, color: Color(0xFFDC2626)),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Reset',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFDC2626),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-            ],
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSearchInput() {
+    return Container(
+      height: 36,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        style: GoogleFonts.outfit(
+          fontSize: 13,
+          color: const Color(0xFF0F172A),
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          hintText: 'Search by Name, Phone, Shop Name, City, Pincode...',
+          hintStyle: GoogleFonts.outfit(
+            color: const Color(0xFF94A3B8),
+            fontSize: 12.5,
           ),
-        ],
+          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18),
+          prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? InkWell(
+                  onTap: () {
+                    _searchController.clear();
+                    _onSearchChanged('');
+                  },
+                  child: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF94A3B8)),
+                )
+              : null,
+          suffixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          border: InputBorder.none,
+        ),
       ),
     );
   }
 
-  Widget _buildFilterDropdown({
+  Widget _buildCompactDropdown({
     required String label,
     required IconData icon,
     required String value,
     required List<DropdownMenuItem<String>> items,
     required ValueChanged<String?> onChanged,
   }) {
+    final hasValue = items.any((i) => i.value == value);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF64748B)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 14, color: const Color(0xFF64748B)),
+          const SizedBox(width: 4),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: items.any((i) => i.value == value) ? value : 'all',
+              value: hasValue ? value : (items.isNotEmpty ? items.first.value : null),
               items: items,
               onChanged: onChanged,
               style: GoogleFonts.outfit(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFF1E293B),
               ),
-              icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFF64748B)),
-              borderRadius: BorderRadius.circular(12),
+              icon: const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF64748B)),
+              borderRadius: BorderRadius.circular(8),
+              dense: true,
             ),
           ),
         ],
@@ -651,19 +889,26 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
+  // -------------------------------------------------------------
+  // 4. Content Sliver (High-Density Compact Table or Cards)
+  // -------------------------------------------------------------
   Widget _buildContentSliver(bool isDesktop) {
     if (_isLoading) {
       return SliverToBoxAdapter(
         child: Container(
-          padding: const EdgeInsets.all(40),
+          padding: const EdgeInsets.symmetric(vertical: 40),
           alignment: Alignment.center,
           child: Column(
             children: [
-              CircularProgressIndicator(color: AppTheme.primaryColor),
-              const SizedBox(height: 16),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF008069)),
+              ),
+              const SizedBox(height: 12),
               Text(
-                'Searching customer records...',
-                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 14),
+                'Loading customer database...',
+                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
               ),
             ],
           ),
@@ -674,34 +919,35 @@ class _CustomersPageState extends State<CustomersPage> {
     if (_errorMessage != null) {
       return SliverToBoxAdapter(
         child: Container(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFFCA5A5)),
           ),
           child: Column(
             children: [
-              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 40),
-              const SizedBox(height: 12),
+              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 32),
+              const SizedBox(height: 8),
               Text(
                 'Failed to load customers',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
+                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 12.5),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: () => _fetchCustomers(page: _currentPage),
-                icon: const Icon(Icons.refresh_rounded, size: 18),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Retry'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
@@ -714,39 +960,43 @@ class _CustomersPageState extends State<CustomersPage> {
     if (_customers.isEmpty) {
       return SliverToBoxAdapter(
         child: Container(
-          padding: const EdgeInsets.all(48),
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.person_search_rounded, size: 44, color: Color(0xFF94A3B8)),
+                child: const Icon(Icons.person_search_rounded, size: 34, color: Color(0xFF94A3B8)),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 'No Customers Found',
                 style: GoogleFonts.outfit(
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF1E293B),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
-                'No user records match your search or filter parameters.',
-                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 13),
+                'No records match your search or filter settings.',
+                style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 12.5),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: _resetFilters,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
                 child: const Text('Clear All Filters'),
               ),
             ],
@@ -760,63 +1010,76 @@ class _CustomersPageState extends State<CustomersPage> {
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: DataTable(
-              showCheckboxColumn: false,
-              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-              horizontalMargin: 20,
-              columnSpacing: 24,
-              dataRowMinHeight: 64,
-              dataRowMaxHeight: 68,
-              columns: [
-                DataColumn(label: Text('Customer', style: _headerStyle())),
-                DataColumn(label: Text('Shop / Location', style: _headerStyle())),
-                DataColumn(label: Text('Account Status', style: _headerStyle())),
-                DataColumn(label: Text('Assigned Sales Agent', style: _headerStyle())),
-                DataColumn(label: Text('Registration', style: _headerStyle())),
-                DataColumn(label: Text('Action', style: _headerStyle())),
-              ],
-              rows: _customers.map((c) => _buildDataRow(c)).toList(),
+            borderRadius: BorderRadius.circular(12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Ensure table stretches 100% or horizontally scrolls on narrow viewports
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
+                      showCheckboxColumn: false,
+                      headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                      headingRowHeight: 38,
+                      dataRowMinHeight: 46,
+                      dataRowMaxHeight: 52,
+                      horizontalMargin: 16,
+                      columnSpacing: 18,
+                      dividerThickness: 1,
+                      columns: [
+                        DataColumn(label: Text('CUSTOMER', style: _compactHeaderStyle())),
+                        DataColumn(label: Text('SHOP / LOCATION', style: _compactHeaderStyle())),
+                        DataColumn(label: Text('STATUS & KYC', style: _compactHeaderStyle())),
+                        DataColumn(label: Text('ASSIGNED AGENT', style: _compactHeaderStyle())),
+                        DataColumn(label: Text('REGISTERED', style: _compactHeaderStyle())),
+                        DataColumn(label: Text('ACTIONS', style: _compactHeaderStyle())),
+                      ],
+                      rows: _customers.map((c) => _buildCompactDataRow(c)).toList(),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
       );
     } else {
-      // Mobile / Tablet Card list
+      // Mobile / Tablet compact card list
       return SliverList(
         delegate: SliverChildBuilderDelegate(
-          (context, index) => _buildCustomerCard(_customers[index]),
+          (context, index) => _buildCompactCustomerCard(_customers[index]),
           childCount: _customers.length,
         ),
       );
     }
   }
 
-  TextStyle _headerStyle() {
+  TextStyle _compactHeaderStyle() {
     return GoogleFonts.outfit(
       fontWeight: FontWeight.w700,
-      fontSize: 12.5,
+      fontSize: 11,
+      letterSpacing: 0.4,
       color: const Color(0xFF475569),
     );
   }
 
-  DataRow _buildDataRow(Map<String, dynamic> c) {
+  DataRow _buildCompactDataRow(Map<String, dynamic> c) {
     final firstName = c['firstName'] ?? '';
     final lastName = c['lastName'] ?? '';
     final fullName = ('$firstName $lastName').trim().isNotEmpty ? ('$firstName $lastName').trim() : 'Unnamed User';
-    final rawPhone = c['phoneNumber'];
-    final cleanPhone = _cleanPhone(rawPhone);
+    final cleanPhone = _cleanPhone(c['phoneNumber']);
     final shopName = c['shopName'] ?? '';
     final address = c['address'] as Map<String, dynamic>?;
     final city = address?['cityTehsil'] ?? address?['villageArea'] ?? '';
@@ -826,8 +1089,8 @@ class _CustomersPageState extends State<CustomersPage> {
     final isDeleted = c['isDeleted'] == true;
     final kycStatus = c['kycStatus'] ?? 'pending';
     final isVerifiedDealer = kycStatus == 'verified';
-
     final assignedAgent = c['assignedAgent'] as Map<String, dynamic>?;
+
     final createdAt = c['createdAt'] != null
         ? DateFormat('dd MMM yyyy').format(DateTime.tryParse(c['createdAt']) ?? DateTime.now())
         : 'N/A';
@@ -837,12 +1100,13 @@ class _CustomersPageState extends State<CustomersPage> {
         setState(() => _selectedCustomer = c);
       },
       cells: [
-        // 1. Customer Column
+        // 1. Customer Name + Phone + Avatar
         DataCell(
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               CircleAvatar(
-                radius: 18,
+                radius: 14,
                 backgroundColor: isDeleted
                     ? const Color(0xFFFEE2E2)
                     : AppTheme.primaryColor.withValues(alpha: 0.12),
@@ -851,11 +1115,11 @@ class _CustomersPageState extends State<CustomersPage> {
                   style: GoogleFonts.outfit(
                     color: isDeleted ? const Color(0xFFDC2626) : AppTheme.primaryColor,
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 11,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -864,26 +1128,27 @@ class _CustomersPageState extends State<CustomersPage> {
                     fullName,
                     style: GoogleFonts.outfit(
                       fontWeight: FontWeight.w600,
-                      fontSize: 13.5,
-                      color: isDeleted ? const Color(0xFF64748B) : const Color(0xFF0F172A),
+                      fontSize: 12.5,
+                      color: isDeleted ? const Color(0xFF94A3B8) : const Color(0xFF0F172A),
                       decoration: isDeleted ? TextDecoration.lineThrough : null,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Text(
                         cleanPhone,
                         style: GoogleFonts.outfit(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: const Color(0xFF64748B),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 3),
                       InkWell(
                         onTap: () => _copyToClipboard(cleanPhone, 'Phone number'),
-                        child: const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF94A3B8)),
+                        child: const Icon(Icons.copy_rounded, size: 11, color: Color(0xFF94A3B8)),
                       ),
                     ],
                   ),
@@ -902,68 +1167,66 @@ class _CustomersPageState extends State<CustomersPage> {
               Text(
                 shopName.isNotEmpty ? shopName : 'Individual',
                 style: GoogleFonts.outfit(
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: const Color(0xFF1E293B),
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
               Text(
                 location.isNotEmpty ? location : (address?['pincode'] ?? 'No address'),
                 style: GoogleFonts.outfit(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: const Color(0xFF64748B),
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
 
-        // 3. Status Column (Active/Deleted + KYC)
+        // 3. Status & KYC Badges
         DataCell(
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
+              // Active / Deleted pill
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: isDeleted ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(4),
                   border: Border.all(
                     color: isDeleted ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isDeleted ? Icons.cancel_rounded : Icons.check_circle_rounded,
-                      size: 11,
-                      color: isDeleted ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      isDeleted ? 'Deleted' : 'Active',
-                      style: GoogleFonts.outfit(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDeleted ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  isDeleted ? 'Deleted' : 'Active',
+                  style: GoogleFonts.outfit(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: isDeleted ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
+              // Dealer / Lead pill
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: isVerifiedDealer ? const Color(0xFFEFF6FF) : const Color(0xFFFAF5FF),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isVerifiedDealer ? const Color(0xFFBFDBFE) : const Color(0xFFE9D5FF),
+                  ),
                 ),
                 child: Text(
                   isVerifiedDealer ? 'Dealer' : 'Lead',
                   style: GoogleFonts.outfit(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
                     color: isVerifiedDealer ? const Color(0xFF2563EB) : const Color(0xFF9333EA),
                   ),
                 ),
@@ -976,16 +1239,10 @@ class _CustomersPageState extends State<CustomersPage> {
         DataCell(
           assignedAgent != null
               ? Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.support_agent_rounded, size: 16, color: Color(0xFF475569)),
-                    ),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.support_agent_rounded, size: 14, color: Color(0xFF64748B)),
+                    const SizedBox(width: 5),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -994,15 +1251,17 @@ class _CustomersPageState extends State<CustomersPage> {
                           '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim(),
                           style: GoogleFonts.outfit(
                             fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            fontSize: 12,
                             color: const Color(0xFF0F172A),
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         if (assignedAgent['phoneNumber'] != null)
                           Text(
                             assignedAgent['phoneNumber'],
                             style: GoogleFonts.outfit(
-                              fontSize: 11.5,
+                              fontSize: 10.5,
                               color: const Color(0xFF64748B),
                             ),
                           ),
@@ -1011,26 +1270,19 @@ class _CustomersPageState extends State<CustomersPage> {
                   ],
                 )
               : Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFFBEB),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: const Color(0xFFFDE68A)),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, size: 13, color: Color(0xFFD97706)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Unassigned',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFFD97706),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '⚠️ Unassigned',
+                    style: GoogleFonts.outfit(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFD97706),
+                    ),
                   ),
                 ),
         ),
@@ -1040,34 +1292,69 @@ class _CustomersPageState extends State<CustomersPage> {
           Text(
             createdAt,
             style: GoogleFonts.outfit(
-              fontSize: 12.5,
+              fontSize: 11.5,
               color: const Color(0xFF64748B),
             ),
           ),
         ),
 
-        // 6. Action Button (Inspect)
+        // 6. Quick Actions (Call, WhatsApp, Inspect)
         DataCell(
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() => _selectedCustomer = c);
-            },
-            icon: const Icon(Icons.visibility_rounded, size: 15),
-            label: const Text('Inspect'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF1F5F9),
-              foregroundColor: const Color(0xFF1E293B),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Phone Call Shortcut
+              IconButton(
+                tooltip: 'Call $cleanPhone',
+                icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
+                color: const Color(0xFF008069),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFE8F5E9),
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(28, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => _launchCall(cleanPhone),
+              ),
+              const SizedBox(width: 5),
+              // WhatsApp Shortcut
+              IconButton(
+                tooltip: 'WhatsApp $cleanPhone',
+                icon: const Icon(Icons.chat_bubble_rounded, size: 14),
+                color: const Color(0xFF16A34A),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFF0FDF4),
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(28, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => _launchWhatsApp(cleanPhone),
+              ),
+              const SizedBox(width: 5),
+              // Inspect Dossier
+              IconButton(
+                tooltip: 'Inspect Dossier',
+                icon: const Icon(Icons.visibility_outlined, size: 15),
+                color: const Color(0xFF2563EB),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(28, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => setState(() => _selectedCustomer = c),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCustomerCard(Map<String, dynamic> c) {
+  // -------------------------------------------------------------
+  // Mobile / Tablet Compact Card
+  // -------------------------------------------------------------
+  Widget _buildCompactCustomerCard(Map<String, dynamic> c) {
     final firstName = c['firstName'] ?? '';
     final lastName = c['lastName'] ?? '';
     final fullName = ('$firstName $lastName').trim().isNotEmpty ? ('$firstName $lastName').trim() : 'Unnamed User';
@@ -1077,17 +1364,17 @@ class _CustomersPageState extends State<CustomersPage> {
     final assignedAgent = c['assignedAgent'] as Map<String, dynamic>?;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -1099,17 +1386,18 @@ class _CustomersPageState extends State<CustomersPage> {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 18,
+                  radius: 14,
                   backgroundColor: isDeleted ? const Color(0xFFFEE2E2) : AppTheme.primaryColor.withValues(alpha: 0.1),
                   child: Text(
                     fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
                     style: GoogleFonts.outfit(
                       color: isDeleted ? const Color(0xFFDC2626) : AppTheme.primaryColor,
                       fontWeight: FontWeight.bold,
+                      fontSize: 11,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,39 +1405,39 @@ class _CustomersPageState extends State<CustomersPage> {
                       Text(
                         fullName,
                         style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
                           color: const Color(0xFF0F172A),
                         ),
                       ),
                       Text(
                         cleanPhone,
-                        style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFF64748B)),
                       ),
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: isDeleted ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         isDeleted ? 'Deleted' : 'Active',
                         style: GoogleFonts.outfit(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                           color: isDeleted ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: isDealer ? const Color(0xFFEFF6FF) : const Color(0xFFFAF5FF),
                         borderRadius: BorderRadius.circular(4),
@@ -1157,7 +1445,7 @@ class _CustomersPageState extends State<CustomersPage> {
                       child: Text(
                         isDealer ? 'Dealer' : 'Lead',
                         style: GoogleFonts.outfit(
-                          fontSize: 10.5,
+                          fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: isDealer ? const Color(0xFF2563EB) : const Color(0xFF9333EA),
                         ),
@@ -1167,31 +1455,55 @@ class _CustomersPageState extends State<CustomersPage> {
                 ),
               ],
             ),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
+            const Divider(height: 16, color: Color(0xFFF1F5F9)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Text(
+                  assignedAgent != null
+                      ? 'Agent: ${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim()
+                      : '⚠️ Unassigned',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    color: assignedAgent != null ? const Color(0xFF475569) : const Color(0xFFD97706),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Row(
                   children: [
-                    Text('Assigned Agent', style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF94A3B8))),
-                    const SizedBox(height: 2),
-                    Text(
-                      assignedAgent != null
-                          ? '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim()
-                          : '⚠️ Unassigned',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: assignedAgent != null ? const Color(0xFF0F172A) : const Color(0xFFD97706),
+                    IconButton(
+                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
+                      color: const Color(0xFF008069),
+                      onPressed: () => _launchCall(cleanPhone),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFE8F5E9),
+                        padding: const EdgeInsets.all(5),
+                        minimumSize: const Size(26, 26),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_rounded, size: 14),
+                      color: const Color(0xFF16A34A),
+                      onPressed: () => _launchWhatsApp(cleanPhone),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFF0FDF4),
+                        padding: const EdgeInsets.all(5),
+                        minimumSize: const Size(26, 26),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 14),
+                      color: const Color(0xFF2563EB),
+                      onPressed: () => setState(() => _selectedCustomer = c),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        padding: const EdgeInsets.all(5),
+                        minimumSize: const Size(26, 26),
                       ),
                     ),
                   ],
-                ),
-                TextButton.icon(
-                  onPressed: () => setState(() => _selectedCustomer = c),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                  label: const Text('Inspect'),
                 ),
               ],
             ),
@@ -1201,16 +1513,20 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
-  Widget _buildPaginationBar(bool isDesktop) {
+  // -------------------------------------------------------------
+  // 5. Compact Pagination Bar
+  // -------------------------------------------------------------
+  Widget _buildCompactPaginationBar(bool isDesktop) {
     final int totalPages = (_totalCount / _limit).ceil();
     final int startItem = _totalCount == 0 ? 0 : (_currentPage - 1) * _limit + 1;
     final int endItem = ((_currentPage * _limit) > _totalCount) ? _totalCount : (_currentPage * _limit);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
@@ -1219,21 +1535,34 @@ class _CustomersPageState extends State<CustomersPage> {
           Text(
             'Showing $startItem–$endItem of ${NumberFormat.decimalPattern().format(_totalCount)} customers',
             style: GoogleFonts.outfit(
-              fontSize: 13,
+              fontSize: 12,
               color: const Color(0xFF64748B),
               fontWeight: FontWeight.w500,
             ),
           ),
           Row(
             children: [
+              // First page
               IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
+                icon: const Icon(Icons.first_page_rounded, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: _currentPage > 1 && !_isLoading
+                    ? () => _fetchCustomers(page: 1)
+                    : null,
+              ),
+              // Previous
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: _currentPage > 1 && !_isLoading
                     ? () => _fetchCustomers(page: _currentPage - 1)
                     : null,
               ),
+              const SizedBox(width: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
@@ -1241,16 +1570,29 @@ class _CustomersPageState extends State<CustomersPage> {
                 child: Text(
                   'Page $_currentPage of ${totalPages == 0 ? 1 : totalPages}',
                   style: GoogleFonts.outfit(
-                    fontSize: 12.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF1E293B),
                   ),
                 ),
               ),
+              const SizedBox(width: 4),
+              // Next
               IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
+                icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: _currentPage < totalPages && !_isLoading
                     ? () => _fetchCustomers(page: _currentPage + 1)
+                    : null,
+              ),
+              // Last page
+              IconButton(
+                icon: const Icon(Icons.last_page_rounded, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: _currentPage < totalPages && !_isLoading
+                    ? () => _fetchCustomers(page: totalPages)
                     : null,
               ),
             ],
@@ -1261,10 +1603,11 @@ class _CustomersPageState extends State<CustomersPage> {
   }
 
   // -------------------------------------------------------------
-  // Customer Research Dossier (Inspector Drawer)
+  // 6. Polished Executive Customer Dossier (Inspector Drawer)
   // -------------------------------------------------------------
   Widget _buildCustomerInspectorDrawer(bool isDesktop) {
     final c = _selectedCustomer!;
+    final customerId = c['_id'] ?? '';
     final firstName = c['firstName'] ?? '';
     final lastName = c['lastName'] ?? '';
     final fullName = ('$firstName $lastName').trim().isNotEmpty ? ('$firstName $lastName').trim() : 'Unnamed User';
@@ -1279,39 +1622,39 @@ class _CustomersPageState extends State<CustomersPage> {
     return GestureDetector(
       onTap: () => setState(() => _selectedCustomer = null),
       child: Container(
-        color: Colors.black.withValues(alpha: 0.4),
+        color: Colors.black.withValues(alpha: 0.35),
         child: Align(
           alignment: Alignment.centerRight,
           child: GestureDetector(
-            onTap: () {}, // Prevent dismissal when tapping drawer content
+            onTap: () {}, // Prevent dismissal when tapping drawer
             child: Container(
-              width: isDesktop ? 480 : MediaQuery.of(context).size.width * 0.9,
+              width: isDesktop ? 440 : MediaQuery.of(context).size.width * 0.9,
               height: double.infinity,
               color: Colors.white,
               child: Column(
                 children: [
-                  // Drawer Header
+                  // Compact Header
                   Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      border: Border(bottom: BorderSide(color: const Color(0xFFE2E8F0))),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                     ),
                     child: Row(
                       children: [
                         CircleAvatar(
-                          radius: 22,
+                          radius: 18,
                           backgroundColor: isDeleted ? const Color(0xFFFEE2E2) : AppTheme.primaryColor.withValues(alpha: 0.12),
                           child: Text(
                             fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontSize: 14,
                               color: isDeleted ? const Color(0xFFDC2626) : AppTheme.primaryColor,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1319,26 +1662,27 @@ class _CustomersPageState extends State<CustomersPage> {
                               Text(
                                 fullName,
                                 style: GoogleFonts.outfit(
-                                  fontSize: 17,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                   color: const Color(0xFF0F172A),
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 2),
                               Row(
                                 children: [
                                   Text(
                                     cleanPhone,
                                     style: GoogleFonts.outfit(
-                                      fontSize: 13,
+                                      fontSize: 12,
                                       color: const Color(0xFF64748B),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 4),
                                   InkWell(
                                     onTap: () => _copyToClipboard(cleanPhone, 'Phone number'),
-                                    child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF94A3B8)),
+                                    child: const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF94A3B8)),
                                   ),
                                 ],
                               ),
@@ -1346,23 +1690,127 @@ class _CustomersPageState extends State<CustomersPage> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close_rounded),
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                           onPressed: () => setState(() => _selectedCustomer = null),
                         ),
                       ],
                     ),
                   ),
 
-                  // Drawer Body
+                  // Quick Action Bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _launchCall(cleanPhone),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F5E9),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFC8E6C9)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Call',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF008069),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _launchWhatsApp(cleanPhone),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.chat_bubble_rounded, size: 14, color: Color(0xFF16A34A)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'WhatsApp',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF16A34A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _copyToClipboard(cleanPhone, 'Phone number'),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF64748B)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Copy',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Drawer Body Scroll
                   Expanded(
                     child: ListView(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       children: [
-                        // Status Banners
+                        // Status Pills Row
                         Row(
                           children: [
                             Expanded(
-                              child: _buildInfoBadge(
+                              child: _buildCompactInfoBadge(
                                 label: 'Status',
                                 value: isDeleted ? 'Deleted Account' : 'Active Account',
                                 icon: isDeleted ? Icons.cancel_rounded : Icons.check_circle_rounded,
@@ -1370,9 +1818,9 @@ class _CustomersPageState extends State<CustomersPage> {
                                 bgColor: isDeleted ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 8),
                             Expanded(
-                              child: _buildInfoBadge(
+                              child: _buildCompactInfoBadge(
                                 label: 'Account Type',
                                 value: isDealer ? 'Verified Dealer' : 'Lead (Pending KYC)',
                                 icon: isDealer ? Icons.verified_user_rounded : Icons.person_outline_rounded,
@@ -1383,39 +1831,66 @@ class _CustomersPageState extends State<CustomersPage> {
                           ],
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
 
-                        // Assigned Sales Agent Card
-                        _buildSectionCard(
+                        // Assigned Sales Agent Card (With Quick Reassignment!)
+                        _buildCompactSectionCard(
                           title: 'Assigned Sales Agent',
                           icon: Icons.support_agent_rounded,
+                          trailing: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isDense: true,
+                              hint: Text(
+                                'Reassign',
+                                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryColor),
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: 'none',
+                                  child: Text('⚠️ Unassigned (None)'),
+                                ),
+                                ..._salesAgents.map((agent) {
+                                  final name = agent['agentName'] ?? 'Agent';
+                                  return DropdownMenuItem(
+                                    value: agent['agentId'].toString(),
+                                    child: Text(name),
+                                  );
+                                }),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  _reassignAgent(customerId, val == 'none' ? null : val);
+                                }
+                              },
+                              style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF1E293B)),
+                            ),
+                          ),
                           child: assignedAgent != null
                               ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _buildDetailRow('Agent Name', '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim()),
-                                    _buildDetailRow('Agent Phone', assignedAgent['phoneNumber'] ?? 'N/A'),
-                                    _buildDetailRow('Agent Email', assignedAgent['email'] ?? 'N/A'),
+                                    _buildCompactDetailRow('Agent Name', '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim()),
+                                    _buildCompactDetailRow('Agent Phone', assignedAgent['phoneNumber'] ?? 'N/A'),
+                                    _buildCompactDetailRow('Agent Email', assignedAgent['email'] ?? 'N/A'),
                                     if (c['assignedAt'] != null)
-                                      _buildDetailRow('Assigned On', DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(c['assignedAt']) ?? DateTime.now())),
+                                      _buildCompactDetailRow('Assigned On', DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(c['assignedAt']) ?? DateTime.now())),
                                   ],
                                 )
                               : Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFFBEB),
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(6),
                                     border: Border.all(color: const Color(0xFFFDE68A)),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
-                                      const SizedBox(width: 10),
+                                      const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 16),
+                                      const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'This customer has not been assigned to any sales agent yet.',
+                                          'Customer is unassigned. Select an agent above to assign.',
                                           style: GoogleFonts.outfit(
-                                            fontSize: 13,
+                                            fontSize: 11.5,
                                             color: const Color(0xFFB45309),
                                             fontWeight: FontWeight.w500,
                                           ),
@@ -1426,64 +1901,63 @@ class _CustomersPageState extends State<CustomersPage> {
                                 ),
                         ),
 
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
 
-                        // Contact & Address Details
-                        _buildSectionCard(
+                        // Contact & Business Details
+                        _buildCompactSectionCard(
                           title: 'Contact & Business Details',
                           icon: Icons.storefront_rounded,
                           child: Column(
                             children: [
-                              _buildDetailRow('Shop / Business', c['shopName'] ?? 'Individual'),
-                              _buildDetailRow('Email', c['email'] ?? 'No email provided'),
-                              _buildDetailRow('Address Type', c['addressType'] ?? 'Home'),
-                              _buildDetailRow('Village / Area', address?['villageArea'] ?? 'N/A'),
-                              _buildDetailRow('City / Tehsil', address?['cityTehsil'] ?? 'N/A'),
-                              _buildDetailRow('State', address?['state'] ?? 'N/A'),
-                              _buildDetailRow('Pincode', address?['pincode'] ?? 'N/A'),
-                              _buildDetailRow('Source', c['source'] ?? 'App'),
+                              _buildCompactDetailRow('Shop / Business', c['shopName'] ?? 'Individual'),
+                              _buildCompactDetailRow('Email', c['email'] ?? 'No email provided'),
+                              _buildCompactDetailRow('Address Type', c['addressType'] ?? 'Home'),
+                              _buildCompactDetailRow('Village / Area', address?['villageArea'] ?? 'N/A'),
+                              _buildCompactDetailRow('City / Tehsil', address?['cityTehsil'] ?? 'N/A'),
+                              _buildCompactDetailRow('State', address?['state'] ?? 'N/A'),
+                              _buildCompactDetailRow('Pincode', address?['pincode'] ?? 'N/A'),
+                              _buildCompactDetailRow('Source', c['source'] ?? 'App'),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
 
-                        // Lifecycle Timestamps
-                        _buildSectionCard(
+                        // System Timeline
+                        _buildCompactSectionCard(
                           title: 'Timeline & System History',
                           icon: Icons.history_rounded,
                           child: Column(
                             children: [
-                              _buildDetailRow(
+                              _buildCompactDetailRow(
                                 'Registered On',
                                 c['createdAt'] != null
                                     ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(c['createdAt']) ?? DateTime.now())
                                     : 'N/A',
                               ),
-                              _buildDetailRow(
+                              _buildCompactDetailRow(
                                 'Last Updated',
                                 c['updatedAt'] != null
                                     ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(c['updatedAt']) ?? DateTime.now())
                                     : 'N/A',
                               ),
                               if (isDeleted) ...[
-                                _buildDetailRow(
+                                _buildCompactDetailRow(
                                   'Deleted On',
                                   c['deletedAt'] != null
                                       ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(c['deletedAt']) ?? DateTime.now())
                                       : 'N/A',
                                 ),
-                                _buildDetailRow('Deleted By', c['deletedByAdminName'] ?? 'Admin'),
+                                _buildCompactDetailRow('Deleted By', c['deletedByAdminName'] ?? 'Admin'),
                               ],
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 16),
-
                         // Notes History (if any)
-                        if (notesHistory.isNotEmpty)
-                          _buildSectionCard(
+                        if (notesHistory.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _buildCompactSectionCard(
                             title: 'Notes & Contact History (${notesHistory.length})',
                             icon: Icons.notes_rounded,
                             child: Column(
@@ -1494,11 +1968,11 @@ class _CustomersPageState extends State<CustomersPage> {
                                     ? DateFormat('dd MMM yyyy').format(DateTime.tryParse(n['createdAt']) ?? DateTime.now())
                                     : '';
                                 return Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(10),
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(6),
                                     border: Border.all(color: const Color(0xFFE2E8F0)),
                                   ),
                                   child: Column(
@@ -1511,24 +1985,24 @@ class _CustomersPageState extends State<CustomersPage> {
                                             author,
                                             style: GoogleFonts.outfit(
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 12,
+                                              fontSize: 11.5,
                                               color: const Color(0xFF334155),
                                             ),
                                           ),
                                           Text(
                                             date,
                                             style: GoogleFonts.outfit(
-                                              fontSize: 11,
+                                              fontSize: 10.5,
                                               color: const Color(0xFF94A3B8),
                                             ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 2),
                                       Text(
                                         noteText,
                                         style: GoogleFonts.outfit(
-                                          fontSize: 12.5,
+                                          fontSize: 11.5,
                                           color: const Color(0xFF475569),
                                         ),
                                       ),
@@ -1538,24 +2012,7 @@ class _CustomersPageState extends State<CustomersPage> {
                               }).toList(),
                             ),
                           ),
-
-                        const SizedBox(height: 20),
-
-                        // Copy Phone Button
-                        OutlinedButton.icon(
-                          onPressed: () => _copyToClipboard(cleanPhone, 'Phone number'),
-                          icon: const Icon(Icons.copy_rounded, size: 16),
-                          label: Text(
-                            'Copy Phone Number',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF334155),
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -1568,7 +2025,7 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
-  Widget _buildInfoBadge({
+  Widget _buildCompactInfoBadge({
     required String label,
     required String value,
     required IconData icon,
@@ -1576,10 +2033,10 @@ class _CustomersPageState extends State<CustomersPage> {
     required Color bgColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
@@ -1587,23 +2044,23 @@ class _CustomersPageState extends State<CustomersPage> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: color),
+              Icon(icon, size: 12, color: color),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: GoogleFonts.outfit(
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: color,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
             style: GoogleFonts.outfit(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -1615,54 +2072,61 @@ class _CustomersPageState extends State<CustomersPage> {
     );
   }
 
-  Widget _buildSectionCard({
+  Widget _buildCompactSectionCard({
     required String title,
     required IconData icon,
     required Widget child,
+    Widget? trailing,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, size: 18, color: const Color(0xFF64748B)),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0F172A),
-                ),
+              Row(
+                children: [
+                  Icon(icon, size: 15, color: const Color(0xFF64748B)),
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
               ),
+              if (trailing != null) trailing,
             ],
           ),
-          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+          const Divider(height: 14, color: Color(0xFFF1F5F9)),
           child,
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildCompactDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 130,
+            width: 110,
             child: Text(
               label,
               style: GoogleFonts.outfit(
-                fontSize: 12.5,
+                fontSize: 11.5,
                 color: const Color(0xFF64748B),
                 fontWeight: FontWeight.w500,
               ),
@@ -1672,7 +2136,7 @@ class _CustomersPageState extends State<CustomersPage> {
             child: Text(
               value,
               style: GoogleFonts.outfit(
-                fontSize: 13,
+                fontSize: 12,
                 color: const Color(0xFF0F172A),
                 fontWeight: FontWeight.w600,
               ),
@@ -1684,25 +2148,24 @@ class _CustomersPageState extends State<CustomersPage> {
   }
 }
 
-class _MetricCardItem extends StatelessWidget {
+// -------------------------------------------------------------
+// Compact KPI Tile Component
+// -------------------------------------------------------------
+class _CompactKpiItem extends StatelessWidget {
   final String label;
-  final String value;
-  final String fullValue;
+  final int value;
   final IconData icon;
   final Color color;
   final Color bgColor;
-  final bool isAlert;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _MetricCardItem({
+  const _CompactKpiItem({
     required this.label,
     required this.value,
-    required this.fullValue,
     required this.icon,
     required this.color,
     required this.bgColor,
-    this.isAlert = false,
     this.isActive = false,
     required this.onTap,
   });
@@ -1713,54 +2176,56 @@ class _MetricCardItem extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isActive ? color : const Color(0xFFE2E8F0),
-              width: isActive ? 2 : 1,
+              width: isActive ? 1.5 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: isActive ? color.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+                color: isActive ? color.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.015),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
               ),
             ],
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: bgColor,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(7),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 17),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       label,
                       style: GoogleFonts.outfit(
-                        fontSize: 11.5,
+                        fontSize: 10.5,
                         color: const Color(0xFF64748B),
                         fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      value,
+                      NumberFormat.compact().format(value),
                       style: GoogleFonts.outfit(
-                        fontSize: 18,
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
                         color: const Color(0xFF0F172A),
                       ),
