@@ -984,15 +984,25 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           });
         } else {
           _messageController.text = content;
-          _showErrorSnackBar(body['message'] ?? 'Failed to send message');
+          final String errMsg = (body['message'] ?? 'Failed to send message').toString();
+          final String errCode = (body['code'] ?? '').toString();
+          if (errCode == 'WINDOW_EXPIRED' || errMsg.contains('24-hour') || errMsg.contains('24 hours')) {
+            _showWindowExpiredSnackBar();
+          } else {
+            _showErrorSnackBar(errMsg);
+          }
         }
       } else {
         _messageController.text = content;
         try {
           final body = jsonDecode(res.body);
-          _showErrorSnackBar(
-            body['message'] ?? 'Failed to send message (Server Error ${res.statusCode})',
-          );
+          final String errMsg = (body['message'] ?? 'Failed to send message (Server Error ${res.statusCode})').toString();
+          final String errCode = (body['code'] ?? '').toString();
+          if (errCode == 'WINDOW_EXPIRED' || errMsg.contains('24-hour') || errMsg.contains('24 hours')) {
+            _showWindowExpiredSnackBar();
+          } else {
+            _showErrorSnackBar(errMsg);
+          }
         } catch (_) {
           _showErrorSnackBar('Failed to send message (Server Error ${res.statusCode})');
         }
@@ -1173,6 +1183,40 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         ),
         backgroundColor: AppTheme.error,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showWindowExpiredSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.timer_off_outlined, color: Colors.amber, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'WhatsApp 24h window closed. Please send a Template to re-open chat.',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13.5),
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'Select Template',
+          textColor: const Color(0xFF25D366),
+          onPressed: () {
+            final convId = _selectedConversation?['_id']?.toString();
+            if (convId != null && convId.isNotEmpty) {
+              _showSendTemplateDialog(context, convId);
+            }
+          },
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

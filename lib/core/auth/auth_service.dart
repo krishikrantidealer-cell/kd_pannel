@@ -34,20 +34,9 @@ class AuthService {
   Map<String, dynamic>? get myoperatorConfig => _myoperatorConfig;
   bool get hasMyOperator => _hasMyOperator;
   bool get isAvailableForCalls => _isAvailableForCalls;
-  static const Set<String> authorizedMyOperatorEmails = {
-    'admin@krishikranti.com',
-    'ebsale08@gmail.com',
-    'essentialsale14@gmail.com',
-    'essentialsale8@gmail.com',
-    'sales3.essential@gmail.com',
-    'essentialbiosciences12@gmail.com',
-    'sales6.essential@gmail.com',
-  };
 
   bool get hasMyOperatorAccess =>
-      _currentUserRole == UserRole.admin ||
-      _hasMyOperator ||
-      authorizedMyOperatorEmails.contains(_currentUserEmail?.trim().toLowerCase());
+      _currentUserRole == UserRole.admin || _hasMyOperator;
 
   bool get isTelephonyEnabled => hasMyOperatorAccess;
   bool get isWhatsAppCrmEnabled => hasMyOperatorAccess;
