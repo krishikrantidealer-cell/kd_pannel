@@ -746,15 +746,29 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     }
   }
 
-  // API Call: Fetch support/sales agents list for manual assignment
+  // API Call: Fetch support/sales agents list for manual assignment and filtering
   Future<void> _fetchSalesAgents() async {
     try {
-      final res = await ApiClient().get('/users?role=sales');
+      final res = await ApiClient().get('/users?role=sales&hasMyOperator=true');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
+          final List<dynamic> rawList = body['data'] ?? body['users'] ?? [];
+          // Ensure ONLY sales agents that have a valid MyOperator account are shown
+          final myoperatorAgents = rawList.where((a) {
+            final cfg = a['myoperatorConfig'];
+            if (cfg is Map) {
+              final cid = (cfg['companyId'] ?? '').toString().trim();
+              final token = (cfg['token'] ?? '').toString().trim();
+              final did = (cfg['did'] ?? '').toString().trim();
+              final uuid = (cfg['uuid'] ?? '').toString().trim();
+              return cid.isNotEmpty || token.isNotEmpty || did.isNotEmpty || uuid.isNotEmpty;
+            }
+            return false;
+          }).toList();
+
           setState(() {
-            _salesAgents = body['data'] ?? [];
+            _salesAgents = myoperatorAgents;
           });
         }
       }
@@ -1863,11 +1877,20 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         _selectedAgentId!.isNotEmpty &&
         _selectedAgentId != 'all';
 
+    // Deduplicate and sanitize agents list
+    final Map<String, dynamic> uniqueAgents = {};
+    for (final agent in _salesAgents) {
+      final id = agent['_id']?.toString() ?? '';
+      if (id.isNotEmpty && !uniqueAgents.containsKey(id)) {
+        uniqueAgents[id] = agent;
+      }
+    }
+
     // Verify current selection is still in dropdown items, else fallback to 'all'
     String currentValue = 'all';
     if (_selectedAgentId == 'unassigned') {
       currentValue = 'unassigned';
-    } else if (isFiltered && _salesAgents.any((a) => a['_id']?.toString() == _selectedAgentId)) {
+    } else if (isFiltered && uniqueAgents.containsKey(_selectedAgentId)) {
       currentValue = _selectedAgentId!;
     }
 
@@ -1910,7 +1933,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                   DropdownMenuItem<String>(
                     value: 'all',
                     child: Text(
-                      'All Sales Agents (${_salesAgents.length})',
+                      'All Sales Agents (${uniqueAgents.length})',
                       style: GoogleFonts.outfit(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
@@ -1937,7 +1960,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                       ],
                     ),
                   ),
-                  ..._salesAgents.map((agent) {
+                  ...uniqueAgents.values.map((agent) {
                     final String id = agent['_id']?.toString() ?? '';
                     final fn = (agent['firstName'] ?? '').toString();
                     final ln = (agent['lastName'] ?? '').toString();
