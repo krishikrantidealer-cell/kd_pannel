@@ -33,6 +33,8 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
   static final Map<String, Map<String, dynamic>> _persistedPermissionsCache =
       {};
   final Map<String, Map<String, dynamic>> _agentPermissionsState = {};
+  static final Map<String, bool> _persistedMyOperatorCache = {};
+  final Map<String, bool> _agentMyOperatorState = {};
   final Set<String> _savingPermissionAgentIds = {};
 
   @override
@@ -215,6 +217,118 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update permission: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPermissionAgentIds.remove(agentId);
+        });
+      }
+    }
+  }
+
+  bool _getAgentMyOperator(Map<String, dynamic> agent) {
+    final agentId = agent['_id']?.toString() ?? '';
+    if (agentId.isNotEmpty && _persistedMyOperatorCache.containsKey(agentId)) {
+      return _persistedMyOperatorCache[agentId]!;
+    }
+    if (_agentMyOperatorState.containsKey(agentId)) {
+      return _agentMyOperatorState[agentId]!;
+    }
+    final val = _toBool(agent['myoperator'], defaultValue: false);
+    if (agentId.isNotEmpty) {
+      _persistedMyOperatorCache[agentId] = val;
+    }
+    return val;
+  }
+
+  Future<void> _toggleAgentMyOperator(
+    Map<String, dynamic> agent,
+    bool newValue,
+  ) async {
+    final agentId = agent['_id']?.toString() ?? '';
+    if (agentId.isEmpty) return;
+
+    final currentVal = _getAgentMyOperator(agent);
+    setState(() {
+      _persistedMyOperatorCache[agentId] = newValue;
+      _agentMyOperatorState[agentId] = newValue;
+      agent['myoperator'] = newValue;
+      _savingPermissionAgentIds.add(agentId);
+    });
+
+    try {
+      var res = await ApiClient().put('/users/$agentId', {
+        'myoperator': newValue,
+      });
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        res = await ApiClient().put('/users/sales/$agentId', {
+          'myoperator': newValue,
+        });
+      }
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        _persistedMyOperatorCache[agentId] = newValue;
+        agent['myoperator'] = newValue;
+        UserRepository().invalidateCache();
+        if (AuthService().currentUserId == agentId) {
+          AuthService().updateMyOperator(newValue);
+        }
+
+        final agentName =
+            '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    newValue
+                        ? Icons.check_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'MyOperator (WhatsApp CRM & Calls) ${newValue ? 'granted to' : 'revoked from'} $agentName',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor:
+                  newValue ? AppTheme.primaryColor : const Color(0xFF334155),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Server returned status ${res.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _persistedMyOperatorCache[agentId] = currentVal;
+        _agentMyOperatorState[agentId] = currentVal;
+        agent['myoperator'] = currentVal;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update MyOperator access: $e'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -868,8 +982,10 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
     int reassignCount = 0;
     int unassignedCount = 0;
     int restrictedCount = 0;
+    int myoperatorCount = 0;
 
     for (final agent in allSalesAgents) {
+      if (_getAgentMyOperator(agent)) myoperatorCount++;
       final perms = _getAgentPermissions(agent);
       final lp = perms['lead'] ?? {};
       final dp = perms['dealer'] ?? {};
@@ -942,6 +1058,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
         return lp['viewUnassigned'] == true || dp['viewUnassigned'] == true;
       }
       if (_selectedFilter == 'restricted') return active <= 2;
+      if (_selectedFilter == 'myoperator') return _getAgentMyOperator(agent);
 
       return true;
     }).toList();
@@ -1029,6 +1146,8 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                 _buildFilterPill('Unassigned ($unassignedCount)', 'unassigned'),
                 const SizedBox(width: 6),
                 _buildFilterPill('Restricted ($restrictedCount)', 'restricted'),
+                const SizedBox(width: 6),
+                _buildFilterPill('MyOperator ($myoperatorCount)', 'myoperator'),
                 const SizedBox(width: 14),
                 // View Switcher: List View FIRST, Grid View SECOND
                 Container(
@@ -1429,10 +1548,11 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
         borderRadius: BorderRadius.circular(16),
         child: Table(
           columnWidths: const {
-            0: FlexColumnWidth(2.4),
-            1: FlexColumnWidth(4.2),
-            2: FlexColumnWidth(4.2),
-            3: FlexColumnWidth(1.6),
+            0: FlexColumnWidth(2.2),
+            1: FlexColumnWidth(3.8),
+            2: FlexColumnWidth(3.8),
+            3: FlexColumnWidth(2.0),
+            4: FlexColumnWidth(1.6),
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -1460,6 +1580,11 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                   accentColor: const Color(0xFF0D9488),
                 ),
                 _buildHeaderCell(
+                  'MyOperator Access',
+                  icon: Icons.phone_in_talk_rounded,
+                  accentColor: const Color(0xFF16A34A),
+                ),
+                _buildHeaderCell(
                   'Presets & Metrics',
                   icon: Icons.bolt_rounded,
                   alignRight: true,
@@ -1483,6 +1608,7 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
               final perms = _getAgentPermissions(agent);
               final lp = perms['lead'] as Map<String, dynamic>? ?? {};
               final dp = perms['dealer'] as Map<String, dynamic>? ?? {};
+              final hasMyOp = _getAgentMyOperator(agent);
 
               int activeCount = 0;
               if (lp['create'] == true) activeCount++;
@@ -1781,7 +1907,49 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
                     ),
                   ),
 
-                  // 4. Quick Presets & Status Metric
+                  // 4. MyOperator Interactive Toggle Switch
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    child: Wrap(
+                      spacing: 5,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildListMicroToggleCapsule(
+                          label: hasMyOp ? 'Active 🟢' : 'Disabled 🔴',
+                          icon: Icons.phone_in_talk_rounded,
+                          isEnabled: hasMyOp,
+                          activeColor: const Color(0xFF16A34A),
+                          tooltip: hasMyOp
+                              ? 'MyOperator is active. WhatsApp CRM & Call History are visible in this agent\'s sidebar.'
+                              : 'MyOperator is disabled. WhatsApp CRM & Call History are hidden from this agent\'s sidebar.',
+                          onChanged: (val) => _toggleAgentMyOperator(agent, val),
+                        ),
+                        if (hasMyOp && agent['myoperatorConfig'] is Map && (agent['myoperatorConfig']['whatsappNumber'] != null || agent['myoperatorConfig']['virtualNumber'] != null))
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Text(
+                              (agent['myoperatorConfig']['whatsappNumber'] ?? agent['myoperatorConfig']['virtualNumber'] ?? '').toString(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF475569),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // 5. Quick Presets & Status Metric
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -2078,61 +2246,176 @@ class _TeamPermissionsTabViewState extends State<TeamPermissionsTabView> {
             ),
           ),
 
-          // Two Side-By-Side Access Bays
+          // Side-By-Side Access Bays + MyOperator Bay
           Padding(
             padding: const EdgeInsets.all(14),
-            child: widget.isDesktop
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _buildAccessBay(
-                          bayTitle: 'Lead Management',
-                          baySubtitle: 'PROSPECTS & FARMER LEADS',
-                          icon: Icons.campaign_rounded,
-                          accentColor: const Color(0xFF0284C7),
-                          agent: agent,
-                          moduleKey: 'lead',
-                          perms: lp,
+            child: Column(
+              children: [
+                widget.isDesktop
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildAccessBay(
+                              bayTitle: 'Lead Management',
+                              baySubtitle: 'PROSPECTS & FARMER LEADS',
+                              icon: Icons.campaign_rounded,
+                              accentColor: const Color(0xFF0284C7),
+                              agent: agent,
+                              moduleKey: 'lead',
+                              perms: lp,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: _buildAccessBay(
+                              bayTitle: 'Dealer Management',
+                              baySubtitle: 'VERIFIED STORES & DEALERS',
+                              icon: Icons.storefront_rounded,
+                              accentColor: const Color(0xFF0D9488),
+                              agent: agent,
+                              moduleKey: 'dealer',
+                              perms: dp,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          _buildAccessBay(
+                            bayTitle: 'Lead Management',
+                            baySubtitle: 'PROSPECTS & FARMER LEADS',
+                            icon: Icons.campaign_rounded,
+                            accentColor: const Color(0xFF0284C7),
+                            agent: agent,
+                            moduleKey: 'lead',
+                            perms: lp,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildAccessBay(
+                            bayTitle: 'Dealer Management',
+                            baySubtitle: 'VERIFIED STORES & DEALERS',
+                            icon: Icons.storefront_rounded,
+                            accentColor: const Color(0xFF0D9488),
+                            agent: agent,
+                            moduleKey: 'dealer',
+                            perms: dp,
+                          ),
+                        ],
+                      ),
+                const SizedBox(height: 12),
+                _buildMyOperatorBay(agent),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyOperatorBay(Map<String, dynamic> agent) {
+    final bool hasMyOp = _getAgentMyOperator(agent);
+    final cfg = agent['myoperatorConfig'] is Map ? agent['myoperatorConfig'] : null;
+    final String lineNum = (cfg?['whatsappNumber'] ?? cfg?['virtualNumber'] ?? cfg?['did'] ?? '').toString();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: hasMyOp ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasMyOp ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: hasMyOp ? const Color(0xFF16A34A).withValues(alpha: 0.12) : const Color(0xFF64748B).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.phone_in_talk_rounded,
+              size: 16,
+              color: hasMyOp ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'MyOperator & Telephony Access',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: hasMyOp ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: hasMyOp ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _buildAccessBay(
-                          bayTitle: 'Dealer Management',
-                          baySubtitle: 'VERIFIED STORES & DEALERS',
-                          icon: Icons.storefront_rounded,
-                          accentColor: const Color(0xFF0D9488),
-                          agent: agent,
-                          moduleKey: 'dealer',
-                          perms: dp,
+                      child: Text(
+                        hasMyOp ? 'ACTIVE' : 'RESTRICTED',
+                        style: GoogleFonts.outfit(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: hasMyOp ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                    if (lineNum.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Text(
+                          'Line: $lineNum',
+                          style: GoogleFonts.outfit(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF475569),
+                          ),
                         ),
                       ),
                     ],
-                  )
-                : Column(
-                    children: [
-                      _buildAccessBay(
-                        bayTitle: 'Lead Management',
-                        baySubtitle: 'PROSPECTS & FARMER LEADS',
-                        icon: Icons.campaign_rounded,
-                        accentColor: const Color(0xFF0284C7),
-                        agent: agent,
-                        moduleKey: 'lead',
-                        perms: lp,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildAccessBay(
-                        bayTitle: 'Dealer Management',
-                        baySubtitle: 'VERIFIED STORES & DEALERS',
-                        icon: Icons.storefront_rounded,
-                        accentColor: const Color(0xFF0D9488),
-                        agent: agent,
-                        moduleKey: 'dealer',
-                        perms: dp,
-                      ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasMyOp
+                      ? 'WhatsApp CRM and Call History are visible in this sales agent\'s sidebar.'
+                      : 'WhatsApp CRM and Call History are completely hidden from this sales agent\'s panel.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: hasMyOp ? const Color(0xFF15803D) : AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
                   ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch.adaptive(
+            value: hasMyOp,
+            activeColor: const Color(0xFF16A34A),
+            onChanged: (val) => _toggleAgentMyOperator(agent, val),
           ),
         ],
       ),

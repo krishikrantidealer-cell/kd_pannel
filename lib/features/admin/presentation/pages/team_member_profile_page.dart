@@ -547,6 +547,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
     );
     final passwordController = TextEditingController();
     bool obscurePassword = true;
+    bool myoperatorAccess = agent['myoperator'] == true;
 
     showDialog(
       context: context,
@@ -657,6 +658,54 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                         return null;
                       },
                     ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.phone_in_talk_rounded,
+                            size: 20,
+                            color: myoperatorAccess ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'MyOperator Access',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'WhatsApp CRM & Call History in agent sidebar',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch.adaptive(
+                            value: myoperatorAccess,
+                            activeColor: const Color(0xFF16A34A),
+                            onChanged: (val) {
+                              setStateDialog(() => myoperatorAccess = val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -685,6 +734,7 @@ class _TeamMemberProfilePageState extends State<TeamMemberProfilePage> {
                               'email': emailController.text.trim(),
                               'phoneNumber': phoneController.text.trim(),
                               'monthlyTarget': double.tryParse(targetController.text),
+                              'myoperator': myoperatorAccess,
                             };
                             if (passwordController.text.isNotEmpty) {
                               payload['password'] = passwordController.text;

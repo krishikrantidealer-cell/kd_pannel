@@ -123,9 +123,10 @@ class AuthService {
           final perms = data['user']['permissions'] as Map<String, dynamic>?;
           final myop = data['user']['myoperatorConfig'] as Map<String, dynamic>?;
           final available = data['user']['isAvailableForCalls'] as bool? ?? true;
-          final hasMyOp = data['user']['myoperator'] == true ||
-              data['user']['hasMyoperator'] == true ||
-              (myop != null && myop.isNotEmpty);
+          final hasMyOp = userRoleStr == 'admin'
+              ? true
+              : (data['user']['myoperator'] == true ||
+                  (perms != null && perms['myoperator'] == true));
 
           _currentUserId = userIdStr;
           _currentUserEmail = userEmailStr;
@@ -253,10 +254,23 @@ class AuthService {
     return defaultValue;
   }
 
-  void updatePermissions(Map<String, dynamic> perms) {
+  void updatePermissions(Map<String, dynamic> perms, {bool? myoperator}) {
     _permissions = perms;
+    if (myoperator != null) {
+      _hasMyOperator = myoperator;
+    } else if (perms['myoperator'] != null) {
+      _hasMyOperator = _toBool(perms['myoperator']);
+    }
     SharedPreferences.getInstance().then((prefs) {
       prefs.setString('kd_user_permissions', jsonEncode(perms));
+      prefs.setBool('kd_user_has_myoperator', _hasMyOperator);
+    }).catchError((_) {});
+  }
+
+  void updateMyOperator(bool enabled) {
+    _hasMyOperator = enabled;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('kd_user_has_myoperator', enabled);
     }).catchError((_) {});
   }
 
@@ -308,11 +322,15 @@ class AuthService {
           final perms = user['permissions'] as Map<String, dynamic>?;
           final myop = user['myoperatorConfig'] as Map<String, dynamic>?;
           final available = user['isAvailableForCalls'] as bool? ?? true;
+          final bool hasMyOp = _currentUserRole == UserRole.admin
+              ? true
+              : (user['myoperator'] == true || (perms != null && perms['myoperator'] == true));
           
           _currentUserName = userName;
           _monthlyTarget = monthlyTarget;
           _permissions = perms;
           _myoperatorConfig = myop;
+          _hasMyOperator = hasMyOp;
           _isAvailableForCalls = available;
           
           final prefs = await SharedPreferences.getInstance();
@@ -328,6 +346,7 @@ class AuthService {
           if (myop != null) {
             await prefs.setString('kd_user_myop_config', jsonEncode(myop));
           }
+          await prefs.setBool('kd_user_has_myoperator', hasMyOp);
           await prefs.setBool('kd_user_available_calls', available);
         }
       }
