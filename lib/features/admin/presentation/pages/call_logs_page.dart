@@ -1349,6 +1349,10 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                     type: state.selectedType,
                                                     status: state.selectedStatus,
                                                     agentId: state.selectedAgentId,
+                                                    timeframe: state.selectedTimeframe,
+                                                    startDate: state.startDate,
+                                                    endDate: state.endDate,
+                                                    page: 1,
                                                   ));
                                                 });
                                                 setState(() {});
@@ -1360,6 +1364,10 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                   type: state.selectedType,
                                                   status: state.selectedStatus,
                                                   agentId: state.selectedAgentId,
+                                                    timeframe: state.selectedTimeframe,
+                                                    startDate: state.startDate,
+                                                    endDate: state.endDate,
+                                                    page: 1,
                                                 ));
                                               },
                                             ),
@@ -1377,6 +1385,10 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                     type: state.selectedType,
                                                     status: state.selectedStatus,
                                                     agentId: state.selectedAgentId,
+                                                    timeframe: state.selectedTimeframe,
+                                                    startDate: state.startDate,
+                                                    endDate: state.endDate,
+                                                    page: 1,
                                                   ));
                                                 },
                                                 child: const Icon(
@@ -1390,6 +1402,16 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(width: 10),
+
+                                  // Calendar & Shift Timeframe Filter
+                                  _buildTimeframeRow(false, state, const [
+                                    'Today',
+                                    'Yesterday',
+                                    'Last 1 Week',
+                                    'Last 1 Month',
+                                    'All Time',
+                                  ]),
                                   const SizedBox(width: 10),
 
                                    // Status Filter
