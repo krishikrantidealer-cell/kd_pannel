@@ -908,59 +908,93 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                   // Search Field
                                   Expanded(
                                     child: Container(
-                                      height: 38,
+                                      height: 42,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF8FAFC),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppTheme.borderColor),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.02),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
-                                      child: TextField(
-                                        controller: _searchController,
-                                        style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF0F172A)),
-                                        decoration: InputDecoration(
-                                          hintText: 'Search lead name, phone number, disposition or notes...',
-                                          hintStyle: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF94A3B8)),
-                                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF008069), size: 17),
-                                          suffixIcon: _searchController.text.isNotEmpty
-                                              ? IconButton(
-                                                  icon: const Icon(Icons.close_rounded, size: 15, color: Color(0xFF64748B)),
-                                                  onPressed: () {
-                                                    _searchController.clear();
-                                                    setState(() {});
-                                                    context.read<CallLogsBloc>().add(FetchCallLogsEvent(
-                                                      search: '',
-                                                      type: state.selectedType,
-                                                      status: state.selectedStatus,
-                                                      agentId: state.selectedAgentId,
-                                                    ));
-                                                  },
-                                                )
-                                              : null,
-                                          border: InputBorder.none,
-                                          isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 9),
-                                        ),
-                                        onChanged: (val) {
-                                          _searchDebounce?.cancel();
-                                          _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-                                            context.read<CallLogsBloc>().add(FetchCallLogsEvent(
-                                              search: val.trim(),
-                                              type: state.selectedType,
-                                              status: state.selectedStatus,
-                                              agentId: state.selectedAgentId,
-                                            ));
-                                          });
-                                          setState(() {});
-                                        },
-                                        onSubmitted: (val) {
-                                          _searchDebounce?.cancel();
-                                          context.read<CallLogsBloc>().add(FetchCallLogsEvent(
-                                            search: val.trim(),
-                                            type: state.selectedType,
-                                            status: state.selectedStatus,
-                                            agentId: state.selectedAgentId,
-                                          ));
-                                        },
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.search_rounded,
+                                            size: 20,
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _searchController,
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 14,
+                                                color: AppTheme.textPrimary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                              decoration: InputDecoration(
+                                                hintText: 'Search lead name, phone number, disposition or notes...',
+                                                hintStyle: GoogleFonts.outfit(
+                                                  fontSize: 14,
+                                                  color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                border: InputBorder.none,
+                                                isDense: true,
+                                                contentPadding: EdgeInsets.zero,
+                                              ),
+                                              onChanged: (val) {
+                                                _searchDebounce?.cancel();
+                                                _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                                                  context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                                    search: val.trim(),
+                                                    type: state.selectedType,
+                                                    status: state.selectedStatus,
+                                                    agentId: state.selectedAgentId,
+                                                  ));
+                                                });
+                                                setState(() {});
+                                              },
+                                              onSubmitted: (val) {
+                                                _searchDebounce?.cancel();
+                                                context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                                  search: val.trim(),
+                                                  type: state.selectedType,
+                                                  status: state.selectedStatus,
+                                                  agentId: state.selectedAgentId,
+                                                ));
+                                              },
+                                            ),
+                                          ),
+                                          if (_searchController.text.isNotEmpty)
+                                            MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  _searchController.clear();
+                                                  _searchDebounce?.cancel();
+                                                  setState(() {});
+                                                  context.read<CallLogsBloc>().add(FetchCallLogsEvent(
+                                                    search: '',
+                                                    type: state.selectedType,
+                                                    status: state.selectedStatus,
+                                                    agentId: state.selectedAgentId,
+                                                  ));
+                                                },
+                                                child: const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 18,
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -968,18 +1002,25 @@ class _CallLogsPageState extends State<CallLogsPage> {
 
                                    // Status Filter
                                    Container(
-                                     height: 38,
-                                     padding: const EdgeInsets.symmetric(horizontal: 10),
+                                     height: 42,
+                                     padding: const EdgeInsets.symmetric(horizontal: 12),
                                      decoration: BoxDecoration(
-                                       color: state.selectedStatus != 'all' ? const Color(0xFF008069).withValues(alpha: 0.08) : const Color(0xFFF8FAFC),
-                                       borderRadius: BorderRadius.circular(8),
-                                       border: Border.all(color: state.selectedStatus != 'all' ? const Color(0xFF008069).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
+                                       color: state.selectedStatus != 'all' ? const Color(0xFF008069).withValues(alpha: 0.08) : Colors.white,
+                                       borderRadius: BorderRadius.circular(12),
+                                       border: Border.all(color: state.selectedStatus != 'all' ? const Color(0xFF008069).withValues(alpha: 0.4) : AppTheme.borderColor),
+                                       boxShadow: [
+                                         BoxShadow(
+                                           color: Colors.black.withValues(alpha: 0.02),
+                                           blurRadius: 8,
+                                           offset: const Offset(0, 2),
+                                         ),
+                                       ],
                                      ),
                                      child: DropdownButtonHideUnderline(
                                        child: DropdownButton<String>(
                                          value: state.selectedStatus,
-                                         icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF64748B)),
-                                         style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
+                                         icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppTheme.textSecondary),
+                                         style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
                                          items: const [
                                            DropdownMenuItem(
                                              value: 'all',
@@ -1015,18 +1056,25 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                    if (isAdmin) ...[
                                      const SizedBox(width: 10),
                                      Container(
-                                       height: 38,
-                                       padding: const EdgeInsets.symmetric(horizontal: 10),
+                                       height: 42,
+                                       padding: const EdgeInsets.symmetric(horizontal: 12),
                                        decoration: BoxDecoration(
-                                         color: state.selectedAgentId != null ? const Color(0xFF008069).withValues(alpha: 0.08) : const Color(0xFFF8FAFC),
-                                         borderRadius: BorderRadius.circular(8),
-                                         border: Border.all(color: state.selectedAgentId != null ? const Color(0xFF008069).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
+                                         color: state.selectedAgentId != null ? const Color(0xFF008069).withValues(alpha: 0.08) : Colors.white,
+                                         borderRadius: BorderRadius.circular(12),
+                                         border: Border.all(color: state.selectedAgentId != null ? const Color(0xFF008069).withValues(alpha: 0.4) : AppTheme.borderColor),
+                                         boxShadow: [
+                                           BoxShadow(
+                                             color: Colors.black.withValues(alpha: 0.02),
+                                             blurRadius: 8,
+                                             offset: const Offset(0, 2),
+                                           ),
+                                         ],
                                        ),
                                        child: DropdownButtonHideUnderline(
                                          child: DropdownButton<String>(
                                            value: state.selectedAgentId ?? 'all',
-                                           icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF64748B)),
-                                           style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
+                                           icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppTheme.textSecondary),
+                                           style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
                                            items: [
                                              DropdownMenuItem<String>(
                                                value: 'all',
@@ -1098,15 +1146,26 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                   // Reset Filter Button
                                   if (state.selectedType != 'all' || state.selectedStatus != 'all' || state.selectedAgentId != null || state.searchQuery.isNotEmpty) ...[
                                     const SizedBox(width: 8),
-                                    IconButton(
-                                      tooltip: 'Reset All Filters',
-                                      style: IconButton.styleFrom(
-                                        backgroundColor: const Color(0xFFFEF2F2),
-                                        foregroundColor: const Color(0xFFDC2626),
-                                        padding: const EdgeInsets.all(8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFFECACA))),
-                                        minimumSize: Size.zero,
+                                    Container(
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.02),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
+                                      child: IconButton(
+                                        tooltip: 'Reset All Filters',
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: const Color(0xFFFEF2F2),
+                                          foregroundColor: const Color(0xFFDC2626),
+                                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFFECACA))),
+                                        ),
                                       icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
                                       onPressed: () {
                                         _searchController.clear();
@@ -1119,6 +1178,7 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                           search: '',
                                         ));
                                       },
+                                    ),
                                     ),
                                   ],
                                 ],
