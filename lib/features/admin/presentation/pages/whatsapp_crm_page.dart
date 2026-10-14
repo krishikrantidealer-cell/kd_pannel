@@ -198,6 +198,35 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       if (_selectedStatus != 'open' && status != _selectedStatus) return false;
     }
 
+    // Role Security: Sales agents can ONLY see conversations assigned to them
+    if (AuthService().currentUserRole == UserRole.sales) {
+      final currentUserId = AuthService().currentUserId;
+      final convAssigned = conversation['assignedTo'];
+      String? convAgentId;
+      if (convAssigned is Map) {
+        convAgentId = convAssigned['_id']?.toString();
+      } else if (convAssigned != null) {
+        convAgentId = convAssigned.toString();
+      }
+
+      final contact = conversation['contactId'] is Map ? conversation['contactId'] : null;
+      final contactAssigned = contact?['assignedTo'];
+      String? contactAgentId;
+      if (contactAssigned is Map) {
+        contactAgentId = contactAssigned['_id']?.toString();
+      } else if (contactAssigned != null) {
+        contactAgentId = contactAssigned.toString();
+      }
+
+      final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
+          ? convAgentId
+          : contactAgentId;
+
+      if (effectiveAgentId == null || effectiveAgentId.isEmpty || effectiveAgentId != currentUserId) {
+        return false;
+      }
+    }
+
     // Role / Admin Agent Filter Check
     if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
       final convAssigned = conversation['assignedTo'];
@@ -385,6 +414,36 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         final newMessage = data['message'];
 
         if (newConversation == null || newConversation['_id'] == null) return;
+
+        // Sales agent security guard: if logged in as sales, ONLY process if assigned to this sales agent
+        if (AuthService().currentUserRole == UserRole.sales) {
+          final currentUserId = AuthService().currentUserId;
+          final convAssigned = newConversation['assignedTo'];
+          String? convAgentId;
+          if (convAssigned is Map) {
+            convAgentId = convAssigned['_id']?.toString();
+          } else if (convAssigned != null) {
+            convAgentId = convAssigned.toString();
+          }
+
+          final contact = newConversation['contactId'] is Map ? newConversation['contactId'] : null;
+          final contactAssigned = contact?['assignedTo'];
+          String? contactAgentId;
+          if (contactAssigned is Map) {
+            contactAgentId = contactAssigned['_id']?.toString();
+          } else if (contactAssigned != null) {
+            contactAgentId = contactAssigned.toString();
+          }
+
+          final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
+              ? convAgentId
+              : contactAgentId;
+
+          if (effectiveAgentId == null || effectiveAgentId.isEmpty || effectiveAgentId != currentUserId) {
+            // Drop unassigned chats or chats belonging to other agents immediately
+            return;
+          }
+        }
 
         // Deduplicate WebSocket frames to prevent double-counting while allowing media updates
         final String newMsgId = (newMessage?['_id']?.toString().isNotEmpty == true
@@ -661,10 +720,34 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         final body = jsonDecode(res.body);
         if (body['success'] == true && mounted) {
           setState(() {
-            if (page == 1) {
-              _conversations = body['data'] ?? [];
+            final List rawData = body['data'] ?? [];
+            final List filteredData;
+            if (AuthService().currentUserRole == UserRole.sales) {
+              final currentUserId = AuthService().currentUserId;
+              filteredData = rawData.where((c) {
+                if (c is! Map) return false;
+                final convAssigned = c['assignedTo'];
+                final String? convAgentId = convAssigned is Map
+                    ? convAssigned['_id']?.toString()
+                    : convAssigned?.toString();
+                final contact = c['contactId'] is Map ? c['contactId'] : null;
+                final contactAssigned = contact?['assignedTo'];
+                final String? contactAgentId = contactAssigned is Map
+                    ? contactAssigned['_id']?.toString()
+                    : contactAssigned?.toString();
+                final eff = (convAgentId != null && convAgentId.isNotEmpty)
+                    ? convAgentId
+                    : contactAgentId;
+                return eff != null && eff.isNotEmpty && eff == currentUserId;
+              }).toList();
             } else {
-              _conversations.addAll(body['data'] ?? []);
+              filteredData = rawData;
+            }
+
+            if (page == 1) {
+              _conversations = filteredData;
+            } else {
+              _conversations.addAll(filteredData);
             }
             _conversationsTotalPages = body['pagination']?['pages'] ?? 1;
             if (body['counts'] != null) {
