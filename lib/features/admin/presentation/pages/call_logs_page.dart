@@ -585,28 +585,106 @@ class _CallLogsPageState extends State<CallLogsPage> {
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('Delete Call Record', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete the call record for $displayName? This will remove it from your active dashboard.', style: GoogleFonts.outfit(fontSize: 14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Delete Call Record',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF0F172A)),
+                  ),
+                  Text(
+                    'Remove record from active CRM view',
+                    style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFF008069)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Target Contact: $displayName',
+                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Are you sure you want to delete this call log? It will be removed from your dashboard and shift metrics.',
+                style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B), height: 1.4),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(dialogCtx);
               context.read<CallLogsBloc>().add(DeleteCallLogEvent(callLogId));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Call log deleted successfully'), backgroundColor: Color(0xFF008069), duration: Duration(seconds: 2)),
+                const SnackBar(
+                  content: Text('Call record deleted successfully'),
+                  backgroundColor: Color(0xFF008069),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text('Delete', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+            label: Text('Delete Record', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -616,37 +694,163 @@ class _CallLogsPageState extends State<CallLogsPage> {
   void _confirmBulkDelete(BuildContext context) {
     if (_selectedLogIds.isEmpty) return;
     final count = _selectedLogIds.length;
+    bool isConfirmed = false;
+
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('Delete $count Selected Records', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete $count selected call record(s)? This will remove them from your active dashboard.', style: GoogleFonts.outfit(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              final ids = _selectedLogIds.toList();
-              setState(() {
-                _selectedLogIds.clear();
-              });
-              context.read<CallLogsBloc>().add(BulkDeleteCallLogsEvent(ids));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$count call log(s) deleted successfully'), backgroundColor: const Color(0xFF008069), duration: const Duration(seconds: 2)),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: Colors.white,
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFDC2626), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Delete $count Selected Record${count > 1 ? 's' : ''}?',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        'Batch deletion • Admin authorization required',
+                        style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFFDC2626), fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            child: Text('Delete Selected', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          ),
-        ],
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF64748B)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'You have selected $count call record(s) to remove from your active CRM dashboard.',
+                            style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF334155), height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Are you sure you want to permanently delete these selected records? Shift metrics and leaderboard will recalculate automatically.',
+                    style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B), height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () {
+                      setDialogState(() {
+                        isConfirmed = !isConfirmed;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: isConfirmed,
+                            activeColor: const Color(0xFFDC2626),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            onChanged: (val) {
+                              setDialogState(() {
+                                isConfirmed = val ?? false;
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'I confirm deleting $count selected record(s)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isConfirmed ? const Color(0xFFDC2626) : const Color(0xFF334155),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton.icon(
+                onPressed: isConfirmed
+                    ? () {
+                        Navigator.pop(dialogCtx);
+                        final ids = _selectedLogIds.toList();
+                        setState(() {
+                          _selectedLogIds.clear();
+                        });
+                        context.read<CallLogsBloc>().add(BulkDeleteCallLogsEvent(ids));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$count call log(s) deleted successfully'),
+                            backgroundColor: const Color(0xFF008069),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  disabledBackgroundColor: const Color(0xFFFCA5A5),
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: Colors.white70,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                label: Text('Delete Selected ($count)', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
