@@ -1298,53 +1298,27 @@ class _CustomersPageState extends State<CustomersPage> {
           ),
         ),
 
-        // 6. Quick Actions (Call, WhatsApp, Inspect)
+        // 6. Action (Inspect Dossier)
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Phone Call Shortcut
-              IconButton(
-                tooltip: 'Call $cleanPhone',
-                icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
-                color: const Color(0xFF008069),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFE8F5E9),
-                  padding: const EdgeInsets.all(6),
-                  minimumSize: const Size(28, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => _launchCall(cleanPhone),
+          ElevatedButton.icon(
+            onPressed: () => setState(() => _selectedCustomer = c),
+            icon: const Icon(Icons.visibility_outlined, size: 14),
+            label: const Text('Inspect'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEFF6FF),
+              foregroundColor: const Color(0xFF2563EB),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(0, 28),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+                side: const BorderSide(color: Color(0xFFBFDBFE)),
               ),
-              const SizedBox(width: 5),
-              // WhatsApp Shortcut
-              IconButton(
-                tooltip: 'WhatsApp $cleanPhone',
-                icon: const Icon(Icons.chat_bubble_rounded, size: 14),
-                color: const Color(0xFF16A34A),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFF0FDF4),
-                  padding: const EdgeInsets.all(6),
-                  minimumSize: const Size(28, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => _launchWhatsApp(cleanPhone),
+              textStyle: GoogleFonts.outfit(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: 5),
-              // Inspect Dossier
-              IconButton(
-                tooltip: 'Inspect Dossier',
-                icon: const Icon(Icons.visibility_outlined, size: 15),
-                color: const Color(0xFF2563EB),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFEFF6FF),
-                  padding: const EdgeInsets.all(6),
-                  minimumSize: const Size(28, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => setState(() => _selectedCustomer = c),
-              ),
-            ],
+            ),
           ),
         ),
       ],
@@ -1469,41 +1443,25 @@ class _CustomersPageState extends State<CustomersPage> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
-                      color: const Color(0xFF008069),
-                      onPressed: () => _launchCall(cleanPhone),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFFE8F5E9),
-                        padding: const EdgeInsets.all(5),
-                        minimumSize: const Size(26, 26),
-                      ),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _selectedCustomer = c),
+                  icon: const Icon(Icons.visibility_outlined, size: 13),
+                  label: const Text('Inspect'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEFF6FF),
+                    foregroundColor: const Color(0xFF2563EB),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size(0, 26),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      side: const BorderSide(color: Color(0xFFBFDBFE)),
                     ),
-                    const SizedBox(width: 5),
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_rounded, size: 14),
-                      color: const Color(0xFF16A34A),
-                      onPressed: () => _launchWhatsApp(cleanPhone),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFFF0FDF4),
-                        padding: const EdgeInsets.all(5),
-                        minimumSize: const Size(26, 26),
-                      ),
+                    textStyle: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 5),
-                    IconButton(
-                      icon: const Icon(Icons.visibility_outlined, size: 14),
-                      color: const Color(0xFF2563EB),
-                      onPressed: () => setState(() => _selectedCustomer = c),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFFEFF6FF),
-                        padding: const EdgeInsets.all(5),
-                        minimumSize: const Size(26, 26),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),

@@ -2905,36 +2905,12 @@ class _LeadRowState extends State<_LeadRow> {
                             opacity: isHovered ? 1.0 : 0.0,
                             child: IgnorePointer(
                               ignoring: !isHovered,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => _launchWhatsApp(phone, name),
-                                    child: Tooltip(
-                                      message: 'WhatsApp CRM',
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Icon(
-                                          Icons.chat_bubble_outline_rounded,
-                                          size: 13,
-                                          color: Color(0xFF10B981),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  TelephonyCallButton(
-                                    customerPhone: phone,
-                                    customerName: name,
-                                    variant: TelephonyButtonVariant.iconOnly,
-                                    color: AppTheme.primaryColor,
-                                    iconSize: 13,
-                                  ),
-                                ],
+                              child: TelephonyCallButton(
+                                customerPhone: phone,
+                                customerName: name,
+                                variant: TelephonyButtonVariant.iconOnly,
+                                color: AppTheme.primaryColor,
+                                iconSize: 13,
                               ),
                             ),
                           ),
