@@ -1520,10 +1520,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       ),
                       const SizedBox(height: 24),
 
-                      // 3. TAB CONTROLLER CHIPS SELECTOR
-                      _buildAdvancedProfileTabs(),
-                      const SizedBox(height: 24),
-                      // 4. TABBED CONTENT CHANNELS
+                      // 3. TAB CONTENT & RIGHT SIDEBAR
                       Builder(
                         builder: (context) {
                           final tabs = _getProfileTabs();
@@ -1533,7 +1530,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                               : 0;
                           final currentTabKey = tabs[safeIdx]['key'];
 
-                          return SelectionContainer.disabled(
+                          final Widget tabContent = SelectionContainer.disabled(
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 250),
                               child: currentTabKey == 'overview'
@@ -1547,47 +1544,55 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                           orders: orders,
                                         ),
                                         const SizedBox(height: 24),
-                                        if (!isMobile) ...[
-                                          IntrinsicHeight(
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                Expanded(
-                                                  child: _DealerInformationCard(
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            if (constraints.maxWidth >= 720) {
+                                              return IntrinsicHeight(
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.stretch,
+                                                  children: [
+                                                    Expanded(
+                                                      child: _DealerInformationCard(
+                                                        dealer: currentDealer,
+                                                        salesAgents: salesAgents,
+                                                        currentAgentId: _agentId,
+                                                        onAssignAgent: _assignAgent,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 24),
+                                                    Expanded(
+                                                      flex: 1,
+                                                      child: _DealerKycDocumentsCard(
+                                                        dealer: currentDealer,
+                                                        onViewDocument: _launchUrl,
+                                                        onUpload:
+                                                            _showUploadKycDialog,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            } else {
+                                              return Column(
+                                                children: [
+                                                  _DealerInformationCard(
                                                     dealer: currentDealer,
                                                     salesAgents: salesAgents,
                                                     currentAgentId: _agentId,
                                                     onAssignAgent: _assignAgent,
                                                   ),
-                                                ),
-                                                const SizedBox(width: 32),
-                                                Expanded(
-                                                  flex: 1,
-                                                  child: _DealerKycDocumentsCard(
+                                                  const SizedBox(height: 24),
+                                                  _DealerKycDocumentsCard(
                                                     dealer: currentDealer,
                                                     onViewDocument: _launchUrl,
-                                                    onUpload:
-                                                        _showUploadKycDialog,
+                                                    onUpload: _showUploadKycDialog,
                                                   ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ] else ...[
-                                          _DealerInformationCard(
-                                            dealer: currentDealer,
-                                            salesAgents: salesAgents,
-                                            currentAgentId: _agentId,
-                                            onAssignAgent: _assignAgent,
-                                          ),
-                                          const SizedBox(height: 24),
-                                          _DealerKycDocumentsCard(
-                                            dealer: currentDealer,
-                                            onViewDocument: _launchUrl,
-                                            onUpload: _showUploadKycDialog,
-                                          ),
-                                        ],
+                                                ],
+                                              );
+                                            }
+                                          },
+                                        ),
                                       ],
                                     )
                                   : currentTabKey == 'orders'
@@ -1710,6 +1715,35 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                     ),
                             ),
                           );
+
+                          if (isMobile) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildMobileProfileTabs(tabs, safeIdx),
+                                const SizedBox(height: 20),
+                                tabContent,
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: tabContent),
+                              const SizedBox(width: 24),
+                              SizedBox(
+                                width: 260,
+                                child: _buildProfileSidebarTabs(
+                                  tabs: tabs,
+                                  activeTabIdx: safeIdx,
+                                  dealer: currentDealer,
+                                  salesAgents: salesAgents,
+                                  ordersCount: orders.length,
+                                ),
+                              ),
+                            ],
+                          );
                         },
                       ),
                     ],
@@ -1742,9 +1776,225 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     ];
   }
 
-  Widget _buildAdvancedProfileTabs() {
-    final List<Map<String, dynamic>> tabs = _getProfileTabs();
+  Widget _buildProfileSidebarTabs({
+    required List<Map<String, dynamic>> tabs,
+    required int activeTabIdx,
+    required Dealer dealer,
+    required List<dynamic> salesAgents,
+    required int ordersCount,
+  }) {
+    String? assignedAgentName;
+    final agentId = dealer.agentId;
+    if (agentId != null && agentId.isNotEmpty) {
+      final match = salesAgents.firstWhere(
+        (a) => (a['_id'] ?? a['id'])?.toString() == agentId,
+        orElse: () => null,
+      );
+      if (match != null) {
+        assignedAgentName =
+            '${match['firstName'] ?? ''} ${match['lastName'] ?? ''}'.trim();
+        if (assignedAgentName.isEmpty) assignedAgentName = match['name']?.toString();
+      }
+    }
+    if ((assignedAgentName == null || assignedAgentName.isEmpty) &&
+        dealer.agent.isNotEmpty &&
+        dealer.agent != '-') {
+      assignedAgentName = dealer.agent;
+    }
 
+    final kycStatus = (dealer.kycStatus ?? 'verified').toLowerCase();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.space_dashboard_outlined,
+                  size: 14,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'PROFILE SECTIONS',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...tabs.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final tab = entry.value;
+            final isSelected = activeTabIdx == idx;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _activeTab = idx),
+                  borderRadius: BorderRadius.circular(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppTheme.primaryColor.withOpacity(0.22),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          tab['icon'] as IconData,
+                          size: 18,
+                          color:
+                              isSelected ? Colors.white : const Color(0xFF6B7280),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            tab['label'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFF1F2937),
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+          Text(
+            'DEALER SNAPSHOT',
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: const Color(0xFF9CA3AF),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildSidebarBadgeRow(
+            'Orders',
+            '$ordersCount Total',
+            AppTheme.primaryColor,
+          ),
+          const SizedBox(height: 8),
+          _buildSidebarBadgeRow(
+            'KYC Status',
+            kycStatus.toUpperCase(),
+            kycStatus == 'verified'
+                ? AppTheme.success
+                : (kycStatus == 'rejected' ? AppTheme.error : AppTheme.warning),
+          ),
+          if (assignedAgentName != null && assignedAgentName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildSidebarBadgeRow('Agent', assignedAgentName, Colors.indigo),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarBadgeRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: const Color(0xFF6B7280),
+          ),
+        ),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.2)),
+            ),
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileProfileTabs(
+    List<Map<String, dynamic>> tabs,
+    int activeTabIdx,
+  ) {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
@@ -1759,63 +2009,67 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         ],
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Row(
-        children: tabs.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final tab = entry.value;
-          final isSelected = _activeTab == idx;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: tabs.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final tab = entry.value;
+            final isSelected = activeTabIdx == idx;
 
-          return Expanded(
-            child: InkWell(
-              onTap: () => setState(() => _activeTab = idx),
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withOpacity(0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      tab['icon'] as IconData,
-                      size: 16,
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF6B7280),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      tab['label'] as String,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w800
-                            : FontWeight.w600,
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: InkWell(
+                onTap: () => setState(() => _activeTab = idx),
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.primaryColor.withOpacity(0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        tab['icon'] as IconData,
+                        size: 16,
                         color: isSelected
                             ? Colors.white
-                            : const Color(0xFF4B5563),
+                            : const Color(0xFF6B7280),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        tab['label'] as String,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.w800 : FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }

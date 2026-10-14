@@ -2043,9 +2043,229 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     ];
   }
 
-  Widget _buildAdvancedProfileTabs() {
-    final List<Map<String, dynamic>> tabs = _getProfileTabs();
+  Widget _buildProfileSidebarTabs({
+    required List<Map<String, dynamic>> tabs,
+    required int activeTabIdx,
+    required Map<String, dynamic> lead,
+    required List<dynamic> salesAgents,
+  }) {
+    String? assignedAgentName;
+    final assignedAgent = lead['assignedAgent'];
+    if (assignedAgent != null) {
+      if (assignedAgent is Map) {
+        assignedAgentName =
+            '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'
+                .trim();
+        if (assignedAgentName.isEmpty) {
+          assignedAgentName = assignedAgent['name']?.toString();
+        }
+      } else {
+        final agentIdStr = assignedAgent.toString();
+        final match = salesAgents.firstWhere(
+          (a) => (a['_id'] ?? a['id'])?.toString() == agentIdStr,
+          orElse: () => null,
+        );
+        if (match != null) {
+          assignedAgentName =
+              '${match['firstName'] ?? ''} ${match['lastName'] ?? ''}'.trim();
+        }
+      }
+    }
+    final kycStatus = (lead['kycStatus'] ?? 'pending').toString().toLowerCase();
+    final leadStatus =
+        (lead['status'] ?? lead['leadStatus'] ?? 'prospect').toString().toLowerCase();
 
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.space_dashboard_outlined,
+                  size: 14,
+                  color: AppTheme.accentColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'PROFILE SECTIONS',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...tabs.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final tab = entry.value;
+            final isSelected = activeTabIdx == idx;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _activeTab = idx),
+                  borderRadius: BorderRadius.circular(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.accentColor
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.accentColor
+                            : const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppTheme.accentColor.withOpacity(0.22),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          tab['icon'] as IconData,
+                          size: 18,
+                          color:
+                              isSelected ? Colors.white : const Color(0xFF6B7280),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            tab['label'] as String,
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFF1F2937),
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+          Text(
+            'QUICK SUMMARY',
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: const Color(0xFF9CA3AF),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildSidebarBadgeRow(
+            'Status',
+            leadStatus.toUpperCase(),
+            AppTheme.primaryColor,
+          ),
+          const SizedBox(height: 8),
+          _buildSidebarBadgeRow(
+            'KYC',
+            kycStatus.toUpperCase(),
+            kycStatus == 'verified'
+                ? AppTheme.success
+                : (kycStatus == 'rejected' ? AppTheme.error : AppTheme.warning),
+          ),
+          if (assignedAgentName != null && assignedAgentName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildSidebarBadgeRow('Agent', assignedAgentName, Colors.indigo),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarBadgeRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: const Color(0xFF6B7280),
+          ),
+        ),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.2)),
+            ),
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileProfileTabs(
+    List<Map<String, dynamic>> tabs,
+    int activeTabIdx,
+  ) {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
@@ -2060,61 +2280,66 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         ],
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Row(
-        children: tabs.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final tab = entry.value;
-          final isSelected = _activeTab == idx;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: tabs.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final tab = entry.value;
+            final isSelected = activeTabIdx == idx;
 
-          return Expanded(
-            child: InkWell(
-              onTap: () => setState(() => _activeTab = idx),
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.accentColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: AppTheme.accentColor.withOpacity(0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      tab['icon'] as IconData,
-                      size: 16,
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF6B7280),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      tab['label'] as String,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w800
-                            : FontWeight.w600,
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: InkWell(
+                onTap: () => setState(() => _activeTab = idx),
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected ? AppTheme.accentColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.accentColor.withOpacity(0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        tab['icon'] as IconData,
+                        size: 16,
                         color: isSelected
                             ? Colors.white
-                            : const Color(0xFF4B5563),
+                            : const Color(0xFF6B7280),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        tab['label'] as String,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.w800 : FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -2342,11 +2567,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         ),
                         const SizedBox(height: 28),
 
-                        // 2. TAB CONTROLLER CHIPS SELECTOR
-                        _buildAdvancedProfileTabs(),
-                        const SizedBox(height: 24),
-
-                        // 3. TABBED CONTENT CHANNELS
+                        // 2. TAB CONTENT & RIGHT SIDEBAR
                         Builder(
                           builder: (context) {
                             final tabs = _getProfileTabs();
@@ -2356,7 +2577,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                 : 0;
                             final currentTabKey = tabs[safeIdx]['key'];
 
-                            return SelectionContainer.disabled(
+                            final Widget tabContent = SelectionContainer.disabled(
                               child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 250),
                                 child: currentTabKey == 'overview'
@@ -2365,50 +2586,58 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          if (!isMobile) ...[
-                                            IntrinsicHeight(
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: _LeadInformationCard(
-                                                      lead: activeLead,
-                                                      salesAgents:
-                                                          state.salesAgents,
-                                                      onAssignAgent:
-                                                          _assignAgent,
-                                                    ),
+                                          LayoutBuilder(
+                                            builder: (context, constraints) {
+                                              if (constraints.maxWidth >= 720) {
+                                                return IntrinsicHeight(
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.stretch,
+                                                    children: [
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: _LeadInformationCard(
+                                                          lead: activeLead,
+                                                          salesAgents:
+                                                              state.salesAgents,
+                                                          onAssignAgent:
+                                                              _assignAgent,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 24),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: _DealerKycDocumentsCard(
+                                                          lead: activeLead,
+                                                          onViewDocument:
+                                                              _launchUrl,
+                                                          onUpload:
+                                                              _showUploadKycDialog,
+                                                          isVertical: true,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  const SizedBox(width: 32),
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: _DealerKycDocumentsCard(
+                                                );
+                                              } else {
+                                                return Column(
+                                                  children: [
+                                                    _LeadInformationCard(
                                                       lead: activeLead,
-                                                      onViewDocument:
-                                                          _launchUrl,
-                                                      onUpload:
-                                                          _showUploadKycDialog,
-                                                      isVertical: true,
+                                                      salesAgents: state.salesAgents,
+                                                      onAssignAgent: _assignAgent,
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ] else ...[
-                                            _LeadInformationCard(
-                                              lead: activeLead,
-                                              salesAgents: state.salesAgents,
-                                              onAssignAgent: _assignAgent,
-                                            ),
-                                            const SizedBox(height: 24),
-                                            _DealerKycDocumentsCard(
-                                              lead: activeLead,
-                                              onViewDocument: _launchUrl,
-                                              onUpload: _showUploadKycDialog,
-                                            ),
-                                          ],
+                                                    const SizedBox(height: 24),
+                                                    _DealerKycDocumentsCard(
+                                                      lead: activeLead,
+                                                      onViewDocument: _launchUrl,
+                                                      onUpload: _showUploadKycDialog,
+                                                    ),
+                                                  ],
+                                                );
+                                              }
+                                            },
+                                          ),
                                         ],
                                       )
                                     : currentTabKey == 'activities'
@@ -2534,6 +2763,34 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         ],
                                       ),
                               ),
+                            );
+
+                            if (isMobile) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildMobileProfileTabs(tabs, safeIdx),
+                                  const SizedBox(height: 20),
+                                  tabContent,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: tabContent),
+                                const SizedBox(width: 24),
+                                SizedBox(
+                                  width: 260,
+                                  child: _buildProfileSidebarTabs(
+                                    tabs: tabs,
+                                    activeTabIdx: safeIdx,
+                                    lead: activeLead,
+                                    salesAgents: state.salesAgents,
+                                  ),
+                                ),
+                              ],
                             );
                           },
                         ),
