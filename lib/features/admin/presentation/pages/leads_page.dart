@@ -3727,162 +3727,322 @@ class _MasterLeadsAnalyticsHeaderState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.dashboard_customize_outlined,
-                  color: AppTheme.primaryColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isSales ? 'My Lead Hub & Performance' : 'Leads Performance Hub',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      isSales
-                          ? 'Manage your assigned leads, track KYC verification, and convert dealers'
-                          : 'Real-time lead status overview & daily sales performance',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: selectedDate,
-                    firstDate: DateTime(2024),
-                    lastDate: DateTime(2030),
-                  );
-                  if (picked != null) {
-                    context.read<LeadsBloc>().add(
-                          FetchDailyLeadStatsEvent(
-                            selectedDate: picked,
-                            selectedAgentId: widget.state.selectedDailyAgentId,
-                          ),
-                        );
-                  }
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          if (widget.isMobile) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundColor,
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.borderColor),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: const Icon(
+                    Icons.dashboard_customize_outlined,
+                    color: AppTheme.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.calendar_month,
-                        size: 16,
-                        color: AppTheme.primaryColor,
-                      ),
-                      const SizedBox(width: 6),
                       Text(
-                        'Day: $dateStr',
+                        isSales ? 'My Lead Hub & Performance' : 'Leads Performance Hub',
                         style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        isSales
+                            ? 'Manage your assigned leads, track KYC verification, and convert dealers'
+                            : 'Real-time lead status overview & daily sales performance',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              if (!isSales)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundColor,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.borderColor),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: widget.state.selectedDailyAgentId,
-                      hint: Text(
-                        'All Sales Team',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      icon: const Icon(Icons.arrow_drop_down, size: 18),
-                      items: [
-                        DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text(
-                            '👥 All Sales Team',
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        ...widget.state.salesAgents.map((agent) {
-                          final id = (agent['_id'] ?? agent['id'])?.toString();
-                          final name =
-                              '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
-                                  .trim();
-                          return DropdownMenuItem<String?>(
-                            value: id,
-                            child: Text(
-                              name.isNotEmpty
-                                  ? name
-                                  : (agent['phoneNumber'] ?? 'Agent'),
-                              style: GoogleFonts.outfit(fontSize: 13),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) {
+                      context.read<LeadsBloc>().add(
+                            FetchDailyLeadStatsEvent(
+                              selectedDate: picked,
+                              selectedAgentId: widget.state.selectedDailyAgentId,
                             ),
                           );
-                        }),
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.calendar_month,
+                          size: 16,
+                          color: AppTheme.primaryColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Day: $dateStr',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
                       ],
-                      onChanged: (agentId) {
-                        context.read<LeadsBloc>().add(
-                              FetchDailyLeadStatsEvent(
-                                selectedDate: selectedDate,
-                                selectedAgentId: agentId,
-                              ),
-                            );
-                      },
                     ),
                   ),
                 ),
-            ],
-          ),
+                if (!isSales)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        value: widget.state.selectedDailyAgentId,
+                        hint: Text(
+                          'All Sales Team',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        icon: const Icon(Icons.arrow_drop_down, size: 18),
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              '👥 All Sales Team',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          ...widget.state.salesAgents.map((agent) {
+                            final id = (agent['_id'] ?? agent['id'])?.toString();
+                            final name =
+                                '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                    .trim();
+                            return DropdownMenuItem<String?>(
+                              value: id,
+                              child: Text(
+                                name.isNotEmpty
+                                    ? name
+                                    : (agent['phoneNumber'] ?? 'Agent'),
+                                style: GoogleFonts.outfit(fontSize: 13),
+                              ),
+                            );
+                          }),
+                        ],
+                        onChanged: (agentId) {
+                          context.read<LeadsBloc>().add(
+                                FetchDailyLeadStatsEvent(
+                                  selectedDate: selectedDate,
+                                  selectedAgentId: agentId,
+                                ),
+                              );
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.dashboard_customize_outlined,
+                    color: AppTheme.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isSales ? 'My Lead Hub & Performance' : 'Leads Performance Hub',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        isSales
+                            ? 'Manage your assigned leads, track KYC verification, and convert dealers'
+                            : 'Real-time lead status overview & daily sales performance',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          context.read<LeadsBloc>().add(
+                                FetchDailyLeadStatsEvent(
+                                  selectedDate: picked,
+                                  selectedAgentId: widget.state.selectedDailyAgentId,
+                                ),
+                              );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.calendar_month,
+                              size: 16,
+                              color: AppTheme.primaryColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Day: $dateStr',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (!isSales)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String?>(
+                            value: widget.state.selectedDailyAgentId,
+                            hint: Text(
+                              'All Sales Team',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            icon: const Icon(Icons.arrow_drop_down, size: 18),
+                            items: [
+                              DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text(
+                                  '👥 All Sales Team',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              ...widget.state.salesAgents.map((agent) {
+                                final id = (agent['_id'] ?? agent['id'])?.toString();
+                                final name =
+                                    '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'
+                                        .trim();
+                                return DropdownMenuItem<String?>(
+                                  value: id,
+                                  child: Text(
+                                    name.isNotEmpty
+                                        ? name
+                                        : (agent['phoneNumber'] ?? 'Agent'),
+                                    style: GoogleFonts.outfit(fontSize: 13),
+                                  ),
+                                );
+                              }),
+                            ],
+                            onChanged: (agentId) {
+                              context.read<LeadsBloc>().add(
+                                    FetchDailyLeadStatsEvent(
+                                      selectedDate: selectedDate,
+                                      selectedAgentId: agentId,
+                                    ),
+                                  );
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Daily Sales Activity Banner
