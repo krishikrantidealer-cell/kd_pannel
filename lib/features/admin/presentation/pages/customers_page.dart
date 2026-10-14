@@ -881,7 +881,7 @@ class _CustomersPageState extends State<CustomersPage> {
               ),
               icon: const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF64748B)),
               borderRadius: BorderRadius.circular(8),
-              dense: true,
+              isDense: true,
             ),
           ),
         ],
