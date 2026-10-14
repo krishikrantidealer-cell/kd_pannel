@@ -676,24 +676,24 @@ class _CustomersPageState extends State<CustomersPage> {
                   const SizedBox(width: 8),
                   InkWell(
                     onTap: _resetFilters,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      height: 42,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: const Color(0xFFFECACA)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.filter_alt_off_rounded, size: 14, color: Color(0xFFDC2626)),
-                          const SizedBox(width: 4),
+                          const Icon(Icons.filter_alt_off_rounded, size: 15, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 5),
                           Text(
                             'Reset',
                             style: GoogleFonts.outfit(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               color: const Color(0xFFDC2626),
                             ),
@@ -808,42 +808,62 @@ class _CustomersPageState extends State<CustomersPage> {
 
   Widget _buildSearchInput() {
     return Container(
-      height: 36,
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        style: GoogleFonts.outfit(
-          fontSize: 13,
-          color: const Color(0xFF0F172A),
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          hintText: 'Search by Name, Phone, Shop Name, City, Pincode...',
-          hintStyle: GoogleFonts.outfit(
-            color: const Color(0xFF94A3B8),
-            fontSize: 12.5,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18),
-          prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? InkWell(
-                  onTap: () {
-                    _searchController.clear();
-                    _onSearchChanged('');
-                  },
-                  child: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF94A3B8)),
-                )
-              : null,
-          suffixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-          border: InputBorder.none,
-        ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: AppTheme.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search customers by name, phone, shop name, city, pincode...',
+                hintStyle: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          if (_searchController.text.isNotEmpty)
+            InkWell(
+              onTap: () {
+                _searchController.clear();
+                _onSearchChanged('');
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.clear_rounded, size: 18, color: AppTheme.textSecondary),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -857,30 +877,37 @@ class _CustomersPageState extends State<CustomersPage> {
   }) {
     final hasValue = items.any((i) => i.value == value);
     return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF64748B)),
-          const SizedBox(width: 4),
+          Icon(icon, size: 15, color: AppTheme.textSecondary),
+          const SizedBox(width: 6),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: hasValue ? value : (items.isNotEmpty ? items.first.value : null),
               items: items,
               onChanged: onChanged,
               style: GoogleFonts.outfit(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textPrimary,
               ),
-              icon: const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF64748B)),
-              borderRadius: BorderRadius.circular(8),
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18, color: AppTheme.textSecondary),
+              borderRadius: BorderRadius.circular(10),
               isDense: true,
             ),
           ),
