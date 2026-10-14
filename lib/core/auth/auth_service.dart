@@ -19,6 +19,7 @@ class AuthService {
   double? _monthlyTarget;
   Map<String, dynamic>? _permissions;
   Map<String, dynamic>? _myoperatorConfig;
+  bool _hasMyOperator = false;
   bool _isAvailableForCalls = true;
   String? _lastError;
   String? _sessionId;
@@ -31,6 +32,7 @@ class AuthService {
   double? get monthlyTarget => _monthlyTarget;
   Map<String, dynamic>? get permissions => _permissions;
   Map<String, dynamic>? get myoperatorConfig => _myoperatorConfig;
+  bool get hasMyOperator => _hasMyOperator;
   bool get isAvailableForCalls => _isAvailableForCalls;
   static const Set<String> authorizedMyOperatorEmails = {
     'admin@krishikranti.com',
@@ -44,6 +46,7 @@ class AuthService {
 
   bool get hasMyOperatorAccess =>
       _currentUserRole == UserRole.admin ||
+      _hasMyOperator ||
       authorizedMyOperatorEmails.contains(_currentUserEmail?.trim().toLowerCase());
 
   bool get isTelephonyEnabled => hasMyOperatorAccess;
@@ -79,6 +82,7 @@ class AuthService {
       if (myopStr != null && myopStr.isNotEmpty) {
         _myoperatorConfig = jsonDecode(myopStr);
       }
+      _hasMyOperator = prefs.getBool('kd_user_has_myoperator') ?? false;
       _isAvailableForCalls = prefs.getBool('kd_user_available_calls') ?? true;
     } catch (_) {}
     _isInitialized = true;
@@ -130,6 +134,9 @@ class AuthService {
           final perms = data['user']['permissions'] as Map<String, dynamic>?;
           final myop = data['user']['myoperatorConfig'] as Map<String, dynamic>?;
           final available = data['user']['isAvailableForCalls'] as bool? ?? true;
+          final hasMyOp = data['user']['myoperator'] == true ||
+              data['user']['hasMyoperator'] == true ||
+              (myop != null && myop.isNotEmpty);
 
           _currentUserId = userIdStr;
           _currentUserEmail = userEmailStr;
@@ -137,6 +144,7 @@ class AuthService {
           _monthlyTarget = monthlyTarget;
           _permissions = perms;
           _myoperatorConfig = myop;
+          _hasMyOperator = hasMyOp;
           _isAvailableForCalls = available;
 
           final prefs = await SharedPreferences.getInstance();
@@ -158,6 +166,7 @@ class AuthService {
           if (myop != null) {
             await prefs.setString('kd_user_myop_config', jsonEncode(myop));
           }
+          await prefs.setBool('kd_user_has_myoperator', hasMyOp);
           await prefs.setBool('kd_user_available_calls', available);
           if (rememberMe) {
             await prefs.setString('kd_user_role', userRoleStr);
@@ -224,6 +233,7 @@ class AuthService {
     _currentUserEmail = null;
     _currentUserName = null;
     _permissions = null;
+    _hasMyOperator = false;
     _lastError = null;
     ApiClient().clearCache();
     ApiClient().clearTokens();
@@ -234,6 +244,7 @@ class AuthService {
       await prefs.remove('kd_user_email');
       await prefs.remove('kd_user_name');
       await prefs.remove('kd_user_permissions');
+      await prefs.remove('kd_user_has_myoperator');
       await prefs.remove('cached_last_agent');
     } catch (_) {}
   }
