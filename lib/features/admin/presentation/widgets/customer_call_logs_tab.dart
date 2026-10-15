@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -322,13 +323,47 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      cleanPhone.isNotEmpty ? 'Connected Line: +91 $cleanPhone' : 'No phone linked',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
-                      ),
+                    Row(
+                      children: [
+                        SelectableText(
+                          cleanPhone.isNotEmpty ? 'Connected Line: +91 $cleanPhone' : 'No phone linked',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (cleanPhone.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: cleanPhone));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text('Phone number +91 $cleanPhone copied to clipboard!'),
+                                    ],
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                  backgroundColor: const Color(0xFF008069),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child: const Tooltip(
+                              message: 'Copy phone number',
+                              child: Padding(
+                                padding: EdgeInsets.all(2.0),
+                                child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

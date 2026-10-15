@@ -1488,9 +1488,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                               : 0;
                           final currentTabKey = tabs[safeIdx]['key'];
 
-                          final Widget tabContent = SelectionContainer.disabled(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
+                          final Widget tabContent = AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
                               child: currentTabKey == 'overview'
                                   ? Column(
                                       key: const ValueKey('overview'),
@@ -1727,10 +1726,11 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                           },
                                         )
                                       : const SizedBox.shrink(),
-                            ),
                           );
 
-                          if (isMobile) {
+                          final bool useStackedTabs = isMobile || isTablet || MediaQuery.of(context).size.width < 1100;
+
+                          if (useStackedTabs) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -2110,68 +2110,73 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              size: 14,
-              color: Color(0xFF6B7280),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                size: 14,
+                color: Color(0xFF6B7280),
+              ),
+              constraints: const BoxConstraints(),
+              padding: EdgeInsets.zero,
+              splashRadius: 20,
             ),
-            constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
-            splashRadius: 20,
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Admin Portal',
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF9CA3AF),
+            const SizedBox(width: 12),
+            Text(
+              'Admin Portal',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF9CA3AF),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(
-            Icons.chevron_right_rounded,
-            size: 16,
-            color: Color(0xFF9CA3AF),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Text(
-                'Dealers',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryColor,
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: Color(0xFF9CA3AF),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Text(
+                  'Dealers',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(
-            Icons.chevron_right_rounded,
-            size: 16,
-            color: Color(0xFF9CA3AF),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              profileName,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF1F2937),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: Color(0xFF9CA3AF),
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isMobile ? 180 : 350),
+              child: Text(
+                profileName,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF1F2937),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2238,26 +2243,32 @@ class _DealerHeroCard extends StatelessWidget {
       ),
     );
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: isMobile
-          ? Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isCompact = isMobile || constraints.maxWidth < 950;
+        final decoration = BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        );
+
+        if (isCompact) {
+          return Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(isMobile ? 14 : 18),
+            decoration: decoration,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     avatar,
                     const SizedBox(width: 14),
@@ -2272,7 +2283,7 @@ class _DealerHeroCard extends StatelessWidget {
                                   dealer.name,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
-                                    fontSize: 18,
+                                    fontSize: isMobile ? 18 : 20,
                                     fontWeight: FontWeight.w900,
                                     color: const Color(0xFF111827),
                                   ),
@@ -2328,74 +2339,85 @@ class _DealerHeroCard extends StatelessWidget {
                 const SizedBox(height: 14),
                 _buildActionButtons(context, isMobile, isTablet),
               ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                avatar,
-                const SizedBox(width: 18),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              dealer.name,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: const Color(0xFF111827),
-                              ),
-                            ),
-                          ),
-                          if (dealer.kycStatus?.toLowerCase() ==
-                              'verified') ...[
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.verified_rounded,
-                              color: Color(0xFF298E4D),
-                              size: 18,
-                            ),
-                          ],
-                          const SizedBox(width: 10),
-                          if (dealer.isBlocked) ...[
-                            _buildStatusBadge(
-                              'BLOCKED',
-                              const Color(0xFFEF4444),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                          _buildStatusBadge(
-                            'GST: ${dealer.gstStatus.toUpperCase()}',
-                            const Color(0xFF3B82F6),
-                          ),
-                          if (dealer.kycStatus != null) ...[
-                            const SizedBox(width: 6),
-                            _buildStatusBadge(
-                              'KYC: ${dealer.kycStatus!.toUpperCase()}',
-                              dealer.kycStatus!.toLowerCase() == 'verified'
-                                  ? const Color(0xFF10B981)
-                                  : dealer.kycStatus!.toLowerCase() ==
-                                        'rejected'
-                                  ? const Color(0xFFEF4444)
-                                  : const Color(0xFFF59E0B),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildContactRow(isMobile, context),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 20),
-                _buildActionButtons(context, isMobile, isTablet),
-              ],
             ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: decoration,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              avatar,
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            dealer.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF111827),
+                            ),
+                          ),
+                        ),
+                        if (dealer.kycStatus?.toLowerCase() ==
+                            'verified') ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF298E4D),
+                            size: 18,
+                          ),
+                        ],
+                        const SizedBox(width: 10),
+                        if (dealer.isBlocked) ...[
+                          _buildStatusBadge(
+                            'BLOCKED',
+                            const Color(0xFFEF4444),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        _buildStatusBadge(
+                          'GST: ${dealer.gstStatus.toUpperCase()}',
+                          const Color(0xFF3B82F6),
+                        ),
+                        if (dealer.kycStatus != null) ...[
+                          const SizedBox(width: 6),
+                          _buildStatusBadge(
+                            'KYC: ${dealer.kycStatus!.toUpperCase()}',
+                            dealer.kycStatus!.toLowerCase() == 'verified'
+                                ? const Color(0xFF10B981)
+                                : dealer.kycStatus!.toLowerCase() ==
+                                      'rejected'
+                                ? const Color(0xFFEF4444)
+                                : const Color(0xFFF59E0B),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildContactRow(isMobile, context),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Flexible(
+                child: _buildActionButtons(context, isMobile, isTablet),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2417,6 +2439,61 @@ class _DealerHeroCard extends StatelessWidget {
     return agentField;
   }
 
+  Widget _buildCopyablePhoneBadge(String phone, String name, BuildContext context) {
+    final rawPhone = phone.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF008069).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF008069).withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
+          const SizedBox(width: 6),
+          SelectableText(
+            rawPhone,
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              color: const Color(0xFF008069),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: rawPhone));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Phone number ' + rawPhone + ' copied to clipboard!'),
+                    ],
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: const Color(0xFF008069),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Tooltip(
+              message: 'Copy phone number',
+              child: Padding(
+                padding: EdgeInsets.all(2.0),
+                child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildContactRow(bool isMobile, BuildContext context) {
     final List<String> addressParts = [];
     if (dealer.address?['villageArea']?.toString().isNotEmpty ?? false) {
@@ -2434,21 +2511,7 @@ class _DealerHeroCard extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (dealer.phone.isNotEmpty)
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              TelephonyHelper.initiateCall(
-                context,
-                customerPhone: dealer.phone,
-                customerName: dealer.name,
-              );
-            },
-            child: _buildContactItem(
-              Icons.phone_in_talk_rounded,
-              dealer.phone,
-              color: const Color(0xFF008069),
-            ),
-          ),
+          _buildCopyablePhoneBadge(dealer.phone, dealer.name, context),
         if (addressParts.isNotEmpty)
           _buildContactItem(
             Icons.location_on_outlined,
@@ -2523,7 +2586,7 @@ class _DealerHeroCard extends StatelessWidget {
             isSolid: true,
             onTap: () async {
               final sanitized = TelephonyHelper.sanitizePhone(dealer.phone);
-              final url = Uri.parse('https://wa.me/91');
+              final url = Uri.parse('https://wa.me/91$sanitized');
               if (await canLaunchUrl(url)) {
                 await launchUrl(url, mode: LaunchMode.externalApplication);
               }
@@ -3330,6 +3393,55 @@ class _DealerInformationCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (dealer.phone.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.phone_in_talk_rounded,
+                              size: 14,
+                              color: Color(0xFF008069),
+                            ),
+                            const SizedBox(width: 6),
+                            SelectableText(
+                              dealer.phone,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF008069),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: dealer.phone));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text('Phone number ' + dealer.phone + ' copied to clipboard!'),
+                                      ],
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: const Color(0xFF008069),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: const Tooltip(
+                                message: 'Copy phone number',
+                                child: Padding(
+                                  padding: EdgeInsets.all(2.0),
+                                  child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

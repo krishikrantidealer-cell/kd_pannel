@@ -2496,58 +2496,61 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                               ),
                             ],
                           ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(
-                                  Icons.arrow_back_ios_new_rounded,
-                                  size: 14,
-                                  color: Color(0xFF6B7280),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios_new_rounded,
+                                    size: 14,
+                                    color: Color(0xFF6B7280),
+                                  ),
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  splashRadius: 20,
                                 ),
-                                constraints: const BoxConstraints(),
-                                padding: EdgeInsets.zero,
-                                splashRadius: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Admin Portal',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF9CA3AF),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(
-                                Icons.chevron_right_rounded,
-                                size: 16,
-                                color: Color(0xFF9CA3AF),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => Navigator.pop(context),
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: Text(
-                                    'Leads',
+                                const SizedBox(width: 12),
+                                if (!isMobile) ...[
+                                  Text(
+                                    'Admin Portal',
                                     style: GoogleFonts.outfit(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.accentColor,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF9CA3AF),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 16,
+                                    color: Color(0xFF9CA3AF),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: Text(
+                                      'Leads',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.accentColor,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(
-                                Icons.chevron_right_rounded,
-                                size: 16,
-                                color: Color(0xFF9CA3AF),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 16,
+                                  color: Color(0xFF9CA3AF),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
                                   activeLead['name'] ?? '',
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
@@ -2556,8 +2559,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                     color: const Color(0xFF1F2937),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -2572,8 +2575,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                 : 0;
                             final currentTabKey = tabs[safeIdx]['key'];
 
-                            final Widget tabContent = SelectionContainer.disabled(
-                              child: AnimatedSwitcher(
+                            final Widget tabContent = AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 250),
                                 child: currentTabKey == 'overview'
                                     ? Column(
@@ -2755,10 +2757,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         onRefresh: _refreshLeadDetails,
                                       )
                                     : const SizedBox.shrink(),
-                              ),
                             );
 
-                            if (isMobile) {
+                            final bool useStackedTabs = isMobile || isTablet || MediaQuery.of(context).size.width < 1100;
+
+                            if (useStackedTabs) {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -2918,26 +2921,32 @@ class _FlatHeaderSection extends StatelessWidget {
       ),
     );
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: isMobile
-          ? Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isCompact = isMobile || constraints.maxWidth < 950;
+        final decoration = BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        );
+
+        if (isCompact) {
+          return Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(isMobile ? 14 : 18),
+            decoration: decoration,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     avatar,
                     const SizedBox(width: 14),
@@ -2952,7 +2961,7 @@ class _FlatHeaderSection extends StatelessWidget {
                                   lead['name'] ?? '',
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
-                                    fontSize: 18,
+                                    fontSize: isMobile ? 18 : 20,
                                     fontWeight: FontWeight.w900,
                                     color: const Color(0xFF111827),
                                   ),
@@ -2997,62 +3006,128 @@ class _FlatHeaderSection extends StatelessWidget {
                 const SizedBox(height: 14),
                 _buildActionButtons(context, isMobile, isTablet),
               ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                avatar,
-                const SizedBox(width: 18),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              lead['name'] ?? '',
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: const Color(0xFF111827),
-                              ),
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: decoration,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              avatar,
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            lead['name'] ?? '',
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF111827),
                             ),
                           ),
-                          if (kycStatus.toLowerCase() == 'verified') ...[
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.verified_rounded,
-                              color: Color(0xFF298E4D),
-                              size: 18,
-                            ),
-                          ],
-                          const SizedBox(width: 10),
-                          _buildStatusBadge(
-                            'KYC: ${kycStatus.toUpperCase()}',
-                            statusColor,
+                        ),
+                        if (kycStatus.toLowerCase() == 'verified') ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF298E4D),
+                            size: 18,
                           ),
-                          if (lead['source'] != null &&
-                              lead['source'].toString().isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            _buildStatusBadge(
-                              'SOURCE: ${lead['source'].toString().toUpperCase()}',
-                              const Color(0xFF3B82F6),
-                            ),
-                          ],
                         ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildContactRow(locationText, isMobile, context),
+                        const SizedBox(width: 10),
+                        _buildStatusBadge(
+                          'KYC: ${kycStatus.toUpperCase()}',
+                          statusColor,
+                        ),
+                        if (lead['source'] != null &&
+                            lead['source'].toString().isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          _buildStatusBadge(
+                            'SOURCE: ${lead['source'].toString().toUpperCase()}',
+                            const Color(0xFF3B82F6),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildContactRow(locationText, isMobile, context),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Flexible(
+                child: _buildActionButtons(context, isMobile, isTablet),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCopyablePhoneBadge(String phone, dynamic name, BuildContext context) {
+    final rawPhone = phone.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF008069).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF008069).withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
+          const SizedBox(width: 6),
+          SelectableText(
+            rawPhone,
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              color: const Color(0xFF008069),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: rawPhone));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Phone number ' + rawPhone + ' copied to clipboard!'),
                     ],
                   ),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: const Color(0xFF008069),
+                  duration: const Duration(seconds: 2),
                 ),
-                const SizedBox(width: 20),
-                _buildActionButtons(context, isMobile, isTablet),
-              ],
+              );
+            },
+            child: const Tooltip(
+              message: 'Copy phone number',
+              child: Padding(
+                padding: EdgeInsets.all(2.0),
+                child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+              ),
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3064,25 +3139,11 @@ class _FlatHeaderSection extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (cleanPhone.toString().isNotEmpty)
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              TelephonyHelper.initiateCall(
-                context,
-                customerPhone: cleanPhone.toString(),
-                customerName: lead['name'],
-              );
-            },
-            child: _buildContactItem(
-              Icons.phone_in_talk_rounded,
-              cleanPhone.toString(),
-              color: const Color(0xFF008069),
-            ),
-          ),
+          _buildCopyablePhoneBadge(cleanPhone.toString(), lead['name'], context),
         if (locationText.isNotEmpty)
           _buildContactItem(Icons.location_on_outlined, locationText),
         if (lead['source'] != null)
-          _buildContactItem(Icons.hub_outlined, 'Source: ${lead['source']}'),
+          _buildContactItem(Icons.hub_outlined, 'Source: ' + lead['source'].toString()),
       ],
     );
   }
@@ -3628,6 +3689,55 @@ class _LeadInformationCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (leadPhone.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.phone_in_talk_rounded,
+                              size: 14,
+                              color: Color(0xFF008069),
+                            ),
+                            const SizedBox(width: 6),
+                            SelectableText(
+                              leadPhone,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF008069),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: leadPhone));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text('Phone number ' + leadPhone + ' copied to clipboard!'),
+                                      ],
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: const Color(0xFF008069),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: const Tooltip(
+                                message: 'Copy phone number',
+                                child: Padding(
+                                  padding: EdgeInsets.all(2.0),
+                                  child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
