@@ -17,6 +17,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/customer_call_logs_tab.dart';
+import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_activity_audit_tab.dart';
 import 'package:kd_pannel/util/dealers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1652,13 +1654,8 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                             ),
                                           ),
                                     )
-                                  : currentTabKey == 'timeline'
-                                      ? CustomerTimelineWidget(
-                                          key: const ValueKey('timeline'),
-                                          userId: currentDealer.id,
-                                          phone: currentDealer.phone,
-                                        )
-                                      : Column(
+                                  : currentTabKey == 'notes'
+                                      ? Column(
                                       key: const ValueKey('notes'),
                                       children: [
                                         if (currentDealer.id != null)
@@ -1708,7 +1705,28 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                             ),
                                           ),
                                       ],
-                                    ),
+                                    )
+                                  : currentTabKey == 'timeline'
+                                      ? CustomerTimelineWidget(
+                                          key: const ValueKey('timeline'),
+                                          userId: currentDealer.id,
+                                          phone: currentDealer.phone,
+                                        )
+                                  : currentTabKey == 'call_logs'
+                                      ? CustomerCallLogsTab(
+                                          key: const ValueKey('call_logs'),
+                                          phone: currentDealer.phone,
+                                          customerName: currentDealer.name,
+                                          userId: currentDealer.id,
+                                          onRefresh: () {
+                                            if (currentDealer.id != null) {
+                                              context.read<DealersBloc>().add(
+                                                FetchDealerDetailsEvent(currentDealer.id!),
+                                              );
+                                            }
+                                          },
+                                        )
+                                      : const SizedBox.shrink(),
                             ),
                           );
 
@@ -1759,16 +1777,21 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       },
       {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
       {
-        'icon': Icons.timeline_rounded,
-        'label': 'Timeline (360°)',
-        'key': 'timeline',
-      },
-      {
         'icon': Icons.analytics_outlined,
         'label': 'Activities',
         'key': 'activities',
       },
       {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
+      {
+        'icon': Icons.timeline_rounded,
+        'label': 'Timeline (360°)',
+        'key': 'timeline',
+      },
+      {
+        'icon': Icons.call_outlined,
+        'label': 'Call Logs',
+        'key': 'call_logs',
+      },
     ];
   }
 
@@ -2299,7 +2322,7 @@ class _DealerHeroCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                _buildContactRow(isMobile),
+                _buildContactRow(isMobile, context),
                 const SizedBox(height: 14),
                 const Divider(height: 1, color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 14),
@@ -2365,7 +2388,7 @@ class _DealerHeroCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _buildContactRow(isMobile),
+                      _buildContactRow(isMobile, context),
                     ],
                   ),
                 ),
@@ -2394,7 +2417,7 @@ class _DealerHeroCard extends StatelessWidget {
     return agentField;
   }
 
-  Widget _buildContactRow(bool isMobile) {
+  Widget _buildContactRow(bool isMobile, BuildContext context) {
     final List<String> addressParts = [];
     if (dealer.address?['villageArea']?.toString().isNotEmpty ?? false) {
       addressParts.add(dealer.address!['villageArea']);
@@ -2410,7 +2433,22 @@ class _DealerHeroCard extends StatelessWidget {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        _buildContactItem(Icons.phone_outlined, dealer.phone),
+        if (dealer.phone.isNotEmpty)
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              TelephonyHelper.initiateCall(
+                context,
+                customerPhone: dealer.phone,
+                customerName: dealer.name,
+              );
+            },
+            child: _buildContactItem(
+              Icons.phone_in_talk_rounded,
+              dealer.phone,
+              color: const Color(0xFF008069),
+            ),
+          ),
         if (addressParts.isNotEmpty)
           _buildContactItem(
             Icons.location_on_outlined,
@@ -2425,25 +2463,26 @@ class _DealerHeroCard extends StatelessWidget {
     );
   }
 
-  Widget _buildContactItem(IconData icon, String text) {
+  Widget _buildContactItem(IconData icon, String text, {Color? color}) {
+    final c = color ?? const Color(0xFF4B5563);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: color != null ? color.withOpacity(0.08) : const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: color != null ? color.withOpacity(0.2) : const Color(0xFFE5E7EB)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF4B5563)),
+          Icon(icon, size: 14, color: c),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
               text,
               style: GoogleFonts.outfit(
                 fontSize: 12,
-                color: const Color(0xFF374151),
+                color: color ?? const Color(0xFF374151),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -2462,6 +2501,34 @@ class _DealerHeroCard extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        if (dealer.phone.isNotEmpty)
+          _ActionButton(
+            icon: Icons.phone_in_talk_rounded,
+            label: 'Call',
+            color: const Color(0xFF008069),
+            isSolid: true,
+            onTap: () {
+              TelephonyHelper.initiateCall(
+                context,
+                customerPhone: dealer.phone,
+                customerName: dealer.name,
+              );
+            },
+          ),
+        if (dealer.phone.isNotEmpty)
+          _ActionButton(
+            icon: FontAwesomeIcons.whatsapp,
+            label: 'WhatsApp',
+            color: const Color(0xFF25D366),
+            isSolid: true,
+            onTap: () async {
+              final sanitized = TelephonyHelper.sanitizePhone(dealer.phone);
+              final url = Uri.parse('https://wa.me/91');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
         _ActionButton(
           icon: Icons.add_shopping_cart_rounded,
           label: 'Order',

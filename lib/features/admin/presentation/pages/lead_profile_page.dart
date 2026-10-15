@@ -15,6 +15,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/leads_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/customer_call_logs_tab.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
@@ -96,10 +97,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
             _refreshLeadDetails();
           }
         });
-        if (AuthService().isAdmin) {
-          _fetchEvents();
-          _listenToRealTimeEvents();
-        }
+        _fetchEvents();
+        _listenToRealTimeEvents();
 
         // Track profile view event
         AnalyticsService().logEvent(
@@ -144,10 +143,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
           });
         }
         _refreshLeadDetails();
-        if (AuthService().isAdmin) {
-          _fetchEvents();
-          _listenToRealTimeEvents();
-        }
+        _fetchEvents();
+        _listenToRealTimeEvents();
       }
     } catch (e) {
       debugPrint('Error loading lead from cache: $e');
@@ -2025,7 +2022,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   }
 
   List<Map<String, dynamic>> _getProfileTabs() {
-    final bool isSales = AuthService().isSales;
     return [
       {
         'icon': Icons.dashboard_outlined,
@@ -2033,17 +2029,25 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         'key': 'overview',
       },
       {
+        'icon': Icons.analytics_outlined,
+        'label': 'Activities',
+        'key': 'activities',
+      },
+      {
+        'icon': Icons.rate_review_outlined,
+        'label': 'Notes',
+        'key': 'notes',
+      },
+      {
         'icon': Icons.timeline_rounded,
         'label': 'Timeline (360°)',
         'key': 'timeline',
       },
-      if (!isSales)
-        {
-          'icon': Icons.analytics_outlined,
-          'label': 'Activities',
-          'key': 'activities',
-        },
-      {'icon': Icons.rate_review_outlined, 'label': 'Notes', 'key': 'notes'},
+      {
+        'icon': Icons.call_outlined,
+        'label': 'Call Logs',
+        'key': 'call_logs',
+      },
     ];
   }
 
@@ -2642,13 +2646,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                           ),
                                         ],
                                       )
-                                    : currentTabKey == 'timeline'
-                                    ? CustomerTimelineWidget(
-                                        key: const ValueKey('timeline'),
-                                        phone: activeLead['phone'] ?? activeLead['phoneNumber'],
-                                        userId: leadId,
-                                        customerName: activeLead['name'],
-                                      )
                                     : currentTabKey == 'activities'
                                     ? Column(
                                         key: const ValueKey('activities'),
@@ -2693,7 +2690,8 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                             ),
                                         ],
                                       )
-                                    : Column(
+                                    : currentTabKey == 'notes'
+                                    ? Column(
                                         key: const ValueKey('notes'),
                                         children: [
                                           if (leadId != null)
@@ -2740,7 +2738,23 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                               ),
                                             ),
                                         ],
-                                      ),
+                                      )
+                                    : currentTabKey == 'timeline'
+                                    ? CustomerTimelineWidget(
+                                        key: const ValueKey('timeline'),
+                                        phone: activeLead['phone'] ?? activeLead['phoneNumber'],
+                                        userId: leadId,
+                                        customerName: activeLead['name'],
+                                      )
+                                    : currentTabKey == 'call_logs'
+                                    ? CustomerCallLogsTab(
+                                        key: const ValueKey('call_logs'),
+                                        phone: (activeLead['phone'] ?? activeLead['phoneNumber'])?.toString(),
+                                        customerName: activeLead['name']?.toString(),
+                                        userId: leadId,
+                                        onRefresh: _refreshLeadDetails,
+                                      )
+                                    : const SizedBox.shrink(),
                               ),
                             );
 
@@ -2977,7 +2991,7 @@ class _FlatHeaderSection extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                _buildContactRow(locationText, isMobile),
+                _buildContactRow(locationText, isMobile, context),
                 const SizedBox(height: 14),
                 const Divider(height: 1, color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 14),
@@ -3031,7 +3045,7 @@ class _FlatHeaderSection extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _buildContactRow(locationText, isMobile),
+                      _buildContactRow(locationText, isMobile, context),
                     ],
                   ),
                 ),
@@ -3042,7 +3056,7 @@ class _FlatHeaderSection extends StatelessWidget {
     );
   }
 
-  Widget _buildContactRow(String locationText, bool isMobile) {
+  Widget _buildContactRow(String locationText, bool isMobile, BuildContext context) {
     final cleanPhone = lead['phone'] ?? lead['phoneNumber'] ?? '';
     return Wrap(
       spacing: 8,
@@ -3050,7 +3064,21 @@ class _FlatHeaderSection extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (cleanPhone.toString().isNotEmpty)
-          _buildContactItem(Icons.phone_outlined, cleanPhone.toString()),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              TelephonyHelper.initiateCall(
+                context,
+                customerPhone: cleanPhone.toString(),
+                customerName: lead['name'],
+              );
+            },
+            child: _buildContactItem(
+              Icons.phone_in_talk_rounded,
+              cleanPhone.toString(),
+              color: const Color(0xFF008069),
+            ),
+          ),
         if (locationText.isNotEmpty)
           _buildContactItem(Icons.location_on_outlined, locationText),
         if (lead['source'] != null)
@@ -3059,25 +3087,26 @@ class _FlatHeaderSection extends StatelessWidget {
     );
   }
 
-  Widget _buildContactItem(IconData icon, String text) {
+  Widget _buildContactItem(IconData icon, String text, {Color? color}) {
+    final c = color ?? const Color(0xFFE65100);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: color != null ? color.withOpacity(0.08) : const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: color != null ? color.withOpacity(0.2) : const Color(0xFFE5E7EB)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFFE65100)),
+          Icon(icon, size: 14, color: c),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
               text,
               style: GoogleFonts.outfit(
                 fontSize: 12,
-                color: const Color(0xFF374151),
+                color: color ?? const Color(0xFF374151),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -3123,6 +3152,7 @@ class _FlatHeaderSection extends StatelessWidget {
     bool isMobile,
     bool isTablet,
   ) {
+    final cleanPhone = (lead['phone'] ?? lead['phoneNumber'] ?? '').toString();
     final String kycStatus = lead['kycStatus'] ?? 'pending';
     final hasLicence =
         lead['licenceImage'] != null &&
@@ -3135,6 +3165,34 @@ class _FlatHeaderSection extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        if (cleanPhone.isNotEmpty)
+          _ActionButton(
+            icon: Icons.phone_in_talk_rounded,
+            label: 'Call',
+            color: const Color(0xFF008069),
+            isSolid: true,
+            onTap: () {
+              TelephonyHelper.initiateCall(
+                context,
+                customerPhone: cleanPhone,
+                customerName: lead['name'],
+              );
+            },
+          ),
+        if (cleanPhone.isNotEmpty)
+          _ActionButton(
+            icon: FontAwesomeIcons.whatsapp,
+            label: 'WhatsApp',
+            color: const Color(0xFF25D366),
+            isSolid: true,
+            onTap: () async {
+              final sanitized = TelephonyHelper.sanitizePhone(cleanPhone);
+              final url = Uri.parse('https://wa.me/91$sanitized');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
         if (AuthService().isAdmin ||
             AuthService().hasLeadPermission('update'))
           _ActionButton(
