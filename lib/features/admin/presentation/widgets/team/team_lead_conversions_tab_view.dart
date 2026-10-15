@@ -1010,6 +1010,20 @@ class _TeamLeadConversionsTabViewState
 
     final bool isFiltered = _conversionDateRange != null;
 
+    final int totalTeamActiveLeads = activeLeadsMap.values.fold(0, (sum, list) => sum + list.length);
+    final int totalTeamAllConvertedDealers = allConvertedDealersMap.values.fold(0, (sum, list) => sum + list.length);
+    final int totalBaseConverted = isFiltered ? totalTeamConversions : totalTeamAllConvertedDealers;
+    final int effectiveBaseConverted = totalBaseConverted > 0 ? totalBaseConverted : totalTeamConversions;
+
+    final int totalTeamAssignedPool = effectiveBaseConverted + totalTeamActiveLeads + totalTeamDeletedLeads;
+    final double overallLeadToDealerRate = totalTeamAssignedPool > 0
+        ? (effectiveBaseConverted / totalTeamAssignedPool) * 100
+        : 0.0;
+
+    final double overallDealerToOrderRate = effectiveBaseConverted > 0
+        ? (totalDealersWithOrdersCount / effectiveBaseConverted) * 100
+        : 0.0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1019,21 +1033,27 @@ class _TeamLeadConversionsTabViewState
             children: [
               Expanded(
                 child: buildSummaryCard(
-                  isFiltered ? 'Period Conversions' : 'Converted Dealers',
-                  totalTeamConversions.toString(),
-                  Icons.verified_rounded,
-                  const Color(0xFF10B981),
+                  'Lead → Dealer Conv.',
+                  '${overallLeadToDealerRate.toStringAsFixed(1)}%',
+                  Icons.filter_alt_rounded,
+                  const Color(0xFF0284C7),
+                  badgeText: '$effectiveBaseConverted Converted',
+                  badgeBgColor: const Color(0xFFE0F2FE),
+                  badgeColor: const Color(0xFF0284C7),
+                  subtitle: '$effectiveBaseConverted of $totalTeamAssignedPool leads',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: buildSummaryCard(
-                  'Dealers Ordered',
-                  isFiltered
-                      ? '$totalDealersWithOrdersCount Dealers'
-                      : '$totalDealersWithOrdersCount of $totalTeamConversions',
+                  'Dealer → Order Conv.',
+                  '${overallDealerToOrderRate.toStringAsFixed(1)}%',
                   Icons.shopping_cart_checkout_rounded,
                   const Color(0xFF8B5CF6),
+                  badgeText: '$totalDealersWithOrdersCount Ordered',
+                  badgeBgColor: const Color(0xFFF3E8FF),
+                  badgeColor: const Color(0xFF7E22CE),
+                  subtitle: '$totalDealersWithOrdersCount of $effectiveBaseConverted dealers',
                 ),
               ),
               const SizedBox(width: 12),
@@ -1042,7 +1062,10 @@ class _TeamLeadConversionsTabViewState
                   'Total Orders',
                   '$totalTeamOrders Orders',
                   Icons.shopping_bag_rounded,
-                  const Color(0xFF0284C7),
+                  const Color(0xFF0EA5E9),
+                  subtitle: totalTeamOrders > 0
+                      ? 'Avg. ${CurrencyUtils.formatInr(totalTeamSalesAmount / totalTeamOrders)}/order'
+                      : '0 orders',
                 ),
               ),
               const SizedBox(width: 12),
@@ -1052,15 +1075,17 @@ class _TeamLeadConversionsTabViewState
                   CurrencyUtils.formatInr(totalTeamSalesAmount),
                   Icons.currency_rupee_rounded,
                   const Color(0xFF059669),
+                  subtitle: '$totalDealersWithOrdersCount purchasing dealers',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: buildSummaryCard(
-                  'Deleted Leads',
-                  totalTeamDeletedLeads.toString(),
-                  Icons.delete_sweep_rounded,
-                  const Color(0xFFF43F5E),
+                  'Active & Deleted Leads',
+                  '$totalTeamActiveLeads Active',
+                  Icons.people_alt_rounded,
+                  const Color(0xFFF59E0B),
+                  subtitle: '$totalTeamDeletedLeads deleted leads',
                 ),
               ),
             ],
@@ -1073,21 +1098,27 @@ class _TeamLeadConversionsTabViewState
               SizedBox(
                 width: (MediaQuery.of(context).size.width - 48) / 2,
                 child: buildSummaryCard(
-                  isFiltered ? 'Period Conversions' : 'Converted Dealers',
-                  totalTeamConversions.toString(),
-                  Icons.verified_rounded,
-                  const Color(0xFF10B981),
+                  'Lead → Dealer Conv.',
+                  '${overallLeadToDealerRate.toStringAsFixed(1)}%',
+                  Icons.filter_alt_rounded,
+                  const Color(0xFF0284C7),
+                  badgeText: '$effectiveBaseConverted Converted',
+                  badgeBgColor: const Color(0xFFE0F2FE),
+                  badgeColor: const Color(0xFF0284C7),
+                  subtitle: '$effectiveBaseConverted of $totalTeamAssignedPool leads',
                 ),
               ),
               SizedBox(
                 width: (MediaQuery.of(context).size.width - 48) / 2,
                 child: buildSummaryCard(
-                  'Dealers Ordered',
-                  isFiltered
-                      ? '$totalDealersWithOrdersCount Dealers'
-                      : '$totalDealersWithOrdersCount of $totalTeamConversions',
+                  'Dealer → Order Conv.',
+                  '${overallDealerToOrderRate.toStringAsFixed(1)}%',
                   Icons.shopping_cart_checkout_rounded,
                   const Color(0xFF8B5CF6),
+                  badgeText: '$totalDealersWithOrdersCount Ordered',
+                  badgeBgColor: const Color(0xFFF3E8FF),
+                  badgeColor: const Color(0xFF7E22CE),
+                  subtitle: '$totalDealersWithOrdersCount of $effectiveBaseConverted dealers',
                 ),
               ),
               SizedBox(
@@ -1096,7 +1127,10 @@ class _TeamLeadConversionsTabViewState
                   'Total Orders',
                   '$totalTeamOrders Orders',
                   Icons.shopping_bag_rounded,
-                  const Color(0xFF0284C7),
+                  const Color(0xFF0EA5E9),
+                  subtitle: totalTeamOrders > 0
+                      ? 'Avg. ${CurrencyUtils.formatInr(totalTeamSalesAmount / totalTeamOrders)}/order'
+                      : '0 orders',
                 ),
               ),
               SizedBox(
@@ -1106,15 +1140,17 @@ class _TeamLeadConversionsTabViewState
                   CurrencyUtils.formatInr(totalTeamSalesAmount),
                   Icons.currency_rupee_rounded,
                   const Color(0xFF059669),
+                  subtitle: '$totalDealersWithOrdersCount purchasing dealers',
                 ),
               ),
               SizedBox(
                 width: (MediaQuery.of(context).size.width - 48) / 2,
                 child: buildSummaryCard(
-                  'Deleted Leads',
-                  totalTeamDeletedLeads.toString(),
-                  Icons.delete_sweep_rounded,
-                  const Color(0xFFF43F5E),
+                  'Active & Deleted Leads',
+                  '$totalTeamActiveLeads Active',
+                  Icons.people_alt_rounded,
+                  const Color(0xFFF59E0B),
+                  subtitle: '$totalTeamDeletedLeads deleted leads',
                 ),
               ),
             ],

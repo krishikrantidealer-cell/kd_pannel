@@ -1967,13 +1967,13 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                                    const Icon(Icons.people_alt_rounded, size: 14, color: Color(0xFF008069)),
                                                    const SizedBox(width: 6),
                                                    Text(
-                                                     'All Agents (${state.salesAgents.length})',
+                                                     'All Agents (${state.salesAgents.where((a) => a is Map && a["myoperator"] != false).length})',
                                                      style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
                                                    ),
                                                  ],
                                                ),
                                              ),
-                                             ...state.salesAgents.map((agent) {
+                                             ...state.salesAgents.where((a) => a is Map && a["myoperator"] != false).map((agent) {
                                                final name = agent['name'] ?? '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
                                                final phone = agent['phoneNumber'] ?? agent['mobileNumber'] ?? '';
                                                final displayName = name.isNotEmpty ? name : (agent['email'] ?? 'Agent');

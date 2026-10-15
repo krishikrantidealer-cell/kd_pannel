@@ -195,30 +195,30 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       if (_selectedStatus != 'open' && status != _selectedStatus) return false;
     }
 
+    final convAssigned = conversation['assignedTo'];
+    String? convAgentId;
+    if (convAssigned is Map) {
+      convAgentId = convAssigned['_id']?.toString();
+    } else if (convAssigned != null) {
+      convAgentId = convAssigned.toString();
+    }
+
+    final contactData = conversation['contactId'] is Map ? conversation['contactId'] : null;
+    final contactAssigned = contactData?['assignedTo'];
+    String? contactAgentId;
+    if (contactAssigned is Map) {
+      contactAgentId = contactAssigned['_id']?.toString();
+    } else if (contactAssigned != null) {
+      contactAgentId = contactAssigned.toString();
+    }
+
+    final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
+        ? convAgentId
+        : contactAgentId;
+
     // Role Security: Sales agents can ONLY see conversations assigned to them
     if (AuthService().currentUserRole == UserRole.sales) {
       final currentUserId = AuthService().currentUserId;
-      final convAssigned = conversation['assignedTo'];
-      String? convAgentId;
-      if (convAssigned is Map) {
-        convAgentId = convAssigned['_id']?.toString();
-      } else if (convAssigned != null) {
-        convAgentId = convAssigned.toString();
-      }
-
-      final contact = conversation['contactId'] is Map ? conversation['contactId'] : null;
-      final contactAssigned = contact?['assignedTo'];
-      String? contactAgentId;
-      if (contactAssigned is Map) {
-        contactAgentId = contactAssigned['_id']?.toString();
-      } else if (contactAssigned != null) {
-        contactAgentId = contactAssigned.toString();
-      }
-
-      final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
-          ? convAgentId
-          : contactAgentId;
-
       if (effectiveAgentId == null || effectiveAgentId.isEmpty || effectiveAgentId != currentUserId) {
         return false;
       }
@@ -226,27 +226,6 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     // Role / Admin Agent Filter Check
     if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
-      final convAssigned = conversation['assignedTo'];
-      String? convAgentId;
-      if (convAssigned is Map) {
-        convAgentId = convAssigned['_id']?.toString();
-      } else if (convAssigned != null) {
-        convAgentId = convAssigned.toString();
-      }
-
-      final contact = conversation['contactId'] is Map ? conversation['contactId'] : null;
-      final contactAssigned = contact?['assignedTo'];
-      String? contactAgentId;
-      if (contactAssigned is Map) {
-        contactAgentId = contactAssigned['_id']?.toString();
-      } else if (contactAssigned != null) {
-        contactAgentId = contactAssigned.toString();
-      }
-
-      final effectiveAgentId = (convAgentId != null && convAgentId.isNotEmpty)
-          ? convAgentId
-          : contactAgentId;
-
       if (_selectedAgentId == 'unassigned') {
         if (effectiveAgentId != null && effectiveAgentId.isNotEmpty) return false;
       } else {
@@ -711,10 +690,13 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
       if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
         endpoint += '&agentId=$_selectedAgentId';
       }
+      debugPrint('[WhatsApp CRM] Requesting $endpoint');
       final res = await ApiClient().get(endpoint);
+      debugPrint('[WhatsApp CRM] Response: statusCode=${res.statusCode}, length=${res.body.length}');
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
+        debugPrint('[WhatsApp CRM] success=${body['success']}, dataCount=${(body['data'] as List?)?.length}, counts=${body['counts']}');
         if (body['success'] == true && mounted) {
           setState(() {
             final List rawData = body['data'] ?? [];
@@ -848,16 +830,10 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
           // Ensure ONLY sales agents that have active MyOperator capability are shown in filter
           final myoperatorAgents = rawList.where((a) {
-            if (a['myoperator'] == true) return true;
-            final cfg = a['myoperatorConfig'];
-            if (cfg is Map) {
-              final cid = (cfg['companyId'] ?? '').toString().trim();
-              final token = (cfg['token'] ?? '').toString().trim();
-              final did = (cfg['did'] ?? '').toString().trim();
-              final uuid = (cfg['uuid'] ?? '').toString().trim();
-              return cid.isNotEmpty || token.isNotEmpty || did.isNotEmpty || uuid.isNotEmpty;
-            }
-            return false;
+            final isMyop = (a['myoperator'] == true || a['myoperator'] == 'true') &&
+                a['permissions']?['myoperator'] != false;
+            final isBlocked = a['isBlocked'] == true || a['isDeleted'] == true;
+            return isMyop && !isBlocked;
           }).toList();
 
           setState(() {
@@ -2023,6 +1999,11 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
     // Deduplicate and sanitize agents list
     final Map<String, dynamic> uniqueAgents = {};
     for (final agent in _salesAgents) {
+      final isMyop = (agent['myoperator'] == true || agent['myoperator'] == 'true') &&
+          agent['permissions']?['myoperator'] != false;
+      final isBlocked = agent['isBlocked'] == true || agent['isDeleted'] == true;
+      if (!isMyop || isBlocked) continue;
+
       final id = agent['_id']?.toString() ?? '';
       if (id.isNotEmpty && !uniqueAgents.containsKey(id)) {
         uniqueAgents[id] = agent;

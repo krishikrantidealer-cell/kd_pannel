@@ -187,13 +187,6 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     'companyId': '6abcea80a6fa9438',
   },
   {
-    'name': 'Garima Gokulpure',
-    'email': 'essentialbiosciences12@gmail.com',
-    'phone': '+91 7316917216',
-    'line': 'Ram Ji Shukla - 6 (6abceacb44b44323)',
-    'companyId': '6abceacb44b44323',
-  },
-  {
     'name': 'Eram Istiyaque',
     'email': 'sales6.essential@gmail.com',
     'phone': '+91 7316917216',
@@ -240,10 +233,10 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
         endpoint += '&endDate=${Uri.encodeComponent(event.endDate!)}';
       }
 
-      // Concurrently fetch call logs and agent registry in parallel
+      // Concurrently fetch call logs and agent registry in parallel to stay synced with backend
       final List<Future<dynamic>> parallelTasks = [
         ApiClient().get(endpoint),
-        if (state.salesAgents.isEmpty) ApiClient().get('/calls/agents'),
+        ApiClient().get('/calls/agents'),
       ];
 
       final results = await Future.wait(parallelTasks);
@@ -254,8 +247,9 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
           final agentRes = results[1];
           if (agentRes.statusCode == 200) {
             final agentBody = jsonDecode(agentRes.body);
-            if (agentBody['success'] == true && agentBody['agents'] != null && (agentBody['agents'] as List).isNotEmpty) {
-              agents = agentBody['agents'] as List<dynamic>;
+            if (agentBody['success'] == true && agentBody['agents'] != null) {
+              final List<dynamic> fetchedAgents = agentBody['agents'] as List<dynamic>;
+              agents = fetchedAgents.where((a) => a['myoperator'] != false).toList();
             }
           }
         } catch (_) {}
@@ -407,10 +401,10 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
         'callLogId': event.callLogId,
         'customerPhone': event.customerPhone,
         'userDisposition': event.userDisposition,
-        'followUpDate': event.followUpDate?.toIso8601String(),
+        'followUpDate': event.followUpDate?.toUtc().toIso8601String(),
         'followUpNote': event.followUpNote,
         'notes': event.notes,
-        'taskReminderDate': event.taskReminderDate?.toIso8601String(),
+        'taskReminderDate': event.taskReminderDate?.toUtc().toIso8601String(),
         'taskReminderTitle': event.taskReminderTitle,
         'taskReminderNote': event.taskReminderNote,
       });
