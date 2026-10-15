@@ -2270,51 +2270,50 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
-  Widget _buildMobileProfileTabs(
+  Widget _buildModernTabBar(
     List<Map<String, dynamic>> tabs,
     int activeTabIdx,
   ) {
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.015),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: tabs.asMap().entries.map((entry) {
             final idx = entry.key;
             final tab = entry.value;
             final isSelected = activeTabIdx == idx;
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 3),
               child: InkWell(
                 onTap: () => setState(() => _activeTab = idx),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected ? AppTheme.accentColor : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    color: isSelected ? AppTheme.accentColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: AppTheme.accentColor.withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: AppTheme.accentColor.withOpacity(0.2),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ]
                         : null,
@@ -2324,21 +2323,16 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                     children: [
                       Icon(
                         tab['icon'] as IconData,
-                        size: 16,
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF6B7280),
+                        size: 15,
+                        color: isSelected ? Colors.white : const Color(0xFF64748B),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 7),
                       Text(
                         tab['label'] as String,
                         style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.w800 : FontWeight.w600,
-                          color: isSelected
-                              ? Colors.white
-                              : const Color(0xFF4B5563),
+                          fontSize: 12.5,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                          color: isSelected ? Colors.white : const Color(0xFF475569),
                         ),
                       ),
                     ],
@@ -2352,7 +2346,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     );
   }
 
-  @override
   Widget build(BuildContext context) {
     return BlocConsumer<LeadsBloc, LeadsState>(
       listener: (context, state) {
@@ -2473,61 +2466,56 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                   )
                 : SingleChildScrollView(
                     padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-                      vertical: isMobile ? 20 : 32,
+                      horizontal: isMobile ? 12 : 20,
+                      vertical: isMobile ? 12 : 16,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Back Button Row
+                        // Compact Breadcrumbs
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
+                            horizontal: 12,
+                            vertical: 7,
                           ),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.015),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   onPressed: () => Navigator.pop(context),
                                   icon: const Icon(
                                     Icons.arrow_back_ios_new_rounded,
-                                    size: 14,
+                                    size: 13,
                                     color: Color(0xFF6B7280),
                                   ),
                                   constraints: const BoxConstraints(),
                                   padding: EdgeInsets.zero,
-                                  splashRadius: 20,
+                                  splashRadius: 18,
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 10),
                                 if (!isMobile) ...[
                                   Text(
                                     'Admin Portal',
                                     style: GoogleFonts.outfit(
-                                      fontSize: 13,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w500,
                                       color: const Color(0xFF9CA3AF),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   const Icon(
                                     Icons.chevron_right_rounded,
-                                    size: 16,
+                                    size: 14,
                                     color: Color(0xFF9CA3AF),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                 ],
                                 GestureDetector(
                                   onTap: () => Navigator.pop(context),
@@ -2536,34 +2524,50 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                     child: Text(
                                       'Leads',
                                       style: GoogleFonts.outfit(
-                                        fontSize: 13,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                         color: AppTheme.accentColor,
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 const Icon(
                                   Icons.chevron_right_rounded,
-                                  size: 16,
+                                  size: 14,
                                   color: Color(0xFF9CA3AF),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  activeLead['name'] ?? '',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF1F2937),
+                                const SizedBox(width: 6),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: isMobile ? 180 : 350),
+                                  child: Text(
+                                    activeLead['name'] ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1F2937),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
+
+                        // Persistent Hero Header Section (Always Visible Across All Tabs)
+                        _FlatHeaderSection(
+                          lead: activeLead,
+                          isSales: AuthService().isSales,
+                          onConvertDealer: _showConvertDealerDialog,
+                          onRejectKyc: _showRejectDialog,
+                          onToggleBlock: _toggleBlockLead,
+                          onEdit: _editLead,
+                          onDelete: _deleteLead,
+                          onReassign: _showReassignLeadDialog,
+                        ),
+                        const SizedBox(height: 12),
 
                         // TAB CONTENT & RIGHT SIDEBAR
                         Builder(
@@ -2583,17 +2587,6 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          _FlatHeaderSection(
-                                            lead: activeLead,
-                                            isSales: AuthService().isSales,
-                                            onConvertDealer: _showConvertDealerDialog,
-                                            onRejectKyc: _showRejectDialog,
-                                            onToggleBlock: _toggleBlockLead,
-                                            onEdit: _editLead,
-                                            onDelete: _deleteLead,
-                                            onReassign: _showReassignLeadDialog,
-                                          ),
-                                          const SizedBox(height: 24),
                                           LayoutBuilder(
                                             builder: (context, constraints) {
                                               if (constraints.maxWidth >= 720) {
@@ -2697,8 +2690,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                         key: const ValueKey('notes'),
                                         children: [
                                           if (leadId != null)
-                                            SelectionContainer.disabled(
-                                              child: UserStatusNotesWidget(
+                                            UserStatusNotesWidget(
                                                 userId: leadId,
                                                 initialStatus:
                                                     activeLead['status'] ??
@@ -2734,10 +2726,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                             'notePriority':
                                                                 notePriority,
                                                           },
-                                                        ),
+                                            ),
                                                       );
                                                     },
-                                              ),
                                             ),
                                         ],
                                       )
@@ -2759,33 +2750,12 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                     : const SizedBox.shrink(),
                             );
 
-                            final bool useStackedTabs = isMobile || isTablet || MediaQuery.of(context).size.width < 1100;
-
-                            if (useStackedTabs) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildMobileProfileTabs(tabs, safeIdx),
-                                  const SizedBox(height: 20),
-                                  tabContent,
-                                ],
-                              );
-                            }
-
-                            return Row(
+                            return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(child: tabContent),
-                                const SizedBox(width: 24),
-                                SizedBox(
-                                  width: 260,
-                                  child: _buildProfileSidebarTabs(
-                                    tabs: tabs,
-                                    activeTabIdx: safeIdx,
-                                    lead: activeLead,
-                                    salesAgents: state.salesAgents,
-                                  ),
-                                ),
+                                _buildModernTabBar(tabs, safeIdx),
+                                const SizedBox(height: 12),
+                                tabContent,
                               ],
                             );
                           },

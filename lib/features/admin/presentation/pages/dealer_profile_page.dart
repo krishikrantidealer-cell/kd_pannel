@@ -1467,21 +1467,64 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   ),
                 )
               : SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 16 : (isTablet ? 24 : 40),
-                    vertical: isMobile ? 20 : 32,
-                  ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 20,
+                      vertical: isMobile ? 12 : 16,
+                    ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 1. BACK HEADER
+                      // 1. BACK HEADER
                       _buildBreadcrumbs(context, isMobile, currentDealer.name),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 10),
+
+                      // 2. PERSISTENT HERO CARD (Always Visible Across All Tabs)
+                      _DealerHeroCard(
+                        dealer: currentDealer,
+                        salesAgents: salesAgents,
+                        onToggleBlock: _toggleBlockDealer,
+                        onEdit: _editDealer,
+                        onDelete: _deleteDealer,
+                        onReassign: _showReassignDealerDialog,
+                        onCreateOrder: () async {
+                          AnalyticsService().logEvent(
+                            'initiate_order_creation',
+                            properties: {
+                              'dealerId': currentDealer.id,
+                              'dealerName': currentDealer.name,
+                              'details':
+                                  'Started creating a new order for ${currentDealer.name}',
+                            },
+                          );
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CreateOrderPage(dealer: currentDealer),
+                            ),
+                          );
+                          if (result == true && mounted) {
+                            if (currentDealer.id != null) {
+                              context.read<DealersBloc>().add(
+                                FetchDealerDetailsEvent(currentDealer.id!),
+                              );
+                              context.read<DealersBloc>().add(
+                                FetchDealerOrdersEvent(currentDealer.id!),
+                              );
+                            }
+                            context.read<OrdersBloc>().add(
+                              const FetchOrdersEvent(),
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
 
                       // 2. TAB CONTENT & RIGHT SIDEBAR
                       Builder(
                         builder: (context) {
-                          final tabs = _getProfileTabs();
+                          final tabs = _getProfileTabs(orders.length);
                           final safeIdx =
                               (_activeTab >= 0 && _activeTab < tabs.length)
                               ? _activeTab
@@ -1496,54 +1539,14 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        _DealerHeroCard(
-                                          dealer: currentDealer,
-                                          salesAgents: salesAgents,
-                                          onToggleBlock: _toggleBlockDealer,
-                                          onEdit: _editDealer,
-                                          onDelete: _deleteDealer,
-                                          onReassign: _showReassignDealerDialog,
-                                          onCreateOrder: () async {
-                                            AnalyticsService().logEvent(
-                                              'initiate_order_creation',
-                                              properties: {
-                                                'dealerId': currentDealer.id,
-                                                'dealerName': currentDealer.name,
-                                                'details':
-                                                    'Started creating a new order for ${currentDealer.name}',
-                                              },
-                                            );
-                                            final result = await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    CreateOrderPage(dealer: currentDealer),
-                                              ),
-                                            );
-                                            if (result == true && mounted) {
-                                              if (currentDealer.id != null) {
-                                                context.read<DealersBloc>().add(
-                                                  FetchDealerDetailsEvent(currentDealer.id!),
-                                                );
-                                                context.read<DealersBloc>().add(
-                                                  FetchDealerOrdersEvent(currentDealer.id!),
-                                                );
-                                              }
-                                              context.read<OrdersBloc>().add(
-                                                const FetchOrdersEvent(),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                        const SizedBox(height: 24),
                                         _StatsCardsSection(
                                           dealer: currentDealer,
                                           orders: orders,
                                         ),
-                                        const SizedBox(height: 24),
+                                        const SizedBox(height: 14),
                                         LayoutBuilder(
                                           builder: (context, constraints) {
-                                            if (constraints.maxWidth >= 720) {
+                                            if (constraints.maxWidth >= 760) {
                                               return IntrinsicHeight(
                                                 child: Row(
                                                   crossAxisAlignment:
@@ -1557,7 +1560,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                         onAssignAgent: _assignAgent,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 24),
+                                                    const SizedBox(width: 14),
                                                     Expanded(
                                                       flex: 1,
                                                       child: _DealerKycDocumentsCard(
@@ -1579,7 +1582,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                                     currentAgentId: _agentId,
                                                     onAssignAgent: _assignAgent,
                                                   ),
-                                                  const SizedBox(height: 24),
+                                                   const SizedBox(height: 14),
                                                   _DealerKycDocumentsCard(
                                                     dealer: currentDealer,
                                                     onViewDocument: _launchUrl,
@@ -1728,36 +1731,14 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                       : const SizedBox.shrink(),
                           );
 
-                          final bool useStackedTabs = isMobile || isTablet || MediaQuery.of(context).size.width < 1100;
-
-                          if (useStackedTabs) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildMobileProfileTabs(tabs, safeIdx),
-                                const SizedBox(height: 20),
+                                _buildModernTabBar(tabs, safeIdx),
+                                const SizedBox(height: 12),
                                 tabContent,
                               ],
                             );
-                          }
-
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: tabContent),
-                              const SizedBox(width: 24),
-                              SizedBox(
-                                width: 260,
-                                child: _buildProfileSidebarTabs(
-                                  tabs: tabs,
-                                  activeTabIdx: safeIdx,
-                                  dealer: currentDealer,
-                                  salesAgents: salesAgents,
-                                  ordersCount: orders.length,
-                                ),
-                              ),
-                            ],
-                          );
                         },
                       ),
                     ],
@@ -1768,14 +1749,14 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     );
   }
 
-  List<Map<String, dynamic>> _getProfileTabs() {
+  List<Map<String, dynamic>> _getProfileTabs(int ordersCount) {
     return [
       {
         'icon': Icons.dashboard_outlined,
         'label': 'Overview',
         'key': 'overview',
       },
-      {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders'},
+      {'icon': Icons.shopping_bag_outlined, 'label': 'Orders', 'key': 'orders', 'count': ordersCount},
       {
         'icon': Icons.analytics_outlined,
         'label': 'Activities',
@@ -2009,52 +1990,51 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     );
   }
 
-  Widget _buildMobileProfileTabs(
+  Widget _buildModernTabBar(
     List<Map<String, dynamic>> tabs,
     int activeTabIdx,
   ) {
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.015),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: tabs.asMap().entries.map((entry) {
             final idx = entry.key;
             final tab = entry.value;
             final isSelected = activeTabIdx == idx;
+            final count = tab['count'] as int?;
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 3),
               child: InkWell(
                 onTap: () => setState(() => _activeTab = idx),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.primaryColor
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: AppTheme.primaryColor.withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: AppTheme.primaryColor.withOpacity(0.2),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ]
                         : null,
@@ -2064,23 +2044,36 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                     children: [
                       Icon(
                         tab['icon'] as IconData,
-                        size: 16,
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF6B7280),
+                        size: 15,
+                        color: isSelected ? Colors.white : const Color(0xFF64748B),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 7),
                       Text(
                         tab['label'] as String,
                         style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.w800 : FontWeight.w600,
-                          color: isSelected
-                              ? Colors.white
-                              : const Color(0xFF4B5563),
+                          fontSize: 12.5,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                          color: isSelected ? Colors.white : const Color(0xFF475569),
                         ),
                       ),
+                      if (count != null && count > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white.withOpacity(0.25) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2098,7 +2091,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     String profileName,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -2211,13 +2204,13 @@ class _DealerHeroCard extends StatelessWidget {
         : 'J';
 
     final Widget avatar = Container(
-      width: isMobile ? 48 : 56,
-      height: isMobile ? 48 : 56,
+      width: isMobile ? 40 : 46,
+      height: isMobile ? 40 : 46,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
             AppTheme.primaryColor,
-            AppTheme.primaryColor.withOpacity(0.8),
+            AppTheme.primaryColor.withOpacity(0.85),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2225,9 +2218,9 @@ class _DealerHeroCard extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: AppTheme.primaryColor.withOpacity(0.18),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -2235,7 +2228,7 @@ class _DealerHeroCard extends StatelessWidget {
         child: Text(
           initial,
           style: GoogleFonts.outfit(
-            fontSize: isMobile ? 20 : 24,
+            fontSize: isMobile ? 17 : 20,
             fontWeight: FontWeight.w900,
             color: Colors.white,
           ),
@@ -2248,7 +2241,7 @@ class _DealerHeroCard extends StatelessWidget {
         final bool isCompact = isMobile || constraints.maxWidth < 950;
         final decoration = BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
@@ -2262,7 +2255,7 @@ class _DealerHeroCard extends StatelessWidget {
         if (isCompact) {
           return Container(
             width: double.infinity,
-            padding: EdgeInsets.all(isMobile ? 14 : 18),
+            padding: EdgeInsets.all(isMobile ? 12 : 14),
             decoration: decoration,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2345,7 +2338,7 @@ class _DealerHeroCard extends StatelessWidget {
 
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           decoration: decoration,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
