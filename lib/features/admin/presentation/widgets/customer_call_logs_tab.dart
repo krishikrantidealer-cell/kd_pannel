@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
-import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/call_disposition_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
@@ -120,25 +119,6 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
         );
       }
     }
-  }
-
-  void _triggerCall() {
-    final cleanPhone = normalizePhone(widget.phone ?? '');
-    if (cleanPhone.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invalid phone number for calling: ${widget.phone}', style: GoogleFonts.outfit()),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    TelephonyHelper.initiateCall(
-      context,
-      customerPhone: cleanPhone,
-      customerName: widget.customerName,
-    );
   }
 
   void _openDispositionDialog(Map<String, dynamic> callLog) {
@@ -368,22 +348,6 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                   ],
                 ),
               ),
-              // Make Call CTA
-              ElevatedButton.icon(
-                onPressed: cleanPhone.isNotEmpty ? _triggerCall : null,
-                icon: const Icon(Icons.call_rounded, size: 16, color: Colors.white),
-                label: Text(
-                  'Call Now',
-                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF008069),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(width: 8),
               IconButton(
                 onPressed: _fetchCallLogs,
                 tooltip: 'Refresh Call Records',
@@ -925,21 +889,6 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
             ),
-            const SizedBox(height: 18),
-            if (cleanPhone.isNotEmpty)
-              ElevatedButton.icon(
-                onPressed: _triggerCall,
-                icon: const Icon(Icons.call_rounded, size: 16, color: Colors.white),
-                label: Text(
-                  'Make First Call',
-                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF008069),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
           ],
         ),
       ),

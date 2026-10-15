@@ -3358,20 +3358,6 @@ class _FlatHeaderSection extends StatelessWidget {
       children: [
         if (cleanPhone.isNotEmpty)
           _ActionButton(
-            icon: Icons.phone_in_talk_rounded,
-            label: 'Call',
-            color: const Color(0xFF008069),
-            isSolid: true,
-            onTap: () {
-              TelephonyHelper.initiateCall(
-                context,
-                customerPhone: cleanPhone,
-                customerName: lead['name'],
-              );
-            },
-          ),
-        if (cleanPhone.isNotEmpty)
-          _ActionButton(
             icon: FontAwesomeIcons.whatsapp,
             label: 'WhatsApp',
             color: const Color(0xFF25D366),

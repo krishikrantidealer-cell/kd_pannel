@@ -1383,7 +1383,16 @@ class _LeadsPageState extends State<LeadsPage> {
                                   onEditLead: _editLead,
                                   onDeleteLead: _deleteLead,
                                   onInspectLead: (lead) {
-                                    setState(() => _inspectingLead = lead);
+                                    final isVerified =
+                                        lead['kycStatus'] == 'verified';
+                                    final route = isVerified
+                                        ? '/dealers/profile'
+                                        : '/leads/profile';
+                                    Navigator.pushNamed(
+                                      context,
+                                      route,
+                                      arguments: lead,
+                                    );
                                   },
                                 ),
                               ),
@@ -2610,15 +2619,16 @@ class _LeadsTableState extends State<_LeadsTable> {
               isAllSelected: isAllSelected,
               onToggleSelection: () => _toggleSelection(leadId),
               onTap: () {
-                if (widget.onInspectLead != null) {
-                  widget.onInspectLead!(lead);
-                } else {
-                  Navigator.pushNamed(
-                    context,
-                    '/leads/profile',
-                    arguments: lead,
-                  );
-                }
+                final isVerified =
+                    lead['kycStatus'] == 'verified';
+                final route = isVerified
+                    ? '/dealers/profile'
+                    : '/leads/profile';
+                Navigator.pushNamed(
+                  context,
+                  route,
+                  arguments: lead,
+                );
               },
               salesAgents: widget.salesAgents,
               onAssignAgent: widget.onAssignAgent,
@@ -2863,20 +2873,6 @@ class _LeadRowState extends State<_LeadRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (phone.isNotEmpty)
-                          Opacity(
-                            opacity: isHovered ? 1.0 : 0.0,
-                            child: IgnorePointer(
-                              ignoring: !isHovered,
-                              child: TelephonyCallButton(
-                                customerPhone: phone,
-                                customerName: name,
-                                variant: TelephonyButtonVariant.iconOnly,
-                                color: AppTheme.primaryColor,
-                                iconSize: 13,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),

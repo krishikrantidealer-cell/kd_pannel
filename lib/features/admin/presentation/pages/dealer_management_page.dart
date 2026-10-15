@@ -3136,20 +3136,6 @@ class _DealerRowState extends State<_DealerRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (phone.isNotEmpty)
-                          Opacity(
-                            opacity: isHovered ? 1.0 : 0.0,
-                            child: IgnorePointer(
-                              ignoring: !isHovered,
-                              child: TelephonyCallButton(
-                                customerPhone: phone,
-                                customerName: displayName,
-                                variant: TelephonyButtonVariant.iconOnly,
-                                color: AppTheme.primaryColor,
-                                iconSize: 13,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),

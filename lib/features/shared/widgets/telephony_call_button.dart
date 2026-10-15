@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum TelephonyButtonVariant {
   filled,
@@ -32,7 +29,7 @@ class TelephonyHelper {
     required String customerPhone,
     String? customerName,
     String callMode = 'click2call',
-  }) {
+  }) async {
     final clean = sanitizePhone(customerPhone);
     final targetContext = (context != null && context.mounted)
         ? context
@@ -50,13 +47,12 @@ class TelephonyHelper {
       return;
     }
 
-    if (targetContext != null) {
-      targetContext.read<CallLogsBloc>().add(TriggerOutboundCallEvent(
-        clean,
-        customerName: customerName,
-        callMode: 'click2call',
-      ));
-    }
+    final Uri telUri = Uri.parse('tel:$clean');
+    try {
+      if (await canLaunchUrl(telUri)) {
+        await launchUrl(telUri);
+      }
+    } catch (_) {}
   }
 
   static void showDialpad(BuildContext context) {

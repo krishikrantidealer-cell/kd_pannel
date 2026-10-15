@@ -2696,20 +2696,6 @@ class _DealerHeroCard extends StatelessWidget {
       children: [
         if (dealer.phone.isNotEmpty)
           _ActionButton(
-            icon: Icons.phone_in_talk_rounded,
-            label: 'Call',
-            color: const Color(0xFF008069),
-            isSolid: true,
-            onTap: () {
-              TelephonyHelper.initiateCall(
-                context,
-                customerPhone: dealer.phone,
-                customerName: dealer.name,
-              );
-            },
-          ),
-        if (dealer.phone.isNotEmpty)
-          _ActionButton(
             icon: FontAwesomeIcons.whatsapp,
             label: 'WhatsApp',
             color: const Color(0xFF25D366),
