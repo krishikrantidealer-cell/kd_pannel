@@ -18,6 +18,9 @@ import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
 import 'package:kd_pannel/features/shared/widgets/user_status_notes_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_timeline_widget.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/customer_call_logs_tab.dart';
+import 'package:kd_pannel/features/admin/presentation/widgets/call_disposition_dialog.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_activity_audit_tab.dart';
 import 'package:kd_pannel/util/dealers.dart';
@@ -495,6 +498,41 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _openAcwDialog(Dealer dealer) {
+    final phone = dealer.phone.trim();
+    final name = dealer.name.isNotEmpty ? dealer.name : 'Dealer';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => CallDispositionDialog(
+        callLogId: 'new',
+        customerPhone: phone,
+        customerName: name,
+        initialDisposition: 'Interested',
+        onSave: (disposition, followUpDate, followUpNote, notes, {taskReminderDate, taskReminderTitle, taskReminderNote}) {
+          context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
+            callLogId: 'new',
+            customerPhone: phone,
+            userDisposition: disposition,
+            followUpDate: followUpDate,
+            followUpNote: followUpNote,
+            notes: notes,
+            taskReminderDate: taskReminderDate,
+            taskReminderTitle: taskReminderTitle,
+            taskReminderNote: taskReminderNote,
+          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('ACW / Task Reminder saved successfully'),
+              backgroundColor: Color(0xFF008069),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _showReassignDealerDialog() {
@@ -1478,7 +1516,41 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       _buildBreadcrumbs(context, isMobile, currentDealer.name),
                       const SizedBox(height: 10),
 
-                      // 2. TAB CONTENT & RIGHT SIDEBAR
+                      // 2. PERSISTENT HERO CARD (Always Visible Across All Tabs)
+                      _DealerHeroCard(
+                        dealer: currentDealer,
+                        salesAgents: salesAgents,
+                        onToggleBlock: _toggleBlockDealer,
+                        onEdit: _editDealer,
+                        onDelete: _deleteDealer,
+                        onReassign: _showReassignDealerDialog,
+                        onOpenAcw: () => _openAcwDialog(currentDealer),
+                        onCreateOrder: () async {
+                          AnalyticsService().logEvent(
+                            'initiate_order_creation',
+                            properties: {
+                              'dealer_id': currentDealer.id,
+                              'dealer_name': currentDealer.name,
+                            },
+                          );
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CreateOrderPage(dealer: currentDealer),
+                            ),
+                          );
+                          if (result == true) {
+                            if (currentDealer.id != null) {
+                              context.read<DealersBloc>().add(
+                                FetchDealerOrdersEvent(currentDealer.id!),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 3. TAB CONTENT & RIGHT SIDEBAR
                       Expanded(
                         child: Builder(
                         builder: (context) {
@@ -1832,11 +1904,6 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
       assignedAgentName = dealer.agent;
     }
 
-    final initial = dealerName.isNotEmpty ? dealerName.substring(0, 1).toUpperCase() : 'D';
-    final Color kycColor = kycStatus == 'verified'
-        ? const Color(0xFF10B981)
-        : (kycStatus == 'rejected' ? const Color(0xFFEF4444) : const Color(0xFFF59E0B));
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1855,121 +1922,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 1. Dealer Mini Profile Header
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.85)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            dealerName,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                          ),
-                        ),
-                        if (kycStatus == 'verified') ...[
-                          const SizedBox(width: 4),
-                          const Icon(Icons.verified_rounded, size: 15, color: Color(0xFF10B981)),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        if (dealer.isBlocked)
-                          _buildStatusBadge('BLOCKED', const Color(0xFFEF4444)),
-                        _buildStatusBadge('GST: ' + dealer.gstStatus.toUpperCase(), const Color(0xFF3B82F6)),
-                        _buildStatusBadge('KYC: ' + kycStatus.toUpperCase(), kycColor),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // 2. Direct Contact & Outbound CTAs
-          if (cleanPhone.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      cleanPhone,
-                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF008069)),
-                    ),
-                  ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: cleanPhone));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                              const SizedBox(width: 8),
-                              Text('Phone number ' + cleanPhone + ' copied!'),
-                            ],
-                          ),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: const Color(0xFF008069),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    child: const Tooltip(
-                      message: 'Copy phone number',
-                      child: Padding(
-                        padding: EdgeInsets.all(2.0),
-                        child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
-          const SizedBox(height: 12),
-
-          // 3. Navigation Sections (Tabs on the side of the screen)
+          // Navigation Sections (Tabs on the side of the screen)
           Row(
             children: [
               Container(
@@ -2320,6 +2273,7 @@ class _DealerHeroCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onCreateOrder;
   final VoidCallback? onReassign;
+  final VoidCallback? onOpenAcw;
 
   const _DealerHeroCard({
     required this.dealer,
@@ -2329,6 +2283,7 @@ class _DealerHeroCard extends StatelessWidget {
     required this.onDelete,
     required this.onCreateOrder,
     this.onReassign,
+    this.onOpenAcw,
   });
 
   @override

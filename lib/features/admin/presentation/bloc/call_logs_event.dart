@@ -61,21 +61,39 @@ class DismissDispositionModalEvent extends CallLogsEvent {
 
 class SaveCallDispositionEvent extends CallLogsEvent {
   final String callLogId;
+  final String? customerPhone;
   final String userDisposition;
   final DateTime? followUpDate;
   final String? followUpNote;
   final String? notes;
+  final DateTime? taskReminderDate;
+  final String? taskReminderTitle;
+  final String? taskReminderNote;
 
   const SaveCallDispositionEvent({
     required this.callLogId,
+    this.customerPhone,
     required this.userDisposition,
     this.followUpDate,
     this.followUpNote,
     this.notes,
+    this.taskReminderDate,
+    this.taskReminderTitle,
+    this.taskReminderNote,
   });
 
   @override
-  List<Object?> get props => [callLogId, userDisposition, followUpDate, followUpNote, notes];
+  List<Object?> get props => [
+        callLogId,
+        customerPhone,
+        userDisposition,
+        followUpDate,
+        followUpNote,
+        notes,
+        taskReminderDate,
+        taskReminderTitle,
+        taskReminderNote,
+      ];
 }
 
 class WebSocketCallUpdateReceivedEvent extends CallLogsEvent {

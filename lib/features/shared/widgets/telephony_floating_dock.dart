@@ -164,13 +164,16 @@ class _TelephonyFloatingDockState extends State<TelephonyFloatingDock> with Sing
         callLogId: callLogId,
         customerPhone: state.activeCustomerPhone ?? '',
         customerName: name,
-        onSave: (disposition, followUpDate, followUpNote, notes) {
+        onSave: (disposition, followUpDate, followUpNote, notes, {taskReminderDate, taskReminderTitle, taskReminderNote}) {
           context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
             callLogId: callLogId,
             userDisposition: disposition,
             followUpDate: followUpDate,
             followUpNote: followUpNote,
             notes: notes,
+            taskReminderDate: taskReminderDate,
+            taskReminderTitle: taskReminderTitle,
+            taskReminderNote: taskReminderNote,
           ));
         },
       ),

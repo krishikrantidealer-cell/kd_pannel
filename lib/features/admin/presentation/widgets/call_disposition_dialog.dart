@@ -8,6 +8,10 @@ class AcwDraft {
   TimeOfDay? followUpTime;
   String followUpNote;
   String notes;
+  DateTime? taskReminderDate;
+  TimeOfDay? taskReminderTime;
+  String taskReminderTitle;
+  String taskReminderNote;
 
   AcwDraft({
     this.disposition = 'Interested',
@@ -15,6 +19,10 @@ class AcwDraft {
     this.followUpTime,
     this.followUpNote = '',
     this.notes = '',
+    this.taskReminderDate,
+    this.taskReminderTime,
+    this.taskReminderTitle = '',
+    this.taskReminderNote = '',
   });
 }
 
@@ -26,7 +34,18 @@ class CallDispositionDialog extends StatefulWidget {
   final DateTime? initialFollowUpDate;
   final String? initialFollowUpNote;
   final String? initialNotes;
-  final Function(String disposition, DateTime? followUpDate, String? followUpNote, String? notes) onSave;
+  final DateTime? initialTaskReminderDate;
+  final String? initialTaskReminderTitle;
+  final String? initialTaskReminderNote;
+  final Function(
+    String disposition,
+    DateTime? followUpDate,
+    String? followUpNote,
+    String? notes, {
+    DateTime? taskReminderDate,
+    String? taskReminderTitle,
+    String? taskReminderNote,
+  }) onSave;
   final VoidCallback? onOpenEstimate;
   final VoidCallback? onOpenWhatsApp;
 
@@ -39,6 +58,9 @@ class CallDispositionDialog extends StatefulWidget {
     this.initialFollowUpDate,
     this.initialFollowUpNote,
     this.initialNotes,
+    this.initialTaskReminderDate,
+    this.initialTaskReminderTitle,
+    this.initialTaskReminderNote,
     required this.onSave,
     this.onOpenEstimate,
     this.onOpenWhatsApp,
@@ -62,8 +84,13 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
   String _selectedDisposition = 'Interested';
   DateTime? _selectedFollowUpDate;
   TimeOfDay? _selectedFollowUpTime;
+  DateTime? _selectedTaskReminderDate;
+  TimeOfDay? _selectedTaskReminderTime;
+
   late final TextEditingController _notesController;
   late final TextEditingController _followUpNoteController;
+  late final TextEditingController _taskReminderTitleController;
+  late final TextEditingController _taskReminderNoteController;
 
   @override
   void initState() {
@@ -83,22 +110,39 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
       _selectedFollowUpTime = draft?.followUpTime;
     }
 
+    _selectedTaskReminderDate = draft?.taskReminderDate ?? widget.initialTaskReminderDate;
+    if (_selectedTaskReminderDate != null) {
+      _selectedTaskReminderTime = draft?.taskReminderTime ?? TimeOfDay(hour: _selectedTaskReminderDate!.hour, minute: _selectedTaskReminderDate!.minute);
+    } else {
+      _selectedTaskReminderTime = draft?.taskReminderTime;
+    }
+
     final initNotes = draft?.notes ?? widget.initialNotes ?? '';
     final initFollowNote = draft?.followUpNote ?? widget.initialFollowUpNote ?? '';
+    final initTaskTitle = draft?.taskReminderTitle ?? widget.initialTaskReminderTitle ?? '';
+    final initTaskNote = draft?.taskReminderNote ?? widget.initialTaskReminderNote ?? '';
 
     _notesController = TextEditingController(text: initNotes);
     _followUpNoteController = TextEditingController(text: initFollowNote);
+    _taskReminderTitleController = TextEditingController(text: initTaskTitle);
+    _taskReminderNoteController = TextEditingController(text: initTaskNote);
 
     _notesController.addListener(_persistDraft);
     _followUpNoteController.addListener(_persistDraft);
+    _taskReminderTitleController.addListener(_persistDraft);
+    _taskReminderNoteController.addListener(_persistDraft);
   }
 
   @override
   void dispose() {
     _notesController.removeListener(_persistDraft);
     _followUpNoteController.removeListener(_persistDraft);
+    _taskReminderTitleController.removeListener(_persistDraft);
+    _taskReminderNoteController.removeListener(_persistDraft);
     _notesController.dispose();
     _followUpNoteController.dispose();
+    _taskReminderTitleController.dispose();
+    _taskReminderNoteController.dispose();
     super.dispose();
   }
 
@@ -109,6 +153,10 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
       followUpTime: _selectedFollowUpTime,
       followUpNote: _followUpNoteController.text,
       notes: _notesController.text,
+      taskReminderDate: _selectedTaskReminderDate,
+      taskReminderTime: _selectedTaskReminderTime,
+      taskReminderTitle: _taskReminderTitleController.text,
+      taskReminderNote: _taskReminderNoteController.text,
     );
   }
 
@@ -184,6 +232,91 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
     }
   }
 
+  Future<void> _pickTaskReminderDate() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedTaskReminderDate ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+    );
+
+    if (pickedDate != null) {
+      if (!mounted) return;
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: _selectedTaskReminderTime ?? TimeOfDay.now(),
+      );
+
+      setState(() {
+        _selectedTaskReminderDate = pickedDate;
+        _selectedTaskReminderTime = pickedTime ?? TimeOfDay.now();
+      });
+      _persistDraft();
+    }
+  }
+
+  void _applyTaskPreset(Duration duration, {String? defaultTitle}) {
+    final target = DateTime.now().add(duration);
+    setState(() {
+      _selectedTaskReminderDate = target;
+      _selectedTaskReminderTime = TimeOfDay(hour: target.hour, minute: target.minute);
+      if (_taskReminderTitleController.text.trim().isEmpty && defaultTitle != null) {
+        _taskReminderTitleController.text = defaultTitle;
+      }
+    });
+    _persistDraft();
+  }
+
+  void _applyTomorrowPreset({int hour = 10, int minute = 0, String? defaultTitle}) {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1, hour, minute);
+    setState(() {
+      _selectedTaskReminderDate = tomorrow;
+      _selectedTaskReminderTime = TimeOfDay(hour: hour, minute: minute);
+      if (_taskReminderTitleController.text.trim().isEmpty && defaultTitle != null) {
+        _taskReminderTitleController.text = defaultTitle;
+      }
+    });
+    _persistDraft();
+  }
+
+  Widget _buildTaskPresetChip(String label, VoidCallback onTap, {bool isCustom = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isCustom ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isCustom ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isCustom ? Icons.edit_calendar_rounded : Icons.schedule_rounded,
+              size: 13,
+              color: isCustom ? const Color(0xFF2563EB) : const Color(0xFF475569),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isCustom ? const Color(0xFF1D4ED8) : const Color(0xFF334155),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _submit() {
     DateTime? combinedDate;
     if (_selectedFollowUpDate != null && _selectedFollowUpTime != null) {
@@ -196,6 +329,17 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
       );
     }
 
+    DateTime? combinedTaskReminder;
+    if (_selectedTaskReminderDate != null && _selectedTaskReminderTime != null) {
+      combinedTaskReminder = DateTime(
+        _selectedTaskReminderDate!.year,
+        _selectedTaskReminderDate!.month,
+        _selectedTaskReminderDate!.day,
+        _selectedTaskReminderTime!.hour,
+        _selectedTaskReminderTime!.minute,
+      );
+    }
+
     // Clear draft upon successful save
     _draftCache.remove(_draftKey);
 
@@ -204,6 +348,9 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
       combinedDate,
       _followUpNoteController.text.trim().isNotEmpty ? _followUpNoteController.text.trim() : null,
       _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+      taskReminderDate: combinedTaskReminder,
+      taskReminderTitle: _taskReminderTitleController.text.trim().isNotEmpty ? _taskReminderTitleController.text.trim() : null,
+      taskReminderNote: _taskReminderNoteController.text.trim().isNotEmpty ? _taskReminderNoteController.text.trim() : null,
     );
     Navigator.of(context).pop();
   }
@@ -494,6 +641,153 @@ class _CallDispositionDialogState extends State<CallDispositionDialog> {
                       ),
                       const SizedBox(height: 16),
                     ],
+
+                    // ── Task Reminder & 2-Tier Automated Notification Card ──
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _selectedTaskReminderDate != null ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _selectedTaskReminderDate != null ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.alarm_add_rounded,
+                                    color: _selectedTaskReminderDate != null ? const Color(0xFF16A34A) : const Color(0xFF0284C7),
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'SCHEDULE TASK REMINDER',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                      color: _selectedTaskReminderDate != null ? const Color(0xFF15803D) : const Color(0xFF0369A1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_selectedTaskReminderDate != null)
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedTaskReminderDate = null;
+                                      _selectedTaskReminderTime = null;
+                                    });
+                                    _persistDraft();
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.close_rounded, size: 13, color: Color(0xFFEF4444)),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Clear',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFFEF4444),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Sends 2 automated notifications: 30 minutes before & at the exact task time.',
+                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(height: 10),
+                          // Quick preset chips
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildTaskPresetChip('In 30 Mins', () => _applyTaskPreset(const Duration(minutes: 30))),
+                              _buildTaskPresetChip('In 1 Hour', () => _applyTaskPreset(const Duration(hours: 1))),
+                              _buildTaskPresetChip('In 3 Hours', () => _applyTaskPreset(const Duration(hours: 3))),
+                              _buildTaskPresetChip('Tomorrow 10 AM', () => _applyTomorrowPreset(hour: 10, minute: 0)),
+                              _buildTaskPresetChip('Pick Date & Time', _pickTaskReminderDate, isCustom: true),
+                            ],
+                          ),
+                          if (_selectedTaskReminderDate != null) ...[
+                            const SizedBox(height: 10),
+                            InkWell(
+                              onTap: _pickTaskReminderDate,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFF86EFAC)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.event_available_rounded, size: 15, color: Color(0xFF16A34A)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Set for: ${DateFormat('dd MMM yyyy').format(_selectedTaskReminderDate!)} at ${_selectedTaskReminderTime?.format(context) ?? '10:00 AM'}',
+                                      style: GoogleFonts.outfit(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF15803D)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.edit_calendar_rounded, size: 13, color: Color(0xFF16A34A)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _taskReminderTitleController,
+                              style: GoogleFonts.outfit(fontSize: 12.5),
+                              decoration: InputDecoration(
+                                hintText: 'Task Title (e.g. Call back for bulk discount / Payment update)',
+                                hintStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF94A3B8)),
+                                filled: true,
+                                fillColor: Colors.white,
+                                isDense: true,
+                                prefixIcon: const Icon(Icons.title_rounded, size: 16, color: Color(0xFF64748B)),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _taskReminderNoteController,
+                              style: GoogleFonts.outfit(fontSize: 12.5),
+                              decoration: InputDecoration(
+                                hintText: 'Optional task notes or details...',
+                                hintStyle: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF94A3B8)),
+                                filled: true,
+                                fillColor: Colors.white,
+                                isDense: true,
+                                prefixIcon: const Icon(Icons.notes_rounded, size: 16, color: Color(0xFF64748B)),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // Quick Chips
                     Text(

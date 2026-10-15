@@ -135,6 +135,15 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
       } catch (_) {}
     }
 
+    final initialTaskReminderTitle = callLog['taskReminderTitle']?.toString();
+    final initialTaskReminderNote = callLog['taskReminderNote']?.toString();
+    DateTime? initialTaskReminderDate;
+    if (callLog['taskReminderDate'] != null) {
+      try {
+        initialTaskReminderDate = DateTime.tryParse(callLog['taskReminderDate'].toString())?.toLocal();
+      } catch (_) {}
+    }
+
     showDialog(
       context: context,
       builder: (dialogCtx) => CallDispositionDialog(
@@ -145,13 +154,19 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
         initialFollowUpDate: initialFollowUpDate,
         initialFollowUpNote: initialFollowUpNote,
         initialNotes: initialNotes,
-        onSave: (disposition, followUpDate, followUpNote, notes) {
+        initialTaskReminderDate: initialTaskReminderDate,
+        initialTaskReminderTitle: initialTaskReminderTitle,
+        initialTaskReminderNote: initialTaskReminderNote,
+        onSave: (disposition, followUpDate, followUpNote, notes, {taskReminderDate, taskReminderTitle, taskReminderNote}) {
           context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
             callLogId: logId,
             userDisposition: disposition,
             followUpDate: followUpDate,
             followUpNote: followUpNote,
             notes: notes,
+            taskReminderDate: taskReminderDate,
+            taskReminderTitle: taskReminderTitle,
+            taskReminderNote: taskReminderNote,
           ));
           Future.delayed(const Duration(milliseconds: 600), () {
             if (mounted) _fetchCallLogs();
@@ -568,6 +583,17 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
     }
     final followUpNote = (call['followUpNote'] ?? '').toString().trim();
 
+    // Task Reminder info
+    final taskReminderDateRaw = call['taskReminderDate'];
+    DateTime? taskReminderDate;
+    if (taskReminderDateRaw != null) {
+      try {
+        taskReminderDate = DateTime.tryParse(taskReminderDateRaw.toString())?.toLocal();
+      } catch (_) {}
+    }
+    final taskReminderTitle = (call['taskReminderTitle'] ?? '').toString().trim();
+    final taskReminderNote = (call['taskReminderNote'] ?? '').toString().trim();
+
     final Color cardBorderColor = isMissed
         ? const Color(0xFFFECDD3)
         : isOutbound
@@ -755,7 +781,7 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
           ),
 
           // Disposition & Notes section
-          if (userDisp.isNotEmpty || notes.isNotEmpty || followUpDate != null) ...[
+          if (userDisp.isNotEmpty || notes.isNotEmpty || followUpDate != null || taskReminderDate != null) ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -820,6 +846,32 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (taskReminderDate != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.notifications_active_rounded, size: 10, color: Color(0xFF1D4ED8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Task Reminder: ${DateFormat('dd MMM, hh:mm a').format(taskReminderDate)}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1D4ED8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -843,6 +895,26 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                         fontStyle: FontStyle.italic,
                         color: const Color(0xFF64748B),
                       ),
+                    ),
+                  ],
+                  if (taskReminderTitle.isNotEmpty || taskReminderNote.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.alarm_rounded, size: 13, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Task: ${taskReminderTitle.isNotEmpty ? taskReminderTitle : 'Reminder'}${taskReminderNote.isNotEmpty ? ' — $taskReminderNote' : ''}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],

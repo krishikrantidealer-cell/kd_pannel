@@ -405,10 +405,14 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     try {
       final res = await ApiClient().post('/calls/disposition', {
         'callLogId': event.callLogId,
+        'customerPhone': event.customerPhone,
         'userDisposition': event.userDisposition,
         'followUpDate': event.followUpDate?.toIso8601String(),
         'followUpNote': event.followUpNote,
         'notes': event.notes,
+        'taskReminderDate': event.taskReminderDate?.toIso8601String(),
+        'taskReminderTitle': event.taskReminderTitle,
+        'taskReminderNote': event.taskReminderNote,
       });
 
       if (res.statusCode == 200) {

@@ -696,6 +696,15 @@ class _CallLogsPageState extends State<CallLogsPage> {
       } catch (_) {}
     }
 
+    final initialTaskReminderTitle = callLog['taskReminderTitle']?.toString();
+    final initialTaskReminderNote = callLog['taskReminderNote']?.toString();
+    DateTime? initialTaskReminderDate;
+    if (callLog['taskReminderDate'] != null) {
+      try {
+        initialTaskReminderDate = DateTime.tryParse(callLog['taskReminderDate'].toString())?.toLocal();
+      } catch (_) {}
+    }
+
     showDialog(
       context: context,
       builder: (dialogCtx) => CallDispositionDialog(
@@ -706,13 +715,19 @@ class _CallLogsPageState extends State<CallLogsPage> {
         initialFollowUpDate: initialFollowUpDate,
         initialFollowUpNote: initialFollowUpNote,
         initialNotes: initialNotes,
-        onSave: (disposition, followUpDate, followUpNote, notes) {
+        initialTaskReminderDate: initialTaskReminderDate,
+        initialTaskReminderTitle: initialTaskReminderTitle,
+        initialTaskReminderNote: initialTaskReminderNote,
+        onSave: (disposition, followUpDate, followUpNote, notes, {taskReminderDate, taskReminderTitle, taskReminderNote}) {
           context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
             callLogId: logId,
             userDisposition: disposition,
             followUpDate: followUpDate,
             followUpNote: followUpNote,
             notes: notes,
+            taskReminderDate: taskReminderDate,
+            taskReminderTitle: taskReminderTitle,
+            taskReminderNote: taskReminderNote,
           ));
         },
         onOpenEstimate: () {

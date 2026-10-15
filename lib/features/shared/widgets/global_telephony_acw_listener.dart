@@ -55,13 +55,16 @@ class _GlobalTelephonyAcwListenerState extends State<GlobalTelephonyAcwListener>
           callLogId: callLogId,
           customerPhone: phone,
           customerName: state.activeCustomerName,
-          onSave: (disposition, followUpDate, followUpNote, notes) {
+          onSave: (disposition, followUpDate, followUpNote, notes, {taskReminderDate, taskReminderTitle, taskReminderNote}) {
             context.read<CallLogsBloc>().add(SaveCallDispositionEvent(
               callLogId: callLogId,
               userDisposition: disposition,
               followUpDate: followUpDate,
               followUpNote: followUpNote,
               notes: notes,
+              taskReminderDate: taskReminderDate,
+              taskReminderTitle: taskReminderTitle,
+              taskReminderNote: taskReminderNote,
             ));
           },
         ),
