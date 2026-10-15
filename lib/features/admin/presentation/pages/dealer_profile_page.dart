@@ -1731,12 +1731,33 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                       : const SizedBox.shrink(),
                           );
 
-                            return Column(
+                            final bool isMobileScreen = MediaQuery.of(context).size.width < 768;
+                            if (isMobileScreen) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildModernTabBar(tabs, safeIdx),
+                                  const SizedBox(height: 10),
+                                  tabContent,
+                                ],
+                              );
+                            }
+
+                            return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildModernTabBar(tabs, safeIdx),
-                                const SizedBox(height: 12),
-                                tabContent,
+                                Expanded(child: tabContent),
+                                const SizedBox(width: 14),
+                                SizedBox(
+                                  width: 220,
+                                  child: _buildProfileSidebarTabs(
+                                    tabs: tabs,
+                                    activeTabIdx: safeIdx,
+                                    dealer: currentDealer,
+                                    salesAgents: salesAgents,
+                                    ordersCount: orders.length,
+                                  ),
+                                ),
                               ],
                             );
                         },
@@ -1804,16 +1825,16 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     final kycStatus = (dealer.kycStatus ?? 'verified').toLowerCase();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1824,51 +1845,50 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(
                   Icons.space_dashboard_outlined,
-                  size: 14,
+                  size: 13,
                   color: AppTheme.primaryColor,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
               Text(
                 'PROFILE SECTIONS',
                 style: GoogleFonts.outfit(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
+                  letterSpacing: 0.6,
                   color: const Color(0xFF6B7280),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           ...tabs.asMap().entries.map((entry) {
             final idx = entry.key;
             final tab = entry.value;
             final isSelected = activeTabIdx == idx;
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 4),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => setState(() => _activeTab = idx),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(9),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppTheme.primaryColor
                           : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(9),
                       border: Border.all(
                         color: isSelected
                             ? AppTheme.primaryColor
@@ -1878,9 +1898,9 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: AppTheme.primaryColor.withOpacity(0.22),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
+                                color: AppTheme.primaryColor.withOpacity(0.18),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
                               ),
                             ]
                           : null,
@@ -1889,29 +1909,24 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       children: [
                         Icon(
                           tab['icon'] as IconData,
-                          size: 18,
-                          color:
-                              isSelected ? Colors.white : const Color(0xFF6B7280),
+                          size: 15,
+                          color: isSelected ? Colors.white : const Color(0xFF6B7280),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 9),
                         Expanded(
                           child: Text(
                             tab['label'] as String,
                             style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : const Color(0xFF1F2937),
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                              color: isSelected ? Colors.white : const Color(0xFF1F2937),
                             ),
                           ),
                         ),
                         if (isSelected)
                           const Icon(
                             Icons.arrow_forward_ios_rounded,
-                            size: 12,
+                            size: 10,
                             color: Colors.white,
                           ),
                       ],
@@ -1922,23 +1937,23 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             );
           }),
           const SizedBox(height: 4),
-          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+          const Divider(height: 16, color: Color(0xFFE2E8F0)),
           Text(
             'DEALER SNAPSHOT',
             style: GoogleFonts.outfit(
-              fontSize: 10,
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+              letterSpacing: 0.6,
               color: const Color(0xFF9CA3AF),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           _buildSidebarBadgeRow(
             'Orders',
             '$ordersCount Total',
             AppTheme.primaryColor,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _buildSidebarBadgeRow(
             'KYC Status',
             kycStatus.toUpperCase(),
@@ -1947,7 +1962,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                 : (kycStatus == 'rejected' ? AppTheme.error : AppTheme.warning),
           ),
           if (assignedAgentName != null && assignedAgentName.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _buildSidebarBadgeRow('Agent', assignedAgentName, Colors.indigo),
           ],
         ],
@@ -2700,9 +2715,9 @@ class _ActionButtonState extends State<_ActionButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: isMobile ? 38 : 36,
+          height: 32,
           width: widget.width,
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
           decoration: BoxDecoration(
             color: widget.isSolid
                 ? (isHovered ? widget.color.withOpacity(0.9) : widget.color)
