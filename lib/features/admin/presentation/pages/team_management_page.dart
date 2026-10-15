@@ -391,6 +391,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
 
     return BlocBuilder<LeadsBloc, LeadsState>(
       builder: (context, state) {
+        final dealersState = context.watch<DealersBloc>().state;
         final allSalesAgents = state.allRawUsers
             .where((u) => u['role'] == 'sales')
             .toList();
@@ -400,11 +401,19 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                     state.status == LeadsStatus.initial) &&
                 state.allRawUsers.isEmpty;
 
+        final Set<String> seenUserIds = {};
         int totalTeamConversions = 0;
-        for (final user in state.allRawUsers) {
+        for (final user in [...dealersState.allRawUsers, ...state.allRawUsers]) {
+          final uid = (user['_id'] ?? user[r'$oid'] ?? user['id'])?.toString();
+          if (uid == null || uid.isEmpty || seenUserIds.contains(uid)) continue;
+          seenUserIds.add(uid);
+          final agent = user['assignedAgent'];
+          final hasAgent = agent != null &&
+              (agent is! String || agent.trim().isNotEmpty) &&
+              (agent is! Map || agent.isNotEmpty);
           if (user['role'] == 'user' &&
               user['kycStatus'] == 'verified' &&
-              user['assignedAgent'] != null) {
+              hasAgent) {
             totalTeamConversions++;
           }
         }

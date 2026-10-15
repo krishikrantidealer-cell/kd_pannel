@@ -902,7 +902,7 @@ class _TeamLeadConversionsTabViewState
       if (agentId != null && agentId.isNotEmpty) {
         if (isDeleted) {
           final deletedDate =
-              user['deletedAt'] ?? user['updatedAt'] ?? user['createdAt'];
+              user['deletedAt'] ?? user['createdAt'];
           if (_isWithinDateRange(deletedDate)) {
             deletedLeadsMap.putIfAbsent(agentId, () => []).add(user);
             totalTeamDeletedLeads++;
@@ -912,7 +912,7 @@ class _TeamLeadConversionsTabViewState
           if (isVerified) {
             allConvertedDealersMap.putIfAbsent(agentId, () => []).add(user);
             final approvedDate =
-                user['kycApprovedAt'] ?? user['updatedAt'] ?? user['createdAt'];
+                user['kycApprovedAt'] ?? user['verifiedAt'] ?? user['createdAt'];
             if (_isWithinDateRange(approvedDate)) {
               timeframeConvertedDealersMap
                   .putIfAbsent(agentId, () => [])
@@ -956,11 +956,11 @@ class _TeamLeadConversionsTabViewState
         userId = userObj;
       }
 
-      if (agentId == null && userId != null) {
+      if ((agentId == null || !salesAgentIds.contains(agentId)) && userId != null) {
         agentId = userToAgentMap[userId];
       }
 
-      if (agentId == null && order['createdBy'] != null) {
+      if ((agentId == null || !salesAgentIds.contains(agentId)) && order['createdBy'] != null) {
         final createdBy = order['createdBy'];
         String? creatorId;
         if (createdBy is Map) {
@@ -976,7 +976,7 @@ class _TeamLeadConversionsTabViewState
         }
       }
 
-      if (agentId != null && agentId.isNotEmpty) {
+      if (agentId != null && agentId.isNotEmpty && salesAgentIds.contains(agentId)) {
         final double orderAmount = CurrencyUtils.parse(
           order['totalAmount'] ??
               order['grandTotal'] ??

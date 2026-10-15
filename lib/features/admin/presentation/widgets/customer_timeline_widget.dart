@@ -58,6 +58,7 @@ class _CustomerTimelineWidgetState extends State<CustomerTimelineWidget> {
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         if (body['success'] == true) {
+          if (!mounted) return;
           setState(() {
             _timelineItems = body['data']?['timeline'] ?? [];
           });

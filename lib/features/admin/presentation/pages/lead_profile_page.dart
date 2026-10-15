@@ -2051,49 +2051,84 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     ];
   }
 
-  Widget _buildProfileSidebarTabs({
-    required List<Map<String, dynamic>> tabs,
-    required int activeTabIdx,
+  Widget _buildStatusBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: color,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProperCustomerSidebar({
     required Map<String, dynamic> lead,
     required List<dynamic> salesAgents,
+    required List<Map<String, dynamic>> tabs,
+    required int activeTabIdx,
+    required ValueChanged<int> onTabSelected,
+    VoidCallback? onReassign,
   }) {
+    final cleanPhone = (lead['phone'] ?? lead['phoneNumber'] ?? '').toString().trim();
+    final leadName = (lead['name'] ?? 'Unnamed Lead').toString();
+    final kycStatus = (lead['kycStatus'] ?? 'pending').toString().toLowerCase();
+    final leadStatus = (lead['status'] ?? lead['leadStatus'] ?? 'prospect').toString().toLowerCase();
+
     String? assignedAgentName;
     final assignedAgent = lead['assignedAgent'];
     if (assignedAgent != null) {
       if (assignedAgent is Map) {
-        assignedAgentName =
-            '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'
-                .trim();
-        if (assignedAgentName.isEmpty) {
-          assignedAgentName = assignedAgent['name']?.toString();
-        }
+        assignedAgentName = '${assignedAgent['firstName'] ?? ''} ${assignedAgent['lastName'] ?? ''}'.trim();
+        if (assignedAgentName.isEmpty) assignedAgentName = assignedAgent['name']?.toString();
       } else {
         final agentIdStr = assignedAgent.toString();
         for (final a in salesAgents) {
           if (a is Map && (a['_id'] ?? a['id'])?.toString() == agentIdStr) {
-            assignedAgentName =
-                '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
+            assignedAgentName = '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
             if (assignedAgentName.isEmpty) assignedAgentName = a['name']?.toString();
             break;
           }
         }
       }
     }
-    final kycStatus = (lead['kycStatus'] ?? 'pending').toString().toLowerCase();
-    final leadStatus =
-        (lead['status'] ?? lead['leadStatus'] ?? 'prospect').toString().toLowerCase();
+
+    final initial = leadName.isNotEmpty ? leadName.substring(0, 1).toUpperCase() : 'L';
+    final Color kycColor = kycStatus == 'verified'
+        ? const Color(0xFF10B981)
+        : (kycStatus == 'rejected' ? const Color(0xFFEF4444) : const Color(0xFFF59E0B));
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.015),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -2101,12 +2136,125 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 1. Customer Mini Profile Header
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(5),
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: AppTheme.accentColor.withOpacity(0.08),
+                  gradient: LinearGradient(
+                    colors: [AppTheme.accentColor, AppTheme.accentColor.withOpacity(0.85)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            leadName,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                        ),
+                        if (kycStatus == 'verified') ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified_rounded, size: 15, color: Color(0xFF10B981)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        _buildStatusBadge(leadStatus.toUpperCase(), AppTheme.primaryColor),
+                        _buildStatusBadge('KYC: ${kycStatus.toUpperCase()}', kycColor),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 2. Direct Contact & Outbound CTAs
+          if (cleanPhone.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      cleanPhone,
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF008069)),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: cleanPhone));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Text('Phone number ' + cleanPhone + ' copied!'),
+                            ],
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: const Color(0xFF008069),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: const Tooltip(
+                      message: 'Copy phone number',
+                      child: Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // 3. Navigation Sections (Tabs on the side of the screen)
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(
@@ -2115,31 +2263,31 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                   color: AppTheme.accentColor,
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 8),
               Text(
-                'PROFILE SECTIONS',
+                'SECTIONS',
                 style: GoogleFonts.outfit(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF94A3B8),
                   letterSpacing: 0.6,
-                  color: const Color(0xFF6B7280),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           ...tabs.asMap().entries.map((entry) {
             final idx = entry.key;
             final tab = entry.value;
             final isSelected = activeTabIdx == idx;
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 5),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => setState(() => _activeTab = idx),
-                  borderRadius: BorderRadius.circular(9),
+                  onTap: () => onTabSelected(idx),
+                  borderRadius: BorderRadius.circular(10),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2147,7 +2295,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       color: isSelected
                           ? AppTheme.accentColor
                           : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
                             ? AppTheme.accentColor
@@ -2157,7 +2305,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: AppTheme.accentColor.withOpacity(0.18),
+                                color: AppTheme.accentColor.withOpacity(0.22),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               ),
@@ -2169,23 +2317,23 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         Icon(
                           tab['icon'] as IconData,
                           size: 15,
-                          color: isSelected ? Colors.white : const Color(0xFF6B7280),
+                          color: isSelected ? Colors.white : const Color(0xFF64748B),
                         ),
-                        const SizedBox(width: 9),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             tab['label'] as String,
                             style: GoogleFonts.outfit(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                              color: isSelected ? Colors.white : const Color(0xFF1F2937),
+                              color: isSelected ? Colors.white : const Color(0xFF1E293B),
                             ),
                           ),
                         ),
                         if (isSelected)
                           const Icon(
                             Icons.arrow_forward_ios_rounded,
-                            size: 10,
+                            size: 11,
                             color: Colors.white,
                           ),
                       ],
@@ -2195,72 +2343,66 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
               ),
             );
           }),
-          const SizedBox(height: 4),
-          const Divider(height: 16, color: Color(0xFFE2E8F0)),
-          Text(
-            'QUICK SUMMARY',
-            style: GoogleFonts.outfit(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: const Color(0xFF9CA3AF),
-            ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // 4. Assigned Agent Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ASSIGNED AGENT',
+                style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), letterSpacing: 0.6),
+              ),
+              if ((AuthService().isAdmin || AuthService().hasLeadPermission('reassign')) && onReassign != null)
+                InkWell(
+                  onTap: onReassign,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Text(
+                    'Reassign',
+                    style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primaryColor),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
-          _buildSidebarBadgeRow(
-            'Status',
-            leadStatus.toUpperCase(),
-            AppTheme.primaryColor,
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
+                  child: const Icon(Icons.person_rounded, size: 15, color: AppTheme.primaryColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (assignedAgentName != null && assignedAgentName.isNotEmpty) ? assignedAgentName : 'Unassigned',
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                      ),
+                      Text(
+                        (assignedAgentName != null && assignedAgentName.isNotEmpty) ? 'Active Agent' : 'Click Reassign to assign',
+                        style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          _buildSidebarBadgeRow(
-            'KYC',
-            kycStatus.toUpperCase(),
-            kycStatus == 'verified'
-                ? AppTheme.success
-                : (kycStatus == 'rejected' ? AppTheme.error : AppTheme.warning),
-          ),
-          if (assignedAgentName != null && assignedAgentName.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            _buildSidebarBadgeRow('Agent', assignedAgentName, Colors.indigo),
-          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildSidebarBadgeRow(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF6B7280),
-          ),
-        ),
-        Flexible(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withOpacity(0.2)),
-            ),
-            child: Text(
-              value,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -2458,7 +2600,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                       color: AppTheme.primaryColor,
                     ),
                   )
-                : SingleChildScrollView(
+                : Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: isMobile ? 12 : 20,
                       vertical: isMobile ? 12 : 16,
@@ -2550,21 +2692,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                         ),
                         const SizedBox(height: 10),
 
-                        // Persistent Hero Header Section (Always Visible Across All Tabs)
-                        _FlatHeaderSection(
-                          lead: activeLead,
-                          isSales: AuthService().isSales,
-                          onConvertDealer: _showConvertDealerDialog,
-                          onRejectKyc: _showRejectDialog,
-                          onToggleBlock: _toggleBlockLead,
-                          onEdit: _editLead,
-                          onDelete: _deleteLead,
-                          onReassign: _showReassignLeadDialog,
-                        ),
-                        const SizedBox(height: 12),
+
 
                         // TAB CONTENT & RIGHT SIDEBAR
-                        Builder(
+                        Expanded(
+                          child: Builder(
                           builder: (context) {
                             final tabs = _getProfileTabs();
                             final safeIdx =
@@ -2576,14 +2708,10 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                             final Widget tabContent = AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 250),
                                 child: currentTabKey == 'overview'
-                                    ? Column(
+                                    ? LayoutBuilder(
                                         key: const ValueKey('overview'),
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              if (constraints.maxWidth >= 720) {
+                                        builder: (context, constraints) {
+                                          if (constraints.maxWidth >= 720) {
                                                 return IntrinsicHeight(
                                                   child: Row(
                                                     crossAxisAlignment:
@@ -2632,9 +2760,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                                 );
                                               }
                                             },
-                                          ),
-                                        ],
-                                      )
+                                          )
                                     : currentTabKey == 'activities'
                                     ? Column(
                                         key: const ValueKey('activities'),
@@ -2744,37 +2870,57 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                     : const SizedBox.shrink(),
                             );
 
-                            final bool isMobileScreen = MediaQuery.of(context).size.width < 768;
+                            final bool isMobileScreen = MediaQuery.of(context).size.width < 960;
+
+                            final properSidebar = _buildProperCustomerSidebar(
+                              lead: activeLead,
+                              salesAgents: state.salesAgents,
+                              tabs: tabs,
+                              activeTabIdx: safeIdx,
+                              onTabSelected: (idx) => setState(() => _activeTab = idx),
+                              onReassign: _showReassignLeadDialog,
+                            );
+
                             if (isMobileScreen) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildModernTabBar(tabs, safeIdx),
-                                  const SizedBox(height: 10),
-                                  tabContent,
-                                ],
+                              return SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildModernTabBar(tabs, safeIdx),
+                                    const SizedBox(height: 12),
+                                    tabContent,
+                                    const SizedBox(height: 16),
+                                    properSidebar,
+                                  ],
+                                ),
                               );
                             }
 
                             return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(child: tabContent),
-                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 24),
+                                      child: tabContent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
                                 SizedBox(
-                                  width: 220,
-                                  child: _buildProfileSidebarTabs(
-                                    tabs: tabs,
-                                    activeTabIdx: safeIdx,
-                                    lead: activeLead,
-                                    salesAgents: state.salesAgents,
+                                  width: 280,
+                                  child: SingleChildScrollView(
+                                    physics: const ClampingScrollPhysics(),
+                                    child: properSidebar,
                                   ),
                                 ),
                               ],
                             );
                           },
                         ),
-                      ],
+                      ),
+                    ],
                     ),
                   ),
           ),
@@ -3074,7 +3220,7 @@ class _FlatHeaderSection extends StatelessWidget {
         children: [
           const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
           const SizedBox(width: 6),
-          SelectableText(
+          Text(
             rawPhone,
             style: GoogleFonts.outfit(
               fontSize: 12.5,
@@ -3417,28 +3563,6 @@ class _LeadInformationCard extends StatelessWidget {
     required this.onAssignAgent,
   });
 
-  Future<void> _makeCall(String phone, BuildContext context) async {
-    var cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-
-    AnalyticsService().logEvent(
-      'agent_call_lead',
-      properties: {
-        'leadId': lead['id'] ?? lead['_id'],
-        'leadName': lead['name'],
-        'details': 'Initiated MyOperator call to lead: ${lead['name']}',
-      },
-    );
-
-    TelephonyHelper.initiateCall(
-      context,
-      customerPhone: cleanPhone,
-      customerName: lead['name'],
-    );
-  }
-
   void _copyToClipboard(String text, String label, BuildContext context) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -3526,22 +3650,9 @@ class _LeadInformationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-    final String leadName = lead['name'] ?? 'Unnamed Lead';
-    final String leadPhone = lead['phone'] ?? '';
-    final String shopName = lead['shopName']?.toString().isNotEmpty == true
-        ? lead['shopName']
-        : 'No Shop Registered';
-    final String leadSource = lead['source'] ?? 'App';
-    final String initial = leadName.isNotEmpty
-        ? leadName.substring(0, 1).toUpperCase()
-        : 'L';
-
-    final cardBgColor = Colors.white;
-
     return Container(
       decoration: BoxDecoration(
-        color: cardBgColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: AppTheme.softShadow,
         border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
@@ -3550,184 +3661,6 @@ class _LeadInformationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.primaryColor.withOpacity(0.06),
-                  AppTheme.primaryColor.withOpacity(0.01),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              border: const Border(
-                bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primaryColor,
-                        AppTheme.primaryColor.withOpacity(0.8),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      initial,
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              leadName,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF111827),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.campaign_outlined,
-                                  size: 12,
-                                  color: AppTheme.primaryColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  leadSource.toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.primaryColor,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.storefront_outlined,
-                            size: 14,
-                            color: Color(0xFF6B7280),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              shopName,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF4B5563),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (leadPhone.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.phone_in_talk_rounded,
-                              size: 14,
-                              color: Color(0xFF008069),
-                            ),
-                            const SizedBox(width: 6),
-                            SelectableText(
-                              leadPhone,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF008069),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: leadPhone));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text('Phone number ' + leadPhone + ' copied to clipboard!'),
-                                      ],
-                                    ),
-                                    behavior: SnackBarBehavior.floating,
-                                    backgroundColor: const Color(0xFF008069),
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                              },
-                              child: const Tooltip(
-                                message: 'Copy phone number',
-                                child: Padding(
-                                  padding: EdgeInsets.all(2.0),
-                                  child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(

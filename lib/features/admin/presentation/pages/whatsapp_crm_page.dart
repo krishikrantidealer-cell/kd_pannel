@@ -9,16 +9,13 @@ import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
-import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
-import 'package:kd_pannel/features/shared/widgets/telephony_call_button.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_doodle_painter.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_call_history_dialog.dart';
 import 'package:kd_pannel/features/admin/presentation/widgets/whatsapp/whatsapp_canned_replies_dialog.dart';
@@ -1648,15 +1645,8 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                         : (int.tryParse(conv['unreadCount']?.toString() ?? '0') ?? 0);
                     final int unreadCount = isSelected ? 0 : rawUnread;
 
-                    String formattedTime = '';
-                    if (conv['lastMessageAt'] != null) {
-                      try {
-                        final date = DateTime.parse(
-                          conv['lastMessageAt'].toString(),
-                        ).toLocal();
-                        formattedTime = DateFormat('hh:mm a').format(date);
-                      } catch (_) {}
-                    }
+                    final String formattedTime =
+                        formatWhatsAppConversationTime(conv['lastMessageAt']);
 
                     final String name = (contact['name'] ?? 'WhatsApp User').toString();
                     final Color avatarColor = _getAvatarColor(name);
@@ -2883,12 +2873,38 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                 final type = msg['type'];
                                 final isNote = msg['isNote'] == true;
 
-                                final date = DateTime.parse(
-                                  msg['createdAt'],
-                                ).toLocal();
-                                final formattedTime = DateFormat(
-                                  'hh:mm a',
-                                ).format(date);
+                                DateTime? date;
+                                try {
+                                  final raw = msg['createdAt'] ?? msg['timestamp'];
+                                  if (raw != null) {
+                                    date = DateTime.parse(raw.toString()).toLocal();
+                                  }
+                                } catch (_) {}
+                                final formattedTime = date != null
+                                    ? DateFormat('hh:mm a').format(date)
+                                    : '';
+
+                                bool showDateDivider = false;
+                                if (date != null) {
+                                  if (index == 0) {
+                                    showDateDivider = true;
+                                  } else {
+                                    final prevMsg = filteredMessages[index - 1];
+                                    DateTime? prevDate;
+                                    try {
+                                      final rawPrev = prevMsg['createdAt'] ?? prevMsg['timestamp'];
+                                      if (rawPrev != null) {
+                                        prevDate = DateTime.parse(rawPrev.toString()).toLocal();
+                                      }
+                                    } catch (_) {}
+                                    if (prevDate == null ||
+                                        prevDate.year != date.year ||
+                                        prevDate.month != date.month ||
+                                        prevDate.day != date.day) {
+                                      showDateDivider = true;
+                                    }
+                                  }
+                                }
 
                                 BoxDecoration bubbleDecoration;
                                 Color textCol = const Color(0xFF111B21);
@@ -2946,7 +2962,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                                   );
                                 }
 
-                                return Padding(
+                                final messageBubble = Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 3.0),
                                   child: Align(
                                     alignment: isOutgoing
@@ -3391,6 +3407,19 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
                               ),
                             ),
                           );
+
+                          if (showDateDivider && date != null) {
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                buildWhatsAppDateDivider(date),
+                                messageBubble,
+                              ],
+                            );
+                          }
+
+                          return messageBubble;
                         },
                       ),
                     );

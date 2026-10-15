@@ -1466,63 +1466,21 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                     color: AppTheme.primaryColor,
                   ),
                 )
-              : SingleChildScrollView(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 12 : 20,
-                      vertical: isMobile ? 12 : 16,
-                    ),
+              : Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12 : 20,
+                    vertical: isMobile ? 12 : 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 1. BACK HEADER
-                      // 1. BACK HEADER
                       _buildBreadcrumbs(context, isMobile, currentDealer.name),
                       const SizedBox(height: 10),
 
-                      // 2. PERSISTENT HERO CARD (Always Visible Across All Tabs)
-                      _DealerHeroCard(
-                        dealer: currentDealer,
-                        salesAgents: salesAgents,
-                        onToggleBlock: _toggleBlockDealer,
-                        onEdit: _editDealer,
-                        onDelete: _deleteDealer,
-                        onReassign: _showReassignDealerDialog,
-                        onCreateOrder: () async {
-                          AnalyticsService().logEvent(
-                            'initiate_order_creation',
-                            properties: {
-                              'dealerId': currentDealer.id,
-                              'dealerName': currentDealer.name,
-                              'details':
-                                  'Started creating a new order for ${currentDealer.name}',
-                            },
-                          );
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CreateOrderPage(dealer: currentDealer),
-                            ),
-                          );
-                          if (result == true && mounted) {
-                            if (currentDealer.id != null) {
-                              context.read<DealersBloc>().add(
-                                FetchDealerDetailsEvent(currentDealer.id!),
-                              );
-                              context.read<DealersBloc>().add(
-                                FetchDealerOrdersEvent(currentDealer.id!),
-                              );
-                            }
-                            context.read<OrdersBloc>().add(
-                              const FetchOrdersEvent(),
-                            );
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
                       // 2. TAB CONTENT & RIGHT SIDEBAR
-                      Builder(
+                      Expanded(
+                        child: Builder(
                         builder: (context) {
                           final tabs = _getProfileTabs(orders.length);
                           final safeIdx =
@@ -1731,36 +1689,55 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                       : const SizedBox.shrink(),
                           );
 
-                            final bool isMobileScreen = MediaQuery.of(context).size.width < 768;
+                            final bool isMobileScreen = MediaQuery.of(context).size.width < 960;
+
+                            final properDealerSidebar = _buildProperDealerSidebar(
+                              dealer: currentDealer,
+                              salesAgents: salesAgents,
+                              tabs: tabs,
+                              activeTabIdx: safeIdx,
+                              onTabSelected: (idx) => setState(() => _activeTab = idx),
+                              onReassign: _showReassignDealerDialog,
+                            );
+
                             if (isMobileScreen) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildModernTabBar(tabs, safeIdx),
-                                  const SizedBox(height: 10),
-                                  tabContent,
-                                ],
+                              return SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildModernTabBar(tabs, safeIdx),
+                                    const SizedBox(height: 12),
+                                    tabContent,
+                                    const SizedBox(height: 16),
+                                    properDealerSidebar,
+                                  ],
+                                ),
                               );
                             }
 
                             return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(child: tabContent),
-                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 24),
+                                      child: tabContent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
                                 SizedBox(
-                                  width: 220,
-                                  child: _buildProfileSidebarTabs(
-                                    tabs: tabs,
-                                    activeTabIdx: safeIdx,
-                                    dealer: currentDealer,
-                                    salesAgents: salesAgents,
-                                    ordersCount: orders.length,
+                                  width: 280,
+                                  child: SingleChildScrollView(
+                                    physics: const ClampingScrollPhysics(),
+                                    child: properDealerSidebar,
                                   ),
                                 ),
                               ],
                             );
-                        },
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -1797,44 +1774,80 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     ];
   }
 
-  Widget _buildProfileSidebarTabs({
-    required List<Map<String, dynamic>> tabs,
-    required int activeTabIdx,
+  Widget _buildStatusBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: color,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProperDealerSidebar({
     required Dealer dealer,
     required List<dynamic> salesAgents,
-    required int ordersCount,
+    required List<Map<String, dynamic>> tabs,
+    required int activeTabIdx,
+    required ValueChanged<int> onTabSelected,
+    VoidCallback? onReassign,
   }) {
+    final cleanPhone = dealer.phone.trim();
+    final dealerName = dealer.name.isNotEmpty ? dealer.name : 'Unnamed Dealer';
+    final kycStatus = (dealer.kycStatus ?? 'verified').toLowerCase();
+
     String? assignedAgentName;
     final agentId = dealer.agentId;
     if (agentId != null && agentId.isNotEmpty) {
       for (final a in salesAgents) {
         if (a is Map && (a['_id'] ?? a['id'])?.toString() == agentId) {
-          assignedAgentName =
-              '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
+          assignedAgentName = '${a['firstName'] ?? ''} ${a['lastName'] ?? ''}'.trim();
           if (assignedAgentName.isEmpty) assignedAgentName = a['name']?.toString();
           break;
         }
       }
     }
-    if ((assignedAgentName == null || assignedAgentName.isEmpty) &&
-        dealer.agent.isNotEmpty &&
-        dealer.agent != '-') {
+    if ((assignedAgentName == null || assignedAgentName.isEmpty) && dealer.agent.isNotEmpty && dealer.agent != '-') {
       assignedAgentName = dealer.agent;
     }
 
-    final kycStatus = (dealer.kycStatus ?? 'verified').toLowerCase();
+    final initial = dealerName.isNotEmpty ? dealerName.substring(0, 1).toUpperCase() : 'D';
+    final Color kycColor = kycStatus == 'verified'
+        ? const Color(0xFF10B981)
+        : (kycStatus == 'rejected' ? const Color(0xFFEF4444) : const Color(0xFFF59E0B));
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.015),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1842,12 +1855,127 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 1. Dealer Mini Profile Header
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(5),
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  gradient: LinearGradient(
+                    colors: [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.85)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            dealerName,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                        ),
+                        if (kycStatus == 'verified') ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified_rounded, size: 15, color: Color(0xFF10B981)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        if (dealer.isBlocked)
+                          _buildStatusBadge('BLOCKED', const Color(0xFFEF4444)),
+                        _buildStatusBadge('GST: ' + dealer.gstStatus.toUpperCase(), const Color(0xFF3B82F6)),
+                        _buildStatusBadge('KYC: ' + kycStatus.toUpperCase(), kycColor),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 2. Direct Contact & Outbound CTAs
+          if (cleanPhone.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      cleanPhone,
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF008069)),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: cleanPhone));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Text('Phone number ' + cleanPhone + ' copied!'),
+                            ],
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: const Color(0xFF008069),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: const Tooltip(
+                      message: 'Copy phone number',
+                      child: Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // 3. Navigation Sections (Tabs on the side of the screen)
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(
@@ -1856,31 +1984,31 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   color: AppTheme.primaryColor,
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 8),
               Text(
-                'PROFILE SECTIONS',
+                'SECTIONS',
                 style: GoogleFonts.outfit(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF94A3B8),
                   letterSpacing: 0.6,
-                  color: const Color(0xFF6B7280),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           ...tabs.asMap().entries.map((entry) {
             final idx = entry.key;
             final tab = entry.value;
             final isSelected = activeTabIdx == idx;
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 5),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => setState(() => _activeTab = idx),
-                  borderRadius: BorderRadius.circular(9),
+                  onTap: () => onTabSelected(idx),
+                  borderRadius: BorderRadius.circular(10),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1888,7 +2016,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       color: isSelected
                           ? AppTheme.primaryColor
                           : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
                             ? AppTheme.primaryColor
@@ -1898,7 +2026,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: AppTheme.primaryColor.withOpacity(0.18),
+                                color: AppTheme.primaryColor.withOpacity(0.22),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               ),
@@ -1910,23 +2038,23 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                         Icon(
                           tab['icon'] as IconData,
                           size: 15,
-                          color: isSelected ? Colors.white : const Color(0xFF6B7280),
+                          color: isSelected ? Colors.white : const Color(0xFF64748B),
                         ),
-                        const SizedBox(width: 9),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             tab['label'] as String,
                             style: GoogleFonts.outfit(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                              color: isSelected ? Colors.white : const Color(0xFF1F2937),
+                              color: isSelected ? Colors.white : const Color(0xFF1E293B),
                             ),
                           ),
                         ),
                         if (isSelected)
                           const Icon(
                             Icons.arrow_forward_ios_rounded,
-                            size: 10,
+                            size: 11,
                             color: Colors.white,
                           ),
                       ],
@@ -1936,72 +2064,66 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
               ),
             );
           }),
-          const SizedBox(height: 4),
-          const Divider(height: 16, color: Color(0xFFE2E8F0)),
-          Text(
-            'DEALER SNAPSHOT',
-            style: GoogleFonts.outfit(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: const Color(0xFF9CA3AF),
-            ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // 4. Assigned Agent Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ASSIGNED AGENT',
+                style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), letterSpacing: 0.6),
+              ),
+              if ((AuthService().isAdmin || AuthService().hasDealerPermission('reassign')) && onReassign != null)
+                InkWell(
+                  onTap: onReassign,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Text(
+                    'Reassign',
+                    style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primaryColor),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
-          _buildSidebarBadgeRow(
-            'Orders',
-            '$ordersCount Total',
-            AppTheme.primaryColor,
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
+                  child: const Icon(Icons.person_rounded, size: 15, color: AppTheme.primaryColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (assignedAgentName != null && assignedAgentName.isNotEmpty) ? assignedAgentName : 'Unassigned',
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                      ),
+                      Text(
+                        (assignedAgentName != null && assignedAgentName.isNotEmpty) ? 'Active Agent' : 'Click Reassign to assign',
+                        style: GoogleFonts.outfit(fontSize: 10.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          _buildSidebarBadgeRow(
-            'KYC Status',
-            kycStatus.toUpperCase(),
-            kycStatus == 'verified'
-                ? AppTheme.success
-                : (kycStatus == 'rejected' ? AppTheme.error : AppTheme.warning),
-          ),
-          if (assignedAgentName != null && assignedAgentName.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            _buildSidebarBadgeRow('Agent', assignedAgentName, Colors.indigo),
-          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildSidebarBadgeRow(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF6B7280),
-          ),
-        ),
-        Flexible(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withOpacity(0.2)),
-            ),
-            child: Text(
-              value,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -2461,7 +2583,7 @@ class _DealerHeroCard extends StatelessWidget {
         children: [
           const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF008069)),
           const SizedBox(width: 6),
-          SelectableText(
+          Text(
             rawPhone,
             style: GoogleFonts.outfit(
               fontSize: 12.5,
@@ -3208,18 +3330,6 @@ class _DealerInformationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-    final String dealerName = dealer.name.isNotEmpty
-        ? dealer.name
-        : 'Unnamed Dealer';
-    final String shopName = dealer.shopName?.toString().isNotEmpty == true
-        ? dealer.shopName!
-        : 'No Shop Registered';
-    final String dealerSource = dealer.source;
-    final String initial = dealerName.isNotEmpty
-        ? dealerName.substring(0, 1).toUpperCase()
-        : 'D';
-
     final String tier = dealer.isHighValue
         ? 'Platinum Distributor'
         : 'Authorized Dealer';
@@ -3235,227 +3345,6 @@ class _DealerInformationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.primaryColor.withOpacity(0.06),
-                  AppTheme.primaryColor.withOpacity(0.01),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              border: const Border(
-                bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primaryColor,
-                        AppTheme.primaryColor.withOpacity(0.8),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      initial,
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              dealerName,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF111827),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  (dealer.isPanelCreated ||
-                                      dealerSource.toLowerCase().contains(
-                                        'panel',
-                                      ))
-                                  ? const Color(0xFFF3E8FF)
-                                  : AppTheme.primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                              border:
-                                  (dealer.isPanelCreated ||
-                                      dealerSource.toLowerCase().contains(
-                                        'panel',
-                                      ))
-                                  ? Border.all(
-                                      color: const Color(0xFFD8B4FE),
-                                      width: 0.8,
-                                    )
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  (dealer.isPanelCreated ||
-                                          dealerSource.toLowerCase().contains(
-                                            'panel',
-                                          ))
-                                      ? Icons.laptop_mac_rounded
-                                      : Icons.campaign_outlined,
-                                  size: 12,
-                                  color:
-                                      (dealer.isPanelCreated ||
-                                          dealerSource.toLowerCase().contains(
-                                            'panel',
-                                          ))
-                                      ? const Color(0xFF7E22CE)
-                                      : AppTheme.primaryColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  (dealer.isPanelCreated ||
-                                          dealerSource.toLowerCase().contains(
-                                            'panel',
-                                          ))
-                                      ? (dealer.createdByAdminName != null &&
-                                                dealer
-                                                    .createdByAdminName!
-                                                    .isNotEmpty
-                                            ? 'PANEL (${dealer.createdByAdminName!.toUpperCase()})'
-                                            : 'KD PANEL')
-                                      : dealerSource.toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color:
-                                        (dealer.isPanelCreated ||
-                                            dealerSource.toLowerCase().contains(
-                                              'panel',
-                                            ))
-                                        ? const Color(0xFF7E22CE)
-                                        : AppTheme.primaryColor,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.storefront_outlined,
-                            size: 14,
-                            color: Color(0xFF6B7280),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              shopName,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF4B5563),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (dealer.phone.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.phone_in_talk_rounded,
-                              size: 14,
-                              color: Color(0xFF008069),
-                            ),
-                            const SizedBox(width: 6),
-                            SelectableText(
-                              dealer.phone,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF008069),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: dealer.phone));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text('Phone number ' + dealer.phone + ' copied to clipboard!'),
-                                      ],
-                                    ),
-                                    behavior: SnackBarBehavior.floating,
-                                    backgroundColor: const Color(0xFF008069),
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                              },
-                              child: const Tooltip(
-                                message: 'Copy phone number',
-                                child: Padding(
-                                  padding: EdgeInsets.all(2.0),
-                                  child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF008069)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(

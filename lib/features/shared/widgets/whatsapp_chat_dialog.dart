@@ -11,6 +11,7 @@ import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/telephony_audio_service.dart';
+import 'package:kd_pannel/core/utils/formatters.dart';
 
 class WhatsAppChatDialog extends StatefulWidget {
   final String phone;
@@ -410,9 +411,38 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                           final isOutgoing = msg['direction'] == 'outgoing';
                           final type = msg['type'];
                           final isNote = msg['isNote'] == true;
-                          
-                          final date = DateTime.parse(msg['createdAt']).toLocal();
-                          final formattedTime = DateFormat('hh:mm a').format(date);
+                          DateTime? date;
+                          try {
+                            final raw = msg['createdAt'] ?? msg['timestamp'];
+                            if (raw != null) {
+                              date = DateTime.parse(raw.toString()).toLocal();
+                            }
+                          } catch (_) {}
+                          final formattedTime = date != null
+                              ? DateFormat('hh:mm a').format(date)
+                              : '';
+
+                          bool showDateDivider = false;
+                          if (date != null) {
+                            if (index == 0) {
+                              showDateDivider = true;
+                            } else {
+                              final prevMsg = _messages[index - 1];
+                              DateTime? prevDate;
+                              try {
+                                final rawPrev = prevMsg['createdAt'] ?? prevMsg['timestamp'];
+                                if (rawPrev != null) {
+                                  prevDate = DateTime.parse(rawPrev.toString()).toLocal();
+                                }
+                              } catch (_) {}
+                              if (prevDate == null ||
+                                  prevDate.year != date.year ||
+                                  prevDate.month != date.month ||
+                                  prevDate.day != date.day) {
+                                showDateDivider = true;
+                              }
+                            }
+                          }
 
                           // WhatsApp Bubble styling
                           BoxDecoration bubbleDecoration;
@@ -447,7 +477,7 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                             );
                           }
 
-                          return Padding(
+                          final messageBubble = Padding(
                             padding: const EdgeInsets.symmetric(vertical: 3),
                             child: Align(
                               alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
@@ -621,6 +651,19 @@ class _WhatsAppChatDialogState extends State<WhatsAppChatDialog> with SingleTick
                               ),
                             ),
                           );
+
+                          if (showDateDivider && date != null) {
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                buildWhatsAppDateDivider(date),
+                                messageBubble,
+                              ],
+                            );
+                          }
+
+                          return messageBubble;
                         },
                       ),
           ),

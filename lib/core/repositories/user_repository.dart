@@ -18,6 +18,7 @@ class UserRepository {
 
   List<Map<String, dynamic>>? _cachedUsers;
   List<Map<String, dynamic>>? _cachedSalesAgents;
+  List<Map<String, dynamic>>? _cachedOrders;
   DateTime? _lastCacheTime;
   static const Duration _cacheTtl = Duration(minutes: 3);
 
@@ -28,12 +29,13 @@ class UserRepository {
     if (!forceRefresh &&
         _cachedUsers != null &&
         _cachedSalesAgents != null &&
+        _cachedOrders != null &&
         _lastCacheTime != null &&
         DateTime.now().difference(_lastCacheTime!) < _cacheTtl) {
       return {
         'users': _cachedUsers!,
         'salesAgents': _cachedSalesAgents!,
-        'orders': [],
+        'orders': _cachedOrders!,
       };
     }
 
@@ -94,6 +96,7 @@ class UserRepository {
 
     _cachedUsers = users;
     _cachedSalesAgents = salesAgents;
+    _cachedOrders = orders;
     _lastCacheTime = DateTime.now();
 
     return {
@@ -544,6 +547,7 @@ class UserRepository {
   void invalidateCache() {
     _cachedUsers = null;
     _cachedSalesAgents = null;
+    _cachedOrders = null;
     _lastCacheTime = null;
     if (!_cacheInvalidationController.isClosed) {
       _cacheInvalidationController.add(null);
