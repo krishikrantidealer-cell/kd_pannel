@@ -32,7 +32,13 @@ class _TopbarWidgetState extends State<TopbarWidget> {
   void initState() {
     super.initState();
     requestNotificationPermission();
-    
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<NotificationsCubit>().fetchNotifications(isInitial: true);
+      }
+    });
+
     // Refresh profile if data is incomplete
     if (AuthService().currentUserName == null || AuthService().currentUserName!.isEmpty) {
       AuthService().refreshProfile().then((_) {
@@ -59,9 +65,11 @@ class _TopbarWidgetState extends State<TopbarWidget> {
   }
 
   void _toggleDropdown() {
+    requestNotificationPermission();
     if (_isDropdownOpen) {
       _closeDropdown();
     } else {
+      context.read<NotificationsCubit>().fetchNotifications(isInitial: false);
       _openDropdown();
     }
   }

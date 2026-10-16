@@ -2,6 +2,7 @@
 // Unified notification helper using conditional imports.
 
 import 'web_notification_helper_native.dart'
+    if (dart.library.js_interop) 'web_notification_helper_web.dart'
     if (dart.library.html) 'web_notification_helper_web.dart' as helper;
 
 /// Requests permission to display browser/system notifications.

@@ -1,12 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/repositories/notification_repository.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
+import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
+import 'package:kd_pannel/util/web_notification_helper.dart';
 import 'package:intl/intl.dart';
 
 class AlertsPage extends StatefulWidget {
@@ -21,22 +23,39 @@ class _AlertsPageState extends State<AlertsPage> {
   bool _isLoading = true;
   String _selectedFilter = 'All'; // 'All' or 'Unread'
   StreamSubscription? _websocketSubscription;
+  StreamSubscription? _cubitSubscription;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService().updateContext(screen: '/alerts');
+    requestNotificationPermission();
     _fetchNotifications(isInitial: true);
-    
-    // Subscribe to real-time updates
+
+    // Subscribe to real-time WebSocket updates
     _websocketSubscription = WebSocketService().notificationUpdates.listen((_) {
       _fetchNotifications(isInitial: false);
+    });
+
+    // Also stay synced with NotificationsCubit periodic 15s polling
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cubit = context.read<NotificationsCubit>();
+      _cubitSubscription = cubit.stream.listen((notifState) {
+        if (mounted && notifState.notifications.isNotEmpty) {
+          setState(() {
+            _notifications = List<Map<String, dynamic>>.from(notifState.notifications);
+            _isLoading = false;
+          });
+        }
+      });
     });
   }
 
   @override
   void dispose() {
     _websocketSubscription?.cancel();
+    _cubitSubscription?.cancel();
     super.dispose();
   }
 
@@ -234,10 +253,12 @@ class _AlertsPageState extends State<AlertsPage> {
                             children: [
                               _buildTitle(),
                               const SizedBox(height: 16),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: [
+                                  _buildBrowserAlertButton(),
                                   if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
-                                  if (_unreadCount > 0) const SizedBox(width: 8),
                                   if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
                                 ],
                               ),
@@ -249,6 +270,8 @@ class _AlertsPageState extends State<AlertsPage> {
                               _buildTitle(),
                               Row(
                                 children: [
+                                  _buildBrowserAlertButton(),
+                                  if (_unreadCount > 0 || _notifications.isNotEmpty) const SizedBox(width: 8),
                                   if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
                                   if (_unreadCount > 0 && _notifications.isNotEmpty) const SizedBox(width: 8),
                                   if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
@@ -380,6 +403,67 @@ class _AlertsPageState extends State<AlertsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBrowserAlertButton() {
+    return Material(
+      color: AppTheme.primaryColor.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () {
+          requestNotificationPermission();
+          showWebNotification(
+            '🔔 Browser Alerts Enabled',
+            'You will now receive real-time browser notifications for all panel alerts.',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Browser notifications active! Test alert dispatched.',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                backgroundColor: AppTheme.primaryColor,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.notifications_active_rounded,
+                color: AppTheme.primaryColor,
+                size: 17,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Test Browser Alert',
+                style: GoogleFonts.outfit(
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
