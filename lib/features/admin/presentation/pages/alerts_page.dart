@@ -202,10 +202,45 @@ class _AlertsPageState extends State<AlertsPage> {
   }
 
   List<Map<String, dynamic>> get _filteredNotifications {
-    if (_selectedFilter == 'Unread') {
-      return _notifications.where((n) => n['isRead'] == false || n['isRead'] == null).toList();
-    }
-    return _notifications;
+    return _notifications.where((n) {
+      if (_selectedFilter == 'Unread') {
+        return n['isRead'] == false || n['isRead'] == null;
+      }
+      if (_selectedFilter == 'Tasks & Calls') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'tasks_calls';
+      }
+      if (_selectedFilter == 'Leads & KYC') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'leads_kyc';
+      }
+      if (_selectedFilter == 'Orders') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'orders';
+      }
+      if (_selectedFilter == 'WhatsApp') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'whatsapp';
+      }
+      return true;
+    }).toList();
+  }
+
+  int _unreadCountForFilter(String filter) {
+    return _notifications.where((n) {
+      final isUnread = n['isRead'] == false || n['isRead'] == null;
+      if (!isUnread) return false;
+      if (filter == 'All' || filter == 'Unread') return true;
+      if (filter == 'Tasks & Calls') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'tasks_calls';
+      }
+      if (filter == 'Leads & KYC') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'leads_kyc';
+      }
+      if (filter == 'Orders') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'orders';
+      }
+      if (filter == 'WhatsApp') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'whatsapp';
+      }
+      return false;
+    }).length;
   }
 
   int get _unreadCount {
@@ -253,12 +288,10 @@ class _AlertsPageState extends State<AlertsPage> {
                             children: [
                               _buildTitle(),
                               const SizedBox(height: 16),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                              Row(
                                 children: [
-                                  _buildBrowserAlertButton(),
                                   if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
+                                  if (_unreadCount > 0) const SizedBox(width: 8),
                                   if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
                                 ],
                               ),
@@ -270,8 +303,6 @@ class _AlertsPageState extends State<AlertsPage> {
                               _buildTitle(),
                               Row(
                                 children: [
-                                  _buildBrowserAlertButton(),
-                                  if (_unreadCount > 0 || _notifications.isNotEmpty) const SizedBox(width: 8),
                                   if (_unreadCount > 0) _buildMarkAllReadButton(isMobile),
                                   if (_unreadCount > 0 && _notifications.isNotEmpty) const SizedBox(width: 8),
                                   if (_notifications.isNotEmpty) _buildClearAllButton(isMobile),
@@ -281,23 +312,41 @@ class _AlertsPageState extends State<AlertsPage> {
                           ),
                     const SizedBox(height: 24),
 
-                    // Filters Bar
+                    // Category Filters Bar
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              _buildFilterButton('All', _selectedFilter == 'All'),
-                              _buildFilterButton('Unread', _selectedFilter == 'Unread'),
-                            ],
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (final filter in const [
+                                    'All',
+                                    'Unread',
+                                    'Tasks & Calls',
+                                    'Leads & KYC',
+                                    'Orders',
+                                    'WhatsApp',
+                                  ])
+                                    _buildFilterButton(
+                                      filter,
+                                      _selectedFilter == filter,
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 12),
                         Text(
                           '${items.length} alert(s)',
                           style: GoogleFonts.outfit(
@@ -395,7 +444,7 @@ class _AlertsPageState extends State<AlertsPage> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Manage your system alerts, status updates, and notifications.',
+          'Real-time task reminders, lead assignments, KYC updates, orders, and WhatsApp alerts.',
           style: GoogleFonts.outfit(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -403,67 +452,6 @@ class _AlertsPageState extends State<AlertsPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildBrowserAlertButton() {
-    return Material(
-      color: AppTheme.primaryColor.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: () {
-          requestNotificationPermission();
-          showWebNotification(
-            '🔔 Browser Alerts Enabled',
-            'You will now receive real-time browser notifications for all panel alerts.',
-          );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Browser notifications active! Test alert dispatched.',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                backgroundColor: AppTheme.primaryColor,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            );
-          }
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.25)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.notifications_active_rounded,
-                color: AppTheme.primaryColor,
-                size: 17,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Test Browser Alert',
-                style: GoogleFonts.outfit(
-                  color: AppTheme.primaryColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -542,6 +530,7 @@ class _AlertsPageState extends State<AlertsPage> {
   }
 
   Widget _buildFilterButton(String filter, bool isActive) {
+    final int badgeCount = filter == 'All' ? 0 : _unreadCountForFilter(filter);
     return Material(
       color: isActive ? Colors.white : Colors.transparent,
       borderRadius: BorderRadius.circular(8),
@@ -555,7 +544,7 @@ class _AlertsPageState extends State<AlertsPage> {
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -567,20 +556,22 @@ class _AlertsPageState extends State<AlertsPage> {
                   fontSize: 13,
                 ),
               ),
-              if (filter == 'Unread' && _unreadCount > 0) ...[
+              if (badgeCount > 0) ...[
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
-                    color: AppTheme.error.withOpacity(0.12),
+                    color: filter == 'Unread'
+                        ? AppTheme.error.withOpacity(0.12)
+                        : AppTheme.primaryColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    '$_unreadCount',
+                    '$badgeCount',
                     style: GoogleFonts.outfit(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.error,
+                      color: filter == 'Unread' ? AppTheme.error : AppTheme.primaryColor,
                     ),
                   ),
                 ),
@@ -619,7 +610,11 @@ class _AlertsPageState extends State<AlertsPage> {
           ),
           const SizedBox(height: 24),
           Text(
-            _selectedFilter == 'Unread' ? 'No unread notifications' : 'All caught up!',
+            _selectedFilter == 'Unread'
+                ? 'No unread notifications'
+                : _selectedFilter == 'All'
+                    ? 'All caught up!'
+                    : 'No $_selectedFilter alerts',
             style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -630,7 +625,7 @@ class _AlertsPageState extends State<AlertsPage> {
           Text(
             _selectedFilter == 'Unread'
                 ? 'You do not have any unread notifications at the moment.'
-                : 'When new alerts or system updates arrive, they will appear here.',
+                : 'When new alerts or updates arrive in this category, they will appear here.',
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 14,
@@ -645,34 +640,65 @@ class _AlertsPageState extends State<AlertsPage> {
 
   Widget _buildNotificationCard(Map<String, dynamic> item) {
     final isUnread = item['isRead'] == false || item['isRead'] == null;
-    final title = item['title'] ?? 'Notification';
-    final body = item['body'] ?? '';
-    final route = item['actionRoute'];
-    final timeStr = item['createdAt'] != null ? _formatTimeAgo(item['createdAt']) : '';
+    final title = (item['title'] ?? 'Notification').toString();
+    final body = (item['body'] ?? '').toString();
+    final type = (item['type'] ?? '').toString().toLowerCase();
+    final priority = NotificationsCubit.resolvePriority(item);
+    final bucket = NotificationsCubit.resolveCategoryBucket(item);
+    final timeStr = item['createdAt'] != null ? _formatTimeAgo(item['createdAt'].toString()) : '';
 
     IconData iconData = Icons.notifications_rounded;
     Color iconColor = const Color(0xFF475569);
     Color iconBg = const Color(0xFFF1F5F9);
+    String actionLabel = 'View Details';
 
-    if (title.contains('Assigned') || title.contains('Agent')) {
-      iconData = Icons.person_add_rounded;
-      iconColor = Colors.indigo;
-      iconBg = Colors.indigo.withOpacity(0.12);
-    } else if (title.contains('Blocked')) {
+    if (bucket == 'tasks_calls') {
+      if (type == 'missed_call' || title.toLowerCase().contains('missed')) {
+        iconData = Icons.phone_missed_rounded;
+        iconColor = const Color(0xFFDC2626);
+        iconBg = const Color(0xFFFEE2E2);
+        actionLabel = 'Open Call Logs';
+      } else {
+        iconData = Icons.alarm_on_rounded;
+        iconColor = priority == 'critical' ? const Color(0xFFDC2626) : const Color(0xFFD97706);
+        iconBg = priority == 'critical' ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7);
+        actionLabel = 'Open Call Task';
+      }
+    } else if (bucket == 'whatsapp') {
+      iconData = Icons.chat_bubble_rounded;
+      iconColor = const Color(0xFF059669);
+      iconBg = const Color(0xFFD1FAE5);
+      actionLabel = 'Reply on WhatsApp';
+    } else if (bucket == 'orders') {
+      iconData = Icons.shopping_bag_rounded;
+      iconColor = Colors.amber.shade800;
+      iconBg = Colors.amber.withOpacity(0.14);
+      actionLabel = 'View Orders';
+    } else if (bucket == 'leads_kyc') {
+      if (type.contains('kyc') || title.contains('KYC')) {
+        iconData = type == 'kyc_rejected' ? Icons.gpp_bad_rounded : Icons.verified_user_rounded;
+        iconColor = type == 'kyc_rejected'
+            ? const Color(0xFFDC2626)
+            : (type == 'kyc_sla_breach' ? const Color(0xFFD97706) : const Color(0xFF16A34A));
+        iconBg = iconColor.withOpacity(0.12);
+        actionLabel = type == 'kyc_verified' ? 'Open Dealer Profile' : 'Review KYC / Lead';
+      } else {
+        iconData = Icons.person_add_alt_1_rounded;
+        iconColor = Colors.indigo;
+        iconBg = Colors.indigo.withOpacity(0.12);
+        actionLabel = type == 'dealer_assigned' ? 'Open Dealer Profile' : 'Open Lead Profile';
+      }
+    } else if (title.contains('Blocked') || type == 'account_blocked' || type == 'account_deleted') {
       iconData = Icons.block_rounded;
       iconColor = Colors.red;
       iconBg = Colors.red.withOpacity(0.12);
-    } else if (title.contains('KYC')) {
-      iconData = Icons.verified_user_rounded;
-      iconColor = Colors.green;
-      iconBg = Colors.green.withOpacity(0.12);
-    } else if (title.contains('Order')) {
-      iconData = Icons.shopping_bag_rounded;
-      iconColor = Colors.amber.shade800;
-      iconBg = Colors.amber.withOpacity(0.12);
+      actionLabel = 'View Record';
     }
 
-    final String? id = item['_id'] ?? item['id'];
+    final String? id = (item['_id'] ?? item['id'])?.toString();
+    final Color leftBarColor = priority == 'critical'
+        ? const Color(0xFFDC2626)
+        : AppTheme.primaryColor;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -680,13 +706,11 @@ class _AlertsPageState extends State<AlertsPage> {
         onTap: () {
           if (isUnread && id != null) {
             _markAsRead(id);
+            try {
+              context.read<NotificationsCubit>().markAsRead(id);
+            } catch (_) {}
           }
-          if (route != null && route.isNotEmpty) {
-            String navRoute = route;
-            if (route == '/leads/profile') navRoute = '/leads';
-            if (route == '/dealers/profile') navRoute = '/dealers';
-            Navigator.pushNamed(context, navRoute);
-          }
+          NotificationsCubit.navigateToAlertTarget(item, context: context);
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -694,7 +718,11 @@ class _AlertsPageState extends State<AlertsPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isUnread ? AppTheme.primaryColor.withOpacity(0.15) : const Color(0xFFE2E8F0),
+              color: isUnread
+                  ? (priority == 'critical'
+                      ? const Color(0xFFDC2626).withOpacity(0.35)
+                      : AppTheme.primaryColor.withOpacity(0.2))
+                  : const Color(0xFFE2E8F0),
               width: isUnread ? 1.5 : 1,
             ),
             boxShadow: [
@@ -715,7 +743,7 @@ class _AlertsPageState extends State<AlertsPage> {
                     top: 0,
                     bottom: 0,
                     width: 4,
-                    child: Container(color: AppTheme.primaryColor),
+                    child: Container(color: leftBarColor),
                   ),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -735,13 +763,39 @@ class _AlertsPageState extends State<AlertsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
+                            Row(
+                              children: [
+                                if (priority == 'critical') ...[
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEE2E2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFFECACA)),
+                                    ),
+                                    child: Text(
+                                      'URGENT',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFFDC2626),
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    title,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -752,25 +806,57 @@ class _AlertsPageState extends State<AlertsPage> {
                                 color: AppTheme.textSecondary,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              timeStr,
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF94A3B8),
-                              ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Text(
+                                  timeStr,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        actionLabel,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.primaryColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 12,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
                       if (isUnread)
                         Container(
-                          margin: const EdgeInsets.only(top: 4, left: 4),
+                          margin: const EdgeInsets.only(top: 4, left: 8),
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.primaryColor,
+                          decoration: BoxDecoration(
+                            color: leftBarColor,
                             shape: BoxShape.circle,
                           ),
                         ),

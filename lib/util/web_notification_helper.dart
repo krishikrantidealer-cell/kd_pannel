@@ -10,7 +10,17 @@ void requestNotificationPermission() {
   helper.requestNotificationPermission();
 }
 
-/// Displays a desktop system notification and plays a sound.
-void showWebNotification(String title, String body) {
-  helper.showWebNotification(title, body);
+/// Displays a desktop system notification and plays a priority-aware sound.
+void showWebNotification(
+  String title,
+  String body, {
+  String priority = 'normal',
+  void Function()? onTap,
+}) {
+  helper.showWebNotification(
+    title,
+    body,
+    priority: priority,
+    onTap: onTap,
+  );
 }

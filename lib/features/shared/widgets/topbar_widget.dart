@@ -222,43 +222,65 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                           itemBuilder: (context, index) {
                                             final item = notifications[index];
                                             final isUnread = item['isRead'] == false || item['isRead'] == null;
-                                            final title = item['title'] ?? 'Notification';
-                                            final body = item['body'] ?? '';
-                                            final route = item['actionRoute'];
+                                            final title = (item['title'] ?? 'Notification').toString();
+                                            final body = (item['body'] ?? '').toString();
+                                            final type = (item['type'] ?? '').toString().toLowerCase();
+                                            final bucket = NotificationsCubit.resolveCategoryBucket(item);
+                                            final priority = NotificationsCubit.resolvePriority(item);
                                             final timeStr = item['createdAt'] != null
-                                                ? _formatTimeAgo(item['createdAt'])
+                                                ? _formatTimeAgo(item['createdAt'].toString())
                                                 : '';
 
                                             IconData iconData = Icons.notifications_outlined;
                                             Color iconColor = const Color(0xFF475569);
                                             Color iconBg = const Color(0xFFF1F5F9);
 
-                                            if (title.contains('Assigned') || title.contains('Agent')) {
-                                              iconData = Icons.person_add_outlined;
-                                              iconColor = Colors.indigo;
-                                              iconBg = Colors.indigo.withValues(alpha: 0.12);
-                                            } else if (title.contains('Blocked')) {
+                                            if (bucket == 'tasks_calls') {
+                                              iconData = (type == 'missed_call' || title.toLowerCase().contains('missed'))
+                                                  ? Icons.phone_missed_rounded
+                                                  : Icons.alarm_on_rounded;
+                                              iconColor = priority == 'critical'
+                                                  ? const Color(0xFFDC2626)
+                                                  : const Color(0xFFD97706);
+                                              iconBg = priority == 'critical'
+                                                  ? const Color(0xFFFEE2E2)
+                                                  : const Color(0xFFFEF3C7);
+                                            } else if (bucket == 'whatsapp') {
+                                              iconData = Icons.chat_bubble_outline_rounded;
+                                              iconColor = const Color(0xFF059669);
+                                              iconBg = const Color(0xFFD1FAE5);
+                                            } else if (bucket == 'orders') {
+                                              iconData = Icons.shopping_bag_outlined;
+                                              iconColor = Colors.amber.shade800;
+                                              iconBg = Colors.amber.withValues(alpha: 0.14);
+                                            } else if (bucket == 'leads_kyc') {
+                                              if (type.contains('kyc') || title.contains('KYC')) {
+                                                iconData = type == 'kyc_rejected'
+                                                    ? Icons.gpp_bad_outlined
+                                                    : Icons.verified_user_outlined;
+                                                iconColor = type == 'kyc_rejected'
+                                                    ? const Color(0xFFDC2626)
+                                                    : const Color(0xFF16A34A);
+                                                iconBg = iconColor.withValues(alpha: 0.12);
+                                              } else {
+                                                iconData = Icons.person_add_outlined;
+                                                iconColor = Colors.indigo;
+                                                iconBg = Colors.indigo.withValues(alpha: 0.12);
+                                              }
+                                            } else if (title.contains('Blocked') || type == 'account_blocked' || type == 'account_deleted') {
                                               iconData = Icons.block_outlined;
                                               iconColor = Colors.red;
                                               iconBg = Colors.red.withValues(alpha: 0.12);
-                                            } else if (title.contains('KYC')) {
-                                              iconData = Icons.verified_user_outlined;
-                                              iconColor = Colors.green;
-                                              iconBg = Colors.green.withValues(alpha: 0.12);
                                             }
 
                                             return InkWell(
                                               onTap: () {
                                                 _closeDropdown();
-                                                if (isUnread && item['_id'] != null) {
-                                                  notifCubit.markAsRead(item['_id']);
+                                                final id = (item['_id'] ?? item['id'])?.toString();
+                                                if (isUnread && id != null && id.isNotEmpty) {
+                                                  notifCubit.markAsRead(id);
                                                 }
-                                                if (route != null && route.isNotEmpty) {
-                                                  String navRoute = route;
-                                                  if (route == '/leads/profile') navRoute = '/leads';
-                                                  if (route == '/dealers/profile') navRoute = '/dealers';
-                                                  Navigator.pushNamed(context, navRoute);
-                                                }
+                                                NotificationsCubit.navigateToAlertTarget(item, context: context);
                                               },
                                               child: Container(
                                                 padding: const EdgeInsets.all(12),
@@ -279,13 +301,39 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                                       child: Column(
                                                         crossAxisAlignment: CrossAxisAlignment.start,
                                                         children: [
-                                                          Text(
-                                                            title,
-                                                            style: GoogleFonts.outfit(
-                                                              fontSize: 12,
-                                                              fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                                              color: const Color(0xFF1E293B),
-                                                            ),
+                                                          Row(
+                                                            children: [
+                                                              if (priority == 'critical') ...[
+                                                                Container(
+                                                                  margin: const EdgeInsets.only(right: 6),
+                                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                                  decoration: BoxDecoration(
+                                                                    color: const Color(0xFFFEE2E2),
+                                                                    borderRadius: BorderRadius.circular(4),
+                                                                  ),
+                                                                  child: Text(
+                                                                    'URGENT',
+                                                                    style: GoogleFonts.outfit(
+                                                                      fontSize: 8.5,
+                                                                      fontWeight: FontWeight.w800,
+                                                                      color: const Color(0xFFDC2626),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                              Expanded(
+                                                                child: Text(
+                                                                  title,
+                                                                  style: GoogleFonts.outfit(
+                                                                    fontSize: 12,
+                                                                    fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
+                                                                    color: const Color(0xFF1E293B),
+                                                                  ),
+                                                                  maxLines: 1,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
                                                           ),
                                                           const SizedBox(height: 2),
                                                           Text(
@@ -316,7 +364,9 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                                         width: 6,
                                                         height: 6,
                                                         decoration: BoxDecoration(
-                                                          color: AppTheme.primaryColor,
+                                                          color: priority == 'critical'
+                                                              ? const Color(0xFFDC2626)
+                                                              : AppTheme.primaryColor,
                                                           shape: BoxShape.circle,
                                                         ),
                                                       ),
@@ -328,6 +378,27 @@ class _TopbarWidgetState extends State<TopbarWidget> {
                                           },
                                         ),
                                       ),
+                              ),
+                              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                              InkWell(
+                                onTap: () {
+                                  _closeDropdown();
+                                  Navigator.pushNamed(context, '/alerts');
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  color: const Color(0xFFF8FAFC),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    'View All Alerts & Notifications →',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),

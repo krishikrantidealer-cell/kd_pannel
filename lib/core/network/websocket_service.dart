@@ -24,6 +24,7 @@ class WebSocketService {
   final _dealersUpdateController = StreamController<void>.broadcast();
   final _ordersUpdateController = StreamController<void>.broadcast();
   final _notificationUpdateController = StreamController<void>.broadcast();
+  final _notificationPayloadController = StreamController<Map<String, dynamic>>.broadcast();
   final _presenceUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _auditLogUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
@@ -33,6 +34,7 @@ class WebSocketService {
   Stream<void> get dealersUpdates => _dealersUpdateController.stream;
   Stream<void> get ordersUpdates => _ordersUpdateController.stream;
   Stream<void> get notificationUpdates => _notificationUpdateController.stream;
+  Stream<Map<String, dynamic>> get notificationPayloads => _notificationPayloadController.stream;
   Stream<Map<String, dynamic>> get presenceUpdates => _presenceUpdateController.stream;
   Stream<Map<String, dynamic>> get auditLogUpdates => _auditLogUpdateController.stream;
   Stream<Map<String, dynamic>> get chatUpdates => _chatUpdateController.stream;
@@ -208,6 +210,11 @@ class WebSocketService {
           _triggerOrdersUpdate();
           break;
         case 'NOTIFICATION_RECEIVED':
+          if (data['notification'] is Map && !_notificationPayloadController.isClosed) {
+            _notificationPayloadController.add(
+              Map<String, dynamic>.from(data['notification'] as Map),
+            );
+          }
           _triggerNotificationUpdate();
           break;
         case 'PRESENCE_UPDATE':

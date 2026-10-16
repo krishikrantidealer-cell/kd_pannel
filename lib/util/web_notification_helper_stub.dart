@@ -5,6 +5,11 @@ void requestNotificationPermission() {
   // No-op on native platforms
 }
 
-void showWebNotification(String title, String body) {
+void showWebNotification(
+  String title,
+  String body, {
+  String priority = 'normal',
+  void Function()? onTap,
+}) {
   // No-op on native platforms
 }
