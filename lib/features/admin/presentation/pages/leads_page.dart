@@ -719,6 +719,51 @@ class _LeadsPageState extends State<LeadsPage> {
     return ['All States', ..._indianStatesAndUTs];
   }
 
+  final List<String> sourceOptions = [
+    'All Sources',
+    'Meta Lead Form',
+    'Organic',
+    'Facebook Ads',
+    'Instagram Ads',
+    'Google Ads',
+    'App',
+    'KD Panel',
+  ];
+
+  Map<String, int> _computeSourceCounts(List<Map<String, dynamic>> leads) {
+    final counts = <String, int>{
+      'All Sources': leads.length,
+      'Meta Lead Form': 0,
+      'Organic': 0,
+      'Facebook Ads': 0,
+      'Instagram Ads': 0,
+      'Google Ads': 0,
+      'App': 0,
+      'KD Panel': 0,
+    };
+
+    for (final l in leads) {
+      final s = (l['source'] ?? 'App').toString().toLowerCase();
+      if (s.contains('meta')) {
+        counts['Meta Lead Form'] = (counts['Meta Lead Form'] ?? 0) + 1;
+      } else if (s == 'organic') {
+        counts['Organic'] = (counts['Organic'] ?? 0) + 1;
+      } else if (s.contains('facebook')) {
+        counts['Facebook Ads'] = (counts['Facebook Ads'] ?? 0) + 1;
+      } else if (s.contains('instagram')) {
+        counts['Instagram Ads'] = (counts['Instagram Ads'] ?? 0) + 1;
+      } else if (s.contains('google')) {
+        counts['Google Ads'] = (counts['Google Ads'] ?? 0) + 1;
+      } else if (s.contains('panel')) {
+        counts['KD Panel'] = (counts['KD Panel'] ?? 0) + 1;
+      } else {
+        counts['App'] = (counts['App'] ?? 0) + 1;
+      }
+    }
+
+    return counts;
+  }
+
   final List<String> dropdownOptions = [
     'All Time',
     'Last 1 Week',
@@ -759,6 +804,30 @@ class _LeadsPageState extends State<LeadsPage> {
       result = result.where((l) {
         final leadState = (l['state'] ?? '').toString().trim().toLowerCase();
         return leadState == filterState;
+      }).toList();
+    }
+
+    // 1b. Source Filtering
+    if (state.selectedSource != 'All Sources') {
+      final filterSource = state.selectedSource.trim().toLowerCase();
+      result = result.where((l) {
+        final leadSource = (l['source'] ?? 'App').toString().trim().toLowerCase();
+        if (filterSource == 'meta lead form') {
+          return leadSource.contains('meta');
+        } else if (filterSource == 'organic') {
+          return leadSource == 'organic';
+        } else if (filterSource.contains('facebook')) {
+          return leadSource.contains('facebook');
+        } else if (filterSource.contains('instagram')) {
+          return leadSource.contains('instagram');
+        } else if (filterSource.contains('google')) {
+          return leadSource.contains('google');
+        } else if (filterSource == 'app') {
+          return leadSource == 'app';
+        } else if (filterSource == 'kd panel') {
+          return leadSource.contains('panel');
+        }
+        return leadSource == filterSource;
       }).toList();
     }
 
@@ -1353,6 +1422,22 @@ class _LeadsPageState extends State<LeadsPage> {
                                           },
                                           isMobile: isMobile,
                                         ),
+                                        sourceDropdown: _buildFilterDropdown(
+                                          'All Sources',
+                                          isMobile ? double.infinity : 185,
+                                          sourceOptions,
+                                          state.selectedSource,
+                                          (val) {
+                                            context.read<LeadsBloc>().add(
+                                                  UpdateLeadsFilterEvent(
+                                                    selectedSource: val!,
+                                                    currentPage: 1,
+                                                  ),
+                                                );
+                                          },
+                                          counts: _computeSourceCounts(dateFilteredLeads),
+                                          isMobile: isMobile,
+                                        ),
                                         onChipSelected: (chip) {
                                           context.read<LeadsBloc>().add(
                                                 UpdateLeadsFilterEvent(
@@ -1641,6 +1726,7 @@ class _LeadsPageState extends State<LeadsPage> {
     List<String> options,
     String currentValue,
     ValueChanged<String?> onChanged, {
+    Map<String, int>? counts,
     bool isMobile = false,
   }) {
     return Container(
@@ -1682,15 +1768,42 @@ class _LeadsPageState extends State<LeadsPage> {
               .map<DropdownMenuItem<String>>(
                 (String value) => DropdownMenuItem<String>(
                   value: value,
-                  child: Text(
-                    value,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: GoogleFonts.outfit(
-                      fontSize: isMobile ? 12 : 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textPrimary,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          value,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: GoogleFonts.outfit(
+                            fontSize: isMobile ? 12 : 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (counts != null && counts.containsKey(value)) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${counts[value]}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               )
@@ -2723,6 +2836,75 @@ class _LeadRowState extends State<_LeadRow> {
     );
   }
 
+  Widget _buildLeadSourceBadge(dynamic rawSource) {
+    final s = (rawSource ?? 'App').toString();
+    final lower = s.toLowerCase();
+    Color bg;
+    Color text;
+    IconData icon;
+    String label;
+
+    if (lower.contains('meta')) {
+      bg = const Color(0xFFE7F3FF);
+      text = const Color(0xFF1877F2);
+      icon = Icons.campaign_rounded;
+      label = 'Meta Form';
+    } else if (lower == 'organic') {
+      bg = const Color(0xFFECFDF5);
+      text = const Color(0xFF059669);
+      icon = Icons.eco_rounded;
+      label = 'Organic';
+    } else if (lower.contains('facebook')) {
+      bg = const Color(0xFFEFF6FF);
+      text = const Color(0xFF2563EB);
+      icon = Icons.facebook_rounded;
+      label = 'FB Ad';
+    } else if (lower.contains('instagram')) {
+      bg = const Color(0xFFFDF2F8);
+      text = const Color(0xFFDB2777);
+      icon = Icons.photo_camera_rounded;
+      label = 'Insta Ad';
+    } else if (lower.contains('google')) {
+      bg = const Color(0xFFFEF3C7);
+      text = const Color(0xFFD97706);
+      icon = Icons.search_rounded;
+      label = 'Google Ad';
+    } else if (lower.contains('panel')) {
+      bg = const Color(0xFFF3E8FF);
+      text = const Color(0xFF7C3AED);
+      icon = Icons.admin_panel_settings_rounded;
+      label = 'KD Panel';
+    } else {
+      bg = const Color(0xFFF1F5F9);
+      text = const Color(0xFF64748B);
+      icon = Icons.smartphone_rounded;
+      label = 'Direct App';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: text),
+          const SizedBox(width: 3.5),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Color rowBgColor = widget.isAlternate ? const Color(0xFFFAFBFC) : Colors.white;
@@ -2845,6 +3027,8 @@ class _LeadRowState extends State<_LeadRow> {
                                   ],
                                 ),
                               ],
+                              const SizedBox(height: 3),
+                              _buildLeadSourceBadge(widget.lead['source']),
                             ],
                           ),
                         ),

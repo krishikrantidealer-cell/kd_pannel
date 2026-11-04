@@ -9,6 +9,7 @@ class LeadsLifecycleFunnel extends StatelessWidget {
   final Function(String chip) onChipSelected;
   final Widget? searchField;
   final Widget? stateDropdown;
+  final Widget? sourceDropdown;
   final bool isMobile;
 
   const LeadsLifecycleFunnel({
@@ -18,6 +19,7 @@ class LeadsLifecycleFunnel extends StatelessWidget {
     required this.onChipSelected,
     this.searchField,
     this.stateDropdown,
+    this.sourceDropdown,
     required this.isMobile,
   });
 
@@ -104,6 +106,10 @@ class LeadsLifecycleFunnel extends StatelessWidget {
           if (searchField != null && stateDropdown != null)
             const SizedBox(width: 12),
           if (stateDropdown != null) stateDropdown!,
+          if (sourceDropdown != null) ...[
+            const SizedBox(width: 12),
+            sourceDropdown!,
+          ],
           const SizedBox(width: 16),
           Expanded(
             child: SingleChildScrollView(
@@ -135,9 +141,16 @@ class LeadsLifecycleFunnel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (searchField != null) searchField!,
-          if (stateDropdown != null) ...[
+          if (stateDropdown != null || sourceDropdown != null) ...[
             const SizedBox(height: 12),
-            stateDropdown!,
+            Row(
+              children: [
+                if (stateDropdown != null) Expanded(child: stateDropdown!),
+                if (stateDropdown != null && sourceDropdown != null)
+                  const SizedBox(width: 10),
+                if (sourceDropdown != null) Expanded(child: sourceDropdown!),
+              ],
+            ),
           ],
           const SizedBox(height: 12),
           SingleChildScrollView(

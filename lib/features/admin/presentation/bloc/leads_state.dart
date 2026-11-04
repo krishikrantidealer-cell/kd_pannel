@@ -11,6 +11,7 @@ class LeadsState extends Equatable {
   // Filtering and pagination states
   final String searchQuery;
   final String selectedState;
+  final String selectedSource;
   final String selectedTimeframe;
   final PickerDateRange? selectedRange;
   final String selectedFilterChip;
@@ -40,6 +41,7 @@ class LeadsState extends Equatable {
     this.salesAgents = const [],
     this.searchQuery = '',
     this.selectedState = 'All States',
+    this.selectedSource = 'All Sources',
     this.selectedTimeframe = 'All Time',
     this.selectedRange,
     this.selectedFilterChip = 'All',
@@ -64,6 +66,7 @@ class LeadsState extends Equatable {
     List<Map<String, dynamic>>? salesAgents,
     String? searchQuery,
     String? selectedState,
+    String? selectedSource,
     String? selectedTimeframe,
     PickerDateRange? selectedRange,
     String? selectedFilterChip,
@@ -88,6 +91,7 @@ class LeadsState extends Equatable {
       salesAgents: salesAgents ?? this.salesAgents,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedState: selectedState ?? this.selectedState,
+      selectedSource: selectedSource ?? this.selectedSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       selectedRange: selectedRange ?? this.selectedRange,
       selectedFilterChip: selectedFilterChip ?? this.selectedFilterChip,
@@ -115,6 +119,7 @@ class LeadsState extends Equatable {
     List<Map<String, dynamic>>? salesAgents,
     String? searchQuery,
     String? selectedState,
+    String? selectedSource,
     String? selectedTimeframe,
     PickerDateRange? selectedRange,
     String? selectedFilterChip,
@@ -135,6 +140,7 @@ class LeadsState extends Equatable {
       salesAgents: salesAgents ?? this.salesAgents,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedState: selectedState ?? this.selectedState,
+      selectedSource: selectedSource ?? this.selectedSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       selectedRange: selectedRange ?? this.selectedRange,
       selectedFilterChip: selectedFilterChip ?? this.selectedFilterChip,
@@ -158,6 +164,7 @@ class LeadsState extends Equatable {
     List<Map<String, dynamic>>? salesAgents,
     String? searchQuery,
     String? selectedState,
+    String? selectedSource,
     String? selectedTimeframe,
     String? selectedFilterChip,
     int? currentPage,
@@ -177,6 +184,7 @@ class LeadsState extends Equatable {
       salesAgents: salesAgents ?? this.salesAgents,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedState: selectedState ?? this.selectedState,
+      selectedSource: selectedSource ?? this.selectedSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       selectedRange: null, // explicitly reset selectedRange
       selectedFilterChip: selectedFilterChip ?? this.selectedFilterChip,
@@ -201,6 +209,7 @@ class LeadsState extends Equatable {
         salesAgents,
         searchQuery,
         selectedState,
+        selectedSource,
         selectedTimeframe,
         selectedRange,
         selectedFilterChip,

@@ -558,6 +558,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         state.copyWithResetRange(
           searchQuery: event.searchQuery,
           selectedState: event.selectedState,
+          selectedSource: event.selectedSource,
           selectedTimeframe: event.selectedTimeframe,
           selectedFilterChip: event.selectedFilterChip,
           currentPage: event.currentPage,
@@ -569,6 +570,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
         state.copyWith(
           searchQuery: event.searchQuery,
           selectedState: event.selectedState,
+          selectedSource: event.selectedSource,
           selectedTimeframe: event.selectedTimeframe,
           selectedRange: event.selectedRange,
           selectedFilterChip: event.selectedFilterChip,
