@@ -223,6 +223,37 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     'KD Panel',
   ];
 
+  Map<String, int> _computeDealerSourceCounts(List<Dealer> dealers) {
+    final counts = <String, int>{
+      'All Sources': dealers.length,
+      'Meta Lead Form': 0,
+      'Organic': 0,
+      'Facebook Ads': 0,
+      'Instagram Ads': 0,
+      'Google Ads': 0,
+      'KD Panel': 0,
+    };
+
+    for (final d in dealers) {
+      final s = d.source.toLowerCase();
+      final utm = (d.utmSource ?? '').toLowerCase();
+      if (d.isPanelCreated || s.contains('panel') || d.createdVia?.toLowerCase() == 'panel') {
+        counts['KD Panel'] = (counts['KD Panel'] ?? 0) + 1;
+      } else if (s.contains('meta') || utm.contains('meta')) {
+        counts['Meta Lead Form'] = (counts['Meta Lead Form'] ?? 0) + 1;
+      } else if (s.contains('facebook') || utm.contains('facebook')) {
+        counts['Facebook Ads'] = (counts['Facebook Ads'] ?? 0) + 1;
+      } else if (s.contains('instagram') || utm.contains('instagram')) {
+        counts['Instagram Ads'] = (counts['Instagram Ads'] ?? 0) + 1;
+      } else if (s.contains('google') || utm.contains('google')) {
+        counts['Google Ads'] = (counts['Google Ads'] ?? 0) + 1;
+      } else if (s == 'organic' || s == 'app' || s.isEmpty) {
+        counts['Organic'] = (counts['Organic'] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
   String _formatCurrency(double amount) {
     final int val = amount.round();
     if (val == 0) return '₹0';
@@ -874,6 +905,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                                 state,
                                 isMobile,
                                 isDesktop,
+                                allCalculated,
                               ),
                               const SizedBox(height: 16),
                             ],
@@ -1347,6 +1379,49 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
       }).toList();
     }
 
+    if (state.selectedAgent != 'All Sales Agents') {
+      filtered = filtered.where((d) => d.agent == state.selectedAgent).toList();
+    }
+
+    if (state.selectedState != 'All States') {
+      filtered = filtered
+          .where(
+            (d) =>
+                d.state.trim().toLowerCase() ==
+                state.selectedState.trim().toLowerCase(),
+          )
+          .toList();
+    }
+
+    if (state.selectedSource != 'All Sources') {
+      filtered = filtered.where((dealer) {
+        final src = dealer.source.toLowerCase();
+        final utm = (dealer.utmSource ?? '').toLowerCase();
+        switch (state.selectedSource) {
+          case 'Meta Lead Form':
+            return src.contains('meta') || utm.contains('meta');
+          case 'Facebook Ads':
+            return src.contains('facebook') ||
+                utm.contains('facebook') ||
+                utm.contains('fb');
+          case 'Instagram Ads':
+            return src.contains('instagram') ||
+                utm.contains('instagram') ||
+                utm.contains('ig');
+          case 'Google Ads':
+            return src.contains('google') || utm.contains('google');
+          case 'KD Panel':
+            return dealer.isPanelCreated ||
+                src.contains('panel') ||
+                dealer.createdVia?.toLowerCase() == 'panel';
+          case 'Organic':
+            return src == 'organic' || src == 'app' || src.isEmpty;
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
     final totalDealers = filtered.length;
     final activeDealers = filtered.where((d) => !d.isInactive).length;
     final highValueDealers = filtered.where((d) => d.isHighValue).length;
@@ -1407,12 +1482,14 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     DealersState state,
     bool isMobile,
     bool isDesktop,
+    List<Dealer> allDealers,
   ) {
     final agents = _getAgentOptions(state);
+    final sourceCounts = _computeDealerSourceCounts(allDealers);
     if (!isMobile) {
       return Row(
         children: [
-          _buildSearchField(260),
+          _buildSearchField(250),
           if (AuthService().isAdmin) ...[
             const SizedBox(width: 10),
             _buildFilterDropdown(
@@ -1442,7 +1519,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           const SizedBox(width: 10),
           _buildFilterDropdown(
             'All Sources',
-            150,
+            185,
             sourceOptions,
             state.selectedSource,
             (val) {
@@ -1450,6 +1527,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 UpdateDealersFilterEvent(selectedSource: val!, currentPage: 1),
               );
             },
+            counts: sourceCounts,
           ),
           const Spacer(),
           _buildToggleFilter('High Value', state.showHighValueOnly, (val) {
@@ -1524,6 +1602,7 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 ),
               );
             },
+            counts: sourceCounts,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1626,8 +1705,9 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     double? width,
     List<String> options,
     String currentValue,
-    ValueChanged<String?> onChanged,
-  ) {
+    ValueChanged<String?> onChanged, {
+    Map<String, int>? counts,
+  }) {
     return Container(
       height: 38,
       width: width,
@@ -1660,14 +1740,41 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
               .map<DropdownMenuItem<String>>(
                 (String value) => DropdownMenuItem<String>(
                   value: value,
-                  child: Text(
-                    value,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          value,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (counts != null && counts.containsKey(value)) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${counts[value]}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               )
