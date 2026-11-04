@@ -2999,11 +2999,19 @@ class _LeadRowState extends State<_LeadRow> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                name,
-                                style: _nameStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      name,
+                                      style: _nameStyle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildLeadSourceBadge(widget.lead['source']),
+                                ],
                               ),
                               if (shopName.isNotEmpty &&
                                   shopName.toLowerCase() != 'my store') ...[
@@ -3027,8 +3035,6 @@ class _LeadRowState extends State<_LeadRow> {
                                   ],
                                 ),
                               ],
-                              const SizedBox(height: 3),
-                              _buildLeadSourceBadge(widget.lead['source']),
                             ],
                           ),
                         ),
