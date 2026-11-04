@@ -376,6 +376,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
         searchQuery: event.searchQuery,
         selectedAgent: event.selectedAgent,
         selectedState: event.selectedState,
+        selectedSource: event.selectedSource,
         selectedTimeframe: event.selectedTimeframe,
         customStartDate: event.customStartDate,
         customEndDate: event.customEndDate,

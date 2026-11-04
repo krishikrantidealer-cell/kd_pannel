@@ -213,6 +213,16 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     return ['All States', ..._indianStatesAndUTs];
   }
 
+  static const List<String> sourceOptions = [
+    'All Sources',
+    'Meta Lead Form',
+    'Facebook Ads',
+    'Instagram Ads',
+    'Google Ads',
+    'Organic',
+    'KD Panel',
+  ];
+
   String _formatCurrency(double amount) {
     final int val = amount.round();
     if (val == 0) return '₹0';
@@ -410,11 +420,37 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
           state.selectedState == 'All States' ||
           dealer.state.trim().toLowerCase() ==
               state.selectedState.trim().toLowerCase();
+      bool matchesSource = true;
+      if (state.selectedSource != 'All Sources') {
+        final src = dealer.source.toLowerCase();
+        final utm = (dealer.utmSource ?? '').toLowerCase();
+        switch (state.selectedSource) {
+          case 'Meta Lead Form':
+            matchesSource = src.contains('meta') || utm.contains('meta');
+            break;
+          case 'Facebook Ads':
+            matchesSource = src.contains('facebook') || utm.contains('facebook') || utm.contains('fb');
+            break;
+          case 'Instagram Ads':
+            matchesSource = src.contains('instagram') || utm.contains('instagram') || utm.contains('ig');
+            break;
+          case 'Google Ads':
+            matchesSource = src.contains('google') || utm.contains('google');
+            break;
+          case 'KD Panel':
+            matchesSource = dealer.isPanelCreated || src.contains('panel') || dealer.createdVia?.toLowerCase() == 'panel';
+            break;
+          case 'Organic':
+            matchesSource = src == 'organic' || src == 'app' || src.isEmpty;
+            break;
+        }
+      }
       bool matchesHighValue = !state.showHighValueOnly || dealer.isHighValue;
       bool matchesInactive = !state.showInactiveOnly || dealer.isInactive;
       return matchesSearch &&
           matchesAgent &&
           matchesState &&
+          matchesSource &&
           matchesHighValue &&
           matchesInactive;
     }).toList();
@@ -1376,12 +1412,12 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
     if (!isMobile) {
       return Row(
         children: [
-          _buildSearchField(300),
+          _buildSearchField(260),
           if (AuthService().isAdmin) ...[
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             _buildFilterDropdown(
               'All Sales Agents',
-              180,
+              160,
               agents,
               state.selectedAgent,
               (val) {
@@ -1391,15 +1427,27 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
               },
             ),
           ],
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           _buildFilterDropdown(
             'All States',
-            150,
+            140,
             stateOptions,
             state.selectedState,
             (val) {
               context.read<DealersBloc>().add(
                 UpdateDealersFilterEvent(selectedState: val!, currentPage: 1),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          _buildFilterDropdown(
+            'All Sources',
+            150,
+            sourceOptions,
+            state.selectedSource,
+            (val) {
+              context.read<DealersBloc>().add(
+                UpdateDealersFilterEvent(selectedSource: val!, currentPage: 1),
               );
             },
           ),
@@ -1461,6 +1509,21 @@ class _DealerManagementPageState extends State<DealerManagementPage> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _buildFilterDropdown(
+            'Sources',
+            double.infinity,
+            sourceOptions,
+            state.selectedSource,
+            (val) {
+              context.read<DealersBloc>().add(
+                UpdateDealersFilterEvent(
+                  selectedSource: val!,
+                  currentPage: 1,
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
           Row(
@@ -2948,6 +3011,84 @@ class _DealerRowState extends State<_DealerRow> {
     );
   }
 
+  Widget _buildDealerSourceBadge(Dealer dealer) {
+    final s = dealer.source;
+    final lower = s.toLowerCase();
+    Color bg;
+    Color border;
+    Color text;
+    IconData icon;
+    String label;
+
+    if (dealer.isPanelCreated || lower.contains('panel') || dealer.createdVia?.toLowerCase() == 'panel') {
+      bg = const Color(0xFFF3E8FF);
+      border = const Color(0xFFC084FC);
+      text = const Color(0xFF7E22CE);
+      icon = Icons.laptop_mac_rounded;
+      label = 'Panel';
+    } else if (lower.contains('meta')) {
+      bg = const Color(0xFFE7F3FF);
+      border = const Color(0xFF90CDF4);
+      text = const Color(0xFF1877F2);
+      icon = Icons.campaign_rounded;
+      label = 'Meta Form';
+    } else if (lower.contains('facebook')) {
+      bg = const Color(0xFFEFF6FF);
+      border = const Color(0xFF93C5FD);
+      text = const Color(0xFF2563EB);
+      icon = Icons.facebook_rounded;
+      label = 'FB Ad';
+    } else if (lower.contains('instagram')) {
+      bg = const Color(0xFFFDF2F8);
+      border = const Color(0xFFF9A8D4);
+      text = const Color(0xFFDB2777);
+      icon = Icons.photo_camera_rounded;
+      label = 'Insta Ad';
+    } else if (lower.contains('google')) {
+      bg = const Color(0xFFFEF3C7);
+      border = const Color(0xFFFDE68A);
+      text = const Color(0xFFD97706);
+      icon = Icons.search_rounded;
+      label = 'Google Ad';
+    } else if (lower == 'organic') {
+      bg = const Color(0xFFECFDF5);
+      border = const Color(0xFFA7F3D0);
+      text = const Color(0xFF059669);
+      icon = Icons.eco_rounded;
+      label = 'Organic';
+    } else {
+      bg = const Color(0xFFF1F5F9);
+      border = const Color(0xFFE2E8F0);
+      text = const Color(0xFF64748B);
+      icon = Icons.storefront_rounded;
+      label = s.isNotEmpty ? s : 'App';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: border, width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 9, color: text),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color rowBgColor = isHovered
@@ -3051,42 +3192,8 @@ class _DealerRowState extends State<_DealerRow> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (widget.dealer.isPanelCreated) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1.5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF3E8FF),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(0xFFC084FC),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.laptop_mac_rounded,
-                                            size: 9,
-                                            color: Color(0xFF7E22CE),
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            'Panel',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF7E22CE),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                  const SizedBox(width: 6),
+                                  _buildDealerSourceBadge(widget.dealer),
                                 ],
                               ),
                               const SizedBox(height: 1),

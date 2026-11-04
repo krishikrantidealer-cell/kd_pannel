@@ -90,6 +90,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
   final String? searchQuery;
   final String? selectedAgent;
   final String? selectedState;
+  final String? selectedSource;
   final String? selectedTimeframe;
   final DateTime? customStartDate;
   final DateTime? customEndDate;
@@ -103,6 +104,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
     this.searchQuery,
     this.selectedAgent,
     this.selectedState,
+    this.selectedSource,
     this.selectedTimeframe,
     this.customStartDate,
     this.customEndDate,
@@ -118,6 +120,7 @@ class UpdateDealersFilterEvent extends DealersEvent {
         searchQuery,
         selectedAgent,
         selectedState,
+        selectedSource,
         selectedTimeframe,
         customStartDate,
         customEndDate,

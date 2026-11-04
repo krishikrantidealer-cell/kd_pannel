@@ -12,6 +12,7 @@ class DealersState extends Equatable {
   final String searchQuery;
   final String selectedAgent;
   final String selectedState;
+  final String selectedSource;
   final String selectedTimeframe;
   final DateTime? customStartDate;
   final DateTime? customEndDate;
@@ -44,6 +45,7 @@ class DealersState extends Equatable {
     this.searchQuery = '',
     this.selectedAgent = 'All Sales Agents',
     this.selectedState = 'All States',
+    this.selectedSource = 'All Sources',
     this.selectedTimeframe = 'All Time',
     this.customStartDate,
     this.customEndDate,
@@ -73,6 +75,7 @@ class DealersState extends Equatable {
     String? searchQuery,
     String? selectedAgent,
     String? selectedState,
+    String? selectedSource,
     String? selectedTimeframe,
     DateTime? customStartDate,
     DateTime? customEndDate,
@@ -101,6 +104,7 @@ class DealersState extends Equatable {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedAgent: selectedAgent ?? this.selectedAgent,
       selectedState: selectedState ?? this.selectedState,
+      selectedSource: selectedSource ?? this.selectedSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       customStartDate: customStartDate ?? this.customStartDate,
       customEndDate: customEndDate ?? this.customEndDate,
@@ -132,6 +136,7 @@ class DealersState extends Equatable {
     String? searchQuery,
     String? selectedAgent,
     String? selectedState,
+    String? selectedSource,
     String? selectedTimeframe,
     DateTime? customStartDate,
     DateTime? customEndDate,
@@ -151,6 +156,7 @@ class DealersState extends Equatable {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedAgent: selectedAgent ?? this.selectedAgent,
       selectedState: selectedState ?? this.selectedState,
+      selectedSource: selectedSource ?? this.selectedSource,
       selectedTimeframe: selectedTimeframe ?? this.selectedTimeframe,
       customStartDate: customStartDate ?? this.customStartDate,
       customEndDate: customEndDate ?? this.customEndDate,
@@ -173,6 +179,7 @@ class DealersState extends Equatable {
         searchQuery,
         selectedAgent,
         selectedState,
+        selectedSource,
         selectedTimeframe,
         customStartDate,
         customEndDate,
