@@ -123,8 +123,19 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
 
   void _openDispositionDialog(Map<String, dynamic> callLog) {
     final logId = (callLog['_id'] ?? callLog['id'])?.toString() ?? '';
-    final phone = (callLog['customerPhone'] ?? widget.phone ?? '').toString();
-    final name = (callLog['customerName'] ?? widget.customerName ?? '').toString();
+    String phone = (callLog['customerPhone'] ?? '').toString();
+    if (phone.isEmpty || phone == 'Unknown') {
+      phone = (callLog['metadata']?['customer_identifier'] ??
+          callLog['metadata']?['payload']?['customer_identifier'] ??
+          (callLog['contactId'] is Map ? callLog['contactId']['phone'] : null) ??
+          widget.phone ??
+          '').toString();
+    }
+    phone = normalizePhone(phone);
+    final name = (callLog['customerName'] ??
+        (callLog['contactId'] is Map ? callLog['contactId']['name'] : null) ??
+        widget.customerName ??
+        '').toString();
     final initialDisposition = (callLog['userDisposition'] ?? callLog['disposition'] ?? '').toString();
     final initialNotes = (callLog['notes'] ?? '').toString();
     final initialFollowUpNote = callLog['followUpNote']?.toString();
@@ -564,6 +575,16 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
         ? '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim()
         : (call['agentName'] ?? 'Agent').toString();
 
+    final rawCallPhone = (call['customerPhone'] ??
+        call['contactPhone'] ??
+        call['phone'] ??
+        call['metadata']?['customer_identifier'] ??
+        call['metadata']?['payload']?['customer_identifier'] ??
+        (call['contactId'] is Map ? call['contactId']['phone'] : null) ??
+        widget.phone ??
+        '').toString();
+    final callPhone = normalizePhone(rawCallPhone);
+
     final rawDate = call['createdAt'];
     final DateTime? callTime = rawDate != null ? DateTime.tryParse(rawDate.toString())?.toLocal() : null;
     final String dateFormatted = callTime != null ? DateFormat('dd MMM yyyy, hh:mm a').format(callTime) : '';
@@ -655,7 +676,10 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         Text(
                           isOutbound ? 'Outbound Call' : 'Inbound Call',
@@ -665,7 +689,46 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                             color: const Color(0xFF0F172A),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        // Customer Phone Chip
+                        if (callPhone.isNotEmpty && callPhone != 'Unknown') ...[
+                          InkWell(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: callPhone));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Copied +91 $callPhone to clipboard', style: GoogleFonts.outfit()),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.phone_rounded, size: 10, color: Color(0xFF0284C7)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '+91 $callPhone',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  const Icon(Icons.copy_rounded, size: 10, color: Color(0xFF94A3B8)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                         // Status pill
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -685,7 +748,6 @@ class _CustomerCallLogsTabState extends State<CustomerCallLogsTab> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
                         // Duration pill
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

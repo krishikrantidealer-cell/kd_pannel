@@ -683,8 +683,15 @@ class _CallLogsPageState extends State<CallLogsPage> {
 
   void _openDispositionDialog(dynamic callLog) {
     final logId = callLog['_id']?.toString() ?? '';
-    final phone = callLog['customerPhone']?.toString() ?? '';
     final contact = callLog['contactId'];
+    final rawPhone = (callLog['customerPhone'] ??
+        callLog['metadata']?['customer_identifier'] ??
+        callLog['metadata']?['payload']?['customer_identifier'] ??
+        (contact is Map ? contact['phone'] : null) ??
+        '').toString();
+    final phone = rawPhone == 'Unknown'
+        ? ''
+        : rawPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '').replaceFirst(RegExp(r'^0+'), '');
     final name = contact is Map ? contact['name']?.toString() : null;
     final initialDisposition = callLog['userDisposition']?.toString();
     final initialNotes = callLog['notes']?.toString();
@@ -2139,8 +2146,15 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                       final String dirStr = (log['direction'] ?? log['type'] ?? 'outbound').toString().toLowerCase();
                                       final bool isOutbound = dirStr == 'outbound' || dirStr == 'out' || dirStr == '2' || dirStr == 'obd' || dirStr == 'click2call';
                                       final rawStatus = (log['status'] ?? 'initiated').toString().toLowerCase();
-                                      final String customerPhone = (log['customerPhone'] ?? 'Unknown').toString();
                                       final contact = log['contactId'] is Map ? log['contactId'] : null;
+                                      final String rawCustPhone = (log['customerPhone'] ??
+                                          log['metadata']?['customer_identifier'] ??
+                                          log['metadata']?['payload']?['customer_identifier'] ??
+                                          contact?['phone'] ??
+                                          'Unknown').toString();
+                                      final String customerPhone = rawCustPhone == 'Unknown'
+                                          ? 'Unknown'
+                                          : rawCustPhone.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '').replaceFirst(RegExp(r'^0+'), '');
                                       final String contactName = (contact?['name'] ?? '').toString().trim();
                                       final agent = log['agentId'] is Map ? log['agentId'] : {};
                                       final String agentName = '${agent['firstName'] ?? ''} ${agent['lastName'] ?? ''}'.trim();
@@ -2181,7 +2195,9 @@ class _CallLogsPageState extends State<CallLogsPage> {
                                         formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(logDate.toLocal());
                                       }
 
-                                  final displayName = contactName.isNotEmpty ? contactName : 'Customer (+$customerPhone)';
+                                  final displayName = contactName.isNotEmpty
+                                      ? contactName
+                                      : (customerPhone.isNotEmpty && customerPhone != 'Unknown' ? 'Customer (+$customerPhone)' : 'Customer');
                                   final initials = _getInitials(displayName);
                                   final rowLogId = log['_id']?.toString() ?? log['callId']?.toString() ?? log['providerCallId']?.toString() ?? '';
                                   final bool isRowSelected = rowLogId.isNotEmpty && _selectedLogIds.contains(rowLogId);
