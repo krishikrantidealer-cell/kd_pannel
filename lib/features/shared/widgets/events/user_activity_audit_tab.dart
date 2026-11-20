@@ -35,6 +35,17 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
   String _selectedCategory = 'all';
   String _selectedActorScope = 'all'; // 'all', 'user', 'sales'
 
+  @override
+  void didUpdateWidget(UserActivityAuditTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.userIdentifiers != oldWidget.userIdentifiers) {
+      currentPage = 1;
+      _expandedIndices.clear();
+      _selectedCategory = 'all';
+      _selectedActorScope = 'all';
+    }
+  }
+
   bool _isSalesActorEvent(Map<String, dynamic> e) {
     final payload = e['payload'] is Map
         ? Map<String, dynamic>.from(e['payload'])

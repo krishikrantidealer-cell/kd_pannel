@@ -1,0 +1,11 @@
+.git
+.github
+.dart_tool
+.idea
+android/
+ios/
+linux/
+macos/
+windows/
+test/
+!build/web

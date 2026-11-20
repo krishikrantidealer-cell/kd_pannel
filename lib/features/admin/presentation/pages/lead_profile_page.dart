@@ -2722,10 +2722,11 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
                                           )
                                     : currentTabKey == 'activities'
                                     ? Column(
-                                        key: const ValueKey('activities'),
+                                        key: ValueKey('activities_${leadId ?? ""}'),
                                         children: [
                                           if (leadId != null)
                                             UserActivityAuditTab(
+                                              key: ValueKey('lead_audit_${leadId ?? ""}'),
                                               userIdentifiers: [
                                                 leadId!,
                                                 if (activeLead['email'] != null)

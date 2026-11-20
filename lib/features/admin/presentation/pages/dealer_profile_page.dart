@@ -1662,7 +1662,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                                     )
                                   : currentTabKey == 'activities'
                                   ? UserActivityAuditTab(
-                                      key: const ValueKey('activities'),
+                                      key: ValueKey('dealer_activities_${currentDealer.id ?? currentDealer.phone}'),
                                       userIdentifiers: [
                                         if (currentDealer.id != null)
                                           currentDealer.id!,

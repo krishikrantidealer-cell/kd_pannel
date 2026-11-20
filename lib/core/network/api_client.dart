@@ -171,10 +171,12 @@ class ApiClient {
   /// Designed to seamlessly handle backend server cold starts and network glitches.
   Future<http.Response> _requestWithRetry(
     Future<http.Response> Function(Duration currentTimeout) requestFn, {
+    String endpoint = '',
     int maxRetries = 4,
     Duration initialDelay = const Duration(seconds: 1),
     bool isRetryAfterRefresh = false,
   }) async {
+    final bool isAuthEndpoint = endpoint.contains('/auth/');
     int attempt = 0;
     while (true) {
       attempt++;
@@ -187,12 +189,13 @@ class ApiClient {
       try {
         final response = await requestFn(currentTimeout);
 
-        // Silent token refresh interceptor
-        if (response.statusCode == 401 && !isRetryAfterRefresh) {
+        // Silent token refresh interceptor (only for protected API endpoints, NEVER on auth/login/otp/refresh)
+        if (response.statusCode == 401 && !isRetryAfterRefresh && !isAuthEndpoint) {
           final refreshed = await _refreshAccessToken();
           if (refreshed) {
             return await _requestWithRetry(
               requestFn,
+              endpoint: endpoint,
               maxRetries: 1, // Only try once more after a fresh token
               isRetryAfterRefresh: true,
             );
@@ -298,7 +301,7 @@ class ApiClient {
       return await http
           .get(uri, headers: _getHeaders())
           .timeout(timeoutDuration);
-    });
+    }, endpoint: endpoint);
 
     _inFlightGetRequests[key] = future;
     try {
@@ -321,7 +324,7 @@ class ApiClient {
       return await http
           .post(uri, headers: _getHeaders(), body: jsonEncode(body))
           .timeout(timeoutDuration);
-    });
+    }, endpoint: endpoint);
   }
 
   Future<http.Response> put(String endpoint, Map<String, dynamic> body) async {
@@ -331,7 +334,7 @@ class ApiClient {
       return await http
           .put(uri, headers: _getHeaders(), body: jsonEncode(body))
           .timeout(timeoutDuration);
-    });
+    }, endpoint: endpoint);
   }
 
   Future<http.Response> patch(String endpoint, [Map<String, dynamic>? body]) async {
@@ -341,7 +344,7 @@ class ApiClient {
       return await http
           .patch(uri, headers: _getHeaders(), body: body != null ? jsonEncode(body) : null)
           .timeout(timeoutDuration);
-    });
+    }, endpoint: endpoint);
   }
 
   Future<http.Response> delete(String endpoint) async {
@@ -351,7 +354,7 @@ class ApiClient {
       return await http
           .delete(uri, headers: _getHeaders())
           .timeout(timeoutDuration);
-    });
+    }, endpoint: endpoint);
   }
 
   // Multipart request helper for creating/updating products with images.
@@ -383,7 +386,7 @@ class ApiClient {
 
       final streamedResponse = await request.send().timeout(timeoutDuration);
       return await http.Response.fromStream(streamedResponse);
-    });
+    }, endpoint: endpoint);
   }
 
   // Like multipartRequest but calls [onProgress] with 0.0–1.0 as bytes upload.

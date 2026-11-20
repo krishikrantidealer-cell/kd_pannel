@@ -268,13 +268,24 @@ class NotificationsCubit extends Cubit<NotificationsState> {
               metadata['customerPhone'] ??
               '')
           .toString();
-      final customerName =
-          (metadata['customerName'] ?? metadata['name'] ?? '').toString();
+      String customerName =
+          (metadata['customerName'] ?? metadata['name'] ?? metadata['leadName'] ?? metadata['dealerName'] ?? '').toString();
+
+      // Fallback: extract name from notification body (e.g. "Task is due now for Sanjay Kurmi: ...")
+      if (customerName.isEmpty) {
+        final bodyText = (item['body'] ?? '').toString();
+        final match = RegExp(r'(?:due now for|task for|reminder for)\s+([^:]+):', caseSensitive: false).firstMatch(bodyText);
+        if (match != null && match.group(1) != null) {
+          customerName = match.group(1)!.trim();
+        }
+      }
+
       final ctx = context ?? NavigationService.navigatorKey.currentContext;
-      if (ctx != null && (phone.isNotEmpty || customerName.isNotEmpty)) {
+      final targetIdentifier = phone.isNotEmpty ? phone : (customerName.isNotEmpty ? customerName : rawEntityId);
+      if (ctx != null && targetIdentifier.isNotEmpty) {
         navigateToProfile(
           ctx,
-          phone.isNotEmpty ? phone : customerName,
+          targetIdentifier,
           phone: phone,
           name: customerName,
           userDetails: metadata,

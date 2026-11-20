@@ -42,6 +42,12 @@ class WhatsAppCrmPage extends StatefulWidget {
 
 class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   // Lists & States
+  static List<dynamic> _staticConversationsCache = [];
+  static Map<String, int> _staticCountsCache = {};
+  static List<dynamic> _staticSalesAgentsCache = [];
+  static List<dynamic> _staticTemplatesCache = [];
+  static List<dynamic> _staticCannedCache = [];
+
   List<dynamic> _conversations = [];
   List<dynamic> _messages = [];
   List<dynamic> _salesAgents = [];
@@ -271,10 +277,35 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
   void initState() {
     super.initState();
     TelephonyAudioService().requestNotificationPermission();
+
+    // Instant screen restore from client memory cache (0ms perceived load time)
+    if (_staticConversationsCache.isNotEmpty) {
+      _conversations = List.from(_staticConversationsCache);
+      _isLoadingConversations = false;
+    } else {
+      _isLoadingConversations = true;
+    }
+    if (_staticSalesAgentsCache.isNotEmpty) {
+      _salesAgents = List.from(_staticSalesAgentsCache);
+    }
+    if (_staticTemplatesCache.isNotEmpty) {
+      _approvedTemplates = List.from(_staticTemplatesCache);
+    }
+    if (_staticCannedCache.isNotEmpty) {
+      _cannedResponses = List.from(_staticCannedCache);
+    }
+    if (_staticCountsCache.isNotEmpty) {
+      _totalAllCount = _staticCountsCache['all'] ?? 0;
+      _totalLeadsCount = _staticCountsCache['leads'] ?? 0;
+      _totalDealersCount = _staticCountsCache['dealers'] ?? 0;
+      _totalActiveCount = _staticCountsCache['active'] ?? 0;
+      _totalUnreadCount = _staticCountsCache['unread'] ?? 0;
+    }
+
     _fetchConversations();
-    _fetchSalesAgents();
-    _fetchTemplates();
-    _fetchCannedResponses();
+    if (_staticSalesAgentsCache.isEmpty) _fetchSalesAgents();
+    if (_staticTemplatesCache.isEmpty) _fetchTemplates();
+    if (_staticCannedCache.isEmpty) _fetchCannedResponses();
     _setupWebSocketListener();
 
     // Check for arguments passed from Leads/Dealers profile buttons
@@ -755,6 +786,18 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               }
             }
             _recalculateUnreadCount();
+
+            // Keep in-memory cache updated for instantaneous tab restore (0ms load)
+            if (page == 1 && search.isEmpty && _selectedStatus == 'all' && _selectedTab == 'all') {
+              _staticConversationsCache = List.from(filteredData);
+              _staticCountsCache = {
+                'all': _totalAllCount,
+                'leads': _totalLeadsCount,
+                'dealers': _totalDealersCount,
+                'active': _totalActiveCount,
+                'unread': _totalUnreadCount,
+              };
+            }
           });
 
           // Auto-select first conversation if search returned elements and nothing is selected
@@ -839,6 +882,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
           setState(() {
             _allSalesAgentsMap = agentsMap;
             _salesAgents = myoperatorAgents;
+            _staticSalesAgentsCache = myoperatorAgents;
           });
         }
       }
@@ -886,6 +930,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
               final s = (t['status'] ?? t['waba_template_status'] ?? '').toString().toUpperCase();
               return s == 'APPROVED' || s == 'ACTIVE';
             }).toList();
+            _staticTemplatesCache = _approvedTemplates;
           });
           debugPrint('[WhatsApp CRM] Loaded ${_approvedTemplates.length} approved templates from backend.');
         }
@@ -907,6 +952,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
         if (body['success'] == true && body['data'] != null) {
           setState(() {
             _cannedResponses = List<dynamic>.from(body['data']);
+            _staticCannedCache = _cannedResponses;
           });
         }
       }
