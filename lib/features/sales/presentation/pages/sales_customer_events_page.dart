@@ -258,6 +258,16 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       if (userId == null || userId.isEmpty || userId.toLowerCase() == 'guest')
         return;
 
+      final role = (enrichedUpdate['role'] ?? '').toString().toLowerCase();
+      if (role == 'admin' ||
+          role == 'sales' ||
+          role == 'staff' ||
+          role == 'agent' ||
+          userId == AuthService().currentUserId ||
+          userId == AuthService().currentUserEmail) {
+        return;
+      }
+
       final action = enrichedUpdate['lastAction']?.toString();
       if (action != null && action.isNotEmpty && action != 'App Open') {
         final liveEvent = {
@@ -329,8 +339,9 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   bool _isUserOnline(String userName) {
     final lowerName = userName.toLowerCase();
     if (_onlineUserKeys.contains(userName) ||
-        _onlineUserKeys.contains(lowerName))
+        _onlineUserKeys.contains(lowerName)) {
       return true;
+    }
 
     final rawUser = _nameToId[userName];
     if (rawUser != null &&
@@ -339,10 +350,13 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       return true;
     }
 
-    final mostRecentTime = _cachedMostRecentEventTimes[userName];
-    if (mostRecentTime != null) {
-      final diffInMinutes = DateTime.now().difference(mostRecentTime).inMinutes;
-      if (diffInMinutes <= 5) return true;
+    final phone = _nameToPhone[userName]?.replaceAll(RegExp(r'\D'), '');
+    if (phone != null && phone.isNotEmpty) {
+      final p10 =
+          phone.length >= 10 ? phone.substring(phone.length - 10) : phone;
+      if (_onlineUserKeys.contains(phone) || _onlineUserKeys.contains(p10)) {
+        return true;
+      }
     }
 
     return false;
@@ -972,6 +986,39 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         continue;
       }
 
+      final eventType = (event['eventType'] ?? event['event'] ?? 'unknown').toString();
+      const staffActions = {
+        'profile_view',
+        'assign_agent',
+        'bulk_assign_agent',
+        'create_sales_agent',
+        'add_lead_note',
+        'edit_lead',
+        'edit_dealer',
+        'toggle_block',
+        'delete_dealer',
+        'permanent_delete_user',
+        'restore_user',
+        'export_leads_csv',
+        'delete_sales_agent',
+        'call_logged',
+        'call_task_created',
+        'lead_converted',
+        'status_changed',
+        'lead_status_changed',
+        'dealer_status_changed',
+        'estimate_created',
+        'estimate_shared',
+      };
+      if (staffActions.contains(eventType)) {
+        continue;
+      }
+
+      final role = (event['role'] ?? userDetails?['role'] ?? '').toString().toLowerCase();
+      if (role == 'admin' || role == 'sales' || role == 'staff' || role == 'agent') {
+        continue;
+      }
+
       if (!_isUserAssignedToSales(
         rawUser: resolvedId,
         displayName: displayName,
@@ -993,7 +1040,6 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         }
       }
 
-      final eventType = event['eventType']?.toString() ?? 'unknown';
       if (!grouped.containsKey(eventType)) grouped[eventType] = [];
 
       grouped[eventType]!.add({

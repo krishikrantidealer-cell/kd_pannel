@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 
 class UserActivityAuditTab extends StatefulWidget {
@@ -65,6 +66,12 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       'estimate_created',
       'estimate_shared',
       'create_sales_agent',
+      'profile_view',
+      'permanent_delete_user',
+      'restore_user',
+      'export_leads_csv',
+      'delete_sales_agent',
+      'call_task_created',
       'status_changed',
       'lead_status_changed',
       'dealer_status_changed',
@@ -517,6 +524,9 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
   }
 
   Widget _buildActorScopeSelector(int allCount, int userCount, int salesCount) {
+    if (AuthService().isSales) {
+      return const SizedBox.shrink();
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(4),
@@ -625,8 +635,8 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       {'id': 'shopping', 'label': 'Cart & Store'},
       {'id': 'payments', 'label': 'Payments'},
       {'id': 'marketing', 'label': 'Marketing'},
-      {'id': 'crm', 'label': 'Staff & CRM'},
-      {'id': 'system', 'label': 'System Logs'},
+      if (!AuthService().isSales) {'id': 'crm', 'label': 'Staff & CRM'},
+      if (!AuthService().isSales) {'id': 'system', 'label': 'System Logs'},
     ];
 
     return SingleChildScrollView(
@@ -960,11 +970,15 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
         userEventsCount++;
       }
     }
-    final int allEventsCount = sortedEvents.length;
+    final int allEventsCount =
+        AuthService().isSales ? userEventsCount : sortedEvents.length;
 
     final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
       final bool isSalesEvent = _isSalesActorEvent(e);
+
+      // Never show staff/agent events to sales agents
+      if (AuthService().isSales && isSalesEvent) return false;
 
       // 1. Actor scope filter
       if (_selectedActorScope == 'user' && isSalesEvent) return false;
