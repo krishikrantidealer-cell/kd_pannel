@@ -1068,7 +1068,12 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     _isLoadingEvents = true;
 
     try {
-      final res = await AnalyticsService().fetchEventsPaged(limit: 200);
+      final res = await AnalyticsService()
+          .fetchEventsPaged(limit: 200)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => {'events': <Map<String, dynamic>>[], 'nextCursor': null},
+          );
       final flatEvents =
           (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
@@ -1312,12 +1317,6 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     final List<String> paginatedUsers = (startIndex < totalUsers)
         ? users.sublist(startIndex, endIndex)
         : <String>[];
-
-    if (paginatedUsers.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _prefetchPageUsers(paginatedUsers);
-      });
-    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
