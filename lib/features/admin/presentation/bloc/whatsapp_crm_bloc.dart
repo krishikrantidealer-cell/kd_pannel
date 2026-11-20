@@ -68,21 +68,32 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
     ));
 
     try {
-      // Also fetch sales agents list if empty
-      List<dynamic> agents = state.salesAgents;
-      if (agents.isEmpty) {
-        final agentRes = await ApiClient().get('/users?role=sales');
-        if (agentRes.statusCode == 200) {
-          final agentBody = jsonDecode(agentRes.body);
-          if (agentBody['success'] == true) {
-            agents = agentBody['data'] ?? [];
+      // Fetch sales agents and conversations in parallel for instant screen loading
+      final endpoint =
+          '/conversations?status=${event.status}&tab=${event.tab}&search=${Uri.encodeComponent(event.search)}&page=${event.page}&limit=100';
+
+      Future<List<dynamic>> agentFuture;
+      if (state.salesAgents.isEmpty) {
+        agentFuture = ApiClient().get('/users?role=sales').then((agentRes) {
+          if (agentRes.statusCode == 200) {
+            final agentBody = jsonDecode(agentRes.body);
+            if (agentBody['success'] == true) {
+              return (agentBody['data'] as List?) ?? [];
+            }
           }
-        }
+          return <dynamic>[];
+        }).catchError((_) => <dynamic>[]);
+      } else {
+        agentFuture = Future.value(state.salesAgents);
       }
 
-      final endpoint =
-          '/conversations?status=${event.status}&tab=${event.tab}&search=${Uri.encodeComponent(event.search)}&page=${event.page}&limit=500';
-      final res = await ApiClient().get(endpoint);
+      final results = await Future.wait([
+        agentFuture,
+        ApiClient().get(endpoint),
+      ]);
+
+      final List<dynamic> agents = results[0] as List<dynamic>;
+      final res = results[1] as dynamic;
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);

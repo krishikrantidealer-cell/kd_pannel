@@ -159,7 +159,8 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     return false;
   }
 
-  void _buildUserLookupIndexes() {
+  void _buildUserLookupIndexes({bool force = false}) {
+    if (!force && _cachedAssignedUserKeys != null) return;
     final assignedKeys = <String>{};
     final currentUserId =
         _normalizeId(AuthService().currentUserId).toLowerCase();
@@ -399,102 +400,107 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         }
       });
 
-      final Map<String, String> userTypes = {};
+      final Map<String, String> userTypes = Map.from(_cachedUserTypes);
+      final bool needsFullUserScan = userTypes.isEmpty;
 
-      // Populate user types and add all assigned dealers and leads (only role == 'user')
-      try {
-        final dealersState = context.read<DealersBloc>().state;
-        for (final u in dealersState.allRawUsers) {
-          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
-          if (dbRole != 'user') continue;
+      if (needsFullUserScan) {
+        // Populate user types and add all assigned dealers and leads (only role == 'user')
+        try {
+          final dealersState = context.read<DealersBloc>().state;
+          for (final u in dealersState.allRawUsers) {
+            final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+            if (dbRole != 'user') continue;
 
-          final String rawUser = _normalizeId(u['_id']);
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
-              .toString();
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-              .trim();
-          if (displayName.isEmpty)
-            displayName = (u['shopName'] ?? '').toString();
-          if (displayName.isEmpty)
-            displayName = displayPhone.isNotEmpty
-                ? displayPhone
-                : 'New Customer';
+            final String rawUser = _normalizeId(u['_id']);
+            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+                .toString();
+            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                .trim();
+            if (displayName.isEmpty)
+              displayName = (u['shopName'] ?? '').toString();
+            if (displayName.isEmpty)
+              displayName = displayPhone.isNotEmpty
+                  ? displayPhone
+                  : 'New Customer';
 
-          final kycStatus =
-              u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-          final isDealer = kycStatus == 'verified';
-          final type = isDealer ? 'Dealer' : 'Lead';
+            final kycStatus =
+                u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+            final isDealer = kycStatus == 'verified';
+            final type = isDealer ? 'Dealer' : 'Lead';
 
-          if (rawUser.isNotEmpty &&
-              displayName != 'New Customer' &&
-              displayName != 'Guest') {
-            _nameToId[displayName] = rawUser;
+            if (rawUser.isNotEmpty &&
+                displayName != 'New Customer' &&
+                displayName != 'Guest') {
+              _nameToId[displayName] = rawUser;
+            }
+            if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
+            userTypes[displayName] = type;
+            if (rawUser.isNotEmpty) userTypes[rawUser] = type;
+
+            if (_isUserAssignedToSales(
+              rawUser: rawUser,
+              displayName: displayName,
+              displayPhone: displayPhone,
+              userDetails: u,
+            )) {
+              usersSet.add(displayName);
+            }
           }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
+        } catch (_) {}
+
+        try {
+          final leadsState = context.read<LeadsBloc>().state;
+          for (final u in leadsState.allRawUsers) {
+            final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
+            if (dbRole != 'user') continue;
+
+            final String rawUser = _normalizeId(u['_id']);
+            final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
+                .toString();
+            String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
+                .trim();
+            if (displayName.isEmpty)
+              displayName = (u['shopName'] ?? '').toString();
+            if (displayName.isEmpty)
+              displayName = displayPhone.isNotEmpty
+                  ? displayPhone
+                  : 'New Customer';
+
+            final kycStatus =
+                u['kycStatus']?.toString().toLowerCase() ?? 'pending';
+            final isDealer = kycStatus == 'verified';
+            final type = isDealer ? 'Dealer' : 'Lead';
+
+            if (rawUser.isNotEmpty &&
+                displayName != 'New Customer' &&
+                displayName != 'Guest') {
+              _nameToId[displayName] = rawUser;
+            }
+            if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
+            userTypes.putIfAbsent(displayName, () => type);
+            if (rawUser.isNotEmpty) userTypes.putIfAbsent(rawUser, () => type);
+
+            if (_isUserAssignedToSales(
+              rawUser: rawUser,
+              displayName: displayName,
+              displayPhone: displayPhone,
+              userDetails: u,
+            )) {
+              usersSet.add(displayName);
+            }
           }
-          userTypes[displayName] = type;
-          if (rawUser.isNotEmpty) userTypes[rawUser] = type;
-
-          if (_isUserAssignedToSales(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
-            usersSet.add(displayName);
-          }
-        }
-      } catch (_) {}
-
-      try {
-        final leadsState = context.read<LeadsBloc>().state;
-        for (final u in leadsState.allRawUsers) {
-          final dbRole = (u['role'] ?? 'user').toString().toLowerCase();
-          if (dbRole != 'user') continue;
-
-          final String rawUser = _normalizeId(u['_id']);
-          final displayPhone = (u['phoneNumber'] ?? u['phone'] ?? '')
-              .toString();
-          String displayName = '${u['firstName'] ?? ''} ${u['lastName'] ?? ''}'
-              .trim();
-          if (displayName.isEmpty)
-            displayName = (u['shopName'] ?? '').toString();
-          if (displayName.isEmpty)
-            displayName = displayPhone.isNotEmpty
-                ? displayPhone
-                : 'New Customer';
-
-          final kycStatus =
-              u['kycStatus']?.toString().toLowerCase() ?? 'pending';
-          final isDealer = kycStatus == 'verified';
-          final type = isDealer ? 'Dealer' : 'Lead';
-
-          if (rawUser.isNotEmpty &&
-              displayName != 'New Customer' &&
-              displayName != 'Guest') {
-            _nameToId[displayName] = rawUser;
-          }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
-          }
-          userTypes.putIfAbsent(displayName, () => type);
-          if (rawUser.isNotEmpty) userTypes.putIfAbsent(rawUser, () => type);
-
-          if (_isUserAssignedToSales(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
-            usersSet.add(displayName);
-          }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      } else {
+        usersSet.addAll(_cachedUsersWithEvents);
+      }
 
       // Add currently active online real-time users (only if assigned to this agent)
       for (final u in _realTimeUsers) {
@@ -1065,6 +1071,8 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   Future<void> _loadEvents() async {
     if (!mounted || _isLoadingEvents) return;
     _isLoadingEvents = true;
+    _buildUserLookupIndexes(force: true);
+    _cachedUserTypes.clear();
 
     try {
       final res = await AnalyticsService().fetchEventsPaged(limit: 200);
