@@ -662,7 +662,7 @@ class _AlertsPageState extends State<AlertsPage> {
         iconData = Icons.alarm_on_rounded;
         iconColor = priority == 'critical' ? const Color(0xFFDC2626) : const Color(0xFFD97706);
         iconBg = priority == 'critical' ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7);
-        actionLabel = 'Open Call Task';
+        actionLabel = 'Open Profile';
       }
     } else if (bucket == 'whatsapp') {
       iconData = Icons.chat_bubble_rounded;

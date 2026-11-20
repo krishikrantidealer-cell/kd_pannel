@@ -88,7 +88,13 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     FetchDealerDetailsEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(isLoadingProfile: true));
+    emit(state.copyWith(
+      isLoadingProfile: true,
+      currentDealerEvents: [],
+      currentDealerOrders: [],
+      eventsNextCursor: null,
+      hasReachedMaxEvents: false,
+    ));
     try {
       final user = await _userRepo.getUserById(event.userId);
       emit(state.copyWith(
@@ -126,8 +132,6 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     FetchDealerEventsEvent event,
     Emitter<DealersState> emit,
   ) async {
-    if (!event.forceRefresh && state.currentDealerEvents.isNotEmpty) return;
-
     emit(state.copyWith(
       isLoadingEvents: true,
       currentDealerEvents: [],

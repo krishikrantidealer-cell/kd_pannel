@@ -56,21 +56,46 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
     _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
       if (!mounted || _lead == null) return;
 
-      final currentIdentifier =
-          (_lead!['email'] ??
-                  _lead!['phone'] ??
-                  _lead!['phoneNumber'] ??
-                  _lead!['id'] ??
-                  _lead!['_id'])
-              ?.toString();
-      final incomingUser =
-          data['user']?.toString() ?? data['userEmail']?.toString();
+      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])?.toString() ?? '';
+      final incomingPhone = (data['userPhone'] ?? data['phone'] ?? '').toString();
 
-      if (currentIdentifier != null &&
-          incomingUser != null &&
-          currentIdentifier == incomingUser) {
+      final leadPhone = (_lead!['phone'] ?? _lead!['phoneNumber'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+      final leadLast10 = leadPhone.length >= 10
+          ? leadPhone.substring(leadPhone.length - 10)
+          : leadPhone;
+
+      final incomingPhoneDigits = incomingPhone.replaceAll(RegExp(r'\D'), '');
+      final incomingLast10 = incomingPhoneDigits.length >= 10
+          ? incomingPhoneDigits.substring(incomingPhoneDigits.length - 10)
+          : incomingPhoneDigits;
+
+      final incomingUserDigits = incomingUser.replaceAll(RegExp(r'\D'), '');
+      final incomingUserLast10 = incomingUserDigits.length >= 10
+          ? incomingUserDigits.substring(incomingUserDigits.length - 10)
+          : incomingUserDigits;
+
+      bool isMatch = false;
+
+      // 1. Phone matching (last 10 digits)
+      if (leadLast10.isNotEmpty) {
+        if (incomingLast10.isNotEmpty && incomingLast10 == leadLast10) {
+          isMatch = true;
+        } else if (incomingUserLast10.isNotEmpty && incomingUserLast10 == leadLast10) {
+          isMatch = true;
+        }
+      }
+
+      // 2. ID / Email matching
+      if (!isMatch) {
+        final email = (_lead!['email'] ?? '').toString().toLowerCase();
+        final id = (_lead!['_id'] ?? _lead!['id'] ?? '').toString().toLowerCase();
+        if (email.isNotEmpty && incomingUser.toLowerCase() == email) isMatch = true;
+        if (id.isNotEmpty && incomingUser.toLowerCase() == id) isMatch = true;
+      }
+
+      if (isMatch) {
         // If it's a presence update for the current user, refresh the events feed to get the latest audit log
-        _fetchEvents();
+        _fetchEvents(silent: true);
       }
     });
   }

@@ -6,6 +6,7 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/repositories/notification_repository.dart';
 import 'package:kd_pannel/core/utils/navigation_service.dart';
 import 'package:kd_pannel/features/shared/bloc/notifications_state.dart';
+import 'package:kd_pannel/features/shared/widgets/events/events_helper.dart';
 import 'package:kd_pannel/util/web_notification_helper.dart';
 
 class NotificationsCubit extends Cubit<NotificationsState> {
@@ -258,11 +259,34 @@ class NotificationsCubit extends Cubit<NotificationsState> {
       return;
     }
 
-    // 3. Call Logs / Task Reminders / Missed Calls
+    // 3. Task Reminders -> Direct Customer Profile
     if (type == 'task_reminder' ||
         type == 'task_due_now' ||
-        type == 'missed_call' ||
-        type == 'task_overdue_digest' ||
+        type == 'task_overdue_digest') {
+      final phone = (metadata['phoneNumber'] ??
+              metadata['phone'] ??
+              metadata['customerPhone'] ??
+              '')
+          .toString();
+      final customerName =
+          (metadata['customerName'] ?? metadata['name'] ?? '').toString();
+      final ctx = context ?? NavigationService.navigatorKey.currentContext;
+      if (ctx != null && (phone.isNotEmpty || customerName.isNotEmpty)) {
+        navigateToProfile(
+          ctx,
+          phone.isNotEmpty ? phone : customerName,
+          phone: phone,
+          name: customerName,
+          userDetails: metadata,
+        );
+        return;
+      }
+      pushRoute('/calls');
+      return;
+    }
+
+    // Missed Calls / General Calls
+    if (type == 'missed_call' ||
         rawRoute == '/call-logs' ||
         rawRoute == '/calls' ||
         rawRoute == '/call-recordings') {

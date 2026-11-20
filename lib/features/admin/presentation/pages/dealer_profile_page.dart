@@ -68,22 +68,51 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
     _presenceSubscription = WebSocketService().presenceUpdates.listen((data) {
       if (!mounted || _dealer == null) return;
 
-      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])
-          ?.toString();
-      if (incomingUser == null) return;
+      final incomingUser = (data['user'] ?? data['userEmail'] ?? data['userId'])?.toString() ?? '';
+      final incomingPhone = (data['userPhone'] ?? data['phone'] ?? '').toString();
 
-      final List<String> myIdentifiers = [
-        if (_dealer!.email != null) _dealer!.email!.toString(),
-        _dealer!.phone.toString(),
-        if (_dealer!.id != null) _dealer!.id!.toString(),
-      ];
+      final currentDealerPhone = _dealer!.phone.replaceAll(RegExp(r'\D'), '');
+      final currentDealerLast10 = currentDealerPhone.length >= 10
+          ? currentDealerPhone.substring(currentDealerPhone.length - 10)
+          : currentDealerPhone;
 
-      bool isMatch = myIdentifiers.any(
-        (id) => id.toLowerCase() == incomingUser.toLowerCase(),
-      );
+      final incomingPhoneDigits = incomingPhone.replaceAll(RegExp(r'\D'), '');
+      final incomingLast10 = incomingPhoneDigits.length >= 10
+          ? incomingPhoneDigits.substring(incomingPhoneDigits.length - 10)
+          : incomingPhoneDigits;
+
+      final incomingUserDigits = incomingUser.replaceAll(RegExp(r'\D'), '');
+      final incomingUserLast10 = incomingUserDigits.length >= 10
+          ? incomingUserDigits.substring(incomingUserDigits.length - 10)
+          : incomingUserDigits;
+
+      bool isMatch = false;
+
+      // 1. Phone matching (last 10 digits)
+      if (currentDealerLast10.isNotEmpty) {
+        if (incomingLast10.isNotEmpty && incomingLast10 == currentDealerLast10) {
+          isMatch = true;
+        } else if (incomingUserLast10.isNotEmpty && incomingUserLast10 == currentDealerLast10) {
+          isMatch = true;
+        }
+      }
+
+      // 2. ID / Email matching
+      if (!isMatch) {
+        final List<String> myIdentifiers = [
+          if (_dealer!.email != null && _dealer!.email!.isNotEmpty)
+            _dealer!.email!.toString().toLowerCase(),
+          if (_dealer!.id != null && _dealer!.id!.isNotEmpty)
+            _dealer!.id!.toString().toLowerCase(),
+        ];
+        if (incomingUser.isNotEmpty &&
+            myIdentifiers.contains(incomingUser.toLowerCase())) {
+          isMatch = true;
+        }
+      }
 
       if (isMatch) {
-        // If it's a presence update for the current user, refresh the events feed silently
+        // Automatically refresh events feed silently on incoming customer activity
         _fetchEvents(silent: true);
       }
     });
@@ -102,6 +131,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
           _dealer?.id != resolvedDealer.id ||
           _dealer?.phone != resolvedDealer.phone) {
         _dealer = resolvedDealer;
+        _events = [];
         _agentId = resolvedDealer.agentId;
         _agentName = resolvedDealer.agent;
         _isCacheLoaded = true;
@@ -121,7 +151,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
                   ? _dealer!.phone
                   : (_dealer!.id ?? ''));
         if (identifier.isNotEmpty) {
-          context.read<DealersBloc>().add(FetchDealerEventsEvent(identifier));
+          context.read<DealersBloc>().add(FetchDealerEventsEvent(identifier, forceRefresh: true));
         }
 
         // Track profile view event
@@ -145,9 +175,7 @@ class _DealerProfilePageState extends State<DealerProfilePage> {
             bloc.add(FetchDealerOrdersEvent(_dealer!.id!));
           }
         });
-        if (AuthService().isAdmin) {
-          _listenToRealTimeEvents();
-        }
+        _listenToRealTimeEvents();
         _fetchSalesAgents();
       }
     } else if (_dealer == null) {
