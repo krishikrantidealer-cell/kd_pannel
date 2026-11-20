@@ -29,7 +29,7 @@ class UserActivityAuditTab extends StatefulWidget {
 
 class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
   int currentPage = 1;
-  static const int pageSize = 5;
+  int _pageSize = 20;
   final Set<int> _expandedIndices = {};
   String _selectedCategory = 'all';
   String _selectedActorScope = 'all'; // 'all', 'user', 'sales'
@@ -143,9 +143,14 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
     if (category == 'all') return true;
     if (category == 'shopping') {
       return eventType == 'add_to_cart' ||
+          eventType == 'remove_from_cart' ||
           eventType == 'checkout_started' ||
+          eventType == 'checkout_failure' ||
+          eventType == 'abandoned_checkout' ||
           eventType == 'apply_coupon' ||
-          eventType == 'product_search';
+          eventType == 'product_search' ||
+          eventType == 'product_view' ||
+          eventType == 'category_view';
     }
     if (category == 'payments') {
       return eventType == 'payment_initiated' ||
@@ -165,7 +170,11 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
           eventType == 'add_lead_note' ||
           eventType == 'edit_lead' ||
           eventType == 'toggle_block' ||
-          eventType == 'lead_converted';
+          eventType == 'lead_converted' ||
+          eventType == 'contact_support' ||
+          eventType == 'kyc_submitted' ||
+          eventType == 'kyc_verified' ||
+          eventType == 'kyc_rejected';
     }
     if (category == 'system') {
       return eventType == 'login_success' ||
@@ -212,6 +221,48 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
           'icon': Icons.visibility_rounded,
           'color': Colors.blue,
           'label': 'Profile View',
+        };
+      case 'product_view':
+        return {
+          'icon': Icons.remove_red_eye_outlined,
+          'color': Colors.blue,
+          'label': 'Product Viewed',
+        };
+      case 'category_view':
+        return {
+          'icon': Icons.category_outlined,
+          'color': Colors.teal,
+          'label': 'Category Browsed',
+        };
+      case 'remove_from_cart':
+        return {
+          'icon': Icons.remove_shopping_cart_outlined,
+          'color': Colors.deepOrange,
+          'label': 'Removed from Cart',
+        };
+      case 'abandoned_checkout':
+        return {
+          'icon': Icons.remove_shopping_cart_rounded,
+          'color': Colors.redAccent,
+          'label': 'Abandoned Checkout',
+        };
+      case 'checkout_failure':
+        return {
+          'icon': Icons.error_outline_rounded,
+          'color': Colors.red,
+          'label': 'Checkout Failure',
+        };
+      case 'contact_support':
+        return {
+          'icon': Icons.support_agent_rounded,
+          'color': Colors.blueAccent,
+          'label': 'Contacted Support',
+        };
+      case 'kyc_submitted':
+        return {
+          'icon': Icons.upload_file_rounded,
+          'color': Colors.purple,
+          'label': 'KYC Submitted',
         };
       case 'product_search':
         return {
@@ -424,6 +475,26 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       case 'notification_open':
         final title = payload['title'] ?? 'notification';
         return 'Tapped on push notification: "$title".';
+      case 'product_view':
+        final prod = payload['productName'] ?? payload['name'] ?? payload['title'] ?? 'a product';
+        final rawPrice = payload['price'] ?? payload['amount'];
+        final price = rawPrice != null ? ' (₹$rawPrice)' : '';
+        return originalDetails.isNotEmpty ? originalDetails : 'Viewed product details for "$prod"$price.';
+      case 'category_view':
+        final cat = payload['categoryName'] ?? payload['category'] ?? payload['name'] ?? 'a category';
+        return originalDetails.isNotEmpty ? originalDetails : 'Browsed category "$cat".';
+      case 'remove_from_cart':
+        final prod = payload['productName'] ?? payload['name'] ?? payload['title'] ?? 'an item';
+        return 'Removed "$prod" from the shopping cart.';
+      case 'abandoned_checkout':
+        final val = payload['totalAmount'] ?? payload['cartValue'] ?? payload['amount'] ?? '0';
+        return 'Abandoned checkout with cart value ₹$val.';
+      case 'checkout_failure':
+        return originalDetails.isNotEmpty ? originalDetails : 'Order placement failed during checkout.';
+      case 'contact_support':
+        return 'Customer reached out to customer support.';
+      case 'kyc_submitted':
+        return 'Dealer submitted KYC verification documents.';
       case 'product_search':
         final query = payload['searchQuery'] ?? payload['query'] ?? '';
         return 'Searched for products matching: "$query".';
@@ -904,14 +975,14 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
     }).toList();
 
     final totalEvents = filteredEvents.length;
-    final int totalPages = (totalEvents / pageSize).ceil().clamp(1, 9999);
+    final int totalPages = (totalEvents / _pageSize).ceil().clamp(1, 9999);
 
     if (currentPage > totalPages) {
       currentPage = totalPages;
     }
 
-    final startIndex = (currentPage - 1) * pageSize;
-    final endIndex = startIndex + pageSize;
+    final startIndex = (currentPage - 1) * _pageSize;
+    final endIndex = startIndex + _pageSize;
     final currentPageEvents = filteredEvents.sublist(
       startIndex,
       endIndex > totalEvents ? totalEvents : endIndex,
@@ -1179,6 +1250,30 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
                 totalPages,
               ),
             ],
+            if (widget.onLoadMore != null && !widget.hasReachedMax) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: widget.isLoadingMore ? null : widget.onLoadMore,
+                  icon: widget.isLoadingMore
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_rounded, size: 16),
+                  label: Text(
+                    widget.isLoadingMore
+                        ? 'Loading older events...'
+                        : 'Load more history from server',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),
@@ -1189,13 +1284,54 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Showing $start-$end of $total',
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF64748B),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Showing $start-$end of $total',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _pageSize,
+                  isDense: true,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF334155),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 10, child: Text('10 / page')),
+                    DropdownMenuItem(value: 20, child: Text('20 / page')),
+                    DropdownMenuItem(value: 50, child: Text('50 / page')),
+                    DropdownMenuItem(value: 100, child: Text('100 / page')),
+                    DropdownMenuItem(value: 500, child: Text('500 / page')),
+                    DropdownMenuItem(value: 10000, child: Text('Show All')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _pageSize = val;
+                        currentPage = 1;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
         Row(
           children: [

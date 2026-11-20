@@ -1742,7 +1742,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
         try {
           final res = await AnalyticsService().fetchEventsPaged(
             userEmail: query,
-            limit: 10,
+            limit: 150,
             actorOnly: false,
           );
           final events =
@@ -1754,9 +1754,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
         } catch (_) {}
       }
 
-      _perUserEventsCache[userName] = flatEvents.take(10).toList();
+      _perUserEventsCache[userName] = flatEvents.take(150).toList();
       if (flatEvents.isNotEmpty) {
-        flatEvents = flatEvents.take(10).toList();
+        flatEvents = flatEvents.take(150).toList();
         final Map<String, List<Map<String, dynamic>>> grouped = Map.from(
           _eventsLogs,
         );

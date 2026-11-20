@@ -255,7 +255,8 @@ class AnalyticsService extends WidgetsBindingObserver {
     bool actorOnly = false,
   }) async {
     try {
-      String path = '/events?limit=$limit';
+      final limitStr = limit == 0 ? 'all' : '$limit';
+      String path = '/events?limit=$limitStr';
       if (userEmail != null) {
         path += '&user=${Uri.encodeComponent(userEmail)}';
       }

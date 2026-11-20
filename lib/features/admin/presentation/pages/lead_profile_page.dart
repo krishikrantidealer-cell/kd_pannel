@@ -88,6 +88,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
 
       if (_lead == null || newId != oldId || newPhone != oldPhone) {
         _lead = newLead;
+        _events = [];
         _isCacheLoaded = true;
         _saveLeadToCache(_lead!);
         _refreshLeadDetails();
@@ -184,14 +185,14 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
   Future<void> _fetchEvents({bool silent = false}) async {
     if (_lead == null) return;
     String? identifier;
-    final email = _lead!['email']?.toString();
     final phone = (_lead!['phone'] ?? _lead!['phoneNumber'])?.toString();
-    final id = _lead!['_id']?.toString();
+    final email = _lead!['email']?.toString();
+    final id = (_lead!['_id'] ?? _lead!['id'])?.toString();
 
-    if (email != null && email.trim().isNotEmpty) {
-      identifier = email.trim();
-    } else if (phone != null && phone.trim().isNotEmpty) {
+    if (phone != null && phone.trim().isNotEmpty) {
       identifier = phone.trim();
+    } else if (email != null && email.trim().isNotEmpty) {
+      identifier = email.trim();
     } else if (id != null && id.trim().isNotEmpty) {
       identifier = id.trim();
     }
@@ -206,6 +207,7 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
         setState(() {
           _events = filtered;
         });
+        context.read<LeadsBloc>().add(FetchLeadEventsEvent(identifier));
       }
     } catch (e) {
       debugPrint('Error loading lead events: $e');
@@ -2439,9 +2441,9 @@ class _LeadProfilePageState extends State<LeadProfilePage> {
             ? _mapUserToLead(state.currentLeadDetails!)
             : _lead;
 
-        final events = state.currentLeadEvents.isNotEmpty
-            ? state.currentLeadEvents
-            : _events;
+        final events = _events.isNotEmpty
+            ? _events
+            : state.currentLeadEvents;
 
         final isLoadingEvents = state.isLoadingEvents || _isLoadingEvents;
 

@@ -137,7 +137,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     try {
       final result = await AnalyticsService().fetchEventsPaged(
         userEmail: event.identifier,
-        limit: 50,
+        limit: 0, // 0 = all events for profile view
         actorOnly: false,
       );
       final List<Map<String, dynamic>> events =

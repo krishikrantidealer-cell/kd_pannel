@@ -121,7 +121,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     FetchLeadDetailsEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(isLoadingProfile: true));
+    emit(state.copyWith(isLoadingProfile: true, currentLeadEvents: []));
     try {
       final user = await _userRepo.getUserById(event.userId);
       emit(
