@@ -34,6 +34,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
   Map<String, List<Map<String, dynamic>>> _eventsLogs = {};
   Map<String, String> _nameToId = {};
+  Map<String, String> _nameToPhone = {};
   final List<Map<String, dynamic>> _realTimeUsers = [];
   final Set<String> _onlineUserKeys = {};
 
@@ -985,8 +986,11 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           displayName != 'Guest') {
         nameToId[displayName] = resolvedId;
       }
-      if (phone.isNotEmpty && !nameToId.containsKey(phone)) {
-        nameToId[phone] = resolvedId.isNotEmpty ? resolvedId : phone;
+      if (phone.isNotEmpty) {
+        _nameToPhone[displayName] = phone;
+        if (!nameToId.containsKey(phone)) {
+          nameToId[phone] = resolvedId.isNotEmpty ? resolvedId : phone;
+        }
       }
 
       final eventType = event['eventType']?.toString() ?? 'unknown';
@@ -1225,9 +1229,14 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         final cleanName = u.replaceAll(RegExp(r'\D'), '');
         final cleanRaw = rawUser.replaceAll(RegExp(r'\D'), '');
 
-        final phoneMatches =
-            (cleanQ.isNotEmpty &&
-            (cleanName.contains(cleanQ) || cleanRaw.contains(cleanQ)));
+        final userPhone = _nameToPhone[u]?.replaceAll(RegExp(r'\D'), '') ?? '';
+        final last10 = cleanQ.length >= 10 ? cleanQ.substring(cleanQ.length - 10) : '';
+
+        final phoneMatches = cleanQ.isNotEmpty &&
+            (cleanName.contains(cleanQ) ||
+             cleanRaw.contains(cleanQ) ||
+             userPhone.contains(cleanQ) ||
+             (last10.isNotEmpty && userPhone.contains(last10)));
 
         if (!nameMatches && !idMatches && !phoneMatches) return false;
       }

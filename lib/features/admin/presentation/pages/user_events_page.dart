@@ -75,6 +75,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
   final Set<String> _mergedOrderIds = {};
   final Set<String> _mergedUserIds = {};
   Map<String, String> _nameToId = {};
+  Map<String, String> _nameToPhone = {};
   List<Map<String, dynamic>> _realTimeUsers = [];
   Timer? _eventsRefreshDebounce;
   Timer? _searchDebounce;
@@ -765,6 +766,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
         ? cleanQuery.substring(cleanQuery.length - 10)
         : '';
 
+    // If query is directly a phone number (10+ digits), query backend by phone number immediately
+    if (last10.isNotEmpty) {
+      return last10;
+    }
+    // If query is an email, query backend by email directly
+    if (queryLower.contains('@')) {
+      return queryLower;
+    }
+
     // 1. Try to find in Dealers
     final dealersState = _dealersStateSafe;
     if (dealersState != null) {
@@ -872,6 +882,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
                 )) {
               usersSet.add(userName);
 
+              final userPhone = log['userPhone']?.toString() ?? '';
+              if (userPhone.isNotEmpty) {
+                _nameToPhone[userName] = userPhone;
+              }
+
               final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
               final categoryList = userMap.putIfAbsent(category, () => []);
               categoryList.add(log);
@@ -904,10 +919,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
               displayName != 'Guest') {
             _nameToId[displayName] = rawUser;
           }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
+          if (displayPhone.isNotEmpty) {
+            _nameToPhone[displayName] = displayPhone;
+            if (!_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
           }
 
           if (!AuthService().isSales ||
@@ -945,10 +963,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
               displayName != 'Guest') {
             _nameToId[displayName] = rawUser;
           }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
+          if (displayPhone.isNotEmpty) {
+            _nameToPhone[displayName] = displayPhone;
+            if (!_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
           }
 
           if (!AuthService().isSales ||
@@ -1083,6 +1104,21 @@ class _UserEventsPageState extends State<UserEventsPage> {
         if (cleanName.length >= 10) {
           buffer.write(cleanName.substring(cleanName.length - 10));
           buffer.write(' ');
+        }
+
+        final userPhone = _nameToPhone[userName];
+        if (userPhone != null && userPhone.isNotEmpty) {
+          buffer.write(userPhone.toLowerCase());
+          buffer.write(' ');
+          final cleanP = userPhone.replaceAll(RegExp(r'\D'), '');
+          if (cleanP.isNotEmpty) {
+            buffer.write(cleanP);
+            buffer.write(' ');
+            if (cleanP.length >= 10) {
+              buffer.write(cleanP.substring(cleanP.length - 10));
+              buffer.write(' ');
+            }
+          }
         }
 
         userSearchIndex[userName] = buffer.toString();
@@ -1420,8 +1456,11 @@ class _UserEventsPageState extends State<UserEventsPage> {
           displayName != 'Guest') {
         nameToId[displayName] = resolvedId;
       }
-      if (phone.isNotEmpty && !nameToId.containsKey(phone)) {
-        nameToId[phone] = resolvedId.isNotEmpty ? resolvedId : phone;
+      if (phone.isNotEmpty) {
+        _nameToPhone[displayName] = phone;
+        if (!nameToId.containsKey(phone)) {
+          nameToId[phone] = resolvedId.isNotEmpty ? resolvedId : phone;
+        }
       }
 
       grouped[eventType]!.add({
@@ -1443,7 +1482,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     String? metricFilter,
     bool isBackground = false,
   }) async {
-    if (!mounted || _isLoadingEvents) return;
+    final bool isSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
+    if (!mounted) return;
+    if (_isLoadingEvents && !isSearch) return;
 
     // Refresh Funnel Future too
     _funnelDataFuture = AnalyticsService().fetchFunnelData(
@@ -1458,7 +1499,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
     _isLoadingEvents = true;
     _isBackgroundLoading = isBackground;
 
-    final bool isSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
     final String activeMetricFilter = metricFilter ?? _selectedMetricFilter;
     final String activeFilter = activeMetricFilter != 'All'
         ? activeMetricFilter
@@ -1512,7 +1552,12 @@ class _UserEventsPageState extends State<UserEventsPage> {
         );
         final Map<String, String> currentNameToId = Map.from(_nameToId);
 
-        _processEventsList(flatEvents, currentGrouped, currentNameToId);
+        _processEventsList(
+          flatEvents,
+          currentGrouped,
+          currentNameToId,
+          isSingleUserSearch: isSearch,
+        );
 
         _eventsLogs = currentGrouped;
         _nameToId = currentNameToId;
@@ -2049,6 +2094,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (_userSearchQuery.isEmpty) return users;
     final query = _userSearchQuery.toLowerCase();
     final cleanQuery = query.replaceAll(RegExp(r'[^\d]'), '');
+    final last10 = cleanQuery.length >= 10
+        ? cleanQuery.substring(cleanQuery.length - 10)
+        : '';
 
     return users.where((u) {
       final searchIdx = _cachedUserSearchIndex[u];
@@ -2056,7 +2104,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         if (searchIdx.contains(query)) return true;
         if (cleanQuery.isNotEmpty && searchIdx.contains(cleanQuery))
           return true;
-        return false;
+        if (last10.isNotEmpty && searchIdx.contains(last10))
+          return true;
+      }
+      final phone = _nameToPhone[u]?.replaceAll(RegExp(r'\D'), '') ?? '';
+      if (phone.isNotEmpty) {
+        if (cleanQuery.isNotEmpty && phone.contains(cleanQuery)) return true;
+        if (last10.isNotEmpty && phone.contains(last10)) return true;
       }
       return u.toLowerCase().contains(query);
     }).toList();
