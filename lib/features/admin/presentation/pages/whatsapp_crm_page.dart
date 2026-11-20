@@ -686,7 +686,7 @@ class _WhatsAppCrmPageState extends State<WhatsAppCrmPage> {
 
     try {
       String endpoint =
-          '/conversations?status=$_selectedStatus&tab=$_selectedTab&search=$search&page=$page&limit=500';
+          '/conversations?status=$_selectedStatus&tab=$_selectedTab&search=$search&page=$page&limit=100';
       if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty && _selectedAgentId != 'all') {
         endpoint += '&agentId=$_selectedAgentId';
       }
