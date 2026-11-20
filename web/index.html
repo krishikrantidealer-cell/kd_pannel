@@ -2,19 +2,6 @@
 <html>
 
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
@@ -37,9 +24,117 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0F172A;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #kd-boot-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 40%, #143520 0%, #0A1C10 70%, #050E08 100%);
+      z-index: 999999;
+      color: #ffffff;
+      transition: opacity 0.4s ease-out;
+    }
+
+    .kd-logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .kd-logo-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #2E7D32, #1B5E20);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 25px rgba(27, 94, 32, 0.4);
+    }
+
+    .kd-brand-text {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #FFFFFF;
+    }
+
+    .kd-brand-tag {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: #4ADE80;
+      text-transform: uppercase;
+      margin-top: -2px;
+    }
+
+    .kd-spinner-box {
+      width: 44px;
+      height: 44px;
+      position: relative;
+    }
+
+    .kd-spinner {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-top-color: #4ADE80;
+      border-radius: 50%;
+      animation: kd-spin 0.9s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+    }
+
+    .kd-status-msg {
+      margin-top: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #94A3B8;
+      letter-spacing: 0.2px;
+    }
+
+    @keyframes kd-spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
 </head>
 
 <body>
+  <div id="kd-boot-loader">
+    <div class="kd-logo-container">
+      <div class="kd-logo-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="kd-brand-text">KrishiDealer</div>
+        <div class="kd-brand-tag">Enterprise Hub</div>
+      </div>
+    </div>
+    <div class="kd-spinner-box">
+      <div class="kd-spinner"></div>
+    </div>
+    <div class="kd-status-msg">Loading application workspace...</div>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 
