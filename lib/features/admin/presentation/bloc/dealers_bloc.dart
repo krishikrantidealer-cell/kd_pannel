@@ -10,7 +10,26 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 class DealersBloc extends Bloc<DealersEvent, DealersState> {
   StreamSubscription? _wsSubscription;
   StreamSubscription? _repoSubscription;
+  Timer? _refreshDebounceTimer;
   final UserRepository _userRepo = UserRepository();
+
+  void _scheduleDebouncedRefresh({bool ignoreRecentLocalMutation = false}) {
+    if (isClosed) return;
+    if (ignoreRecentLocalMutation && _userRepo.lastLocalMutationAt != null) {
+      final elapsed = DateTime.now().difference(_userRepo.lastLocalMutationAt!);
+      if (elapsed < const Duration(seconds: 4)) {
+        return;
+      }
+    }
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!isClosed) {
+        try {
+          add(const FetchDealersDataEvent(forceRefresh: true));
+        } catch (_) {}
+      }
+    });
+  }
 
   DealersBloc() : super(const DealersState()) {
     on<FetchDealersDataEvent>(_onFetchDealersData);
@@ -29,25 +48,24 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     on<FetchDealerEventsEvent>(_onFetchDealerEvents);
     on<FetchDealerEventsMoreEvent>(_onFetchDealerEventsMore);
 
-    _wsSubscription = WebSocketService().dealersUpdates.listen((_) {
-      if (!isClosed) {
-        try {
-          add(const FetchDealersDataEvent(forceRefresh: true));
-        } catch (_) {}
+    _wsSubscription = WebSocketService().dealersUpdates.listen((dynamic payload) {
+      if (isClosed) return;
+      if (payload is Map &&
+          payload['actorId'] != null &&
+          payload['actorId'].toString() == AuthService().currentUserId) {
+        return;
       }
+      _scheduleDebouncedRefresh(ignoreRecentLocalMutation: true);
     });
 
     _repoSubscription = _userRepo.onCacheInvalidated.listen((_) {
-      if (!isClosed) {
-        try {
-          add(const FetchDealersDataEvent(forceRefresh: true));
-        } catch (_) {}
-      }
+      _scheduleDebouncedRefresh();
     });
   }
 
   @override
   Future<void> close() {
+    _refreshDebounceTimer?.cancel();
     _wsSubscription?.cancel();
     _repoSubscription?.cancel();
     return super.close();
@@ -203,7 +221,9 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     FetchDealersDataEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(status: DealersStatus.loading));
+    if (state.allRawUsers.isEmpty) {
+      emit(state.copyWith(status: DealersStatus.loading));
+    }
     try {
       final results = await _userRepo.fetchDealersData(
         forceRefresh: event.forceRefresh,
@@ -253,7 +273,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     try {
       await _userRepo.assignAgent(event.userId, event.agentId);
 
-      // Log Activity
+      // Fire-and-forget analytics
       AnalyticsService().logEvent('assign_agent', properties: {
         'targetUserId': event.userId,
         'assignedAgentId': event.agentId,
@@ -261,7 +281,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
             ? 'Assigned agent to dealer' 
             : 'Unassigned agent from dealer',
       });
-      await AnalyticsService().flush();
+      unawaited(AnalyticsService().flush().catchError((_) {}));
 
       emit(
         state.copyWithMessages(
@@ -271,11 +291,10 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               : 'Agent unassigned',
         ),
       );
-      if (AuthService().isAdmin ||
-          event.agentId == AuthService().currentUserId) {
+      if (state.currentDealerDetails?['_id']?.toString() == event.userId &&
+          (AuthService().isAdmin ||
+              event.agentId == AuthService().currentUserId)) {
         add(FetchDealerDetailsEvent(event.userId));
-      } else {
-        add(const FetchDealersDataEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(
@@ -293,25 +312,39 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
     BulkAssignAgentToDealersEvent event,
     Emitter<DealersState> emit,
   ) async {
-    emit(state.copyWith(status: DealersStatus.submitting));
-    int successCount = 0;
+    final userIdSet = event.userIds.toSet();
+    final agent = state.salesAgents.firstWhere(
+      (a) => a['_id'] == event.agentId,
+      orElse: () => <String, dynamic>{},
+    );
+
+    final updatedUsers = state.allRawUsers.map((u) {
+      if (userIdSet.contains(u['_id'])) {
+        final updatedUser = Map<String, dynamic>.from(u);
+        updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
+        return updatedUser;
+      }
+      return u;
+    }).toList();
+
+    emit(state.copyWith(
+      status: DealersStatus.submitting,
+      allRawUsers: updatedUsers,
+    ));
+
     try {
-      final futures = event.userIds.map((userId) async {
-        try {
-          await _userRepo.assignAgent(userId, event.agentId);
-          successCount++;
-        } catch (_) {}
-      }).toList();
+      final successCount = await _userRepo.bulkAssignAgent(
+        event.userIds,
+        event.agentId,
+      );
 
-      await Future.wait(futures);
-
-      // Log Activity
+      // Fire-and-forget analytics
       AnalyticsService().logEvent('bulk_assign_agent', properties: {
         'count': successCount,
         'assignedAgentId': event.agentId,
         'details': 'Bulk assigned agent to $successCount dealers',
       });
-      await AnalyticsService().flush();
+      unawaited(AnalyticsService().flush().catchError((_) {}));
 
       emit(
         state.copyWithMessages(
@@ -320,7 +353,6 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
               'Agent assigned to $successCount dealers successfully',
         ),
       );
-      add(const FetchDealersDataEvent(forceRefresh: true));
     } catch (e) {
       emit(
         state.copyWithMessages(
@@ -328,6 +360,7 @@ class DealersBloc extends Bloc<DealersEvent, DealersState> {
           errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
+      add(const FetchDealersDataEvent(forceRefresh: true));
     }
   }
 

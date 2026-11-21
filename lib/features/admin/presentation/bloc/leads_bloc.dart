@@ -11,8 +11,27 @@ import 'package:kd_pannel/core/services/analytics_service.dart';
 class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
   StreamSubscription? _wsSubscription;
   StreamSubscription? _repoSubscription;
+  Timer? _refreshDebounceTimer;
   final UserRepository _userRepo = UserRepository();
   final NotificationRepository _notifRepo = NotificationRepository();
+
+  void _scheduleDebouncedRefresh({bool ignoreRecentLocalMutation = false}) {
+    if (isClosed) return;
+    if (ignoreRecentLocalMutation && _userRepo.lastLocalMutationAt != null) {
+      final elapsed = DateTime.now().difference(_userRepo.lastLocalMutationAt!);
+      if (elapsed < const Duration(seconds: 4)) {
+        return;
+      }
+    }
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!isClosed) {
+        try {
+          add(const FetchLeadsDataEvent(forceRefresh: true));
+        } catch (_) {}
+      }
+    });
+  }
 
   LeadsBloc() : super(const LeadsState()) {
     on<FetchLeadsDataEvent>(_onFetchLeadsData);
@@ -35,25 +54,25 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     on<FetchDailyLeadStatsEvent>(_onFetchDailyLeadStats);
     on<ToggleAnalyticsViewModeEvent>(_onToggleAnalyticsViewMode);
 
-    _wsSubscription = WebSocketService().leadsUpdates.listen((_) {
-      if (!isClosed) {
-        try {
-          add(const FetchLeadsDataEvent(forceRefresh: true));
-        } catch (_) {}
+    _wsSubscription = WebSocketService().leadsUpdates.listen((dynamic payload) {
+      if (isClosed) return;
+      // Skip self-triggered WebSocket echo (we already applied optimistic + cache patch)
+      if (payload is Map &&
+          payload['actorId'] != null &&
+          payload['actorId'].toString() == AuthService().currentUserId) {
+        return;
       }
+      _scheduleDebouncedRefresh(ignoreRecentLocalMutation: true);
     });
 
     _repoSubscription = _userRepo.onCacheInvalidated.listen((_) {
-      if (!isClosed) {
-        try {
-          add(const FetchLeadsDataEvent(forceRefresh: true));
-        } catch (_) {}
-      }
+      _scheduleDebouncedRefresh();
     });
   }
 
   @override
   Future<void> close() {
+    _refreshDebounceTimer?.cancel();
     _wsSubscription?.cancel();
     _repoSubscription?.cancel();
     return super.close();
@@ -169,7 +188,10 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     FetchLeadsDataEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LeadsStatus.loading));
+    // Only show full loading state when we have no data yet; keep UI responsive on background refresh
+    if (state.allRawUsers.isEmpty) {
+      emit(state.copyWith(status: LeadsStatus.loading));
+    }
     try {
       final results = await _userRepo.fetchDealersData(
         forceRefresh: event.forceRefresh,
@@ -270,7 +292,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     try {
       await _userRepo.assignAgent(event.userId, event.agentId);
 
-      // Log Activity
+      // Fire-and-forget analytics so it never blocks UI
       AnalyticsService().logEvent(
         'assign_agent',
         properties: {
@@ -281,7 +303,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
               : 'Unassigned agent from user',
         },
       );
-      await AnalyticsService().flush();
+      unawaited(AnalyticsService().flush().catchError((_) {}));
 
       emit(
         state.copyWith(
@@ -291,11 +313,11 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
               : 'Agent unassigned',
         ),
       );
-      if (AuthService().isAdmin ||
-          event.agentId == AuthService().currentUserId) {
+      // Only fetch profile details if this lead's profile is currently open
+      if (state.currentLeadDetails?['_id']?.toString() == event.userId &&
+          (AuthService().isAdmin ||
+              event.agentId == AuthService().currentUserId)) {
         add(FetchLeadDetailsEvent(event.userId));
-      } else {
-        add(const FetchLeadsDataEvent(forceRefresh: true));
       }
       // Refresh daily stats so banner count updates immediately
       add(
@@ -319,14 +341,16 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     BulkAssignAgentToLeadsEvent event,
     Emitter<LeadsState> emit,
   ) async {
-    // Optimistic Update
+    final userIdSet = event.userIds.toSet();
+    final agent = state.salesAgents.firstWhere(
+      (a) => a['_id'] == event.agentId,
+      orElse: () => <String, dynamic>{},
+    );
+
+    // Optimistic Update (O(N) with Set lookup instead of O(N*M))
     final updatedUsers = state.allRawUsers.map((u) {
-      if (event.userIds.contains(u['_id'])) {
+      if (userIdSet.contains(u['_id'])) {
         final updatedUser = Map<String, dynamic>.from(u);
-        final agent = state.salesAgents.firstWhere(
-          (a) => a['_id'] == event.agentId,
-          orElse: () => <String, dynamic>{},
-        );
         updatedUser['assignedAgent'] = agent.isNotEmpty ? agent : null;
 
         // Optimistically update status to 'new' if it was 'prospect'
@@ -348,17 +372,13 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
     );
 
     try {
-      int successCount = 0;
-      final futures = event.userIds.map((userId) async {
-        try {
-          await _userRepo.assignAgent(userId, event.agentId);
-          successCount++;
-        } catch (_) {}
-      }).toList();
+      // Single atomic bulk API call instead of N parallel requests
+      final successCount = await _userRepo.bulkAssignAgent(
+        event.userIds,
+        event.agentId,
+      );
 
-      await Future.wait(futures);
-
-      // Log Activity
+      // Fire-and-forget analytics
       AnalyticsService().logEvent(
         'bulk_assign_agent',
         properties: {
@@ -367,7 +387,7 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
           'details': 'Bulk assigned agent to $successCount leads',
         },
       );
-      await AnalyticsService().flush();
+      unawaited(AnalyticsService().flush().catchError((_) {}));
 
       emit(
         state.copyWith(
@@ -376,7 +396,6 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
               'Agent assigned to $successCount leads successfully',
         ),
       );
-      add(const FetchLeadsDataEvent(forceRefresh: true));
       // Refresh daily stats so banner count updates immediately
       add(
         FetchDailyLeadStatsEvent(
@@ -388,9 +407,10 @@ class LeadsBloc extends Bloc<LeadsEvent, LeadsState> {
       emit(
         state.copyWithKeepMessages(
           status: LeadsStatus.success,
-          errorMessage: e.toString(),
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
         ),
       );
+      add(const FetchLeadsDataEvent(forceRefresh: true));
     }
   }
 

@@ -20,9 +20,11 @@ class UserRepository {
   List<Map<String, dynamic>>? _cachedSalesAgents;
   List<Map<String, dynamic>>? _cachedOrders;
   DateTime? _lastCacheTime;
+  DateTime? lastLocalMutationAt;
+  Future<Map<String, List<Map<String, dynamic>>>>? _inFlightFetch;
   static const Duration _cacheTtl = Duration(minutes: 3);
 
-  /// Fetch all users and sales agents
+  /// Fetch all users and sales agents (with in-flight deduplication)
   Future<Map<String, List<Map<String, dynamic>>>> fetchDealersData({
     bool forceRefresh = false,
   }) async {
@@ -39,6 +41,23 @@ class UserRepository {
       };
     }
 
+    // Deduplicate concurrent network fetches so multiple blocs/WS events share 1 call
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    final future = _executeFetchDealersData();
+    _inFlightFetch = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_inFlightFetch, future)) {
+        _inFlightFetch = null;
+      }
+    }
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> _executeFetchDealersData() async {
     final usersFuture = _apiClient.get('/users');
     final salesFuture = _apiClient.get('/users?role=sales');
     final ordersFuture = _apiClient.get('/orders/admin/all').catchError((e) {
@@ -223,8 +242,40 @@ class UserRepository {
     throw Exception(data['message'] ?? 'Failed to create lead: ${res.statusCode}');
   }
 
+  /// Patch assignedAgent in memory cache without blowing away all 18k users
+  void _patchAssignedAgentInCache(Iterable<String> userIds, String? agentId) {
+    if (_cachedUsers == null) return;
+    final idSet = userIds.toSet();
+    Map<String, dynamic>? agentObj;
+    if (agentId != null && _cachedSalesAgents != null) {
+      for (final a in _cachedSalesAgents!) {
+        if (a['_id']?.toString() == agentId) {
+          agentObj = a;
+          break;
+        }
+      }
+    }
+    _cachedUsers = _cachedUsers!.map((u) {
+      final uid = u['_id']?.toString();
+      if (uid != null && idSet.contains(uid)) {
+        final copy = Map<String, dynamic>.from(u);
+        copy['assignedAgent'] = agentObj;
+        final status =
+            (copy['status'] ?? copy['leadStatus'] ?? 'prospect').toString().toLowerCase();
+        if (agentId != null && status == 'prospect') {
+          copy['status'] = 'new';
+          copy['leadStatus'] = 'new';
+        }
+        return copy;
+      }
+      return u;
+    }).toList();
+    _lastCacheTime = DateTime.now();
+  }
+
   /// Assign agent to user
   Future<void> assignAgent(String userId, String? agentId) async {
+    lastLocalMutationAt = DateTime.now();
     final res = await _apiClient.put('/users/$userId/assign-agent', {
       'agentId': agentId,
       'assignedAgentId': agentId,
@@ -233,7 +284,31 @@ class UserRepository {
       final data = jsonDecode(res.body);
       throw Exception(data['message'] ?? 'Failed to assign agent');
     }
-    invalidateCache();
+    lastLocalMutationAt = DateTime.now();
+    _patchAssignedAgentInCache([userId], agentId);
+  }
+
+  /// Bulk assign agent to multiple users in a single atomic request
+  Future<int> bulkAssignAgent(List<String> userIds, String? agentId) async {
+    if (userIds.isEmpty) return 0;
+    lastLocalMutationAt = DateTime.now();
+    final res = await _apiClient.put('/users/bulk-assign-agent', {
+      'userIds': userIds,
+      'agentId': agentId,
+      'assignedAgentId': agentId,
+    });
+    if (res.statusCode != 200) {
+      final data = jsonDecode(res.body);
+      throw Exception(data['message'] ?? 'Failed to bulk assign agent');
+    }
+    lastLocalMutationAt = DateTime.now();
+    _patchAssignedAgentInCache(userIds, agentId);
+    try {
+      final data = jsonDecode(res.body);
+      return (data['count'] as num?)?.toInt() ?? userIds.length;
+    } catch (_) {
+      return userIds.length;
+    }
   }
 
   /// Update KYC Status
