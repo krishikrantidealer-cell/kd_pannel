@@ -484,6 +484,15 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
 
   Timer? _wsDebounceFetchTimer;
 
+  String _normalizePhone10(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    String d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.length > 10 && d.startsWith('91')) d = d.substring(2);
+    d = d.replaceFirst(RegExp(r'^0+'), '');
+    if (d.length > 10 && d.startsWith('91')) d = d.substring(2);
+    return d;
+  }
+
   void _onWebSocketCallUpdate(
     WebSocketCallUpdateReceivedEvent event,
     Emitter<CallLogsState> emit,
@@ -492,11 +501,77 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
     final logId = updatedLog['_id']?.toString();
     final callStatus = (updatedLog['status'] ?? '').toString().toLowerCase();
     final eventName = (updatedLog['event'] ?? '').toString().toLowerCase();
-
-    final List<dynamic> currentLogs = List.from(state.callLogs);
     final providerCallId = (updatedLog['providerCallId'] ?? '').toString();
     final callId = (updatedLog['callId'] ?? '').toString();
 
+    final currentUserId = AuthService().currentUserId;
+    final currentUserEmail = AuthService().currentUserEmail?.toLowerCase();
+    final currentUserPhone = _normalizePhone10(AuthService().currentUserPhone);
+    final currentAgentWhatsApp = _normalizePhone10(AuthService().agentWhatsAppNumber);
+    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
+
+    final eventAgentId = (updatedLog['agentId'] is Map)
+        ? updatedLog['agentId']['_id']?.toString()
+        : updatedLog['agentId']?.toString();
+    final eventAgentEmail = (updatedLog['agentId'] is Map)
+        ? updatedLog['agentId']['email']?.toString().toLowerCase()
+        : null;
+    final eventAgentPhone = _normalizePhone10(updatedLog['agentPhone']?.toString());
+
+    final rawCustomer = updatedLog['customerPhone'] ??
+                        updatedLog['caller_number_raw'] ??
+                        updatedLog['cli'] ??
+                        updatedLog['caller_id'] ??
+                        updatedLog['customer_number'] ??
+                        updatedLog['number'] ??
+                        updatedLog['phone'] ??
+                        updatedLog['destination_number'] ??
+                        updatedLog['to'] ??
+                        '';
+    final customerPhone = _normalizePhone10(rawCustomer.toString());
+    final activePhone = _normalizePhone10(state.activeCustomerPhone);
+
+    bool isThisActiveCall = false;
+    if (state.activeCallLogId != null && state.activeCallLogId!.isNotEmpty) {
+      if (state.activeCallLogId == logId ||
+          state.activeCallLogId == providerCallId ||
+          state.activeCallLogId == callId) {
+        isThisActiveCall = true;
+      }
+    } else if (state.isCallActive || state.isTriggeringCall) {
+      if (activePhone.isNotEmpty && customerPhone.isNotEmpty &&
+          (activePhone.endsWith(customerPhone) || customerPhone.endsWith(activePhone))) {
+        isThisActiveCall = true;
+      }
+    }
+
+    bool isAgentMatch = false;
+    if (isThisActiveCall) {
+      isAgentMatch = true;
+    } else if (currentUserId != null && eventAgentId != null && currentUserId == eventAgentId) {
+      isAgentMatch = true;
+    } else if (currentUserEmail != null && eventAgentEmail != null && currentUserEmail == eventAgentEmail) {
+      isAgentMatch = true;
+    } else if (currentUserPhone.isNotEmpty && eventAgentPhone.isNotEmpty &&
+               (currentUserPhone.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentUserPhone))) {
+      isAgentMatch = true;
+    } else if (currentAgentWhatsApp.isNotEmpty && eventAgentPhone.isNotEmpty &&
+               (currentAgentWhatsApp.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentAgentWhatsApp))) {
+      isAgentMatch = true;
+    } else if (isAdmin) {
+      final adminDids = ['7316917246', '07316917246'];
+      if (adminDids.any((d) => eventAgentPhone.endsWith(d) || d.endsWith(eventAgentPhone))) {
+        isAgentMatch = true;
+      }
+    }
+
+    // Strict isolation: ignore other sales agents' WebSocket call broadcasts
+    // so unrelated calls never flash into a sales agent's Call History and vanish on sync.
+    if (!isAdmin && !isAgentMatch) {
+      return;
+    }
+
+    final List<dynamic> currentLogs = List.from(state.callLogs);
     final index = currentLogs.indexWhere((l) {
       final lid = l['_id']?.toString();
       final lcallId = l['callId']?.toString();
@@ -522,69 +597,6 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
       final s = (l['status'] ?? '').toString().toLowerCase();
       return s == 'missed' || s == 'no-answer';
     }).length;
-
-    final currentUserId = AuthService().currentUserId;
-    final currentUserEmail = AuthService().currentUserEmail?.toLowerCase();
-    final currentUserPhone = AuthService().currentUserPhone?.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-    final currentAgentWhatsApp = AuthService().agentWhatsAppNumber?.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-    final bool isAdmin = AuthService().currentUserRole == UserRole.admin;
-
-    final eventAgentId = (updatedLog['agentId'] is Map)
-        ? updatedLog['agentId']['_id']?.toString()
-        : updatedLog['agentId']?.toString();
-    final eventAgentEmail = (updatedLog['agentId'] is Map)
-        ? updatedLog['agentId']['email']?.toString().toLowerCase()
-        : null;
-    final eventAgentPhone = (updatedLog['agentPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-
-    final rawCustomer = updatedLog['customerPhone'] ??
-                        updatedLog['caller_number_raw'] ??
-                        updatedLog['cli'] ??
-                        updatedLog['caller_id'] ??
-                        updatedLog['customer_number'] ??
-                        updatedLog['number'] ??
-                        updatedLog['phone'] ??
-                        updatedLog['destination_number'] ??
-                        updatedLog['to'] ??
-                        '';
-    final customerPhone = rawCustomer.toString().replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-    final activePhone = (state.activeCustomerPhone ?? '').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
-
-    bool isThisActiveCall = false;
-    if (state.activeCallLogId != null && state.activeCallLogId!.isNotEmpty) {
-      if (state.activeCallLogId == logId ||
-          state.activeCallLogId == providerCallId ||
-          state.activeCallLogId == callId) {
-        isThisActiveCall = true;
-      }
-    } else if (state.isCallActive || state.isTriggeringCall) {
-      if (activePhone.isNotEmpty && customerPhone.isNotEmpty &&
-          (activePhone.endsWith(customerPhone) || customerPhone.endsWith(activePhone))) {
-        isThisActiveCall = true;
-      }
-    }
-
-    bool isAgentMatch = false;
-    if (isThisActiveCall) {
-      isAgentMatch = true;
-    } else if (currentUserId != null && eventAgentId != null && currentUserId == eventAgentId) {
-      isAgentMatch = true;
-    } else if (currentUserEmail != null && eventAgentEmail != null && currentUserEmail == eventAgentEmail) {
-      isAgentMatch = true;
-    } else if (currentUserPhone != null && currentUserPhone.isNotEmpty && eventAgentPhone.isNotEmpty &&
-               (currentUserPhone.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentUserPhone))) {
-      isAgentMatch = true;
-    } else if (currentAgentWhatsApp != null && currentAgentWhatsApp.isNotEmpty && eventAgentPhone.isNotEmpty &&
-               (currentAgentWhatsApp.endsWith(eventAgentPhone) || eventAgentPhone.endsWith(currentAgentWhatsApp))) {
-      isAgentMatch = true;
-    } else if (state.isCallActive || state.isTriggeringCall) {
-      isAgentMatch = true;
-    } else if (isAdmin) {
-      final adminDids = ['7316917246', '07316917246'];
-      if (adminDids.any((d) => eventAgentPhone.endsWith(d) || d.endsWith(eventAgentPhone))) {
-        isAgentMatch = true;
-      }
-    }
 
     final bool isPayloadEnded = updatedLog['isEnded'] == true ||
                                 updatedLog['callEnded'] == true ||
