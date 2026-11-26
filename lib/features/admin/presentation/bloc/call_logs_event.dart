@@ -156,3 +156,7 @@ class CompleteFollowUpEvent extends CallLogsEvent {
   List<Object?> get props => [callLogId];
 }
 
+class ResetCallLogsEvent extends CallLogsEvent {
+  const ResetCallLogsEvent();
+}
+

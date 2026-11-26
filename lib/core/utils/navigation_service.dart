@@ -11,6 +11,10 @@ import 'package:kd_pannel/features/admin/presentation/bloc/products_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/products_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_event.dart';
 import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
 import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit.dart';
 
@@ -51,6 +55,12 @@ class NavigationService {
       } catch (_) {}
       try {
         BlocProvider.of<EngagementHubCubit>(context, listen: false).reset();
+      } catch (_) {}
+      try {
+        BlocProvider.of<CallLogsBloc>(context, listen: false).add(const ResetCallLogsEvent());
+      } catch (_) {}
+      try {
+        BlocProvider.of<WhatsAppCrmBloc>(context, listen: false).add(const ResetWhatsAppCrmEvent());
       } catch (_) {}
     }
 

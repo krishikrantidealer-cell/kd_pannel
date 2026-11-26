@@ -12,6 +12,7 @@ import 'call_logs_state.dart';
 class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
   StreamSubscription? _wsSubscription;
   Timer? _activeCallPollingTimer;
+  String? _ownerUserId;
 
   CallLogsBloc() : super(const CallLogsState()) {
     on<FetchCallLogsEvent>(_onFetchCallLogs);
@@ -26,8 +27,19 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     on<ClearCallLogsMessageEvent>(_onClearMessages);
     on<FetchFollowUpsEvent>(_onFetchFollowUps);
     on<CompleteFollowUpEvent>(_onCompleteFollowUp);
+    on<ResetCallLogsEvent>(_onResetCallLogs);
 
     _initWebSocket();
+  }
+
+  void _onResetCallLogs(
+    ResetCallLogsEvent event,
+    Emitter<CallLogsState> emit,
+  ) {
+    _stopActiveCallPolling();
+    _wsDebounceFetchTimer?.cancel();
+    _ownerUserId = null;
+    emit(const CallLogsState());
   }
 
   void _initWebSocket() {
@@ -134,7 +146,12 @@ class CallLogsBloc extends Bloc<CallLogsEvent, CallLogsState> {
     FetchCallLogsEvent event,
     Emitter<CallLogsState> emit,
   ) async {
-    emit(state.copyWith(
+    final requestUserId = AuthService().currentUserId;
+    final bool userChanged = _ownerUserId != null && _ownerUserId != requestUserId;
+    _ownerUserId = requestUserId;
+
+    final baseState = userChanged ? const CallLogsState() : state;
+    emit(baseState.copyWith(
       isLoading: true,
       page: event.page,
       selectedType: event.type,
@@ -240,6 +257,9 @@ const List<Map<String, dynamic>> kTelephonyConfiguredAgents = [
       ];
 
       final results = await Future.wait(parallelTasks);
+      if (AuthService().currentUserId != requestUserId) {
+        return; // Discard stale response if user logged out or switched accounts
+      }
       final res = results[0];
 
       if (results.length > 1) {

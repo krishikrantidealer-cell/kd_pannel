@@ -182,3 +182,7 @@ class WebSocketMessageStatusUpdatedEvent extends WhatsAppCrmEvent {
 class ClearWhatsAppCrmMessageEvent extends WhatsAppCrmEvent {
   const ClearWhatsAppCrmMessageEvent();
 }
+
+class ResetWhatsAppCrmEvent extends WhatsAppCrmEvent {
+  const ResetWhatsAppCrmEvent();
+}

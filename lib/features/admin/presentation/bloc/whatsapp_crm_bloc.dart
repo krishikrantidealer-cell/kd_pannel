@@ -26,6 +26,7 @@ class WhatsAppCrmBloc extends Bloc<WhatsAppCrmEvent, WhatsAppCrmState> {
     on<WebSocketNewMessageReceivedEvent>(_onWebSocketNewMessage);
     on<WebSocketMessageStatusUpdatedEvent>(_onWebSocketMessageStatusUpdated);
     on<ClearWhatsAppCrmMessageEvent>(_onClearMessages);
+    on<ResetWhatsAppCrmEvent>((event, emit) => emit(const WhatsAppCrmState()));
 
     _initWebSocket();
   }
