@@ -127,8 +127,7 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 8;
           _engagementSubTab = 1;
         } else if (routeName == '/logs' || routeName == '/admin/logs') {
-          _currentIdx = 8;
-          _engagementSubTab = 2;
+          _currentIdx = 7;
         } else if (routeName == '/support' || routeName == '/whatsapp') {
           _currentIdx = 9;
         } else if (routeName == '/calls' || routeName == '/call-recordings') {

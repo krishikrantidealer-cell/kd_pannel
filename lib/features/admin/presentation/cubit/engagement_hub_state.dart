@@ -2,8 +2,7 @@ import 'package:equatable/equatable.dart';
 
 enum EngagementHubTab {
   telemetry('telemetry', 'Marketing & Telemetry'),
-  pushCampaigns('push', 'Push Campaigns'),
-  salesActivity('sales-activity', 'Sales Activity');
+  pushCampaigns('push', 'Push Campaigns');
 
   final String pathKey;
   final String label;
@@ -12,7 +11,6 @@ enum EngagementHubTab {
 
   static EngagementHubTab fromIndex(int idx) {
     if (idx == 1) return EngagementHubTab.pushCampaigns;
-    if (idx == 2) return EngagementHubTab.salesActivity;
     return EngagementHubTab.telemetry;
   }
 
@@ -21,9 +19,6 @@ enum EngagementHubTab {
     final lower = key.toLowerCase();
     if (lower.contains('push') || lower.contains('campaign')) {
       return EngagementHubTab.pushCampaigns;
-    }
-    if (lower.contains('sales') || lower.contains('audit') || lower.contains('log')) {
-      return EngagementHubTab.salesActivity;
     }
     return EngagementHubTab.telemetry;
   }

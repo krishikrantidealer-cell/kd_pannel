@@ -173,6 +173,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
   DealersState? _lastDealersState;
   LeadsState? _lastLeadsState;
+  DealersState? _indexedDealersState;
+  LeadsState? _indexedLeadsState;
 
   DealersState? get _dealersStateSafe {
     if (!mounted) return _lastDealersState;
@@ -203,14 +205,15 @@ class _UserEventsPageState extends State<UserEventsPage> {
     _leadsStateSafe;
   }
 
-  void _buildUserLookupIndexes() {
+  void _buildUserLookupIndexes({bool force = false}) {
     final dealersState = _dealersStateSafe;
     final leadsState = _leadsStateSafe;
 
     if (dealersState == null || leadsState == null) return;
 
-    if (_lastDealersState == dealersState &&
-        _lastLeadsState == leadsState &&
+    if (!force &&
+        _indexedDealersState == dealersState &&
+        _indexedLeadsState == leadsState &&
         _cachedAssignedUserKeys != null &&
         _cachedAssignedAgentLookup != null &&
         _cachedUserRoleLookup != null &&
@@ -218,8 +221,8 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return;
     }
 
-    _lastDealersState = dealersState;
-    _lastLeadsState = leadsState;
+    _indexedDealersState = dealersState;
+    _indexedLeadsState = leadsState;
 
     final Set<String> assignedKeys = {};
     final Map<String, String> typeLookup = {};
@@ -928,13 +931,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
             }
           }
 
-          if (!AuthService().isSales ||
-              _isUserAssignedToCurrentSalesAgent(
-                rawUser: rawUser,
-                displayName: displayName,
-                displayPhone: displayPhone,
-                userDetails: u,
-              )) {
+          if (_userSearchQuery.trim().isNotEmpty &&
+              (!AuthService().isSales ||
+                  _isUserAssignedToCurrentSalesAgent(
+                    rawUser: rawUser,
+                    displayName: displayName,
+                    displayPhone: displayPhone,
+                    userDetails: u,
+                  ))) {
             usersSet.add(displayName);
           }
         }
@@ -972,13 +976,14 @@ class _UserEventsPageState extends State<UserEventsPage> {
             }
           }
 
-          if (!AuthService().isSales ||
-              _isUserAssignedToCurrentSalesAgent(
-                rawUser: rawUser,
-                displayName: displayName,
-                displayPhone: displayPhone,
-                userDetails: u,
-              )) {
+          if (_userSearchQuery.trim().isNotEmpty &&
+              (!AuthService().isSales ||
+                  _isUserAssignedToCurrentSalesAgent(
+                    rawUser: rawUser,
+                    displayName: displayName,
+                    displayPhone: displayPhone,
+                    userDetails: u,
+                  ))) {
             usersSet.add(displayName);
           }
         }
@@ -1238,9 +1243,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
 
         _requestRebuildCache();
 
-        // Trigger a background refresh of historical events
+        // Trigger a throttled background refresh of historical customer events
         _eventsRefreshDebounce?.cancel();
-        _eventsRefreshDebounce = Timer(const Duration(seconds: 5), () {
+        _eventsRefreshDebounce = Timer(const Duration(seconds: 30), () {
           if (mounted) _loadEvents(silent: true, isBackground: true);
         });
       }
@@ -1446,7 +1451,51 @@ class _UserEventsPageState extends State<UserEventsPage> {
         batchUserCounts[displayName] = currentCount + 1;
       }
 
-      final eventType = event['eventType']?.toString() ?? 'unknown';
+      final eventType = (event['eventType'] ?? event['event'] ?? 'unknown').toString();
+      const staffActions = {
+        'profile_view',
+        'assign_agent',
+        'bulk_assign_agent',
+        'create_sales_agent',
+        'add_lead_note',
+        'add_dealer_note',
+        'note_added',
+        'edit_lead',
+        'edit_dealer',
+        'update_lead_status',
+        'update_dealer_status',
+        'toggle_block',
+        'delete_lead',
+        'delete_dealer',
+        'permanent_delete_user',
+        'restore_user',
+        'export_leads_csv',
+        'delete_sales_agent',
+        'call_logged',
+        'call_task_created',
+        'whatsapp_message_sent',
+        'order_created_by_agent',
+        'lead_converted',
+        'status_changed',
+        'lead_status_changed',
+        'dealer_status_changed',
+        'estimate_created',
+        'estimate_shared',
+        'kyc_verified',
+        'kyc_rejected',
+        'kyc_status_updated',
+        'create_coupon',
+        'delete_coupon',
+        'update_coupon',
+      };
+      final actorStr = event['actor']?.toString();
+      final performedByStr = event['performedBy']?.toString();
+      if (staffActions.contains(eventType.toLowerCase()) ||
+          _isKnownSalesAgent(actorStr) ||
+          _isKnownSalesAgent(performedByStr)) {
+        continue;
+      }
+
       if (!grouped.containsKey(eventType)) {
         grouped[eventType] = [];
       }
@@ -1486,15 +1535,17 @@ class _UserEventsPageState extends State<UserEventsPage> {
     if (!mounted) return;
     if (_isLoadingEvents && !isSearch) return;
 
-    // Refresh Funnel Future too
-    _funnelDataFuture = AnalyticsService().fetchFunnelData(
-      days: _selectedAnalyticsTimeRange,
-      customRange: _customAnalyticsDateRange,
-    );
-    _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(
-      days: _selectedAnalyticsTimeRange,
-      customRange: _customAnalyticsDateRange,
-    );
+    // Only refresh Funnel & District futures on explicit/initial loads (not background presence pings)
+    if (!isBackground) {
+      _funnelDataFuture = AnalyticsService().fetchFunnelData(
+        days: _selectedAnalyticsTimeRange,
+        customRange: _customAnalyticsDateRange,
+      );
+      _districtDataFuture = AnalyticsService().fetchDistrictAnalytics(
+        days: _selectedAnalyticsTimeRange,
+        customRange: _customAnalyticsDateRange,
+      );
+    }
 
     _isLoadingEvents = true;
     _isBackgroundLoading = isBackground;
@@ -1532,6 +1583,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             ? backendQuery
             : null,
         filter: activeFilter,
+        customerOnly: true,
       );
 
       flatEvents = (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -1606,9 +1658,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       setState(() {
         _isLoading = false;
       });
-      if (!silent && !isBackground) {
-        _prefetchAssignedUsersEvents();
-      }
     }
     _isLoadingEvents = false;
     _isBackgroundLoading = false;
@@ -1631,6 +1680,7 @@ class _UserEventsPageState extends State<UserEventsPage> {
             ? backendQuery
             : null,
         filter: _selectedMetricFilter,
+        customerOnly: true,
       );
       final flatEvents = res['events'] as List<Map<String, dynamic>>;
       _nextCursor = res['nextCursor'] as String?;
@@ -1779,24 +1829,20 @@ class _UserEventsPageState extends State<UserEventsPage> {
     }
 
     try {
-      final candidates = _getCandidateQueriesForUser(userName);
+      final candidates = _getCandidateQueriesForUser(userName)
+          .where((q) => q.trim().isNotEmpty)
+          .toList();
       List<Map<String, dynamic>> flatEvents = [];
 
-      for (final query in candidates) {
-        if (query.isEmpty) continue;
-        try {
-          final res = await AnalyticsService().fetchEventsPaged(
-            userEmail: query,
-            limit: 150,
-            actorOnly: false,
-          );
-          final events =
-              (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          if (events.isNotEmpty) {
-            flatEvents = events;
-            break;
-          }
-        } catch (_) {}
+      // Backend resolves phone (+91/10-digit), email, and ObjectId in a single query
+      if (candidates.isNotEmpty) {
+        final res = await AnalyticsService().fetchEventsPaged(
+          userEmail: candidates.first,
+          limit: 150,
+          customerOnly: true,
+        );
+        flatEvents =
+            (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       }
 
       _perUserEventsCache[userName] = flatEvents.take(150).toList();
@@ -1834,19 +1880,6 @@ class _UserEventsPageState extends State<UserEventsPage> {
       _loadingUserEvents.remove(userName);
       if (mounted) {
         setState(() {});
-      }
-    }
-  }
-
-  Future<void> _prefetchAssignedUsersEvents([List<String>? users]) async {
-    if (!mounted) return;
-    final targetUsers = users ?? _cachedUsersWithEvents.take(10).toList();
-
-    for (final userName in targetUsers) {
-      if (!mounted) break;
-      if (!_loadingUserEvents.contains(userName) &&
-          !_perUserEventsCache.containsKey(userName)) {
-        _fetchEventsForUser(userName, silent: true);
       }
     }
   }
@@ -2127,17 +2160,17 @@ class _UserEventsPageState extends State<UserEventsPage> {
   static final List<Map<String, dynamic>> _allEventTypes = [
     {
       'id': 'login_success',
-      'label': 'Login Success',
+      'label': 'App Login',
       'icon': Icons.login_rounded,
       'color': Colors.green,
-      'description': 'User successfully authenticated',
+      'description': 'Customer signed into mobile app',
     },
     {
-      'id': 'profile_view',
-      'label': 'Profile View',
+      'id': 'product_view',
+      'label': 'Product Views',
       'icon': Icons.visibility_rounded,
       'color': Colors.blue,
-      'description': 'Dealer profile page visited',
+      'description': 'Product detail pages viewed',
     },
     {
       'id': 'product_search',
@@ -2147,11 +2180,32 @@ class _UserEventsPageState extends State<UserEventsPage> {
       'description': 'Inventory search queries executed',
     },
     {
+      'id': 'category_view',
+      'label': 'Category Views',
+      'icon': Icons.category_rounded,
+      'color': Colors.indigo,
+      'description': 'Product categories browsed',
+    },
+    {
       'id': 'add_to_cart',
       'label': 'Add to Cart',
       'icon': Icons.add_shopping_cart_rounded,
       'color': Colors.orange,
       'description': 'Items added to purchasing cart',
+    },
+    {
+      'id': 'cart_add',
+      'label': 'Cart Adds',
+      'icon': Icons.add_shopping_cart_rounded,
+      'color': Colors.orange,
+      'description': 'Items added to purchasing cart',
+    },
+    {
+      'id': 'cart_view',
+      'label': 'Cart Viewed',
+      'icon': Icons.shopping_cart_outlined,
+      'color': Colors.amber,
+      'description': 'Shopping cart opened',
     },
     {
       'id': 'checkout_started',
@@ -2171,8 +2225,22 @@ class _UserEventsPageState extends State<UserEventsPage> {
       'id': 'payment_success',
       'label': 'Payment Success',
       'icon': Icons.check_circle_outline_rounded,
-      'color': const Color(0xFF10B981), // Emerald green
+      'color': const Color(0xFF10B981),
       'description': 'Completed payments received',
+    },
+    {
+      'id': 'order_placed',
+      'label': 'Order Placed',
+      'icon': Icons.local_shipping_rounded,
+      'color': const Color(0xFF10B981),
+      'description': 'Orders placed by customer',
+    },
+    {
+      'id': 'order_created',
+      'label': 'Order Created',
+      'icon': Icons.receipt_long_rounded,
+      'color': const Color(0xFF059669),
+      'description': 'Customer orders recorded',
     },
   ];
 
@@ -2323,13 +2391,29 @@ class _UserEventsPageState extends State<UserEventsPage> {
         ? filtered.sublist(startIndex, endIndex)
         : <String>[];
 
-    if (paginatedUsers.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _prefetchAssignedUsersEvents(paginatedUsers);
-      });
-    }
-
-    return Scaffold(
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<DealersBloc, DealersState>(
+          listenWhen: (prev, curr) =>
+              prev.allRawUsers.length != curr.allRawUsers.length ||
+              prev.allRawOrders.length != curr.allRawOrders.length ||
+              prev.salesAgents.length != curr.salesAgents.length,
+          listener: (context, _) {
+            _buildUserLookupIndexes(force: true);
+            _requestRebuildCache();
+          },
+        ),
+        BlocListener<LeadsBloc, LeadsState>(
+          listenWhen: (prev, curr) =>
+              prev.allRawUsers.length != curr.allRawUsers.length ||
+              prev.salesAgents.length != curr.salesAgents.length,
+          listener: (context, _) {
+            _buildUserLookupIndexes(force: true);
+            _requestRebuildCache();
+          },
+        ),
+      ],
+      child: Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -2494,10 +2578,38 @@ class _UserEventsPageState extends State<UserEventsPage> {
                         currentPage,
                       ),
                     ),
+                  if (_activeAnalyticsTab == 0 &&
+                      _nextCursor != null &&
+                      currentPage == totalPages)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Center(
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoadingMore ? null : _loadMoreEvents,
+                            icon: _isLoadingMore
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.history_rounded, size: 16),
+                            label: Text(
+                              _isLoadingMore
+                                  ? 'Loading older events...'
+                                  : 'Load Older Customer Activity',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   const SliverToBoxAdapter(child: SizedBox(height: 40)),
                 ],
               ),
             ),
+      ),
     );
   }
 

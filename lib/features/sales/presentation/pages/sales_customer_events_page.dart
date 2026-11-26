@@ -8,7 +8,9 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/dealers_state.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/leads_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/leads_state.dart';
 import 'package:kd_pannel/features/shared/widgets/events/user_card.dart';
 import 'package:kd_pannel/features/shared/widgets/events/events_helper.dart';
 
@@ -40,6 +42,8 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
   bool _isLoading = true;
   bool _isLoadingEvents = false;
+  bool _isLoadingMore = false;
+  String? _nextCursor;
 
   int _currentPage = 1;
   final int _usersPerPage = 10;
@@ -47,7 +51,11 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   StreamSubscription? _presenceSubscription;
   Timer? _realTimeTimer;
   Timer? _rebuildDebounce;
+  Timer? _searchDebounce;
   bool _isRebuildingCache = false;
+  int _indexedDealersCount = -1;
+  int _indexedLeadsCount = -1;
+  List<Map<String, dynamic>> _pendingRawEvents = [];
 
   Map<String, Map<String, List<Map<String, dynamic>>>>
   _cachedUserEventsGrouped = {};
@@ -63,16 +71,46 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
   static const List<Map<String, dynamic>> _eventTypes = [
     {
+      'id': 'login_success',
+      'label': 'App Login',
+      'icon': Icons.login_rounded,
+      'color': Color(0xFF16A34A),
+    },
+    {
       'id': 'product_view',
       'label': 'Product Views',
       'icon': Icons.visibility_outlined,
       'color': Color(0xFF0284C7),
     },
     {
+      'id': 'product_search',
+      'label': 'Product Search',
+      'icon': Icons.search_rounded,
+      'color': Color(0xFF0D9488),
+    },
+    {
+      'id': 'category_view',
+      'label': 'Category Views',
+      'icon': Icons.category_outlined,
+      'color': Color(0xFF4F46E5),
+    },
+    {
+      'id': 'add_to_cart',
+      'label': 'Add to Cart',
+      'icon': Icons.add_shopping_cart_rounded,
+      'color': Color(0xFFF59E0B),
+    },
+    {
       'id': 'cart_add',
       'label': 'Cart Adds',
       'icon': Icons.shopping_cart_outlined,
       'color': Color(0xFFF59E0B),
+    },
+    {
+      'id': 'cart_view',
+      'label': 'Cart Viewed',
+      'icon': Icons.shopping_cart_outlined,
+      'color': Color(0xFFD97706),
     },
     {
       'id': 'checkout_started',
@@ -85,6 +123,18 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       'label': 'Payments',
       'icon': Icons.check_circle_outline,
       'color': Color(0xFF10B981),
+    },
+    {
+      'id': 'order_placed',
+      'label': 'Order Placed',
+      'icon': Icons.local_shipping_outlined,
+      'color': Color(0xFF10B981),
+    },
+    {
+      'id': 'order_created',
+      'label': 'Orders',
+      'icon': Icons.receipt_long_outlined,
+      'color': Color(0xFF059669),
     },
     {
       'id': 'payment_failed',
@@ -160,7 +210,29 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
   }
 
   void _buildUserLookupIndexes({bool force = false}) {
-    if (!force && _cachedAssignedUserKeys != null) return;
+    int curDealersLen = 0;
+    int curLeadsLen = 0;
+    List<Map<String, dynamic>> rawDealers = const [];
+    List<Map<String, dynamic>> rawLeads = const [];
+    try {
+      rawDealers = context.read<DealersBloc>().state.allRawUsers;
+      curDealersLen = rawDealers.length;
+    } catch (_) {}
+    try {
+      rawLeads = context.read<LeadsBloc>().state.allRawUsers;
+      curLeadsLen = rawLeads.length;
+    } catch (_) {}
+
+    if (!force &&
+        _cachedAssignedUserKeys != null &&
+        _indexedDealersCount == curDealersLen &&
+        _indexedLeadsCount == curLeadsLen) {
+      return;
+    }
+
+    _indexedDealersCount = curDealersLen;
+    _indexedLeadsCount = curLeadsLen;
+
     final assignedKeys = <String>{};
     final currentUserId =
         _normalizeId(AuthService().currentUserId).toLowerCase();
@@ -169,7 +241,10 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
 
     bool isRawUserAssigned(Map<String, dynamic> u) {
       final assignedAgent =
-          u['assignedAgent'] ?? u['assignedSalesAgent'] ?? u['salesAgent'];
+          u['assignedAgent'] ??
+          u['assignedSalesAgent'] ??
+          u['salesAgent'] ??
+          u['assignedAgentId'];
       if (assignedAgent != null) {
         if (assignedAgent is Map) {
           final aId = _normalizeId(
@@ -208,7 +283,10 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         if (uPhone.isNotEmpty) {
           assignedKeys.add(uPhone.toLowerCase());
           if (cleanPhone.length >= 10) {
-            assignedKeys.add(cleanPhone.substring(cleanPhone.length - 10));
+            final last10 = cleanPhone.substring(cleanPhone.length - 10);
+            assignedKeys.add(last10);
+            assignedKeys.add('91$last10');
+            assignedKeys.add('+91$last10');
           }
         }
         if (uName.isNotEmpty) assignedKeys.add(uName);
@@ -216,19 +294,12 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       }
     }
 
-    try {
-      final dealersState = context.read<DealersBloc>().state;
-      for (final u in dealersState.allRawUsers) {
-        indexUser(u);
-      }
-    } catch (_) {}
-
-    try {
-      final leadsState = context.read<LeadsBloc>().state;
-      for (final u in leadsState.allRawUsers) {
-        indexUser(u);
-      }
-    } catch (_) {}
+    for (final u in rawDealers) {
+      indexUser(u);
+    }
+    for (final u in rawLeads) {
+      indexUser(u);
+    }
 
     _cachedAssignedUserKeys = assignedKeys;
   }
@@ -246,6 +317,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     _searchController.dispose();
     _realTimeTimer?.cancel();
     _rebuildDebounce?.cancel();
+    _searchDebounce?.cancel();
     _presenceSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
@@ -390,6 +462,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
               displayName: userName,
               displayPhone: log['userPhone']?.toString(),
               userDetails: log['userDetails'],
+              fromBackendScopedFeed: true,
             )) {
               usersSet.add(userName);
               final userMap = userEventsGrouped.putIfAbsent(userName, () => {});
@@ -431,20 +504,24 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
               displayName != 'Guest') {
             _nameToId[displayName] = rawUser;
           }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
+          if (displayPhone.isNotEmpty) {
+            _nameToPhone[displayName] = displayPhone;
+            if (!_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
           }
           userTypes[displayName] = type;
           if (rawUser.isNotEmpty) userTypes[rawUser] = type;
 
-          if (_isUserAssignedToSales(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
+          if (_searchQuery.trim().isNotEmpty &&
+              _isUserAssignedToSales(
+                rawUser: rawUser,
+                displayName: displayName,
+                displayPhone: displayPhone,
+                userDetails: u,
+              )) {
             usersSet.add(displayName);
           }
         }
@@ -478,20 +555,24 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
               displayName != 'Guest') {
             _nameToId[displayName] = rawUser;
           }
-          if (displayPhone.isNotEmpty && !_nameToId.containsKey(displayPhone)) {
-            _nameToId[displayPhone] = rawUser.isNotEmpty
-                ? rawUser
-                : displayPhone;
+          if (displayPhone.isNotEmpty) {
+            _nameToPhone[displayName] = displayPhone;
+            if (!_nameToId.containsKey(displayPhone)) {
+              _nameToId[displayPhone] = rawUser.isNotEmpty
+                  ? rawUser
+                  : displayPhone;
+            }
           }
           userTypes.putIfAbsent(displayName, () => type);
           if (rawUser.isNotEmpty) userTypes.putIfAbsent(rawUser, () => type);
 
-          if (_isUserAssignedToSales(
-            rawUser: rawUser,
-            displayName: displayName,
-            displayPhone: displayPhone,
-            userDetails: u,
-          )) {
+          if (_searchQuery.trim().isNotEmpty &&
+              _isUserAssignedToSales(
+                rawUser: rawUser,
+                displayName: displayName,
+                displayPhone: displayPhone,
+                userDetails: u,
+              )) {
             usersSet.add(displayName);
           }
         }
@@ -534,9 +615,9 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
           return bTs.compareTo(aTs);
         });
 
-        final top10Logs = userFlatLogs.take(10).toList();
+        final topLogs = userFlatLogs.take(100).toList();
         final Map<String, List<Map<String, dynamic>>> trimmedCategories = {};
-        for (final log in top10Logs) {
+        for (final log in topLogs) {
           final cat = log['eventType']?.toString() ?? 'general';
           trimmedCategories.putIfAbsent(cat, () => []).add(log);
         }
@@ -570,7 +651,11 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         final bool hasSuccess =
             userGroups.containsKey('payment_success') ||
             userGroups.containsKey('order_placed') ||
-            userGroups.containsKey('order_completed');
+            userGroups.containsKey('order_completed') ||
+            userGroups.containsKey('order_created');
+        final bool hasCart =
+            userGroups.containsKey('add_to_cart') ||
+            userGroups.containsKey('cart_add');
 
         if (userGroups.containsKey('payment_failed') && !hasSuccess) {
           isHigh = true;
@@ -578,7 +663,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         } else if (userGroups.containsKey('checkout_started') && !hasSuccess) {
           isHigh = true;
           reason = 'Abandoned Checkout';
-        } else if (userGroups.containsKey('add_to_cart') && !hasSuccess) {
+        } else if (hasCart && !hasSuccess) {
           isHigh = true;
           reason = 'Abandoned Cart';
         }
@@ -878,6 +963,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     required String displayName,
     String? displayPhone,
     Map<String, dynamic>? userDetails,
+    bool fromBackendScopedFeed = false,
   }) {
     if (_isKnownSalesAgent(rawUser) ||
         _isKnownSalesAgent(displayName) ||
@@ -896,7 +982,8 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       final assigned =
           userDetails['assignedAgent'] ??
           userDetails['assignedSalesAgent'] ??
-          userDetails['salesAgent'];
+          userDetails['salesAgent'] ??
+          userDetails['assignedAgentId'];
       if (assigned != null) {
         if (assigned is Map) {
           final aId = _normalizeId(
@@ -917,11 +1004,18 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       }
     }
 
-    if (_cachedAssignedUserKeys == null) {
-      _buildUserLookupIndexes();
-    }
+    _buildUserLookupIndexes();
 
     final keys = _cachedAssignedUserKeys ?? {};
+    if (keys.isEmpty &&
+        fromBackendScopedFeed &&
+        _indexedDealersCount == 0 &&
+        _indexedLeadsCount == 0) {
+      // Backend /api/events already enforces strict sales agent assignment when role == 'sales'.
+      // Allow immediate display while DealersBloc & LeadsBloc are still downloading CRM lists.
+      return true;
+    }
+
     final rawUserLower = _normalizeId(rawUser).trim().toLowerCase();
     final nameLower = displayName.trim().toLowerCase();
     final phoneLower = displayPhone?.trim().toLowerCase() ?? '';
@@ -1025,6 +1119,7 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         displayName: displayName,
         displayPhone: phone,
         userDetails: userDetails,
+        fromBackendScopedFeed: true,
       )) {
         continue;
       }
@@ -1063,21 +1158,47 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     }
   }
 
-  Future<void> _loadEvents() async {
-    if (!mounted || _isLoadingEvents) return;
+  Future<void> _loadEvents({String? searchQuery}) async {
+    if (!mounted || (_isLoadingEvents && searchQuery == null)) return;
     _isLoadingEvents = true;
+    if (mounted) setState(() {});
 
     try {
+      String? userParam;
+      if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+        final q = searchQuery.trim();
+        final digits = q.replaceAll(RegExp(r'\D'), '');
+        if (digits.length >= 10) {
+          userParam = digits.substring(digits.length - 10);
+        } else if (q.contains('@')) {
+          userParam = q.toLowerCase();
+        } else {
+          final candidates = _getCandidateQueriesForUser(q);
+          if (candidates.isNotEmpty) userParam = candidates.first;
+        }
+      }
+
       final res = await AnalyticsService()
-          .fetchEventsPaged(limit: 200)
+          .fetchEventsPaged(
+            limit: 300,
+            userEmail: userParam,
+            customerOnly: true,
+          )
           .timeout(
             const Duration(seconds: 12),
-            onTimeout: () => {'events': <Map<String, dynamic>>[], 'nextCursor': null},
+            onTimeout: () => {
+              'events': <Map<String, dynamic>>[],
+              'nextCursor': null,
+            },
           );
       final flatEvents =
           (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (userParam == null) {
+        _nextCursor = res['nextCursor'] as String?;
+      }
 
       if (flatEvents.isNotEmpty) {
+        _pendingRawEvents = flatEvents;
         final currentGrouped = Map<String, List<Map<String, dynamic>>>.from(
           _eventsLogs,
         );
@@ -1095,6 +1216,37 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
       } catch (_) {}
       if (mounted) setState(() => _isLoading = false);
       _isLoadingEvents = false;
+    }
+  }
+
+  Future<void> _loadMoreEvents() async {
+    if (!mounted || _isLoadingEvents || _isLoadingMore || _nextCursor == null) {
+      return;
+    }
+    setState(() => _isLoadingMore = true);
+    try {
+      final res = await AnalyticsService().fetchEventsPaged(
+        limit: 300,
+        before: _nextCursor,
+        customerOnly: true,
+      );
+      final flatEvents =
+          (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _nextCursor = res['nextCursor'] as String?;
+      if (flatEvents.isNotEmpty) {
+        final currentGrouped = Map<String, List<Map<String, dynamic>>>.from(
+          _eventsLogs,
+        );
+        final currentNameToId = Map<String, String>.from(_nameToId);
+        _processEventsList(flatEvents, currentGrouped, currentNameToId);
+        _eventsLogs = currentGrouped;
+        _nameToId = currentNameToId;
+        _rebuildCache();
+      }
+    } catch (e) {
+      debugPrint('[SalesCustomerEvents] Error loading more events: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -1185,23 +1337,19 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
     if (!silent && mounted) setState(() => _loadingUserEvents.add(userName));
 
     try {
-      final candidates = _getCandidateQueriesForUser(userName);
+      final candidates = _getCandidateQueriesForUser(userName)
+          .where((q) => q.trim().isNotEmpty)
+          .toList();
       List<Map<String, dynamic>> flatEvents = [];
 
-      for (final query in candidates) {
-        if (query.isEmpty) continue;
-        try {
-          final res = await AnalyticsService().fetchEventsPaged(
-            userEmail: query,
-            limit: 150,
-          );
-          final events =
-              (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          if (events.isNotEmpty) {
-            flatEvents = events;
-            break;
-          }
-        } catch (_) {}
+      if (candidates.isNotEmpty) {
+        final res = await AnalyticsService().fetchEventsPaged(
+          userEmail: candidates.first,
+          limit: 150,
+          customerOnly: true,
+        );
+        flatEvents =
+            (res['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       }
 
       _perUserEventsCache[userName] = flatEvents.take(150).toList();
@@ -1220,22 +1368,19 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         _eventsLogs = currentGrouped;
         _nameToId = currentNameToId;
         _rebuildCache();
+
+        if (_selectedUser == userName && _selectedEventType == null) {
+          final updated = _cachedUserEventsGrouped[userName] ?? {};
+          if (updated.isNotEmpty) {
+            _selectedEventType = updated.keys.first;
+          }
+        }
       }
     } catch (_) {
     } finally {
       _activeUserNetworkFetches.remove(userName);
       _loadingUserEvents.remove(userName);
       if (mounted) setState(() {});
-    }
-  }
-
-  void _prefetchPageUsers(List<String> users) {
-    if (!mounted) return;
-    for (final userName in users) {
-      if (!_activeUserNetworkFetches.contains(userName) &&
-          !_perUserEventsCache.containsKey(userName)) {
-        _fetchEventsForUser(userName, silent: true);
-      }
     }
   }
 
@@ -1318,7 +1463,59 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         ? users.sublist(startIndex, endIndex)
         : <String>[];
 
-    return Scaffold(
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<DealersBloc, DealersState>(
+          listenWhen: (prev, curr) =>
+              prev.allRawUsers.length != curr.allRawUsers.length ||
+              prev.allRawOrders.length != curr.allRawOrders.length ||
+              prev.salesAgents.length != curr.salesAgents.length,
+          listener: (context, _) {
+            _buildUserLookupIndexes(force: true);
+            if (_pendingRawEvents.isNotEmpty) {
+              _processedEventIds.clear();
+              final currentGrouped = <String, List<Map<String, dynamic>>>{};
+              final currentNameToId = Map<String, String>.from(_nameToId);
+              _processEventsList(
+                _pendingRawEvents,
+                currentGrouped,
+                currentNameToId,
+              );
+              _eventsLogs = currentGrouped;
+              _nameToId = currentNameToId;
+              _mergedOrderIds.clear();
+              _lastOrdersCount = -1;
+              _mergeSalesCustomerEventsIntoLogs();
+            }
+            _requestRebuildCache();
+          },
+        ),
+        BlocListener<LeadsBloc, LeadsState>(
+          listenWhen: (prev, curr) =>
+              prev.allRawUsers.length != curr.allRawUsers.length ||
+              prev.salesAgents.length != curr.salesAgents.length,
+          listener: (context, _) {
+            _buildUserLookupIndexes(force: true);
+            if (_pendingRawEvents.isNotEmpty) {
+              _processedEventIds.clear();
+              final currentGrouped = <String, List<Map<String, dynamic>>>{};
+              final currentNameToId = Map<String, String>.from(_nameToId);
+              _processEventsList(
+                _pendingRawEvents,
+                currentGrouped,
+                currentNameToId,
+              );
+              _eventsLogs = currentGrouped;
+              _nameToId = currentNameToId;
+              _mergedOrderIds.clear();
+              _lastOrdersCount = -1;
+              _mergeSalesCustomerEventsIntoLogs();
+            }
+            _requestRebuildCache();
+          },
+        ),
+      ],
+      child: Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
@@ -1334,7 +1531,13 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => _loadEvents(),
+            onPressed: () {
+              _processedEventIds.clear();
+              _eventsLogs = {};
+              _mergedOrderIds.clear();
+              _lastOrdersCount = -1;
+              _loadEvents();
+            },
             tooltip: 'Refresh Events',
           ),
         ],
@@ -1384,31 +1587,64 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
                             setState(() {
                               if (_selectedUser == userName) {
                                 _selectedUser = null;
+                                _selectedEventType = null;
                               } else {
                                 _selectedUser = userName;
                                 _selectedEventType = userEvents.keys.isNotEmpty
                                     ? userEvents.keys.first
                                     : null;
+                                _fetchEventsForUser(userName);
                               }
                             });
                           },
                           onCategorySelected: (cat) {
-                            setState(() => _selectedEventType = cat);
+                            setState(() {
+                              _selectedUser = userName;
+                              _selectedEventType = cat;
+                            });
                           },
-                          onViewProfile: (name) => navigateToProfile(context, name),
+                          onViewProfile: (name) => navigateToProfile(
+                            context,
+                            _nameToId[name] ?? name,
+                            name: name,
+                          ),
                         );
                       },
                     ),
                   const SizedBox(height: 20),
-                  _buildPaginationControls(
-                    isDesktop,
-                    totalUsers,
-                    totalPages,
-                    currentPage,
-                  ),
+                  if (totalPages > 1)
+                    _buildPaginationControls(
+                      isDesktop,
+                      totalUsers,
+                      totalPages,
+                      currentPage,
+                    ),
+                  if (_nextCursor != null && currentPage == totalPages) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: _isLoadingMore ? null : _loadMoreEvents,
+                        icon: _isLoadingMore
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.history_rounded, size: 16),
+                        label: Text(
+                          _isLoadingMore
+                              ? 'Loading older events...'
+                              : 'Load Older Customer Activity',
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
+      ),
     );
   }
 
@@ -1493,6 +1729,16 @@ class _SalesCustomerEventsPageState extends State<SalesCustomerEventsPage> {
                         _searchQuery = val;
                         _currentPage = 1;
                       });
+                      _requestRebuildCache();
+                      _searchDebounce?.cancel();
+                      if (val.trim().length >= 3) {
+                        _searchDebounce = Timer(
+                          const Duration(milliseconds: 450),
+                          () {
+                            if (mounted) _loadEvents(searchQuery: val.trim());
+                          },
+                        );
+                      }
                     },
                     style: GoogleFonts.outfit(
                       fontSize: 13.5,

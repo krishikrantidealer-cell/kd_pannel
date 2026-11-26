@@ -39,15 +39,6 @@ class EngagementHubCubit extends Cubit<EngagementHubState> {
     ));
   }
 
-  void openSalesActivity({String role = 'sales'}) {
-    final updatedLoaded = Set<int>.from(state.loadedTabs)..add(EngagementHubTab.salesActivity.index);
-    emit(state.copyWith(
-      activeTab: EngagementHubTab.salesActivity,
-      loadedTabs: updatedLoaded,
-      prefilledSalesRole: role,
-    ));
-  }
-
   void clearPrefills() {
     emit(state.copyWith(clearPrefills: true));
   }

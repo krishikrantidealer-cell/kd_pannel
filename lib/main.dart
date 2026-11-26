@@ -8,6 +8,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/order_details_page.d
 import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.dart';
 import 'package:kd_pannel/features/shared/widgets/main_layout.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/team_member_profile_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
@@ -296,8 +297,8 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/team': (context) => const MainLayout(),
         '/team/profile': (context) =>
             const MainLayout(child: TeamMemberProfilePage()),
-        '/logs': (context) => const MainLayout(),
-        '/admin/logs': (context) => const MainLayout(),
+        '/logs': (context) => const MainLayout(child: AuditLogsContainerPage()),
+        '/admin/logs': (context) => const MainLayout(child: AuditLogsContainerPage()),
         '/trash': (context) => const MainLayout(child: TrashPage()),
         '/reports': (context) => const MainLayout(
           child: Scaffold(body: Center(child: Text('Reports'))),

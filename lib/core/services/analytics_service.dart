@@ -88,12 +88,17 @@ class AnalyticsService extends WidgetsBindingObserver {
       eventProps['journeyPath'] = _breadcrumbs.join(' ➡️ ');
     }
 
+    final currentRole = AuthService().isAdmin
+        ? 'admin'
+        : (AuthService().isSales ? 'sales' : 'user');
+
     final event = {
       'eventId': _generateEventId(),
       'sessionId': AuthService().sessionId,
       'schemaVersion': _schemaVersion,
       'event': eventName,
       'user': userEmail,
+      'role': currentRole,
       'timestamp': timestamp,
       'platform': kIsWeb ? 'Web' : defaultTargetPlatform.name.toLowerCase(),
       'properties': eventProps,
@@ -121,6 +126,8 @@ class AnalyticsService extends WidgetsBindingObserver {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    // Internal portal staff (admin & sales) must never emit customer presence heartbeats
+    if (AuthService().isAdmin || AuthService().isSales) return;
 
     final isIdle = DateTime.now().difference(_lastActivity) > _idleThreshold;
     final interval = isIdle ? _idleHeartbeat : _activeHeartbeat;
@@ -131,6 +138,7 @@ class AnalyticsService extends WidgetsBindingObserver {
   }
 
   Future<void> _sendHeartbeat() async {
+    if (AuthService().isAdmin || AuthService().isSales) return;
     final userEmail = AuthService().currentUserEmail;
     if (userEmail == null) return;
 
@@ -226,14 +234,20 @@ class AnalyticsService extends WidgetsBindingObserver {
   Future<List<Map<String, dynamic>>> fetchEvents({
     String? userEmail,
     bool actorOnly = false,
+    bool customerOnly = false,
   }) async {
     try {
-      String path = userEmail != null
-          ? '/events?user=${Uri.encodeComponent(userEmail)}'
-          : '/events';
-      if (actorOnly) {
-        path += userEmail != null ? '&actorOnly=true' : '?actorOnly=true';
+      final params = <String>[];
+      if (userEmail != null) {
+        params.add('user=${Uri.encodeComponent(userEmail)}');
       }
+      if (actorOnly) {
+        params.add('actorOnly=true');
+      }
+      if (customerOnly) {
+        params.add('customerOnly=true');
+      }
+      final String path = params.isEmpty ? '/events' : '/events?${params.join('&')}';
       final response = await _apiClient.get(path);
       if (response.statusCode == 200) {
         final dynamic data = jsonDecode(response.body);
@@ -253,6 +267,7 @@ class AnalyticsService extends WidgetsBindingObserver {
     String? before,
     String? filter,
     bool actorOnly = false,
+    bool customerOnly = false,
   }) async {
     try {
       final limitStr = limit == 0 ? 'all' : '$limit';
@@ -268,6 +283,9 @@ class AnalyticsService extends WidgetsBindingObserver {
       }
       if (actorOnly) {
         path += '&actorOnly=true';
+      }
+      if (customerOnly) {
+        path += '&customerOnly=true';
       }
       final response = await _apiClient.get(path);
       if (response.statusCode == 200) {

@@ -7,7 +7,6 @@ import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit
 import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_state.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/push_campaigns_page.dart';
-import 'package:kd_pannel/features/admin/presentation/pages/audit_logs_container_page.dart';
 
 class EngagementHubPage extends StatefulWidget {
   final int initialTab;
@@ -31,7 +30,7 @@ class _EngagementHubPageState extends State<EngagementHubPage>
       'title': 'Marketing & Telemetry',
       'shortTitle': 'Telemetry',
       'icon': Icons.insights_rounded,
-      'subtitle': 'User Drop-offs, Funnels & District Heatmap',
+      'subtitle': 'Customer Buyer Intent, Funnels & District Heatmap',
     },
     {
       'tab': EngagementHubTab.pushCampaigns,
@@ -39,13 +38,6 @@ class _EngagementHubPageState extends State<EngagementHubPage>
       'shortTitle': 'Push Broadcasts',
       'icon': Icons.notifications_active_rounded,
       'subtitle': 'FCM Broadcasts, Smartphone Simulator & Segments',
-    },
-    {
-      'tab': EngagementHubTab.salesActivity,
-      'title': 'Sales Activity',
-      'shortTitle': 'Sales Logs',
-      'icon': Icons.local_activity_rounded,
-      'subtitle': 'Sales Team Actions & Admin Audit Logs',
     },
   ];
 
@@ -311,11 +303,6 @@ class _EngagementHubPageState extends State<EngagementHubPage>
         return const _TabErrorBoundary(
           tabName: 'Push Campaigns',
           child: PushCampaignsPage(),
-        );
-      case 2:
-        return const _TabErrorBoundary(
-          tabName: 'Sales Activity',
-          child: AuditLogsContainerPage(),
         );
       default:
         return const SizedBox.shrink();
