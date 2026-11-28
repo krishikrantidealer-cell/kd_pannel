@@ -556,7 +556,49 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               onPressed: () => _pickCustomDateRange(state),
               icon: const Icon(Icons.date_range_rounded, size: 16),
               label: const Text('Change'),
+            )
+          else if (state.datePreset == '7d' ||
+              state.datePreset == '30d' ||
+              state.datePreset == 'today' ||
+              state.datePreset == 'yesterday') ...[
+            Builder(
+              builder: (context) {
+                final (sStr, eStr) =
+                    context.read<AttributionBloc>().resolveDateStrings();
+                final s = DateTime.parse(sStr);
+                final e = DateTime.parse(eStr);
+                final fmt = DateFormat('d MMM yyyy');
+                final label = sStr == eStr
+                    ? fmt.format(s)
+                    : '${DateFormat('d MMM').format(s)} – ${fmt.format(e)}';
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 13, color: Color(0xFF64748B)),
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF475569),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
+          ],
           SizedBox(
             width: isDesktop ? 240 : double.infinity,
             height: 36,

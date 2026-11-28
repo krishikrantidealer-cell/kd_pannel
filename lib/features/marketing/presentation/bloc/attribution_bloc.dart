@@ -44,6 +44,7 @@ class AttributionBloc extends Bloc<AttributionEvent, AttributionState> {
     final customRange = customOverride ?? state.customDateRange;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
     DateTime start;
     DateTime end = today;
 
@@ -52,14 +53,18 @@ class AttributionBloc extends Bloc<AttributionEvent, AttributionState> {
         start = today;
         break;
       case 'yesterday':
-        start = today.subtract(const Duration(days: 1));
-        end = start;
+        start = yesterday;
+        end = yesterday;
         break;
       case '7d':
-        start = today.subtract(const Duration(days: 6));
+        // Match Meta Ads Manager "Last 7 days": 7 completed days ending yesterday.
+        start = yesterday.subtract(const Duration(days: 6));
+        end = yesterday;
         break;
       case '30d':
-        start = today.subtract(const Duration(days: 29));
+        // Match Meta Ads Manager "Last 30 days": 30 completed days ending yesterday.
+        start = yesterday.subtract(const Duration(days: 29));
+        end = yesterday;
         break;
       case 'custom':
         if (customRange != null) {
