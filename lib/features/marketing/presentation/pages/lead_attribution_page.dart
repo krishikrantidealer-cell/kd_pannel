@@ -61,6 +61,9 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
       case '365d':
         start = today.subtract(const Duration(days: 364));
         break;
+      case 'all':
+        start = DateTime(2026, 8, 1);
+        break;
       case 'custom':
         if (_customDateRange != null) {
           start = _customDateRange!.start;
@@ -466,6 +469,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               const DropdownMenuItem(value: '30d', child: Text('Last 30 Days')),
               const DropdownMenuItem(value: '90d', child: Text('Last 90 Days')),
               const DropdownMenuItem(value: '365d', child: Text('Last 12 Months')),
+              const DropdownMenuItem(value: 'all', child: Text('All Time (Aug 2026+)')),
               DropdownMenuItem(
                 value: 'custom',
                 child: Text(
@@ -653,6 +657,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                           DataColumn(label: Text('Buyers'), numeric: true),
                           DataColumn(label: Text('D→O %'), numeric: true),
                           DataColumn(label: Text('₹/Buyer'), numeric: true),
+                          DataColumn(label: Text('Total GMV'), numeric: true),
                           DataColumn(label: Text('Del. GMV'), numeric: true),
                           DataColumn(label: Text('ROAS'), numeric: true),
                         ],
@@ -679,6 +684,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                               DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text('${c['dealerToOrderPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text(_formatInr(c['totalGmv']), style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text(_formatInr(c['deliveredGmv']), style: const TextStyle(fontSize: 12.5))),
                               DataCell(
                                 Text(
