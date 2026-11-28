@@ -19,6 +19,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
   String? _error;
   String _selectedChannel = 'all';
   int _selectedDays = 90;
+  bool _liveOnly = true;
 
   Map<String, dynamic> _totals = {};
   List<Map<String, dynamic>> _campaigns = [];
@@ -48,7 +49,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
       final endStr = now.toIso8601String().split('T').first;
 
       final res = await ApiClient().get(
-        '/attribution/report?startDate=$startStr&endDate=$endStr&channel=$_selectedChannel',
+        '/attribution/report?startDate=$startStr&endDate=$endStr&channel=$_selectedChannel&liveOnly=$_liveOnly',
       );
 
       if (res.statusCode == 200) {
@@ -311,7 +312,26 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               _fetchReport();
             },
           ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
+        FilterChip(
+          label: Text(
+            'Live Campaigns Only',
+            style: GoogleFonts.outfit(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: _liveOnly ? Colors.white : AppTheme.textPrimary,
+            ),
+          ),
+          selected: _liveOnly,
+          selectedColor: const Color(0xFF059669),
+          checkmarkColor: Colors.white,
+          backgroundColor: Colors.white,
+          onSelected: (val) {
+            setState(() => _liveOnly = val);
+            _fetchReport();
+          },
+        ),
+        const SizedBox(width: 8),
         DropdownButton<int>(
           value: _selectedDays,
           underline: const SizedBox.shrink(),
@@ -464,63 +484,69 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               ),
             )
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(
-                  const Color(0xFFF8FAFC),
+            Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 18,
+                  horizontalMargin: 14,
+                  headingRowColor: WidgetStateProperty.all(
+                    const Color(0xFFF8FAFC),
+                  ),
+                  columns: const [
+                    DataColumn(label: Text('Campaign')),
+                    DataColumn(label: Text('Channel')),
+                    DataColumn(label: Text('Spend'), numeric: true),
+                    DataColumn(label: Text('Leads'), numeric: true),
+                    DataColumn(label: Text('CPL'), numeric: true),
+                    DataColumn(label: Text('KYC'), numeric: true),
+                    DataColumn(label: Text('Conv %'), numeric: true),
+                    DataColumn(label: Text('₹/Dealer'), numeric: true),
+                    DataColumn(label: Text('Buyers'), numeric: true),
+                    DataColumn(label: Text('₹/Buyer'), numeric: true),
+                    DataColumn(label: Text('Del. GMV'), numeric: true),
+                    DataColumn(label: Text('ROAS'), numeric: true),
+                  ],
+                  rows: _campaigns.map((c) {
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 190),
+                            child: Text(
+                              (c['campaignName'] ?? c['campaignId'] ?? '-').toString(),
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5),
+                            ),
+                          ),
+                        ),
+                        DataCell(Text((c['channel'] ?? '-').toString().toUpperCase(), style: const TextStyle(fontSize: 11.5))),
+                        DataCell(Text(_formatInr(c['spend']), style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text('${c['uniqueLeads'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text(_formatInr(c['cpl']), style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text('${c['qualifiedDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text('${c['leadToDealerPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text(_formatInr(c['costPerQualifiedDealer']), style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
+                        DataCell(Text(_formatInr(c['deliveredGmv']), style: const TextStyle(fontSize: 12.5))),
+                        DataCell(
+                          Text(
+                            '${c['deliveredRoas'] ?? 0}x',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                              color: (num.tryParse('${c['deliveredRoas']}') ?? 0) >= 2
+                                  ? const Color(0xFF059669)
+                                  : AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 ),
-                columns: const [
-                  DataColumn(label: Text('Campaign / Source')),
-                  DataColumn(label: Text('Channel')),
-                  DataColumn(label: Text('Spend'), numeric: true),
-                  DataColumn(label: Text('Unique Leads'), numeric: true),
-                  DataColumn(label: Text('CPL'), numeric: true),
-                  DataColumn(label: Text('KYC Dealers'), numeric: true),
-                  DataColumn(label: Text('Lead → Dealer'), numeric: true),
-                  DataColumn(label: Text('Cost / Dealer'), numeric: true),
-                  DataColumn(label: Text('Ordering'), numeric: true),
-                  DataColumn(label: Text('Cost / Buyer'), numeric: true),
-                  DataColumn(label: Text('Delivered GMV'), numeric: true),
-                  DataColumn(label: Text('ROAS'), numeric: true),
-                ],
-                rows: _campaigns.map((c) {
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 220),
-                          child: Text(
-                            (c['campaignName'] ?? c['campaignId'] ?? '-').toString(),
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ),
-                      DataCell(Text((c['channel'] ?? '-').toString().toUpperCase())),
-                      DataCell(Text(_formatInr(c['spend']))),
-                      DataCell(Text('${c['uniqueLeads'] ?? 0}')),
-                      DataCell(Text(_formatInr(c['cpl']))),
-                      DataCell(Text('${c['qualifiedDealers'] ?? 0}')),
-                      DataCell(Text('${c['leadToDealerPct'] ?? 0}%')),
-                      DataCell(Text(_formatInr(c['costPerQualifiedDealer']))),
-                      DataCell(Text('${c['orderingDealers'] ?? 0}')),
-                      DataCell(Text(_formatInr(c['costPerOrderingDealer']))),
-                      DataCell(Text(_formatInr(c['deliveredGmv']))),
-                      DataCell(
-                        Text(
-                          '${c['deliveredRoas'] ?? 0}x',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w700,
-                            color: (num.tryParse('${c['deliveredRoas']}') ?? 0) >= 2
-                                ? const Color(0xFF059669)
-                                : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
               ),
             ),
         ],
