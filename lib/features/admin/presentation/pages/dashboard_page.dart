@@ -1246,7 +1246,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         trendLabel: 'Users needing action',
                         trendIcon: Icons.priority_high_rounded,
                         onTap: () {
-                          Navigator.pushReplacementNamed(context, '/marketing');
+                          Navigator.pushReplacementNamed(context, '/leads');
                         },
                         visualWidget: SizedBox(
                           width: 50,
@@ -1271,7 +1271,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         trendLabel: 'Live Pulse Active',
                         trendIcon: Icons.bolt_rounded,
                         onTap: () {
-                          Navigator.pushReplacementNamed(context, '/marketing');
+                          Navigator.pushReplacementNamed(context, '/leads');
                         },
                         visualWidget: Row(
                           mainAxisSize: MainAxisSize.min,
