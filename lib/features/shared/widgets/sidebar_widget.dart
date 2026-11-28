@@ -70,6 +70,11 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 10},
   ];
 
+  static const List<Map<String, dynamic>> _marketingMenuItems = [
+    {'icon': Icons.rocket_launch_rounded, 'title': 'Marketing & Engagement', 'index': 0},
+    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 1},
+  ];
+
   @override
   Widget build(BuildContext context) {
     final unreadCount = context.watch<NotificationsCubit>().state.unreadCount;
@@ -77,13 +82,15 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     final hasMyOperator = AuthService().hasMyOperatorAccess;
     final menuItems = role == UserRole.admin
         ? _adminMenuItems
-        : _salesMenuItems.where((item) {
-            final title = item['title'] as String?;
-            if (title == 'WhatsApp CRM' || title == 'Call History') {
-              return hasMyOperator;
-            }
-            return true;
-          }).toList();
+        : (role == UserRole.marketing
+            ? _marketingMenuItems
+            : _salesMenuItems.where((item) {
+                final title = item['title'] as String?;
+                if (title == 'WhatsApp CRM' || title == 'Call History') {
+                  return hasMyOperator;
+                }
+                return true;
+              }).toList());
 
     const double collapsedWidth = 72.0;
     const double expandedWidth = 250.0;
@@ -276,10 +283,20 @@ class _SidebarUserProfile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSales = AuthService().isSales;
+    final isMarketing = AuthService().isMarketing;
     final rawName = AuthService().currentUserName ?? '';
-    final name = rawName.isNotEmpty ? rawName : (isSales ? 'Sales Agent' : 'Administrator');
-    final initials = name.isNotEmpty ? name[0].toUpperCase() : (isSales ? 'S' : 'A');
-    final email = AuthService().currentUserEmail ?? (isSales ? 'sales@krishikranti.com' : 'admin@krishikranti.com');
+    final name = rawName.isNotEmpty
+        ? rawName
+        : (isMarketing
+            ? 'Marketing Team'
+            : (isSales ? 'Sales Agent' : 'Administrator'));
+    final initials = name.isNotEmpty
+        ? name[0].toUpperCase()
+        : (isMarketing ? 'M' : (isSales ? 'S' : 'A'));
+    final email = AuthService().currentUserEmail ??
+        (isMarketing
+            ? 'marketing@krishikranti.com'
+            : (isSales ? 'sales@krishikranti.com' : 'admin@krishikranti.com'));
 
     return Tooltip(
       message: !isExpanded ? '$name\n$email' : '',
@@ -307,9 +324,11 @@ class _SidebarUserProfile extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: isSales
-                          ? [const Color(0xFF34D399), const Color(0xFF059669)]
-                          : [const Color(0xFFFA9527), const Color(0xFFFA6400)],
+                      colors: isMarketing
+                          ? [const Color(0xFF8B5CF6), const Color(0xFF6D28D9)]
+                          : (isSales
+                                ? [const Color(0xFF34D399), const Color(0xFF059669)]
+                                : [const Color(0xFFFA9527), const Color(0xFFFA6400)]),
                     ),
                   ),
                   child: Center(
@@ -355,7 +374,9 @@ class _SidebarUserProfile extends StatelessWidget {
                           softWrap: false,
                         ),
                         Text(
-                          isSales ? 'Sales Agent' : 'Administrator',
+                          isMarketing
+                              ? 'Marketing Manager'
+                              : (isSales ? 'Sales Agent' : 'Administrator'),
                           style: GoogleFonts.outfit(
                             color: Colors.white.withValues(alpha: 0.6),
                             fontSize: 9.5,
@@ -490,7 +511,11 @@ class _SidebarHeader extends StatelessWidget {
                               ),
                             ),
                             child: Text(
-                              role == UserRole.admin ? 'ADMIN' : 'SALES',
+                              role == UserRole.admin
+                                  ? 'ADMIN'
+                                  : (role == UserRole.marketing
+                                        ? 'MARKETING'
+                                        : 'SALES'),
                               style: GoogleFonts.outfit(
                                 color: Colors.white.withValues(alpha: 0.8),
                                 fontSize: 8,

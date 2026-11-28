@@ -16,6 +16,13 @@ import 'package:kd_pannel/features/admin/presentation/bloc/dealers_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/dealers_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/orders_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_bloc.dart';
+import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_event.dart';
+import 'package:kd_pannel/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:kd_pannel/features/auth/presentation/bloc/auth_event.dart';
+import 'package:kd_pannel/features/auth/presentation/bloc/auth_state.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -30,7 +37,6 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isPersistentSession = true;
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -195,64 +201,71 @@ class _LoginPageState extends State<LoginPage> {
         });
   }
 
-  void _handleLogin(UserRole role) async {
+  void _handleLogin(UserRole role) {
     if (!_formKey.currentState!.validate()) return;
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    final success = await AuthService().login(
-      email: email,
-      password: password,
-      role: role,
-      rememberMe: _isPersistentSession,
-    );
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (success) {
-        // Invalidate repository cache and dispatch fresh fetches across blocs
-        UserRepository().invalidateCache();
-        try {
-          context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
-          context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
-          context.read<OrdersBloc>().add(const FetchOrdersEvent());
-        } catch (_) {}
-
-        // Clear any previous route-specific cache if necessary
-        if (role == UserRole.admin) {
-          _precacheProductData();
-        }
-        // Redirect to dashboard (MainLayout handles role-specific view orchestration)
-        Navigator.pushReplacementNamed(context, '/dashboard');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AuthService().lastError ??
-                  'Authorization failed. Please verify your credentials.',
-            ),
-            backgroundColor: Colors.redAccent,
+    context.read<AuthBloc>().add(
+          AuthLoginRequestedEvent(
+            email: email,
+            password: password,
+            role: role,
+            rememberMe: _isPersistentSession,
           ),
         );
-      }
-    }
   }
 
-  UserRole _selectedRole = UserRole.admin;
+  void _onAuthenticated(UserRole role) {
+    // Invalidate repository cache and dispatch role-scoped fresh fetches across blocs
+    UserRepository().invalidateCache();
+    try {
+      context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
+      context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
+      context.read<OrdersBloc>().add(const FetchOrdersEvent());
+      if (role == UserRole.admin || role == UserRole.marketing) {
+        context.read<PushCampaignsBloc>().add(const FetchPushCampaignsEvent());
+        context.read<RetargetingBloc>().add(const FetchCohortsEvent());
+      }
+    } catch (_) {}
+
+    if (role == UserRole.admin) {
+      _precacheProductData();
+    }
+
+    // Marketing users land directly in Marketing & Engagement Hub; Admin/Sales land in Dashboard
+    final targetRoute = role == UserRole.marketing ? '/marketing' : '/dashboard';
+    Navigator.pushReplacementNamed(context, targetRoute);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
 
-    return Scaffold(
+    return BlocConsumer<AuthBloc, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.status != curr.status || prev.errorMessage != curr.errorMessage,
+      listener: (context, authState) {
+        if (authState.status == AuthStatus.authenticated &&
+            authState.authenticatedRole != null) {
+          _onAuthenticated(authState.authenticatedRole!);
+        } else if (authState.status == AuthStatus.failure &&
+            authState.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(authState.errorMessage!),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          context.read<AuthBloc>().add(const AuthClearErrorEvent());
+        }
+      },
+      builder: (context, authState) {
+        final selectedRole = authState.selectedRole;
+        final isLoading = authState.isLoading;
+
+        return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
@@ -521,10 +534,12 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 12),
                         ],
                         TypewriterText(
-                          key: ValueKey(_selectedRole), // Re-trigger typing animation on role change
-                          text: _selectedRole == UserRole.admin
+                          key: ValueKey(selectedRole), // Re-trigger typing animation on role change
+                          text: selectedRole == UserRole.admin
                               ? 'Admin Portal'
-                              : 'Sales Portal',
+                              : (selectedRole == UserRole.sales
+                                  ? 'Sales Portal'
+                                  : 'Marketing Portal'),
                           style: GoogleFonts.outfit(
                             fontSize: isDesktop ? 30 : 22,
                             fontWeight: FontWeight.w900,
@@ -540,7 +555,9 @@ class _LoginPageState extends State<LoginPage> {
                         if (isDesktop) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'Secure authentication for enterprise operations.',
+                            selectedRole == UserRole.marketing
+                                ? 'Customer telemetry, conversion funnels & push campaigns.'
+                                : 'Secure authentication for enterprise operations.',
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               color: const Color(0xFF64748B),
@@ -550,7 +567,7 @@ class _LoginPageState extends State<LoginPage> {
                         ],
                         SizedBox(height: isDesktop ? 24 : 12),
 
-                        // Segmented Capsule Switcher (Integrated)
+                        // Segmented Capsule Switcher (Admin | Sales | Marketing)
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
@@ -569,11 +586,19 @@ class _LoginPageState extends State<LoginPage> {
                               _buildCapsuleTab(
                                 UserRole.admin,
                                 'ADMIN',
+                                selectedRole: selectedRole,
                                 isDark: !isDesktop,
                               ),
                               _buildCapsuleTab(
                                 UserRole.sales,
                                 'SALES',
+                                selectedRole: selectedRole,
+                                isDark: !isDesktop,
+                              ),
+                              _buildCapsuleTab(
+                                UserRole.marketing,
+                                'MARKETING',
+                                selectedRole: selectedRole,
                                 isDark: !isDesktop,
                               ),
                             ],
@@ -672,7 +697,7 @@ class _LoginPageState extends State<LoginPage> {
                                 isDark: !isDesktop,
                                 textInputAction: TextInputAction.done,
                                 onFieldSubmitted: (_) =>
-                                    _handleLogin(_selectedRole),
+                                    _handleLogin(selectedRole),
                                 validator: (val) {
                                   if (val == null || val.trim().isEmpty) {
                                     return 'Please enter your security token';
@@ -745,9 +770,9 @@ class _LoginPageState extends State<LoginPage> {
                                     ? 54
                                     : 48, // Sleek responsive buttons
                                 child: ElevatedButton(
-                                  onPressed: _isLoading
+                                  onPressed: isLoading
                                       ? null
-                                      : () => _handleLogin(_selectedRole),
+                                      : () => _handleLogin(selectedRole),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primaryColor,
                                     foregroundColor: Colors.white,
@@ -765,17 +790,17 @@ class _LoginPageState extends State<LoginPage> {
                                       gradient: LinearGradient(
                                         colors: [
                                           AppTheme.primaryColor.withOpacity(
-                                            _isLoading ? 0.6 : 1.0,
+                                            isLoading ? 0.6 : 1.0,
                                           ),
                                           const Color(
                                             0xFF1B5E20,
-                                          ).withOpacity(_isLoading ? 0.6 : 1.0),
+                                          ).withOpacity(isLoading ? 0.6 : 1.0),
                                         ],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),
                                       borderRadius: BorderRadius.circular(14),
-                                      boxShadow: _isLoading
+                                      boxShadow: isLoading
                                           ? []
                                           : [
                                               BoxShadow(
@@ -788,7 +813,7 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                     child: Container(
                                       alignment: Alignment.center,
-                                      child: _isLoading
+                                      child: isLoading
                                           ? const SizedBox(
                                               height: 20,
                                               width: 20,
@@ -821,15 +846,22 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
+        );
+      },
     );
   }
 
 
-  Widget _buildCapsuleTab(UserRole role, String label, {bool isDark = false}) {
-    final isSelected = _selectedRole == role;
+  Widget _buildCapsuleTab(
+    UserRole role,
+    String label, {
+    required UserRole selectedRole,
+    bool isDark = false,
+  }) {
+    final isSelected = selectedRole == role;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedRole = role),
+        onTap: () => context.read<AuthBloc>().add(AuthRoleSelectedEvent(role)),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,

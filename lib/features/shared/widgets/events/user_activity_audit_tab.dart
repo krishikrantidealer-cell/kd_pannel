@@ -646,8 +646,10 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
       {'id': 'shopping', 'label': 'Cart & Store'},
       {'id': 'payments', 'label': 'Payments'},
       {'id': 'marketing', 'label': 'Marketing'},
-      if (!AuthService().isSales) {'id': 'crm', 'label': 'Staff & CRM'},
-      if (!AuthService().isSales) {'id': 'system', 'label': 'System Logs'},
+      if (!AuthService().isSales && !AuthService().isMarketing)
+        {'id': 'crm', 'label': 'Staff & CRM'},
+      if (!AuthService().isSales && !AuthService().isMarketing)
+        {'id': 'system', 'label': 'System Logs'},
     ];
 
     return SingleChildScrollView(
@@ -981,15 +983,17 @@ class _UserActivityAuditTabState extends State<UserActivityAuditTab> {
         userEventsCount++;
       }
     }
+    final bool hideStaffEvents =
+        AuthService().isSales || AuthService().isMarketing;
     final int allEventsCount =
-        AuthService().isSales ? userEventsCount : sortedEvents.length;
+        hideStaffEvents ? userEventsCount : sortedEvents.length;
 
     final filteredEvents = sortedEvents.where((e) {
       final type = e['eventType']?.toString() ?? '';
       final bool isSalesEvent = _isSalesActorEvent(e);
 
-      // Never show staff/agent events to sales agents
-      if (AuthService().isSales && isSalesEvent) return false;
+      // Never show staff/agent events to sales or marketing roles
+      if (hideStaffEvents && isSalesEvent) return false;
 
       // 1. Actor scope filter
       if (_selectedActorScope == 'user' && isSalesEvent) return false;

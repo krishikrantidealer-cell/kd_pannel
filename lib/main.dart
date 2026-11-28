@@ -38,6 +38,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart'
 import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_event.dart';
 import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit.dart';
+import 'package:kd_pannel/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:kd_pannel/features/auth/presentation/bloc/auth_event.dart';
 
 import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
 
@@ -167,6 +169,9 @@ void main() async {
         BlocProvider<EngagementHubCubit>(
           create: (context) => EngagementHubCubit(),
         ),
+        BlocProvider<AuthBloc>(
+          create: (context) => AuthBloc(),
+        ),
       ],
       child: const MyAppWrapper(),
     ),
@@ -203,12 +208,17 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
       final userId = prefs.getString('kd_user_id');
 
       if (token != null && role != null && userId != null) {
-        _initialRoute = '/dashboard';
+        _initialRoute = role == 'marketing' ? '/marketing' : '/dashboard';
         WebSocketService().connect();
         try {
+          context.read<AuthBloc>().add(const AuthSessionRestoredEvent());
           context.read<DealersBloc>().add(const FetchDealersDataEvent(forceRefresh: true));
           context.read<LeadsBloc>().add(const FetchLeadsDataEvent(forceRefresh: true));
           context.read<OrdersBloc>().add(const FetchOrdersEvent());
+          if (role == 'admin' || role == 'marketing') {
+            context.read<PushCampaignsBloc>().add(const FetchPushCampaignsEvent());
+            context.read<RetargetingBloc>().add(const FetchCohortsEvent());
+          }
         } catch (_) {}
       }
     } catch (_) {}
@@ -264,8 +274,11 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
           // Once initialized, we use the calculated initial route
           // But since we are already at '/', we can just return the correct widget
           final initialRoute = _initialRoute;
-          if (initialRoute == '/leads') return const MainLayout();
-          if (initialRoute == '/dashboard') return const MainLayout();
+          if (initialRoute == '/leads' ||
+              initialRoute == '/dashboard' ||
+              initialRoute == '/marketing') {
+            return const MainLayout();
+          }
           return const LoginPage();
         },
         '/login': (context) => const LoginPage(),

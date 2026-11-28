@@ -5,7 +5,7 @@ import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kd_pannel/core/services/analytics_service.dart';
 
-enum UserRole { admin, sales }
+enum UserRole { admin, sales, marketing }
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -58,6 +58,8 @@ class AuthService {
         _currentUserRole = UserRole.admin;
       } else if (roleStr == 'sales') {
         _currentUserRole = UserRole.sales;
+      } else if (roleStr == 'marketing') {
+        _currentUserRole = UserRole.marketing;
       }
       _currentUserId = prefs.getString('kd_user_id');
       _currentUserEmail = prefs.getString('kd_user_email');
@@ -166,6 +168,8 @@ class AuthService {
             _currentUserRole = UserRole.admin;
           } else if (userRoleStr == 'sales') {
             _currentUserRole = UserRole.sales;
+          } else if (userRoleStr == 'marketing') {
+            _currentUserRole = UserRole.marketing;
           } else {
             _currentUserRole = null;
             _lastError = 'Access denied: invalid user role "$userRoleStr"';
@@ -175,9 +179,13 @@ class AuthService {
 
           // Enforce role check: Ensure the authenticated user matches the selected role in the UI
           if (_currentUserRole != role) {
-            final String selectedRoleName = role == UserRole.admin ? 'Admin' : 'Sales';
-            final String actualRoleName = _currentUserRole == UserRole.admin ? 'Admin' : 'Sales';
-            _lastError = 'Access denied: Your account has $actualRoleName privileges, but you selected $selectedRoleName login.';
+            String roleLabel(UserRole? r) {
+              if (r == UserRole.admin) return 'Admin';
+              if (r == UserRole.sales) return 'Sales';
+              if (r == UserRole.marketing) return 'Marketing';
+              return 'Unknown';
+            }
+            _lastError = 'Access denied: Your account has ${roleLabel(_currentUserRole)} privileges, but you selected ${roleLabel(role)} login.';
             _currentUserRole = null;
             return false;
           }
@@ -241,6 +249,7 @@ class AuthService {
 
   bool get isAdmin => _currentUserRole == UserRole.admin;
   bool get isSales => _currentUserRole == UserRole.sales;
+  bool get isMarketing => _currentUserRole == UserRole.marketing;
 
   bool _toBool(dynamic val, {bool defaultValue = false}) {
     if (val == null) return defaultValue;

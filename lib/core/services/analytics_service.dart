@@ -90,7 +90,9 @@ class AnalyticsService extends WidgetsBindingObserver {
 
     final currentRole = AuthService().isAdmin
         ? 'admin'
-        : (AuthService().isSales ? 'sales' : 'user');
+        : (AuthService().isSales
+            ? 'sales'
+            : (AuthService().isMarketing ? 'marketing' : 'user'));
 
     final event = {
       'eventId': _generateEventId(),
@@ -126,8 +128,8 @@ class AnalyticsService extends WidgetsBindingObserver {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    // Internal portal staff (admin & sales) must never emit customer presence heartbeats
-    if (AuthService().isAdmin || AuthService().isSales) return;
+    // Internal portal staff (admin, sales, marketing) must never emit customer presence heartbeats
+    if (AuthService().isAdmin || AuthService().isSales || AuthService().isMarketing) return;
 
     final isIdle = DateTime.now().difference(_lastActivity) > _idleThreshold;
     final interval = isIdle ? _idleHeartbeat : _activeHeartbeat;
@@ -138,7 +140,7 @@ class AnalyticsService extends WidgetsBindingObserver {
   }
 
   Future<void> _sendHeartbeat() async {
-    if (AuthService().isAdmin || AuthService().isSales) return;
+    if (AuthService().isAdmin || AuthService().isSales || AuthService().isMarketing) return;
     final userEmail = AuthService().currentUserEmail;
     if (userEmail == null) return;
 

@@ -60,6 +60,12 @@ class _MainLayoutState extends State<MainLayout> {
         case 13: return const TrashPage();
         default: return const DashboardPage();
       }
+      } else if (role == UserRole.marketing) {
+      switch (idx) {
+        case 0: return EngagementHubPage(initialTab: _engagementSubTab);
+        case 1: return const AlertsPage();
+        default: return EngagementHubPage(initialTab: _engagementSubTab);
+      }
     } else {
       switch (idx) {
         case 0: return const SalesDashboardPage();
@@ -141,6 +147,16 @@ class _MainLayoutState extends State<MainLayout> {
         } else {
           _currentIdx = 0;
         }
+      } else if (role == UserRole.marketing) {
+        if (routeName == '/alerts') {
+          _currentIdx = 1;
+        } else if (routeName == '/push-campaigns' || routeName == '/campaigns') {
+          _currentIdx = 0;
+          _engagementSubTab = 1;
+        } else {
+          _currentIdx = 0;
+          _engagementSubTab = 0;
+        }
       } else {
         if (routeName == '/dashboard' || routeName == '/sales/dashboard') {
           _currentIdx = 0;
@@ -194,6 +210,9 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 11) route = '/sales/estimates';
       if (index == 12) route = '/alerts';
       if (index == 13) route = '/trash';
+    } else if (role == UserRole.marketing) {
+      if (index == 0) route = '/marketing';
+      if (index == 1) route = '/alerts';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/products';

@@ -141,6 +141,8 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
     );
     final passwordController = TextEditingController();
     bool obscurePassword = true;
+    String selectedRole =
+        (isEdit && agent['role'] == 'marketing') ? 'marketing' : 'sales';
     bool myoperatorAccess = isEdit ? (agent['myoperator'] == true) : false;
 
     showDialog(
@@ -155,7 +157,7 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
               borderRadius: BorderRadius.circular(16),
             ),
             title: Text(
-              isEdit ? 'Edit Sales Agent' : 'Create Sales Agent',
+              isEdit ? 'Edit Team Member' : 'Create Team Member',
               style: GoogleFonts.outfit(
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
@@ -167,6 +169,46 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      decoration: buildInputDecoration(
+                        'Portal Role',
+                        Icons.badge_outlined,
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'sales',
+                          child: Text(
+                            'Sales Agent (CRM, Calls & Leads)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'marketing',
+                          child: Text(
+                            'Marketing (Telemetry & Push Campaigns)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setStateDialog(() {
+                            selectedRole = val;
+                            if (selectedRole == 'marketing') {
+                              myoperatorAccess = false;
+                            }
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     TextFormField(
                       controller: firstNameController,
                       decoration: buildInputDecoration(
@@ -239,54 +281,56 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.phone_in_talk_rounded,
-                            size: 20,
-                            color: myoperatorAccess ? const Color(0xFF16A34A) : const Color(0xFF64748B),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'MyOperator Access',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  'WhatsApp CRM & Call History in agent sidebar',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
+                    if (selectedRole == 'sales') ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.phone_in_talk_rounded,
+                              size: 20,
+                              color: myoperatorAccess ? const Color(0xFF16A34A) : const Color(0xFF64748B),
                             ),
-                          ),
-                          Switch.adaptive(
-                            value: myoperatorAccess,
-                            activeColor: const Color(0xFF16A34A),
-                            onChanged: (val) {
-                              setStateDialog(() => myoperatorAccess = val);
-                            },
-                          ),
-                        ],
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'MyOperator Access',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    'WhatsApp CRM & Call History in agent sidebar',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: myoperatorAccess,
+                              activeColor: const Color(0xFF16A34A),
+                              onChanged: (val) {
+                                setStateDialog(() => myoperatorAccess = val);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -314,7 +358,10 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                               'lastName': lastNameController.text.trim(),
                               'email': emailController.text.trim(),
                               'phoneNumber': phoneController.text.trim(),
-                              'myoperator': myoperatorAccess,
+                              'role': selectedRole,
+                              'myoperator': selectedRole == 'sales'
+                                  ? myoperatorAccess
+                                  : false,
                             };
                             if (passwordController.text.isNotEmpty) {
                               payload['password'] = passwordController.text;
@@ -340,11 +387,11 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(
-                                        isEdit
-                                            ? 'Sales agent updated successfully'
-                                            : 'Sales agent created successfully',
-                                      ),
+                                        content: Text(
+                                          isEdit
+                                              ? 'Team member updated successfully'
+                                              : 'Team member created successfully',
+                                        ),
                                       backgroundColor: AppTheme.success,
                                     ),
                                   );
@@ -407,7 +454,7 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
   @override
   Widget build(BuildContext context) {
     final allSalesAgents = widget.state.allRawUsers
-        .where((u) => u['role'] == 'sales')
+        .where((u) => u['role'] == 'sales' || u['role'] == 'marketing')
         .toList();
 
     final filteredAgents = allSalesAgents.where((agent) {
@@ -476,7 +523,7 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
           children: [
             Expanded(
               child: buildSummaryCard(
-                'Total Sales Agents',
+                'Total Team Members',
                 allSalesAgents.length.toString(),
                 Icons.group_outlined,
                 Colors.green,
@@ -608,7 +655,7 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                   onPressed: () => _showSalesAgentFormDialog(),
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(
-                    'Add Sales Agent',
+                    'Add Team Member',
                     style: GoogleFonts.outfit(
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
@@ -908,13 +955,46 @@ class _TeamMembersTabViewState extends State<TeamMembersTabView> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                name,
-                                                style: GoogleFonts.outfit(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppTheme.textPrimary,
-                                                  fontSize: 13.5,
-                                                ),
+                                              Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      name,
+                                                      style: GoogleFonts.outfit(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: AppTheme.textPrimary,
+                                                        fontSize: 13.5,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: agent['role'] == 'marketing'
+                                                          ? const Color(0xFFF3E8FF)
+                                                          : const Color(0xFFECFDF5),
+                                                      borderRadius: BorderRadius.circular(5),
+                                                    ),
+                                                    child: Text(
+                                                      agent['role'] == 'marketing'
+                                                          ? 'MARKETING'
+                                                          : 'SALES',
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: agent['role'] == 'marketing'
+                                                            ? const Color(0xFF7C3AED)
+                                                            : const Color(0xFF059669),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                               const SizedBox(height: 2),
                                               Text(

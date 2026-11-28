@@ -393,7 +393,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
       builder: (context, state) {
         final dealersState = context.watch<DealersBloc>().state;
         final allSalesAgents = state.allRawUsers
-            .where((u) => u['role'] == 'sales')
+            .where((u) => u['role'] == 'sales' || u['role'] == 'marketing')
             .toList();
 
         final bool isInitialOrLoading =
@@ -462,7 +462,7 @@ class _TeamManagementPageState extends State<TeamManagementPage>
                                             ),
                                             child: Text(
                                               _selectedTabIndex == 0
-                                                  ? 'Monitor and coordinate your sales agent team assignments.'
+                                                  ? 'Monitor and coordinate your sales and marketing team accounts.'
                                                   : (_selectedTabIndex == 1
                                                       ? 'Track sales agent performance and lead-to-dealer conversions.'
                                                       : 'Configure granular Lead and Dealer action permissions for sales agents.'),
