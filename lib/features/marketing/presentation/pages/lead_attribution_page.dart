@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
+import 'package:kd_pannel/util/export_helper.dart';
 
 class LeadAttributionPage extends StatefulWidget {
   const LeadAttributionPage({super.key});
@@ -186,6 +187,75 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     }
   }
 
+  String _csvCell(dynamic v) {
+    final s = (v ?? '').toString().replaceAll('"', '""');
+    return '"$s"';
+  }
+
+  void _exportCsv() {
+    if (_campaigns.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No campaign rows to export.')),
+      );
+      return;
+    }
+
+    final (startStr, endStr) = _resolveDateStrings();
+    final buf = StringBuffer();
+    buf.writeln(
+      'Campaign,Channel,Spend,Unique Leads,CPL,KYC Dealers,Lead to Dealer %,Cost per Dealer,Ordering Dealers,Orders,Cost per Buyer,Total GMV,Delivered GMV,Delivered ROAS,RTO %',
+    );
+
+    for (final c in _campaigns) {
+      buf.writeln([
+        _csvCell(c['campaignName'] ?? c['campaignId']),
+        _csvCell(c['channel']),
+        c['spend'] ?? 0,
+        c['uniqueLeads'] ?? 0,
+        c['cpl'] ?? 0,
+        c['qualifiedDealers'] ?? 0,
+        c['leadToDealerPct'] ?? 0,
+        c['costPerQualifiedDealer'] ?? 0,
+        c['orderingDealers'] ?? 0,
+        c['ordersCount'] ?? 0,
+        c['costPerOrderingDealer'] ?? 0,
+        c['totalGmv'] ?? 0,
+        c['deliveredGmv'] ?? 0,
+        c['deliveredRoas'] ?? 0,
+        c['rtoPct'] ?? 0,
+      ].join(','));
+    }
+
+    buf.writeln([
+      _csvCell('TOTAL ($startStr to $endStr)'),
+      _csvCell(_selectedChannel),
+      _totals['spend'] ?? 0,
+      _totals['uniqueLeads'] ?? 0,
+      _totals['cpl'] ?? 0,
+      _totals['qualifiedDealers'] ?? 0,
+      _totals['leadToDealerPct'] ?? 0,
+      _totals['costPerQualifiedDealer'] ?? 0,
+      _totals['orderingDealers'] ?? 0,
+      _totals['ordersCount'] ?? 0,
+      _totals['costPerOrderingDealer'] ?? 0,
+      _totals['totalGmv'] ?? 0,
+      _totals['deliveredGmv'] ?? 0,
+      _totals['deliveredRoas'] ?? 0,
+      _totals['rtoPct'] ?? 0,
+    ].join(','));
+
+    downloadCsv(
+      buf.toString(),
+      'lead_attribution_${startStr}_to_$endStr.csv',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Campaign attribution CSV downloaded!'),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+    );
+  }
+
   String _formatInr(dynamic value) {
     final numVal = num.tryParse(value?.toString() ?? '0') ?? 0;
     return _inrFormat.format(numVal);
@@ -224,6 +294,28 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
           ],
         ),
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: OutlinedButton.icon(
+              onPressed: _campaigns.isEmpty ? null : _exportCsv,
+              icon: const Icon(Icons.download_rounded, size: 16),
+              label: Text(
+                'Export CSV',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF0284C7),
+                side: const BorderSide(color: Color(0xFF0284C7)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: OutlinedButton.icon(
