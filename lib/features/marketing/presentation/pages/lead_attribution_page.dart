@@ -862,8 +862,11 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Text(
                   'Campaign Performance & Unit Economics',
@@ -873,13 +876,35 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                     color: AppTheme.textPrimary,
                   ),
                 ),
-                Text(
-                  '${rows.length} campaigns',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textSecondary,
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _summaryMiniPill(
+                      'Orders: ${t['ordersCount'] ?? 0}',
+                      const Color(0xFF0284C7),
+                      const Color(0xFFE0F2FE),
+                    ),
+                    _summaryMiniPill(
+                      'Repeat: ${t['repeatBuyers'] ?? 0} (${t['repeatRatePct'] ?? 0}%)',
+                      const Color(0xFF7C3AED),
+                      const Color(0xFFF3E8FF),
+                    ),
+                    _summaryMiniPill(
+                      'App: ${t['appOrders'] ?? 0} • Panel: ${t['panelOrders'] ?? 0} • Both: ${t['crossChannelBuyers'] ?? 0}',
+                      const Color(0xFF0F766E),
+                      const Color(0xFFCCFBF1),
+                    ),
+                    Text(
+                      '${rows.length} campaigns',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -918,6 +943,9 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                           sortableCol('L→D %', 'leadToDealerPct'),
                           sortableCol('₹/Dealer', 'costPerQualifiedDealer'),
                           sortableCol('Buyers', 'orderingDealers'),
+                          sortableCol('Orders', 'ordersCount'),
+                          sortableCol('Repeat', 'repeatBuyers'),
+                          const DataColumn(label: Text('App / Panel')),
                           sortableCol('D→O %', 'dealerToOrderPct'),
                           sortableCol('₹/Buyer', 'costPerOrderingDealer'),
                           sortableCol('Total GMV', 'totalGmv'),
@@ -950,6 +978,17 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                                 DataCell(Text('${c['leadToDealerPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
                                 DataCell(Text(_formatInr(c['costPerQualifiedDealer']), style: const TextStyle(fontSize: 12.5))),
                                 DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                                DataCell(Text('${c['ordersCount'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                                DataCell(Text(
+                                  (c['repeatBuyers'] ?? 0) > 0
+                                      ? '${c['repeatBuyers']} (${c['repeatRatePct'] ?? 0}%)'
+                                      : '0',
+                                  style: const TextStyle(fontSize: 12.5),
+                                )),
+                                DataCell(Text(
+                                  '${c['appOrders'] ?? 0} / ${c['panelOrders'] ?? 0}',
+                                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569)),
+                                )),
                                 DataCell(Text('${c['dealerToOrderPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
                                 DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
                                 DataCell(Text(_formatInr(c['totalGmv']), style: const TextStyle(fontSize: 12.5))),
@@ -970,6 +1009,9 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                               DataCell(Text('${t['leadToDealerPct'] ?? 0}%', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
                               DataCell(Text(_formatInr(t['costPerQualifiedDealer']), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
                               DataCell(Text('${t['orderingDealers'] ?? 0}', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
+                              DataCell(Text('${t['ordersCount'] ?? 0}', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
+                              DataCell(Text('${t['repeatBuyers'] ?? 0} (${t['repeatRatePct'] ?? 0}%)', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
+                              DataCell(Text('${t['appOrders'] ?? 0} / ${t['panelOrders'] ?? 0}', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
                               DataCell(Text('${t['dealerToOrderPct'] ?? 0}%', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
                               DataCell(Text(_formatInr(t['costPerOrderingDealer']), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
                               DataCell(Text(_formatInr(t['totalGmv']), style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5))),
@@ -985,6 +1027,24 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               },
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _summaryMiniPill(String label, Color color, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
