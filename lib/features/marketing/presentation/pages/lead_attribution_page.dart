@@ -186,33 +186,6 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     }
   }
 
-  Future<void> _backfillHistoricalLeads() async {
-    setState(() => _isSyncing = true);
-    try {
-      final res = await ApiClient().post('/attribution/backfill', {});
-      final data = jsonDecode(res.body);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Backfilled ${data['backfilled'] ?? 0} historical leads into Attribution.',
-            ),
-            backgroundColor: AppTheme.primaryColor,
-          ),
-        );
-      }
-      await _fetchReport();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backfill error: $e'), backgroundColor: AppTheme.error),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
-  }
-
   String _formatInr(dynamic value) {
     final numVal = num.tryParse(value?.toString() ?? '0') ?? 0;
     return _inrFormat.format(numVal);
@@ -241,7 +214,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               ),
             ),
             Text(
-              'First-touch attribution across Meta Lead Forms, CTWA WhatsApp & App Installs',
+              'First-touch attribution across Meta Lead Forms & Dealer App Installs',
               style: GoogleFonts.outfit(
                 fontSize: 11.5,
                 color: AppTheme.textSecondary,
@@ -251,28 +224,6 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: OutlinedButton.icon(
-              onPressed: _isSyncing ? null : _backfillHistoricalLeads,
-              icon: const Icon(Icons.history_rounded, size: 16),
-              label: Text(
-                'Backfill Leads',
-                style: GoogleFonts.outfit(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF0284C7),
-                side: const BorderSide(color: Color(0xFF0284C7)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: OutlinedButton.icon(
@@ -362,7 +313,6 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
         for (final ch in const [
           {'id': 'all', 'label': 'All Channels'},
           {'id': 'lead_form', 'label': 'Lead Forms'},
-          {'id': 'ctwa', 'label': 'CTWA WhatsApp'},
           {'id': 'app_install', 'label': 'App Installs'},
         ])
           ChoiceChip(
