@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kd_pannel/app_theme.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
+import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/util/export_helper.dart';
 
@@ -25,6 +27,9 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
 
   Map<String, dynamic> _totals = {};
   List<Map<String, dynamic>> _campaigns = [];
+  StreamSubscription? _attrSub;
+  StreamSubscription? _leadsSub;
+  Timer? _wsDebounce;
 
   final _inrFormat = NumberFormat.currency(
     locale: 'en_IN',
@@ -36,6 +41,23 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
   void initState() {
     super.initState();
     _fetchReport();
+    _attrSub = WebSocketService().attributionUpdates.listen((_) => _scheduleSilentRefresh());
+    _leadsSub = WebSocketService().leadsUpdates.listen((_) => _scheduleSilentRefresh());
+  }
+
+  void _scheduleSilentRefresh() {
+    _wsDebounce?.cancel();
+    _wsDebounce = Timer(const Duration(seconds: 2), () {
+      if (mounted) _fetchReport(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsDebounce?.cancel();
+    _attrSub?.cancel();
+    _leadsSub?.cancel();
+    super.dispose();
   }
 
   (String, String) _resolveDateStrings() {
@@ -110,11 +132,13 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     }
   }
 
-  Future<void> _fetchReport() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _fetchReport({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final (startStr, endStr) = _resolveDateStrings();

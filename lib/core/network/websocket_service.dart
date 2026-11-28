@@ -29,6 +29,7 @@ class WebSocketService {
   final _auditLogUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
   final _chatUpdateController = StreamController<Map<String, dynamic>>.broadcast();
+  final _attributionUpdateController = StreamController<void>.broadcast();
 
   Stream<void> get leadsUpdates => _leadsUpdateController.stream;
   Stream<void> get dealersUpdates => _dealersUpdateController.stream;
@@ -38,6 +39,7 @@ class WebSocketService {
   Stream<Map<String, dynamic>> get presenceUpdates => _presenceUpdateController.stream;
   Stream<Map<String, dynamic>> get auditLogUpdates => _auditLogUpdateController.stream;
   Stream<Map<String, dynamic>> get chatUpdates => _chatUpdateController.stream;
+  Stream<void> get attributionUpdates => _attributionUpdateController.stream;
   DateTime? get lastPing => _lastPing;
   Stream<bool> get connectionStatus => _connectionStateController.stream;
   bool get connectionStatusNow => _isConnected;
@@ -202,6 +204,11 @@ class WebSocketService {
           break;
         case 'LEADS_UPDATE':
           _triggerLeadsUpdate();
+          break;
+        case 'ATTRIBUTION_UPDATE':
+          if (!_attributionUpdateController.isClosed) {
+            _attributionUpdateController.add(null);
+          }
           break;
         case 'DEALERS_UPDATE':
           _triggerDealersUpdate();
