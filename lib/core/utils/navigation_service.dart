@@ -17,6 +17,8 @@ import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_bloc.dar
 import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_event.dart';
 import 'package:kd_pannel/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:kd_pannel/features/auth/presentation/bloc/auth_event.dart';
+import 'package:kd_pannel/features/marketing/presentation/bloc/attribution_bloc.dart';
+import 'package:kd_pannel/features/marketing/presentation/bloc/attribution_event.dart';
 import 'package:kd_pannel/features/shared/bloc/notifications_cubit.dart';
 import 'package:kd_pannel/features/admin/presentation/cubit/engagement_hub_cubit.dart';
 
@@ -66,6 +68,9 @@ class NavigationService {
       } catch (_) {}
       try {
         BlocProvider.of<AuthBloc>(context, listen: false).add(const AuthResetEvent());
+      } catch (_) {}
+      try {
+        BlocProvider.of<AttributionBloc>(context, listen: false).add(const ResetAttributionEvent());
       } catch (_) {}
     }
 

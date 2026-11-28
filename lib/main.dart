@@ -33,6 +33,7 @@ import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_bloc.d
 import 'package:kd_pannel/features/admin/presentation/bloc/push_campaigns_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/whatsapp_crm_event.dart';
+import 'package:kd_pannel/features/marketing/presentation/bloc/attribution_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_bloc.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/call_logs_event.dart';
 import 'package:kd_pannel/features/admin/presentation/bloc/retargeting_bloc.dart';
@@ -171,6 +172,9 @@ void main() async {
         ),
         BlocProvider<AuthBloc>(
           create: (context) => AuthBloc(),
+        ),
+        BlocProvider<AttributionBloc>(
+          create: (context) => AttributionBloc(),
         ),
       ],
       child: const MyAppWrapper(),
