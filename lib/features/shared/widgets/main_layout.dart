@@ -1,4 +1,3 @@
-import "package:kd_pannel/features/admin/presentation/pages/engagement_hub_page.dart";
 import 'package:flutter/material.dart';
 import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
@@ -12,6 +11,8 @@ import 'package:kd_pannel/features/admin/presentation/pages/sales_coupon_page.da
 import 'package:kd_pannel/features/admin/presentation/pages/team_management_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/push_campaigns_page.dart';
+import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
@@ -59,11 +60,36 @@ class _MainLayoutState extends State<MainLayout> {
         case 12: return const TrashPage();
         default: return const DashboardPage();
       }
-      } else if (role == UserRole.marketing) {
+    } else if (role == UserRole.marketing) {
       switch (idx) {
-        case 0: return EngagementHubPage(initialTab: _engagementSubTab);
-        case 1: return const AlertsPage();
-        default: return EngagementHubPage(initialTab: _engagementSubTab);
+        case 0:
+          return const UserEventsPage(
+            key: ValueKey('marketing_telemetry_page'),
+            initialTab: 0,
+            hideInternalTabBar: true,
+          );
+        case 1:
+          return const UserEventsPage(
+            key: ValueKey('marketing_telemetry_page'),
+            initialTab: 1,
+            hideInternalTabBar: true,
+          );
+        case 2:
+          return const UserEventsPage(
+            key: ValueKey('marketing_telemetry_page'),
+            initialTab: 2,
+            hideInternalTabBar: true,
+          );
+        case 3:
+          return const PushCampaignsPage();
+        case 4:
+          return const AlertsPage();
+        default:
+          return const UserEventsPage(
+            key: ValueKey('marketing_telemetry_page'),
+            initialTab: 0,
+            hideInternalTabBar: true,
+          );
       }
     } else {
       switch (idx) {
@@ -142,13 +168,15 @@ class _MainLayoutState extends State<MainLayout> {
         }
       } else if (role == UserRole.marketing) {
         if (routeName == '/alerts') {
-          _currentIdx = 1;
+          _currentIdx = 4;
         } else if (routeName == '/push-campaigns' || routeName == '/campaigns') {
-          _currentIdx = 0;
-          _engagementSubTab = 1;
+          _currentIdx = 3;
+        } else if (routeName == '/marketing/heatmap') {
+          _currentIdx = 2;
+        } else if (routeName == '/marketing/journey') {
+          _currentIdx = 1;
         } else {
           _currentIdx = 0;
-          _engagementSubTab = 0;
         }
       } else {
         if (routeName == '/dashboard' || routeName == '/sales/dashboard') {
@@ -204,7 +232,10 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 12) route = '/trash';
     } else if (role == UserRole.marketing) {
       if (index == 0) route = '/marketing';
-      if (index == 1) route = '/alerts';
+      if (index == 1) route = '/marketing/journey';
+      if (index == 2) route = '/marketing/heatmap';
+      if (index == 3) route = '/push-campaigns';
+      if (index == 4) route = '/alerts';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/products';

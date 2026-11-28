@@ -70,8 +70,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   ];
 
   static const List<Map<String, dynamic>> _marketingMenuItems = [
-    {'icon': Icons.rocket_launch_rounded, 'title': 'Marketing & Engagement', 'index': 0},
-    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 1},
+    {'icon': Icons.insights_rounded, 'title': 'Marketing & Telemetry', 'isGroupHeader': true},
+    {'icon': Icons.stream_rounded, 'title': 'Live Customer Feed', 'index': 0, 'isSubTab': true},
+    {'icon': Icons.filter_alt_rounded, 'title': 'Sales Journey', 'index': 1, 'isSubTab': true},
+    {'icon': Icons.map_rounded, 'title': 'District Heatmap', 'index': 2, 'isSubTab': true},
+    {'icon': Icons.notifications_active_rounded, 'title': 'Push Campaigns', 'index': 3},
+    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 4},
   ];
 
   @override
@@ -210,11 +214,61 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       physics: const BouncingScrollPhysics(),
                       itemBuilder: (context, index) {
                         final item = menuItems[index];
+                        if (item['isGroupHeader'] == true) {
+                          if (!isExpanded) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Center(
+                                child: Icon(
+                                  item['icon'] as IconData,
+                                  size: 16,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            );
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                              left: 10,
+                              right: 8,
+                              top: 4,
+                              bottom: 6,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  item['icon'] as IconData,
+                                  size: 15,
+                                  color: AppTheme.accentColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    (item['title'] as String).toUpperCase(),
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white.withValues(alpha: 0.65),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.7,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
                         final targetIdx = item['index'] as int;
                         final isActive = widget.currentIdx == targetIdx;
+                        final bool isSubTab = item['isSubTab'] == true;
 
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
+                          padding: EdgeInsets.only(
+                            left: (isSubTab && isExpanded) ? 14 : 0,
+                            bottom: 6,
+                          ),
                           child: _SidebarItem(
                             icon: item['icon'] as IconData,
                             title: item['title'] as String,

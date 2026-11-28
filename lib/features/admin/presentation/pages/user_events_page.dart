@@ -31,7 +31,14 @@ import '../bloc/dealers_state.dart';
 import '../bloc/leads_state.dart';
 
 class UserEventsPage extends StatefulWidget {
-  const UserEventsPage({super.key});
+  final int initialTab;
+  final bool hideInternalTabBar;
+
+  const UserEventsPage({
+    super.key,
+    this.initialTab = 0,
+    this.hideInternalTabBar = false,
+  });
 
   @override
   State<UserEventsPage> createState() => _UserEventsPageState();
@@ -125,6 +132,9 @@ class _UserEventsPageState extends State<UserEventsPage> {
   @override
   void initState() {
     super.initState();
+    _activeAnalyticsTab = AuthService().isSales
+        ? 0
+        : widget.initialTab.clamp(0, 2);
     PincodeService().init();
     _funnelDataFuture = AnalyticsService().fetchFunnelData(
       days: _selectedAnalyticsTimeRange,
@@ -195,6 +205,19 @@ class _UserEventsPageState extends State<UserEventsPage> {
       return state;
     } catch (_) {
       return _lastLeadsState;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant UserEventsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab && !AuthService().isSales) {
+      final target = widget.initialTab.clamp(0, 2);
+      if (_activeAnalyticsTab != target) {
+        setState(() {
+          _activeAnalyticsTab = target;
+        });
+      }
     }
   }
 
@@ -2420,7 +2443,13 @@ class _UserEventsPageState extends State<UserEventsPage> {
         title: Text(
           AuthService().isSales
               ? 'Live Buyer Intent & Active Shoppers'
-              : 'Marketing & Customer Telemetry Hub',
+              : (widget.hideInternalTabBar
+                    ? (_activeAnalyticsTab == 1
+                          ? 'Sales Journey Step-by-Step'
+                          : (_activeAnalyticsTab == 2
+                                ? 'Agri District Heatmap'
+                                : 'Live Customer Pulse Feed'))
+                    : 'Marketing & Customer Telemetry Hub'),
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: AppTheme.textPrimary,
@@ -2468,8 +2497,10 @@ class _UserEventsPageState extends State<UserEventsPage> {
                     ),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        _buildAnalyticsTabsBar(),
-                        const SizedBox(height: 16),
+                        if (!widget.hideInternalTabBar) ...[
+                          _buildAnalyticsTabsBar(),
+                          const SizedBox(height: 16),
+                        ],
                         RepaintBoundary(child: _buildActiveAnalyticsView()),
                         if (_activeAnalyticsTab == 0) ...[
                           const SizedBox(height: 20),
