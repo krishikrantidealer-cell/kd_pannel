@@ -203,7 +203,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     final (startStr, endStr) = _resolveDateStrings();
     final buf = StringBuffer();
     buf.writeln(
-      'Campaign,Channel,Spend,Unique Leads,CPL,KYC Dealers,Lead to Dealer %,Cost per Dealer,Ordering Dealers,Orders,Cost per Buyer,Total GMV,Delivered GMV,Delivered ROAS,RTO %',
+      'Campaign,Channel,Spend,Unique Leads,CPL,KYC Dealers,Lead to Dealer %,Cost per Dealer,Ordering Dealers,Dealer to Order %,Orders,Cost per Buyer,Total GMV,Delivered GMV,Delivered ROAS,RTO %',
     );
 
     for (final c in _campaigns) {
@@ -217,6 +217,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
         c['leadToDealerPct'] ?? 0,
         c['costPerQualifiedDealer'] ?? 0,
         c['orderingDealers'] ?? 0,
+        c['dealerToOrderPct'] ?? 0,
         c['ordersCount'] ?? 0,
         c['costPerOrderingDealer'] ?? 0,
         c['totalGmv'] ?? 0,
@@ -236,6 +237,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
       _totals['leadToDealerPct'] ?? 0,
       _totals['costPerQualifiedDealer'] ?? 0,
       _totals['orderingDealers'] ?? 0,
+      _totals['dealerToOrderPct'] ?? 0,
       _totals['ordersCount'] ?? 0,
       _totals['costPerOrderingDealer'] ?? 0,
       _totals['totalGmv'] ?? 0,
@@ -516,7 +518,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
       {
         'label': 'Ordering Dealers',
         'value': '${_totals['orderingDealers'] ?? 0}',
-        'sub': '${_totals['ordersCount'] ?? 0} orders • ${_formatInr(_totals['costPerOrderingDealer'] ?? 0)}/buyer',
+        'sub': '${_totals['dealerToOrderPct'] ?? 0}% of KYC • ${_formatInr(_totals['costPerOrderingDealer'] ?? 0)}/buyer',
         'color': const Color(0xFF7C3AED),
       },
       {
@@ -646,9 +648,10 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                           DataColumn(label: Text('Leads'), numeric: true),
                           DataColumn(label: Text('CPL'), numeric: true),
                           DataColumn(label: Text('KYC'), numeric: true),
-                          DataColumn(label: Text('Conv %'), numeric: true),
+                          DataColumn(label: Text('L→D %'), numeric: true),
                           DataColumn(label: Text('₹/Dealer'), numeric: true),
                           DataColumn(label: Text('Buyers'), numeric: true),
+                          DataColumn(label: Text('D→O %'), numeric: true),
                           DataColumn(label: Text('₹/Buyer'), numeric: true),
                           DataColumn(label: Text('Del. GMV'), numeric: true),
                           DataColumn(label: Text('ROAS'), numeric: true),
@@ -658,7 +661,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                             cells: [
                               DataCell(
                                 ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 240),
+                                  constraints: const BoxConstraints(maxWidth: 220),
                                   child: Text(
                                     (c['campaignName'] ?? c['campaignId'] ?? '-').toString(),
                                     overflow: TextOverflow.ellipsis,
@@ -674,6 +677,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
                               DataCell(Text('${c['leadToDealerPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text(_formatInr(c['costPerQualifiedDealer']), style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text('${c['dealerToOrderPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
                               DataCell(Text(_formatInr(c['deliveredGmv']), style: const TextStyle(fontSize: 12.5))),
                               DataCell(
