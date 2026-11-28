@@ -484,70 +484,77 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               ),
             )
           else
-            Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 18,
-                  horizontalMargin: 14,
-                  headingRowColor: WidgetStateProperty.all(
-                    const Color(0xFFF8FAFC),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Scrollbar(
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
+                        columnSpacing: 18,
+                        horizontalMargin: 16,
+                        headingRowColor: WidgetStateProperty.all(
+                          const Color(0xFFF8FAFC),
+                        ),
+                        columns: const [
+                          DataColumn(label: Text('Campaign')),
+                          DataColumn(label: Text('Channel')),
+                          DataColumn(label: Text('Spend'), numeric: true),
+                          DataColumn(label: Text('Leads'), numeric: true),
+                          DataColumn(label: Text('CPL'), numeric: true),
+                          DataColumn(label: Text('KYC'), numeric: true),
+                          DataColumn(label: Text('Conv %'), numeric: true),
+                          DataColumn(label: Text('₹/Dealer'), numeric: true),
+                          DataColumn(label: Text('Buyers'), numeric: true),
+                          DataColumn(label: Text('₹/Buyer'), numeric: true),
+                          DataColumn(label: Text('Del. GMV'), numeric: true),
+                          DataColumn(label: Text('ROAS'), numeric: true),
+                        ],
+                        rows: _campaigns.map((c) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 240),
+                                  child: Text(
+                                    (c['campaignName'] ?? c['campaignId'] ?? '-').toString(),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text((c['channel'] ?? '-').toString().toUpperCase(), style: const TextStyle(fontSize: 11.5))),
+                              DataCell(Text(_formatInr(c['spend']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text('${c['uniqueLeads'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text(_formatInr(c['cpl']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text('${c['qualifiedDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text('${c['leadToDealerPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text(_formatInr(c['costPerQualifiedDealer']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(Text(_formatInr(c['deliveredGmv']), style: const TextStyle(fontSize: 12.5))),
+                              DataCell(
+                                Text(
+                                  '${c['deliveredRoas'] ?? 0}x',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                    color: (num.tryParse('${c['deliveredRoas']}') ?? 0) >= 2
+                                        ? const Color(0xFF059669)
+                                        : AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   ),
-                  columns: const [
-                    DataColumn(label: Text('Campaign')),
-                    DataColumn(label: Text('Channel')),
-                    DataColumn(label: Text('Spend'), numeric: true),
-                    DataColumn(label: Text('Leads'), numeric: true),
-                    DataColumn(label: Text('CPL'), numeric: true),
-                    DataColumn(label: Text('KYC'), numeric: true),
-                    DataColumn(label: Text('Conv %'), numeric: true),
-                    DataColumn(label: Text('₹/Dealer'), numeric: true),
-                    DataColumn(label: Text('Buyers'), numeric: true),
-                    DataColumn(label: Text('₹/Buyer'), numeric: true),
-                    DataColumn(label: Text('Del. GMV'), numeric: true),
-                    DataColumn(label: Text('ROAS'), numeric: true),
-                  ],
-                  rows: _campaigns.map((c) {
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 190),
-                            child: Text(
-                              (c['campaignName'] ?? c['campaignId'] ?? '-').toString(),
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12.5),
-                            ),
-                          ),
-                        ),
-                        DataCell(Text((c['channel'] ?? '-').toString().toUpperCase(), style: const TextStyle(fontSize: 11.5))),
-                        DataCell(Text(_formatInr(c['spend']), style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text('${c['uniqueLeads'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text(_formatInr(c['cpl']), style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text('${c['qualifiedDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text('${c['leadToDealerPct'] ?? 0}%', style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text(_formatInr(c['costPerQualifiedDealer']), style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text('${c['orderingDealers'] ?? 0}', style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text(_formatInr(c['costPerOrderingDealer']), style: const TextStyle(fontSize: 12.5))),
-                        DataCell(Text(_formatInr(c['deliveredGmv']), style: const TextStyle(fontSize: 12.5))),
-                        DataCell(
-                          Text(
-                            '${c['deliveredRoas'] ?? 0}x',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
-                              color: (num.tryParse('${c['deliveredRoas']}') ?? 0) >= 2
-                                  ? const Color(0xFF059669)
-                                  : AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                );
+              },
             ),
         ],
       ),
