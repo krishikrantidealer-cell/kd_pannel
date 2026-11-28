@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kd_pannel/app_theme.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/responsive/responsive.dart';
 import 'package:kd_pannel/core/repositories/notification_repository.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
@@ -206,6 +207,16 @@ class _AlertsPageState extends State<AlertsPage> {
       if (_selectedFilter == 'Unread') {
         return n['isRead'] == false || n['isRead'] == null;
       }
+      if (_selectedFilter == 'Campaigns') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'marketing_campaigns';
+      }
+      if (_selectedFilter == 'Meta Leads') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'marketing_leads';
+      }
+      if (_selectedFilter == 'Telemetry') {
+        final b = NotificationsCubit.resolveCategoryBucket(n);
+        return b != 'marketing_campaigns' && b != 'marketing_leads';
+      }
       if (_selectedFilter == 'Tasks & Calls') {
         return NotificationsCubit.resolveCategoryBucket(n) == 'tasks_calls';
       }
@@ -227,6 +238,16 @@ class _AlertsPageState extends State<AlertsPage> {
       final isUnread = n['isRead'] == false || n['isRead'] == null;
       if (!isUnread) return false;
       if (filter == 'All' || filter == 'Unread') return true;
+      if (filter == 'Campaigns') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'marketing_campaigns';
+      }
+      if (filter == 'Meta Leads') {
+        return NotificationsCubit.resolveCategoryBucket(n) == 'marketing_leads';
+      }
+      if (filter == 'Telemetry') {
+        final b = NotificationsCubit.resolveCategoryBucket(n);
+        return b != 'marketing_campaigns' && b != 'marketing_leads';
+      }
       if (filter == 'Tasks & Calls') {
         return NotificationsCubit.resolveCategoryBucket(n) == 'tasks_calls';
       }
@@ -329,14 +350,22 @@ class _AlertsPageState extends State<AlertsPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  for (final filter in const [
-                                    'All',
-                                    'Unread',
-                                    'Tasks & Calls',
-                                    'Leads & KYC',
-                                    'Orders',
-                                    'WhatsApp',
-                                  ])
+                                  for (final filter in AuthService().isMarketing
+                                      ? const [
+                                          'All',
+                                          'Unread',
+                                          'Campaigns',
+                                          'Meta Leads',
+                                          'Telemetry',
+                                        ]
+                                      : const [
+                                          'All',
+                                          'Unread',
+                                          'Tasks & Calls',
+                                          'Leads & KYC',
+                                          'Orders',
+                                          'WhatsApp',
+                                        ])
                                     _buildFilterButton(
                                       filter,
                                       _selectedFilter == filter,
@@ -444,7 +473,9 @@ class _AlertsPageState extends State<AlertsPage> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Real-time task reminders, lead assignments, KYC updates, orders, and WhatsApp alerts.',
+          AuthService().isMarketing
+              ? 'Real-time Meta Ads leads, push campaign dispatches, and buyer telemetry alerts.'
+              : 'Real-time task reminders, lead assignments, KYC updates, orders, and WhatsApp alerts.',
           style: GoogleFonts.outfit(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -652,7 +683,17 @@ class _AlertsPageState extends State<AlertsPage> {
     Color iconBg = const Color(0xFFF1F5F9);
     String actionLabel = 'View Details';
 
-    if (bucket == 'tasks_calls') {
+    if (bucket == 'marketing_campaigns') {
+      iconData = Icons.campaign_rounded;
+      iconColor = const Color(0xFF7C3AED);
+      iconBg = const Color(0xFFF3E8FF);
+      actionLabel = 'Open Campaigns';
+    } else if (bucket == 'marketing_leads') {
+      iconData = Icons.ads_click_rounded;
+      iconColor = const Color(0xFF0284C7);
+      iconBg = const Color(0xFFE0F2FE);
+      actionLabel = 'Open Telemetry';
+    } else if (bucket == 'tasks_calls') {
       if (type == 'missed_call' || title.toLowerCase().contains('missed')) {
         iconData = Icons.phone_missed_rounded;
         iconColor = const Color(0xFFDC2626);
@@ -693,6 +734,12 @@ class _AlertsPageState extends State<AlertsPage> {
       iconColor = Colors.red;
       iconBg = Colors.red.withOpacity(0.12);
       actionLabel = 'View Record';
+    }
+
+    if (AuthService().isMarketing &&
+        bucket != 'marketing_campaigns' &&
+        bucket != 'marketing_leads') {
+      actionLabel = 'Open Telemetry';
     }
 
     final String? id = (item['_id'] ?? item['id'])?.toString();

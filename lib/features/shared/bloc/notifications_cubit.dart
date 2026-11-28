@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kd_pannel/core/auth/auth_service.dart';
 import 'package:kd_pannel/core/network/api_client.dart';
 import 'package:kd_pannel/core/network/websocket_service.dart';
 import 'package:kd_pannel/core/repositories/notification_repository.dart';
@@ -94,11 +95,26 @@ class NotificationsCubit extends Cubit<NotificationsState> {
   }
 
   /// Resolves the structured alert category for UI tabs & icons:
-  /// Returns one of: 'tasks_calls', 'leads_kyc', 'orders', 'whatsapp', 'system'
+  /// Returns one of: 'marketing_campaigns', 'marketing_leads', 'tasks_calls', 'leads_kyc', 'orders', 'whatsapp', 'system'
   static String resolveCategoryBucket(Map<String, dynamic> item) {
     final type = (item['type'] ?? '').toString().toLowerCase();
     final title = (item['title'] ?? '').toString().toLowerCase();
     final route = (item['actionRoute'] ?? '').toString().toLowerCase();
+
+    if (type == 'campaign_sent' ||
+        type == 'push_campaign' ||
+        title.contains('campaign') ||
+        title.contains('push blast') ||
+        route.contains('push-campaigns') ||
+        route.contains('campaigns')) {
+      return 'marketing_campaigns';
+    }
+
+    if (type == 'marketing_lead' ||
+        title.contains('meta ads') ||
+        title.contains('meta lead')) {
+      return 'marketing_leads';
+    }
 
     if (type == 'task_reminder' ||
         type == 'task_due_now' ||
@@ -200,6 +216,19 @@ class NotificationsCubit extends Cubit<NotificationsState> {
       } else {
         navState?.pushNamed(routeName, arguments: arguments);
       }
+    }
+
+    // Marketing role isolation: never route into Admin/Sales-only CRM, Call, or Order screens
+    if (AuthService().isMarketing) {
+      if (type == 'campaign_sent' ||
+          type == 'push_campaign' ||
+          rawRoute.contains('push-campaigns') ||
+          rawRoute.contains('campaigns')) {
+        pushRoute('/push-campaigns');
+      } else {
+        pushRoute('/marketing');
+      }
+      return;
     }
 
     // 1. Dealer Profile Deep-Link
