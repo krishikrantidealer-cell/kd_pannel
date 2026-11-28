@@ -62,7 +62,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
         start = today.subtract(const Duration(days: 364));
         break;
       case 'all':
-        start = DateTime(2026, 8, 1);
+        start = DateTime(2024, 1, 1);
         break;
       case 'custom':
         if (_customDateRange != null) {
@@ -469,7 +469,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               const DropdownMenuItem(value: '30d', child: Text('Last 30 Days')),
               const DropdownMenuItem(value: '90d', child: Text('Last 90 Days')),
               const DropdownMenuItem(value: '365d', child: Text('Last 12 Months')),
-              const DropdownMenuItem(value: 'all', child: Text('All Time (Aug 2026+)')),
+              const DropdownMenuItem(value: 'all', child: Text('All Time')),
               DropdownMenuItem(
                 value: 'custom',
                 child: Text(
