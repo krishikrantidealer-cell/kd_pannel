@@ -301,6 +301,7 @@ class _MyAppWrapperState extends State<MyAppWrapper> {
         '/marketing': (context) => const MainLayout(),
         '/marketing/journey': (context) => const MainLayout(),
         '/marketing/heatmap': (context) => const MainLayout(),
+        '/marketing/attribution': (context) => const MainLayout(),
         '/push-campaigns': (context) => const MainLayout(),
         '/campaigns': (context) => const MainLayout(),
         '/whatsapp': (context) => const MainLayout(child: WhatsAppCrmPage()),

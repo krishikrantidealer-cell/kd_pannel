@@ -74,8 +74,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     {'icon': Icons.stream_rounded, 'title': 'Live Customer Feed', 'index': 0, 'isSubTab': true},
     {'icon': Icons.filter_alt_rounded, 'title': 'Sales Journey', 'index': 1, 'isSubTab': true},
     {'icon': Icons.map_rounded, 'title': 'District Heatmap', 'index': 2, 'isSubTab': true},
-    {'icon': Icons.notifications_active_rounded, 'title': 'Push Campaigns', 'index': 3},
-    {'icon': Icons.notifications_rounded, 'title': 'Alerts', 'index': 4},
+    {'icon': Icons.query_stats_rounded, 'title': 'Lead Attribution', 'index': 3, 'isSubTab': true},
+    {'icon': Icons.notifications_active_rounded, 'title': 'Push Campaigns', 'index': 4},
+    {'icon': Icons.notifications_rounded, 'title': 'Notifications', 'index': 5},
   ];
 
   @override
@@ -267,15 +268,18 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         return Padding(
                           padding: EdgeInsets.only(
                             left: (isSubTab && isExpanded) ? 14 : 0,
-                            bottom: 6,
+                            bottom: isSubTab ? 3 : 6,
                           ),
                           child: _SidebarItem(
                             icon: item['icon'] as IconData,
                             title: item['title'] as String,
                             isActive: isActive,
                             isExpanded: isExpanded,
+                            isCompact: isSubTab,
                             onTap: () => widget.onTabSelected(targetIdx),
-                            badgeCount: item['title'] == 'Alerts' ? unreadCount : 0,
+                            badgeCount: (item['title'] == 'Alerts' || item['title'] == 'Notifications')
+                                ? unreadCount
+                                : 0,
                           ),
                         );
                       },
@@ -631,6 +635,7 @@ class _SidebarItem extends StatefulWidget {
   final VoidCallback onTap;
   final bool isLogout;
   final int badgeCount;
+  final bool isCompact;
 
   const _SidebarItem({
     required this.icon,
@@ -640,6 +645,7 @@ class _SidebarItem extends StatefulWidget {
     required this.onTap,
     this.isLogout = false,
     this.badgeCount = 0,
+    this.isCompact = false,
   });
 
   @override
@@ -662,7 +668,7 @@ class _SidebarItemState extends State<_SidebarItem> {
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
-            height: 44, // Compact height
+            height: widget.isCompact ? 34 : 44, // Compact sub-tab vs standard height
             decoration: BoxDecoration(
               gradient: showActive
                   ? LinearGradient(
@@ -727,7 +733,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                     // Icon Container: Sized to fit perfectly within collapsed width (72 - 10 - 10 = 52)
                     // Subtracting 2px for borders = 50
                     SizedBox(
-                      width: 50,
+                      width: widget.isCompact ? 36 : 50,
                       child: Center(
                         child: AnimatedScale(
                           duration: const Duration(milliseconds: 200),
@@ -737,7 +743,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                             children: [
                               Icon(
                                 widget.icon,
-                                size: 19,
+                                size: widget.isCompact ? 15 : 19,
                                 color: showActive
                                     ? (widget.isLogout
                                           ? AppTheme.error
@@ -790,7 +796,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                                       fontWeight: showActive
                                           ? FontWeight.w600
                                           : FontWeight.w500,
-                                      fontSize: 13.5,
+                                      fontSize: widget.isCompact ? 12.0 : 13.5,
                                       letterSpacing: -0.2,
                                     ),
                                     maxLines: 1,

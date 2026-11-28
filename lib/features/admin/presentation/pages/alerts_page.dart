@@ -464,7 +464,9 @@ class _AlertsPageState extends State<AlertsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Alerts & Notifications',
+          AuthService().isMarketing
+              ? 'Notifications'
+              : 'Alerts & Notifications',
           style: GoogleFonts.outfit(
             fontSize: 24,
             fontWeight: FontWeight.w800,

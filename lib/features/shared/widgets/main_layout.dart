@@ -13,6 +13,7 @@ import 'package:kd_pannel/features/admin/presentation/pages/trash_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/alerts_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/push_campaigns_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/user_events_page.dart';
+import 'package:kd_pannel/features/marketing/presentation/pages/lead_attribution_page.dart';
 import 'package:kd_pannel/features/sales/presentation/pages/sales_dashboard_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/estimate_generator_page.dart';
 import 'package:kd_pannel/features/admin/presentation/pages/whatsapp_crm_page.dart';
@@ -38,7 +39,6 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIdx = 0;
-  int _engagementSubTab = 0;
   String? _lastProcessedRoute;
   static bool _isSidebarPinned = true;
 
@@ -81,8 +81,10 @@ class _MainLayoutState extends State<MainLayout> {
             hideInternalTabBar: true,
           );
         case 3:
-          return const PushCampaignsPage();
+          return const LeadAttributionPage();
         case 4:
+          return const PushCampaignsPage();
+        case 5:
           return const AlertsPage();
         default:
           return const UserEventsPage(
@@ -167,9 +169,11 @@ class _MainLayoutState extends State<MainLayout> {
           _currentIdx = 0;
         }
       } else if (role == UserRole.marketing) {
-        if (routeName == '/alerts') {
-          _currentIdx = 4;
+        if (routeName == '/alerts' || routeName == '/notifications') {
+          _currentIdx = 5;
         } else if (routeName == '/push-campaigns' || routeName == '/campaigns') {
+          _currentIdx = 4;
+        } else if (routeName == '/marketing/attribution') {
           _currentIdx = 3;
         } else if (routeName == '/marketing/heatmap') {
           _currentIdx = 2;
@@ -234,8 +238,9 @@ class _MainLayoutState extends State<MainLayout> {
       if (index == 0) route = '/marketing';
       if (index == 1) route = '/marketing/journey';
       if (index == 2) route = '/marketing/heatmap';
-      if (index == 3) route = '/push-campaigns';
-      if (index == 4) route = '/alerts';
+      if (index == 3) route = '/marketing/attribution';
+      if (index == 4) route = '/push-campaigns';
+      if (index == 5) route = '/alerts';
     } else {
       if (index == 0) route = '/dashboard';
       if (index == 1) route = '/products';
