@@ -18,7 +18,8 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
   bool _isSyncing = false;
   String? _error;
   String _selectedChannel = 'all';
-  int _selectedDays = 90;
+  String _selectedDatePreset = '90d'; // 'today', 'yesterday', '7d', '30d', '90d', '365d', 'custom'
+  DateTimeRange? _customDateRange;
   bool _liveOnly = true;
 
   Map<String, dynamic> _totals = {};
@@ -36,6 +37,81 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     _fetchReport();
   }
 
+  (String, String) _resolveDateStrings() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime start;
+    DateTime end = today;
+
+    switch (_selectedDatePreset) {
+      case 'today':
+        start = today;
+        break;
+      case 'yesterday':
+        start = today.subtract(const Duration(days: 1));
+        end = start;
+        break;
+      case '7d':
+        start = today.subtract(const Duration(days: 6));
+        break;
+      case '30d':
+        start = today.subtract(const Duration(days: 29));
+        break;
+      case '365d':
+        start = today.subtract(const Duration(days: 364));
+        break;
+      case 'custom':
+        if (_customDateRange != null) {
+          start = _customDateRange!.start;
+          end = _customDateRange!.end;
+        } else {
+          start = today.subtract(const Duration(days: 89));
+        }
+        break;
+      case '90d':
+      default:
+        start = today.subtract(const Duration(days: 89));
+        break;
+    }
+
+    return (
+      DateFormat('yyyy-MM-dd').format(start),
+      DateFormat('yyyy-MM-dd').format(end),
+    );
+  }
+
+  Future<void> _pickCustomDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024, 1, 1),
+      lastDate: now,
+      initialDateRange: _customDateRange ??
+          DateTimeRange(
+            start: now.subtract(const Duration(days: 30)),
+            end: now,
+          ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _customDateRange = picked;
+        _selectedDatePreset = 'custom';
+      });
+      await _fetchReport();
+    }
+  }
+
   Future<void> _fetchReport() async {
     setState(() {
       _isLoading = true;
@@ -43,10 +119,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
     });
 
     try {
-      final now = DateTime.now();
-      final start = now.subtract(Duration(days: _selectedDays));
-      final startStr = start.toIso8601String().split('T').first;
-      final endStr = now.toIso8601String().split('T').first;
+      final (startStr, endStr) = _resolveDateStrings();
 
       final res = await ApiClient().get(
         '/attribution/report?startDate=$startStr&endDate=$endStr&channel=$_selectedChannel&liveOnly=$_liveOnly',
@@ -79,11 +152,10 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
   Future<void> _syncMetaSpend() async {
     setState(() => _isSyncing = true);
     try {
-      final now = DateTime.now();
-      final start = now.subtract(Duration(days: _selectedDays));
+      final (startStr, endStr) = _resolveDateStrings();
       final res = await ApiClient().post('/attribution/sync-spend', {
-        'startDate': start.toIso8601String().split('T').first,
-        'endDate': now.toIso8601String().split('T').first,
+        'startDate': startStr,
+        'endDate': endStr,
       });
 
       final data = jsonDecode(res.body);
@@ -332,22 +404,49 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
           },
         ),
         const SizedBox(width: 8),
-        DropdownButton<int>(
-          value: _selectedDays,
-          underline: const SizedBox.shrink(),
-          items: const [
-            DropdownMenuItem(value: 7, child: Text('Last 7 Days')),
-            DropdownMenuItem(value: 30, child: Text('Last 30 Days')),
-            DropdownMenuItem(value: 90, child: Text('Last 90 Days')),
-            DropdownMenuItem(value: 365, child: Text('Last 12 Months')),
-          ],
-          onChanged: (val) {
-            if (val != null) {
-              setState(() => _selectedDays = val);
-              _fetchReport();
-            }
-          },
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: DropdownButton<String>(
+            value: _selectedDatePreset,
+            underline: const SizedBox.shrink(),
+            isDense: true,
+            items: [
+              const DropdownMenuItem(value: 'today', child: Text('Today')),
+              const DropdownMenuItem(value: 'yesterday', child: Text('Yesterday')),
+              const DropdownMenuItem(value: '7d', child: Text('Last 7 Days')),
+              const DropdownMenuItem(value: '30d', child: Text('Last 30 Days')),
+              const DropdownMenuItem(value: '90d', child: Text('Last 90 Days')),
+              const DropdownMenuItem(value: '365d', child: Text('Last 12 Months')),
+              DropdownMenuItem(
+                value: 'custom',
+                child: Text(
+                  _customDateRange != null
+                      ? '${DateFormat('d MMM').format(_customDateRange!.start)} – ${DateFormat('d MMM').format(_customDateRange!.end)}'
+                      : 'Custom Range...',
+                ),
+              ),
+            ],
+            onChanged: (val) async {
+              if (val == 'custom') {
+                await _pickCustomDateRange();
+              } else if (val != null) {
+                setState(() => _selectedDatePreset = val);
+                await _fetchReport();
+              }
+            },
+          ),
         ),
+        if (_selectedDatePreset == 'custom')
+          TextButton.icon(
+            onPressed: _pickCustomDateRange,
+            icon: const Icon(Icons.date_range_rounded, size: 16),
+            label: const Text('Change'),
+          ),
       ],
     );
   }
