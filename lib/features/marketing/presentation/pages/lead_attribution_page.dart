@@ -19,7 +19,7 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
   bool _isSyncing = false;
   String? _error;
   String _selectedChannel = 'all';
-  String _selectedDatePreset = '90d'; // 'today', 'yesterday', '7d', '30d', '90d', '365d', 'custom'
+  String _selectedDatePreset = 'all'; // 'today', 'yesterday', '7d', '30d', 'all', 'custom'
   DateTimeRange? _customDateRange;
   bool _liveOnly = true;
 
@@ -58,23 +58,17 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
       case '30d':
         start = today.subtract(const Duration(days: 29));
         break;
-      case '365d':
-        start = today.subtract(const Duration(days: 364));
-        break;
-      case 'all':
-        start = DateTime(2024, 1, 1);
-        break;
       case 'custom':
         if (_customDateRange != null) {
           start = _customDateRange!.start;
           end = _customDateRange!.end;
         } else {
-          start = today.subtract(const Duration(days: 89));
+          start = DateTime(2024, 1, 1);
         }
         break;
-      case '90d':
+      case 'all':
       default:
-        start = today.subtract(const Duration(days: 89));
+        start = DateTime(2024, 1, 1);
         break;
     }
 
@@ -467,8 +461,6 @@ class _LeadAttributionPageState extends State<LeadAttributionPage> {
               const DropdownMenuItem(value: 'yesterday', child: Text('Yesterday')),
               const DropdownMenuItem(value: '7d', child: Text('Last 7 Days')),
               const DropdownMenuItem(value: '30d', child: Text('Last 30 Days')),
-              const DropdownMenuItem(value: '90d', child: Text('Last 90 Days')),
-              const DropdownMenuItem(value: '365d', child: Text('Last 12 Months')),
               const DropdownMenuItem(value: 'all', child: Text('All Time')),
               DropdownMenuItem(
                 value: 'custom',
